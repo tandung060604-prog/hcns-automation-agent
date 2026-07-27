@@ -12,6 +12,7 @@ from hcns_agent.domain.models import (
     ProcessingProposal,
     Provenance,
 )
+from hcns_agent.ports.document_parser import DocumentSource
 from hcns_agent.ports.ocr import OcrEngine, OcrResult
 
 
@@ -36,8 +37,14 @@ class ProcessDocument:
         self._ocr_engine = ocr_engine
         self._policy = policy or ProcessingPolicy()
 
-    def execute(self, document: HrDocument) -> ProcessingProposal:
-        result = self._ocr_engine.recognize(document)
+    def execute(self, document: HrDocument, *, content: bytes = b"") -> ProcessingProposal:
+        result = self._ocr_engine.recognize(
+            DocumentSource(
+                document_id=document.document_id,
+                filename=document.filename,
+                content=content,
+            )
+        )
         fields = self._extract_demonstration_fields(document, result)
         reasons: list[str] = []
 

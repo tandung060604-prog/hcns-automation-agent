@@ -1,39 +1,54 @@
 # HCNS Workflows
 
-## 1. Onboarding hồ sơ nhân viên
+## Ownership
+
+Camunda BPMN là nguồn sự thật duy nhất cho onboarding, hồ sơ nhân viên, hợp
+đồng, nghỉ phép, chấm công, payroll và công văn. Camunda sở hữu Service/User
+Task, timer, SLA, retry, escalation, assignment, incident, compensation,
+versioning và process state dài hạn.
+
+IDP worker chỉ thực hiện một job hữu hạn:
 
 ```text
-RECEIVED → OCR_COMPLETE → VALIDATED
-                         ├─ đủ + policy pass → REVIEW_REQUIRED
-                         └─ thiếu/lỗi        → REVIEW_REQUIRED
-REVIEW_REQUIRED → APPROVED → READY_TO_SYNC → COMPLETED
-                └─ REJECTED
+Camunda Service Task
+  → documentId/reference + business/correlation/idempotency key
+  → worker tải source trong storage được kiểm soát
+  → safety + parse + canonicalize
+  → lưu result bền vững
+  → trả resultReference + small summary
+  → Camunda đánh giá BPMN condition
+  → Camunda tạo User Task nếu cần
 ```
 
-Dù confidence cao, định danh cá nhân vẫn phải review trước lần ghi HRM đầu tiên.
+Worker không complete trước khi result được lưu. Retry dùng cùng idempotency key
+và không tạo duplicate side effect. Technical error và business error được báo
+riêng; chính Camunda quyết định retry/escalation ở cấp process.
 
-## 2. Đơn nghỉ phép
+## Context nghiệp vụ
 
-Agent đọc loại đơn, nhân viên, khoảng ngày và lý do; đối chiếu chính sách và số
-dư phép qua port nghiệp vụ. Agent được tạo đề xuất nhưng quản lý/người có thẩm
-quyền phê duyệt.
+`WorkflowType` là context Camunda, không phải kết quả format detection.
+`DocumentType` và `qualityStatus` có thể góp vào BPMN condition nhưng không tự
+quyết định toàn bộ workflow khi thiếu case context. M2 trả type/confidence,
+quality status và review flag; Camunda vẫn quyết định bước tiếp theo.
 
-## 3. Hợp đồng lao động
+## Process variables
 
-Agent trích xuất số hợp đồng, bên ký, loại, thời hạn và các mốc cần nhắc. Lương,
-phụ cấp và điều khoản nhạy cảm luôn được review. Agent có thể tạo reminder nhưng
-không tự gia hạn/chấm dứt.
+Chỉ giữ document/case ID, business/correlation/idempotency key, source format,
+document type, parse/quality/review status, result reference, schema version và
+error code. Không giữ raw file, raw OCR, canonical payload, ảnh hoặc workbook.
 
-## 4. Bảng chấm công
+Milestone này không chứa BPMN production, scheduler, task assignment engine,
+review queue, process persistence hoặc connector HRM thật.
 
-Ưu tiên parser bảng/native XLSX trước OCR ảnh. Agent phát hiện ô thiếu, tổng giờ
-bất thường và chênh lệch; chuyên viên xác nhận trước khi chuyển payroll.
+## Package tham chiếu
 
-## Quy tắc chung
+Repository lưu hai tài sản thiết kế để review và dry-run:
 
-- Mỗi workflow có schema version.
-- Transition không hợp lệ phải bị từ chối.
-- Connector bên ngoài mặc định dry-run.
-- Retry phải dùng cùng idempotency key.
-- Audit event không chứa raw file và chỉ lưu PII tối thiểu cần thiết.
+- `camunda/HR_DOCUMENT_AGENT_MVP_V2.bpmn`
+- `camunda/HR_DOCUMENT_QUALITY_ROUTING.dmn`
 
+Package mô tả luồng intake, kiểm tra chất lượng, Human Review và định tuyến bằng
+DMN cho Camunda Platform 7.13. Đây chưa phải bằng chứng triển khai production;
+endpoint, credentials, deployment ID và liên kết tới môi trường Camunda không
+được lưu trong Git. Liên kết Modeler/Operate/Tasklist sẽ được bổ sung sau khi môi
+trường tích hợp được phê duyệt.

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from hcns_agent.domain.models import HrDocument
+from hcns_agent.ports.document_parser import DocumentSource
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +36,5 @@ class OcrEngine(Protocol):
     def name(self) -> str:
         """Stable engine identifier."""
 
-    def recognize(self, document: HrDocument) -> OcrResult:
+    def recognize(self, source: DocumentSource) -> OcrResult:
         """Recognize a document without performing business side effects."""
-

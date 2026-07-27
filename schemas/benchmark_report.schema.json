@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/hcns/benchmark-report-1.0.0.schema.json",
+  "title": "HCNS Aggregate Benchmark Report",
+  "description": "Aggregate metrics only. Raw Ground Truth and prediction values are forbidden.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "dataset",
+    "backend",
+    "classification",
+    "ocr",
+    "extraction",
+    "quality",
+    "system"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "contentDigest", "caseCount"],
+      "properties": {
+        "id": {"type": "string"},
+        "version": {"type": "string"},
+        "contentDigest": {"type": "string"},
+        "caseCount": {"type": "integer", "minimum": 1}
+      }
+    },
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "modelIdentifiers"],
+      "properties": {
+        "name": {"type": "string"},
+        "version": {"type": "string"},
+        "modelIdentifiers": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "macroPrecision",
+        "macroRecall",
+        "macroF1",
+        "unknownRate",
+        "perType"
+      ],
+      "properties": {
+        "macroPrecision": {"$ref": "#/$defs/rate"},
+        "macroRecall": {"$ref": "#/$defs/rate"},
+        "macroF1": {"$ref": "#/$defs/rate"},
+        "unknownRate": {"$ref": "#/$defs/rate"},
+        "perType": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "documentType",
+              "support",
+              "predicted",
+              "truePositive",
+              "precision",
+              "recall",
+              "f1"
+            ],
+            "properties": {
+              "documentType": {"type": "string"},
+              "support": {"type": "integer", "minimum": 0},
+              "predicted": {"type": "integer", "minimum": 0},
+              "truePositive": {"type": "integer", "minimum": 0},
+              "precision": {"$ref": "#/$defs/rate"},
+              "recall": {"$ref": "#/$defs/rate"},
+              "f1": {"$ref": "#/$defs/rate"}
+            }
+          }
+        }
+      }
+    },
+    "ocr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evaluatedCases",
+        "referenceCharacterCount",
+        "characterErrorCount",
+        "characterErrorRate",
+        "referenceWordCount",
+        "wordErrorCount",
+        "wordErrorRate",
+        "readingOrderExactCount",
+        "readingOrderAccuracy"
+      ],
+      "properties": {
+        "evaluatedCases": {"type": "integer", "minimum": 0},
+        "referenceCharacterCount": {"type": "integer", "minimum": 0},
+        "characterErrorCount": {"type": "integer", "minimum": 0},
+        "characterErrorRate": {"type": "number", "minimum": 0},
+        "referenceWordCount": {"type": "integer", "minimum": 0},
+        "wordErrorCount": {"type": "integer", "minimum": 0},
+        "wordErrorRate": {"type": "number", "minimum": 0},
+        "readingOrderExactCount": {"type": "integer", "minimum": 0},
+        "readingOrderAccuracy": {"$ref": "#/$defs/rate"}
+      }
+    },
+    "extraction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expectedCount",
+        "predictedCount",
+        "exactMatchCount",
+        "notFoundCount",
+        "exactMatchRate",
+        "precision",
+        "recall",
+        "notFoundRate",
+        "perField"
+      ],
+      "properties": {
+        "expectedCount": {"type": "integer", "minimum": 0},
+        "predictedCount": {"type": "integer", "minimum": 0},
+        "exactMatchCount": {"type": "integer", "minimum": 0},
+        "notFoundCount": {"type": "integer", "minimum": 0},
+        "exactMatchRate": {"$ref": "#/$defs/rate"},
+        "precision": {"$ref": "#/$defs/rate"},
+        "recall": {"$ref": "#/$defs/rate"},
+        "notFoundRate": {"$ref": "#/$defs/rate"},
+        "perField": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "documentType",
+              "fieldName",
+              "expectedCount",
+              "predictedCount",
+              "exactMatchCount",
+              "notFoundCount",
+              "exactMatchRate",
+              "precision",
+              "recall"
+            ],
+            "properties": {
+              "documentType": {"type": "string"},
+              "fieldName": {"type": "string"},
+              "expectedCount": {"type": "integer", "minimum": 0},
+              "predictedCount": {"type": "integer", "minimum": 0},
+              "exactMatchCount": {"type": "integer", "minimum": 0},
+              "notFoundCount": {"type": "integer", "minimum": 0},
+              "exactMatchRate": {"$ref": "#/$defs/rate"},
+              "precision": {"$ref": "#/$defs/rate"},
+              "recall": {"$ref": "#/$defs/rate"}
+            }
+          }
+        }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "totalCases",
+        "falsePassCount",
+        "falsePassRate",
+        "falseRejectCount",
+        "falseRejectRate",
+        "reviewRequiredCount",
+        "reviewRate",
+        "reviewPrecision",
+        "sensitiveFieldCount",
+        "sensitiveFalseAcceptanceCount",
+        "sensitiveFalseAcceptanceRate"
+      ],
+      "properties": {
+        "totalCases": {"type": "integer", "minimum": 1},
+        "falsePassCount": {"type": "integer", "minimum": 0},
+        "falsePassRate": {"$ref": "#/$defs/rate"},
+        "falseRejectCount": {"type": "integer", "minimum": 0},
+        "falseRejectRate": {"$ref": "#/$defs/rate"},
+        "reviewRequiredCount": {"type": "integer", "minimum": 0},
+        "reviewRate": {"$ref": "#/$defs/rate"},
+        "reviewPrecision": {"$ref": "#/$defs/rate"},
+        "sensitiveFieldCount": {"type": "integer", "minimum": 0},
+        "sensitiveFalseAcceptanceCount": {"type": "integer", "minimum": 0},
+        "sensitiveFalseAcceptanceRate": {"$ref": "#/$defs/rate"}
+      }
+    },
+    "system": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["latencyP50Ms", "latencyP95Ms", "failureCount", "failureRate"],
+      "properties": {
+        "latencyP50Ms": {"type": "number", "minimum": 0},
+        "latencyP95Ms": {"type": "number", "minimum": 0},
+        "failureCount": {"type": "integer", "minimum": 0},
+        "failureRate": {"$ref": "#/$defs/rate"}
+      }
+    }
+  },
+  "$defs": {
+    "rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}

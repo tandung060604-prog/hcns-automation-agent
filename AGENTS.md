@@ -2,7 +2,8 @@
 
 ## Mission
 
-Phát triển Agent tự động hóa HCNS có OCR, workflow và Human-in-the-loop.
+Phát triển nền tảng Agent HCNS có IDP đa định dạng, Camunda orchestration và
+Human-in-the-loop.
 Ưu tiên theo thứ tự: an toàn PII, đúng nghiệp vụ, khả năng kiểm chứng, thay đổi
 nhỏ, tiết kiệm token.
 
@@ -17,6 +18,8 @@ Chỉ đọc các file cần cho tác vụ:
 | Tác vụ | Chỉ đọc thêm |
 |---|---|
 | OCR/model | `docs/MODEL_GUIDE.md`, `src/hcns_agent/ports/ocr.py` |
+| Intake/parser | `docs/ARCHITECTURE.md`, ADR-0002, `tests/AGENTS.md` |
+| Classification/extraction | ADR-0003, `schemas/`, `docs/EVALUATION.md` |
 | Workflow/HITL | `docs/WORKFLOWS.md`, `docs/HUMAN_IN_THE_LOOP.md` |
 | Kiến trúc | `docs/ARCHITECTURE.md`, ADR liên quan |
 | Schema | `schemas/`, `docs/DATA_SECURITY.md` |
@@ -33,6 +36,9 @@ Không quét toàn repository, dataset, output OCR hoặc `node_modules`.
 - Không tự động hóa quyết định tuyển dụng, sa thải, lương, kỷ luật hay phúc lợi.
 - Mọi action ghi HRM/BPM cần policy cho phép, idempotency key và human approval.
 - Không thay đổi interface trong `ports/` mà không cập nhật contract tests và ADR.
+- Không đưa Camunda/Zeebe SDK vào domain/application hoặc xây workflow engine
+  Python cạnh tranh với Camunda.
+- Native parser trước; chỉ dùng `OcrEngine` trong parser ảnh và PDF scan.
 
 ## Token budget discipline
 
@@ -50,4 +56,3 @@ Không quét toàn repository, dataset, output OCR hoặc `node_modules`.
 - Không có PII/secret trong diff.
 - Tài liệu hoặc ADR được cập nhật nếu hành vi public thay đổi.
 - Báo cáo: file đổi, kiểm thử, rủi ro còn lại, bước kế tiếp.
-

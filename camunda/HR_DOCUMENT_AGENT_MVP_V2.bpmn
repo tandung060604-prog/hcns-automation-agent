@@ -1,0 +1,751 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:modeler="http://camunda.org/schema/modeler/1.0" xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Definitions_HR_Document_Agent_MVP_V2" targetNamespace="http://example.com/hr-document-agent-mvp-v2" exporter="OpenAI BPMN Review" exporterVersion="2.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.13.0">
+  <bpmn:error id="Error_Document_Input_Invalid" name="Document input invalid" errorCode="DOCUMENT_INPUT_INVALID"/>
+  <bpmn:process id="hr_document_agent_mvp_v2" name="HR Document Processing and Onboarding Agent MVP V2" isExecutable="true">
+    <bpmn:documentation>Camunda 7 workflow for HR document intake, OCR orchestration, quality routing, human review, controlled reupload, HRIS update and result notification. Raw files, raw OCR text and full PII remain outside Camunda. External workers must use complete for successful/business-quality results, bpmnError with DOCUMENT_INPUT_INVALID for invalid input, and failure for technical timeout/crash so retries and incidents remain operationally visible.</bpmn:documentation>
+    <bpmn:startEvent id="Start" name="Bắt đầu">
+      <bpmn:documentation>Khởi tạo reuploadCount=0 và maxReuploadAttempts=3 trong engine; người nộp không được sửa chính sách này.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <camunda:executionListener event="start">
+          <camunda:script scriptFormat="javascript">var Long = Java.type('java.lang.Long');
+execution.setVariable('reuploadCount', Long.valueOf(0));
+execution.setVariable('maxReuploadAttempts', Long.valueOf(3));</camunda:script>
+        </camunda:executionListener>
+      </bpmn:extensionElements>
+      <bpmn:outgoing>F_StartSubmit</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask camunda:candidateGroups="employees,new-hires" id="Submit" name="Cung cấp tài liệu HCNS">
+      <bpmn:documentation>Người nộp chỉ cung cấp applicationId, opaque documentReference và loại tài liệu. Không upload raw image vào process variables.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="applicationId" label="Mã hồ sơ" type="string">
+            <camunda:validation>
+              <camunda:constraint name="required"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="documentReference" label="Mã tham chiếu tài liệu" type="string">
+            <camunda:validation>
+              <camunda:constraint name="required"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="declaredDocumentType" label="Loại tài liệu khai báo" type="enum">
+            <camunda:value id="IDENTITY_DOCUMENT" name="Giấy tờ định danh"/>
+            <camunda:value id="EMPLOYEE_INFORMATION_FORM" name="Phiếu thông tin nhân viên"/>
+            <camunda:value id="DEGREE" name="Bằng cấp"/>
+            <camunda:value id="CERTIFICATE" name="Chứng chỉ"/>
+            <camunda:value id="EMPLOYMENT_CONTRACT" name="Hợp đồng/phụ lục lao động"/>
+            <camunda:value id="HR_DECISION" name="Quyết định nhân sự"/>
+            <camunda:value id="LEAVE_REQUEST" name="Đơn nghỉ phép"/>
+            <camunda:value id="HANDOVER_RECORD" name="Biên bản bàn giao"/>
+            <camunda:value id="TIMESHEET" name="Bảng chấm công"/>
+            <camunda:value id="OTHER_HR_DOCUMENT" name="Tài liệu HCNS khác"/>
+            <camunda:validation>
+              <camunda:constraint name="required"/>
+            </camunda:validation>
+          </camunda:formField>
+        </camunda:formData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_StartSubmit</bpmn:incoming>
+      <bpmn:outgoing>F_SubmitValidate</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask camunda:type="external" camunda:topic="document_validate_file" id="Validate" name="Kiểm tra file">
+      <bpmn:documentation>Worker kiểm tra reference, định dạng, dung lượng và khả năng đọc. Complete với fileValidationStatus=VALID/INVALID. Input corrupt/không resolve được có thể báo BPMN Error DOCUMENT_INPUT_INVALID. Timeout/crash phải dùng failure để retry/incident.</bpmn:documentation>
+      <bpmn:incoming>F_SubmitValidate</bpmn:incoming>
+      <bpmn:incoming>F_UploadValidate</bpmn:incoming>
+      <bpmn:outgoing>F_ValidateGateway</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway default="F_FileInvalidReupload" id="GFileValid" name="File hợp lệ?">
+      <bpmn:incoming>F_ValidateGateway</bpmn:incoming>
+      <bpmn:outgoing>F_FileValidDetect</bpmn:outgoing>
+      <bpmn:outgoing>F_FileInvalidReupload</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask camunda:type="external" camunda:topic="document_detect_type" id="Detect" name="Nhận diện loại tài liệu">
+      <bpmn:documentation>Worker trả classificationStatus thuộc CONFIRMED, MISMATCH, UNKNOWN hoặc INVALID; không trả raw OCR text.</bpmn:documentation>
+      <bpmn:incoming>F_FileValidDetect</bpmn:incoming>
+      <bpmn:outgoing>F_DetectClass</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway default="F_ClassInvalid" id="GClass" name="Loại tài liệu hợp lệ?">
+      <bpmn:incoming>F_DetectClass</bpmn:incoming>
+      <bpmn:outgoing>F_ClassConfirmed</bpmn:outgoing>
+      <bpmn:outgoing>F_ClassNeedsConfirm</bpmn:outgoing>
+      <bpmn:outgoing>F_ClassInvalid</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask camunda:candidateGroups="employees,new-hires" id="ConfirmType" name="Xác nhận loại tài liệu">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="confirmedDocumentType" label="Loại tài liệu xác nhận" type="enum">
+            <camunda:value id="IDENTITY_DOCUMENT" name="Giấy tờ định danh"/>
+            <camunda:value id="EMPLOYEE_INFORMATION_FORM" name="Phiếu thông tin nhân viên"/>
+            <camunda:value id="DEGREE" name="Bằng cấp"/>
+            <camunda:value id="CERTIFICATE" name="Chứng chỉ"/>
+            <camunda:value id="EMPLOYMENT_CONTRACT" name="Hợp đồng/phụ lục lao động"/>
+            <camunda:value id="HR_DECISION" name="Quyết định nhân sự"/>
+            <camunda:value id="LEAVE_REQUEST" name="Đơn nghỉ phép"/>
+            <camunda:value id="HANDOVER_RECORD" name="Biên bản bàn giao"/>
+            <camunda:value id="TIMESHEET" name="Bảng chấm công"/>
+            <camunda:value id="OTHER_HR_DOCUMENT" name="Tài liệu HCNS khác"/>
+            <camunda:validation>
+              <camunda:constraint name="required"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="documentTypeDecision" label="Quyết định" type="enum">
+            <camunda:value id="CONFIRMED" name="Xác nhận và tiếp tục"/>
+            <camunda:value id="REQUEST_REUPLOAD" name="Yêu cầu tải lại"/>
+            <camunda:validation>
+              <camunda:constraint name="required"/>
+            </camunda:validation>
+          </camunda:formField>
+        </camunda:formData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_ClassNeedsConfirm</bpmn:incoming>
+      <bpmn:outgoing>F_ConfirmTypeGateway</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway default="F_TypeReupload" id="GType" name="Kết quả xác nhận">
+      <bpmn:incoming>F_ConfirmTypeGateway</bpmn:incoming>
+      <bpmn:outgoing>F_TypeConfirmed</bpmn:outgoing>
+      <bpmn:outgoing>F_TypeReupload</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask camunda:type="external" camunda:topic="document_ocr" id="OCR" name="OCR tài liệu">
+      <bpmn:documentation>OCR chạy ngoài engine. Raw image/raw text/full PII chỉ tồn tại trong private storage hoặc memory. Camunda chỉ nhận opaque ocrResultReference và sanitized status.</bpmn:documentation>
+      <bpmn:incoming>F_ClassConfirmed</bpmn:incoming>
+      <bpmn:incoming>F_TypeConfirmed</bpmn:incoming>
+      <bpmn:outgoing>F_OCRExtract</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask camunda:type="external" camunda:topic="document_extract" id="Extract" name="Trích xuất trường dữ liệu">
+      <bpmn:documentation>Trích xuất theo schema từng loại tài liệu. Full values không được ghi vào Camunda history; chỉ dùng private extractionResultReference.</bpmn:documentation>
+      <bpmn:incoming>F_OCRExtract</bpmn:incoming>
+      <bpmn:outgoing>F_ExtractNormalize</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask camunda:type="external" camunda:topic="document_normalize_validate" id="Normalize" name="Chuẩn hóa và kiểm tra dữ liệu">
+      <bpmn:documentation>Worker trả các biến sanitized: requiredFieldsComplete(Boolean), missingCriticalField(Boolean), businessInconsistency(Boolean), overallConfidence(Double), maskedPreview(String).</bpmn:documentation>
+      <bpmn:incoming>F_ExtractNormalize</bpmn:incoming>
+      <bpmn:incoming>F_CorrectionsNormalize</bpmn:incoming>
+      <bpmn:outgoing>F_NormalizeQuality</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:businessRuleTask camunda:decisionRef="hr-document-quality-routing" camunda:decisionRefBinding="latest" camunda:resultVariable="recommendedAction" camunda:mapDecisionResult="singleEntry" id="QualityDecision" name="Quyết định chất lượng OCR">
+      <bpmn:documentation>DMN tách threshold khỏi Python worker và trả recommendedAction: AUTO_CONTINUE, USER_REVIEW, HR_REVIEW hoặc REQUEST_REUPLOAD.</bpmn:documentation>
+      <bpmn:incoming>F_NormalizeQuality</bpmn:incoming>
+      <bpmn:outgoing>F_QualityGateway</bpmn:outgoing>
+    </bpmn:businessRuleTask>
+    <bpmn:exclusiveGateway default="F_QDefaultHR" id="GQuality" name="Hướng xử lý">
+      <bpmn:incoming>F_QualityGateway</bpmn:incoming>
+      <bpmn:outgoing>F_QAuto</bpmn:outgoing>
+      <bpmn:outgoing>F_QUser</bpmn:outgoing>
+      <bpmn:outgoing>F_QHR</bpmn:outgoing>
+      <bpmn:outgoing>F_QReupload</bpmn:outgoing>
+      <bpmn:outgoing>F_QDefaultHR</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask camunda:candidateGroups="employees,new-hires" id="UserReview" name="Người nộp xác nhận dữ liệu">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="userReviewDecision" label="Kết quả xác nhận" type="enum">
+            <camunda:value id="CONFIRMED" name="Thông tin chính xác"/>
+            <camunda:value id="CORRECTED" name="Đã sửa trong hệ thống riêng"/>
+            <camunda:value id="REQUEST_REUPLOAD" name="Yêu cầu tải lại"/>
+            <camunda:value id="UNRESOLVED" name="Không thể xác nhận"/>
+            <camunda:validation>
+              <camunda:constraint name="required"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="correctionsReference" label="Mã tham chiếu dữ liệu đã sửa" type="string"/>
+        </camunda:formData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_QUser</bpmn:incoming>
+      <bpmn:outgoing>F_UserGateway</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway default="F_UserUnresolved" id="GUserReview" name="Kết quả người nộp">
+      <bpmn:incoming>F_UserGateway</bpmn:incoming>
+      <bpmn:outgoing>F_UserConfirmed</bpmn:outgoing>
+      <bpmn:outgoing>F_UserCorrected</bpmn:outgoing>
+      <bpmn:outgoing>F_UserReupload</bpmn:outgoing>
+      <bpmn:outgoing>F_UserUnresolved</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask camunda:candidateGroups="hr-reviewers" id="HRReview" name="HCNS kiểm tra dữ liệu">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="hrReviewDecision" label="Kết quả kiểm tra" type="enum">
+            <camunda:value id="CONFIRMED" name="Chấp nhận dữ liệu"/>
+            <camunda:value id="CORRECTED" name="Đã sửa trong hệ thống riêng"/>
+            <camunda:value id="REQUEST_REUPLOAD" name="Yêu cầu tải lại"/>
+            <camunda:value id="REJECTED" name="Từ chối tài liệu"/>
+            <camunda:validation>
+              <camunda:constraint name="required"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="correctionsReference" label="Mã tham chiếu dữ liệu đã sửa" type="string"/>
+          <camunda:formField id="hrReviewNote" label="Ghi chú HCNS" type="string"/>
+        </camunda:formData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_QHR</bpmn:incoming>
+      <bpmn:incoming>F_QDefaultHR</bpmn:incoming>
+      <bpmn:incoming>F_UserUnresolved</bpmn:incoming>
+      <bpmn:outgoing>F_HRGateway</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway default="F_HRRejected" id="GHRReview" name="Kết quả HCNS">
+      <bpmn:incoming>F_HRGateway</bpmn:incoming>
+      <bpmn:outgoing>F_HRConfirmed</bpmn:outgoing>
+      <bpmn:outgoing>F_HRCorrected</bpmn:outgoing>
+      <bpmn:outgoing>F_HRReupload</bpmn:outgoing>
+      <bpmn:outgoing>F_HRRejected</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask camunda:type="external" camunda:topic="document_apply_corrections" id="ApplyCorrections" name="Áp dụng dữ liệu đã sửa">
+      <bpmn:documentation>Worker resolve correctionsReference trong hệ thống riêng, không nhận full corrected fields từ Camunda; sau đó quay lại normalize và DMN.</bpmn:documentation>
+      <bpmn:incoming>F_UserCorrected</bpmn:incoming>
+      <bpmn:incoming>F_HRCorrected</bpmn:incoming>
+      <bpmn:outgoing>F_CorrectionsNormalize</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask camunda:type="external" camunda:topic="document_reupload_control" id="RegisterReupload" name="Kiểm soát lượt tải lại">
+      <bpmn:documentation>Worker tăng reuploadCount đúng một lần theo idempotency key applicationId+documentReference. maxReuploadAttempts do engine khởi tạo và không hiển thị cho người dùng.</bpmn:documentation>
+      <bpmn:incoming>F_FileInvalidReupload</bpmn:incoming>
+      <bpmn:incoming>F_ValidateErrorReupload</bpmn:incoming>
+      <bpmn:incoming>F_ClassInvalid</bpmn:incoming>
+      <bpmn:incoming>F_TypeReupload</bpmn:incoming>
+      <bpmn:incoming>F_OCRErrorReupload</bpmn:incoming>
+      <bpmn:incoming>F_QReupload</bpmn:incoming>
+      <bpmn:incoming>F_UserReupload</bpmn:incoming>
+      <bpmn:incoming>F_HRReupload</bpmn:incoming>
+      <bpmn:outgoing>F_RegGateway</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway default="F_ReuploadLimit" id="GReupload" name="Còn lượt tải lại?">
+      <bpmn:incoming>F_RegGateway</bpmn:incoming>
+      <bpmn:outgoing>F_ReuploadAllowed</bpmn:outgoing>
+      <bpmn:outgoing>F_ReuploadLimit</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask camunda:candidateGroups="employees,new-hires" id="UploadAgain" name="Tải lại tài liệu">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="documentReference" label="Mã tham chiếu tài liệu mới" type="string">
+            <camunda:validation>
+              <camunda:constraint name="required"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="declaredDocumentType" label="Loại tài liệu" type="enum">
+            <camunda:value id="IDENTITY_DOCUMENT" name="Giấy tờ định danh"/>
+            <camunda:value id="EMPLOYEE_INFORMATION_FORM" name="Phiếu thông tin nhân viên"/>
+            <camunda:value id="DEGREE" name="Bằng cấp"/>
+            <camunda:value id="CERTIFICATE" name="Chứng chỉ"/>
+            <camunda:value id="EMPLOYMENT_CONTRACT" name="Hợp đồng/phụ lục lao động"/>
+            <camunda:value id="HR_DECISION" name="Quyết định nhân sự"/>
+            <camunda:value id="LEAVE_REQUEST" name="Đơn nghỉ phép"/>
+            <camunda:value id="HANDOVER_RECORD" name="Biên bản bàn giao"/>
+            <camunda:value id="TIMESHEET" name="Bảng chấm công"/>
+            <camunda:value id="OTHER_HR_DOCUMENT" name="Tài liệu HCNS khác"/>
+            <camunda:validation>
+              <camunda:constraint name="required"/>
+            </camunda:validation>
+          </camunda:formField>
+        </camunda:formData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_ReuploadAllowed</bpmn:incoming>
+      <bpmn:outgoing>F_UploadValidate</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask camunda:candidateGroups="hr-reviewers" id="FinalHR" name="HCNS xử lý khi hết lượt">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="finalHrDecision" label="Quyết định cuối" type="enum">
+            <camunda:value id="APPROVED" name="Chấp nhận thủ công"/>
+            <camunda:value id="REJECTED" name="Từ chối tài liệu"/>
+            <camunda:validation>
+              <camunda:constraint name="required"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="finalHrNote" label="Ghi chú quyết định cuối" type="string"/>
+        </camunda:formData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_ReuploadLimit</bpmn:incoming>
+      <bpmn:outgoing>F_FinalGateway</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway default="F_FinalRejected" id="GFinal" name="Quyết định cuối">
+      <bpmn:incoming>F_FinalGateway</bpmn:incoming>
+      <bpmn:outgoing>F_FinalApproved</bpmn:outgoing>
+      <bpmn:outgoing>F_FinalRejected</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="GApprovedMerge" name="Hồ sơ được chấp nhận">
+      <bpmn:incoming>F_QAuto</bpmn:incoming>
+      <bpmn:incoming>F_UserConfirmed</bpmn:incoming>
+      <bpmn:incoming>F_HRConfirmed</bpmn:incoming>
+      <bpmn:incoming>F_FinalApproved</bpmn:incoming>
+      <bpmn:outgoing>F_ApprovedUpdateHRIS</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask camunda:type="external" camunda:topic="hris_update_employee_record" id="UpdateHRIS" name="Cập nhật hồ sơ nhân sự">
+      <bpmn:documentation>Bước nghiệp vụ hoàn chỉnh: cập nhật HRIS bằng approvedDataReference hoặc API nội bộ. Technical failure phải retry/incident; thao tác phải idempotent.</bpmn:documentation>
+      <bpmn:incoming>F_ApprovedUpdateHRIS</bpmn:incoming>
+      <bpmn:outgoing>F_UpdateNotifySuccess</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask camunda:type="external" camunda:topic="hr_notify_processing_result" id="NotifySuccess" name="Thông báo hoàn tất">
+      <bpmn:documentation>Gửi thông báo đã hoàn tất bằng template không chứa dữ liệu nhạy cảm trong log.</bpmn:documentation>
+      <bpmn:incoming>F_UpdateNotifySuccess</bpmn:incoming>
+      <bpmn:outgoing>F_NotifySuccessEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="GRejectedMerge" name="Hồ sơ bị từ chối">
+      <bpmn:incoming>F_HRRejected</bpmn:incoming>
+      <bpmn:incoming>F_FinalRejected</bpmn:incoming>
+      <bpmn:outgoing>F_RejectedNotify</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask camunda:type="external" camunda:topic="hr_notify_processing_result" id="NotifyRejected" name="Thông báo từ chối">
+      <bpmn:documentation>Gửi trạng thái từ chối và hướng dẫn liên hệ HCNS; không ghi full PII vào errorDetails/log.</bpmn:documentation>
+      <bpmn:incoming>F_RejectedNotify</bpmn:incoming>
+      <bpmn:outgoing>F_NotifyRejectedEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="EndSuccess" name="Hoàn tất hồ sơ nhân sự">
+      <bpmn:incoming>F_NotifySuccessEnd</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="EndRejected" name="Tài liệu bị từ chối">
+      <bpmn:incoming>F_NotifyRejectedEnd</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent attachedToRef="Validate" cancelActivity="true" id="ValidateInputError" name="File/reference không hợp lệ">
+      <bpmn:outgoing>F_ValidateErrorReupload</bpmn:outgoing>
+      <bpmn:errorEventDefinition errorRef="Error_Document_Input_Invalid"/>
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent attachedToRef="OCR" cancelActivity="true" id="OCRInputError" name="Đầu vào OCR không hợp lệ">
+      <bpmn:outgoing>F_OCRErrorReupload</bpmn:outgoing>
+      <bpmn:errorEventDefinition errorRef="Error_Document_Input_Invalid"/>
+    </bpmn:boundaryEvent>
+    <bpmn:textAnnotation id="TechnicalFailureNote">
+      <bpmn:text>Lỗi kỹ thuật (timeout, worker crash, OCR engine unavailable): worker gọi /failure, giảm retries và tạo incident khi retries=0. Không dùng BPMN Error để che lỗi kỹ thuật.</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_TechnicalFailure" sourceRef="OCR" targetRef="TechnicalFailureNote"/>
+    <bpmn:sequenceFlow id="F_StartSubmit" sourceRef="Start" targetRef="Submit"/>
+    <bpmn:sequenceFlow id="F_SubmitValidate" sourceRef="Submit" targetRef="Validate"/>
+    <bpmn:sequenceFlow id="F_ValidateGateway" sourceRef="Validate" targetRef="GFileValid"/>
+    <bpmn:sequenceFlow id="F_FileValidDetect" sourceRef="GFileValid" targetRef="Detect" name="VALID">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${fileValidationStatus == 'VALID'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_FileInvalidReupload" sourceRef="GFileValid" targetRef="RegisterReupload" name="INVALID / UNKNOWN"/>
+    <bpmn:sequenceFlow id="F_ValidateErrorReupload" sourceRef="ValidateInputError" targetRef="RegisterReupload" name="DOCUMENT_INPUT_INVALID"/>
+    <bpmn:sequenceFlow id="F_DetectClass" sourceRef="Detect" targetRef="GClass"/>
+    <bpmn:sequenceFlow id="F_ClassConfirmed" sourceRef="GClass" targetRef="OCR" name="CONFIRMED">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${classificationStatus == 'CONFIRMED'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_ClassNeedsConfirm" sourceRef="GClass" targetRef="ConfirmType" name="MISMATCH / UNKNOWN">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${classificationStatus == 'MISMATCH' || classificationStatus == 'UNKNOWN'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_ClassInvalid" sourceRef="GClass" targetRef="RegisterReupload" name="INVALID"/>
+    <bpmn:sequenceFlow id="F_ConfirmTypeGateway" sourceRef="ConfirmType" targetRef="GType"/>
+    <bpmn:sequenceFlow id="F_TypeConfirmed" sourceRef="GType" targetRef="OCR" name="CONFIRMED">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${documentTypeDecision == 'CONFIRMED'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_TypeReupload" sourceRef="GType" targetRef="RegisterReupload" name="REQUEST_REUPLOAD"/>
+    <bpmn:sequenceFlow id="F_OCRExtract" sourceRef="OCR" targetRef="Extract"/>
+    <bpmn:sequenceFlow id="F_OCRErrorReupload" sourceRef="OCRInputError" targetRef="RegisterReupload" name="DOCUMENT_INPUT_INVALID"/>
+    <bpmn:sequenceFlow id="F_ExtractNormalize" sourceRef="Extract" targetRef="Normalize"/>
+    <bpmn:sequenceFlow id="F_NormalizeQuality" sourceRef="Normalize" targetRef="QualityDecision"/>
+    <bpmn:sequenceFlow id="F_QualityGateway" sourceRef="QualityDecision" targetRef="GQuality"/>
+    <bpmn:sequenceFlow id="F_QAuto" sourceRef="GQuality" targetRef="GApprovedMerge" name="AUTO_CONTINUE">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${recommendedAction == 'AUTO_CONTINUE'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_QUser" sourceRef="GQuality" targetRef="UserReview" name="USER_REVIEW">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${recommendedAction == 'USER_REVIEW'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_QHR" sourceRef="GQuality" targetRef="HRReview" name="HR_REVIEW">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${recommendedAction == 'HR_REVIEW'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_QReupload" sourceRef="GQuality" targetRef="RegisterReupload" name="REQUEST_REUPLOAD">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${recommendedAction == 'REQUEST_REUPLOAD'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_QDefaultHR" sourceRef="GQuality" targetRef="HRReview" name="UNKNOWN → HR REVIEW"/>
+    <bpmn:sequenceFlow id="F_UserGateway" sourceRef="UserReview" targetRef="GUserReview"/>
+    <bpmn:sequenceFlow id="F_UserConfirmed" sourceRef="GUserReview" targetRef="GApprovedMerge" name="CONFIRMED">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${userReviewDecision == 'CONFIRMED'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_UserCorrected" sourceRef="GUserReview" targetRef="ApplyCorrections" name="CORRECTED">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${userReviewDecision == 'CORRECTED'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_UserReupload" sourceRef="GUserReview" targetRef="RegisterReupload" name="REQUEST_REUPLOAD">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${userReviewDecision == 'REQUEST_REUPLOAD'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_UserUnresolved" sourceRef="GUserReview" targetRef="HRReview" name="UNRESOLVED"/>
+    <bpmn:sequenceFlow id="F_HRGateway" sourceRef="HRReview" targetRef="GHRReview"/>
+    <bpmn:sequenceFlow id="F_HRConfirmed" sourceRef="GHRReview" targetRef="GApprovedMerge" name="CONFIRMED">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${hrReviewDecision == 'CONFIRMED'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_HRCorrected" sourceRef="GHRReview" targetRef="ApplyCorrections" name="CORRECTED">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${hrReviewDecision == 'CORRECTED'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_HRReupload" sourceRef="GHRReview" targetRef="RegisterReupload" name="REQUEST_REUPLOAD">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${hrReviewDecision == 'REQUEST_REUPLOAD'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_HRRejected" sourceRef="GHRReview" targetRef="GRejectedMerge" name="REJECTED"/>
+    <bpmn:sequenceFlow id="F_CorrectionsNormalize" sourceRef="ApplyCorrections" targetRef="Normalize"/>
+    <bpmn:sequenceFlow id="F_RegGateway" sourceRef="RegisterReupload" targetRef="GReupload"/>
+    <bpmn:sequenceFlow id="F_ReuploadAllowed" sourceRef="GReupload" targetRef="UploadAgain" name="Còn lượt">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${reuploadCount &lt;= maxReuploadAttempts}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_ReuploadLimit" sourceRef="GReupload" targetRef="FinalHR" name="Hết lượt"/>
+    <bpmn:sequenceFlow id="F_UploadValidate" sourceRef="UploadAgain" targetRef="Validate"/>
+    <bpmn:sequenceFlow id="F_FinalGateway" sourceRef="FinalHR" targetRef="GFinal"/>
+    <bpmn:sequenceFlow id="F_FinalApproved" sourceRef="GFinal" targetRef="GApprovedMerge" name="APPROVED">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${finalHrDecision == 'APPROVED'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_FinalRejected" sourceRef="GFinal" targetRef="GRejectedMerge" name="REJECTED"/>
+    <bpmn:sequenceFlow id="F_ApprovedUpdateHRIS" sourceRef="GApprovedMerge" targetRef="UpdateHRIS"/>
+    <bpmn:sequenceFlow id="F_UpdateNotifySuccess" sourceRef="UpdateHRIS" targetRef="NotifySuccess"/>
+    <bpmn:sequenceFlow id="F_NotifySuccessEnd" sourceRef="NotifySuccess" targetRef="EndSuccess"/>
+    <bpmn:sequenceFlow id="F_RejectedNotify" sourceRef="GRejectedMerge" targetRef="NotifyRejected"/>
+    <bpmn:sequenceFlow id="F_NotifyRejectedEnd" sourceRef="NotifyRejected" targetRef="EndRejected"/>
+    <bpmn:group id="GroupAuto" categoryValueRef="CVAuto"/>
+    <bpmn:group id="GroupHuman" categoryValueRef="CVHuman"/>
+    <bpmn:group id="GroupReupload" categoryValueRef="CVReupload"/>
+  </bpmn:process>
+  <bpmn:category id="CatAuto">
+    <bpmn:categoryValue id="CVAuto" value="AGENT XỬ LÝ TỰ ĐỘNG"/>
+  </bpmn:category>
+  <bpmn:category id="CatHuman">
+    <bpmn:categoryValue id="CVHuman" value="HUMAN-IN-THE-LOOP VÀ HOÀN TẤT NGHIỆP VỤ"/>
+  </bpmn:category>
+  <bpmn:category id="CatReupload">
+    <bpmn:categoryValue id="CVReupload" value="TẢI LẠI VÀ NGOẠI LỆ"/>
+  </bpmn:category>
+  <bpmndi:BPMNDiagram id="Diagram_HR_Document_Agent_MVP_V2">
+    <bpmndi:BPMNPlane id="Plane_HR_Document_Agent_MVP_V2" bpmnElement="hr_document_agent_mvp_v2">
+      <bpmndi:BPMNShape id="GroupAuto_di" bpmnElement="GroupAuto" bioc:fill="#FFFFFF" bioc:stroke="#1565C0">
+        <dc:Bounds x="40" y="40" width="2030" height="430"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GroupHuman_di" bpmnElement="GroupHuman" bioc:fill="#FFFFFF" bioc:stroke="#00897B">
+        <dc:Bounds x="2100" y="40" width="1320" height="430"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GroupReupload_di" bpmnElement="GroupReupload" bioc:fill="#FFFFFF" bioc:stroke="#EF6C00">
+        <dc:Bounds x="1810" y="510" width="850" height="370"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start" bioc:fill="#FFFFFF" bioc:stroke="#2E7D32">
+        <dc:Bounds x="80" y="250" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Submit_di" bpmnElement="Submit" bioc:fill="#E3F2FD" bioc:stroke="#1565C0">
+        <dc:Bounds x="150" y="220" width="190" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Validate_di" bpmnElement="Validate" bioc:fill="#FFF8E1" bioc:stroke="#F9A825">
+        <dc:Bounds x="400" y="220" width="170" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ValidateInputError_di" bpmnElement="ValidateInputError" bioc:fill="#FFF3E0" bioc:stroke="#EF6C00">
+        <dc:Bounds x="535" y="292" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GFileValid_di" bpmnElement="GFileValid" bioc:fill="#FFFFFF" bioc:stroke="#546E7A">
+        <dc:Bounds x="630" y="240" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Detect_di" bpmnElement="Detect" bioc:fill="#FFF8E1" bioc:stroke="#F9A825">
+        <dc:Bounds x="740" y="220" width="185" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GClass_di" bpmnElement="GClass" bioc:fill="#FFFFFF" bioc:stroke="#546E7A">
+        <dc:Bounds x="985" y="240" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ConfirmType_di" bpmnElement="ConfirmType" bioc:fill="#E3F2FD" bioc:stroke="#1565C0">
+        <dc:Bounds x="1040" y="70" width="200" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GType_di" bpmnElement="GType" bioc:fill="#FFFFFF" bioc:stroke="#546E7A">
+        <dc:Bounds x="1290" y="90" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="OCR_di" bpmnElement="OCR" bioc:fill="#FFF8E1" bioc:stroke="#F9A825">
+        <dc:Bounds x="1090" y="220" width="170" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="OCRInputError_di" bpmnElement="OCRInputError" bioc:fill="#FFF3E0" bioc:stroke="#EF6C00">
+        <dc:Bounds x="1225" y="292" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Extract_di" bpmnElement="Extract" bioc:fill="#FFF8E1" bioc:stroke="#F9A825">
+        <dc:Bounds x="1320" y="220" width="180" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Normalize_di" bpmnElement="Normalize" bioc:fill="#FFF8E1" bioc:stroke="#F9A825">
+        <dc:Bounds x="1560" y="220" width="190" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="QualityDecision_di" bpmnElement="QualityDecision" bioc:fill="#F3E5F5" bioc:stroke="#7B1FA2">
+        <dc:Bounds x="1800" y="220" width="190" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GQuality_di" bpmnElement="GQuality" bioc:fill="#FFFFFF" bioc:stroke="#546E7A">
+        <dc:Bounds x="2040" y="240" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="UserReview_di" bpmnElement="UserReview" bioc:fill="#E3F2FD" bioc:stroke="#1565C0">
+        <dc:Bounds x="2160" y="70" width="200" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GUserReview_di" bpmnElement="GUserReview" bioc:fill="#FFFFFF" bioc:stroke="#546E7A">
+        <dc:Bounds x="2420" y="90" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="HRReview_di" bpmnElement="HRReview" bioc:fill="#E3F2FD" bioc:stroke="#1565C0">
+        <dc:Bounds x="2160" y="260" width="200" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GHRReview_di" bpmnElement="GHRReview" bioc:fill="#FFFFFF" bioc:stroke="#546E7A">
+        <dc:Bounds x="2420" y="280" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ApplyCorrections_di" bpmnElement="ApplyCorrections" bioc:fill="#FFF8E1" bioc:stroke="#F9A825">
+        <dc:Bounds x="2520" y="165" width="210" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GApprovedMerge_di" bpmnElement="GApprovedMerge" bioc:fill="#FFFFFF" bioc:stroke="#546E7A">
+        <dc:Bounds x="2780" y="100" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="UpdateHRIS_di" bpmnElement="UpdateHRIS" bioc:fill="#FFF8E1" bioc:stroke="#F9A825">
+        <dc:Bounds x="2890" y="70" width="190" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="NotifySuccess_di" bpmnElement="NotifySuccess" bioc:fill="#FFF8E1" bioc:stroke="#F9A825">
+        <dc:Bounds x="3130" y="70" width="180" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndSuccess_di" bpmnElement="EndSuccess" bioc:fill="#E8F5E9" bioc:stroke="#2E7D32">
+        <dc:Bounds x="3370" y="97" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GRejectedMerge_di" bpmnElement="GRejectedMerge" bioc:fill="#FFFFFF" bioc:stroke="#546E7A">
+        <dc:Bounds x="2780" y="300" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="NotifyRejected_di" bpmnElement="NotifyRejected" bioc:fill="#FFF8E1" bioc:stroke="#F9A825">
+        <dc:Bounds x="2890" y="270" width="190" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndRejected_di" bpmnElement="EndRejected" bioc:fill="#FFEBEE" bioc:stroke="#C62828">
+        <dc:Bounds x="3140" y="297" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="RegisterReupload_di" bpmnElement="RegisterReupload" bioc:fill="#FFF8E1" bioc:stroke="#F9A825">
+        <dc:Bounds x="1870" y="600" width="210" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GReupload_di" bpmnElement="GReupload" bioc:fill="#FFFFFF" bioc:stroke="#546E7A">
+        <dc:Bounds x="2140" y="620" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="UploadAgain_di" bpmnElement="UploadAgain" bioc:fill="#E3F2FD" bioc:stroke="#1565C0">
+        <dc:Bounds x="2260" y="540" width="190" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="FinalHR_di" bpmnElement="FinalHR" bioc:fill="#E3F2FD" bioc:stroke="#1565C0">
+        <dc:Bounds x="2260" y="720" width="200" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GFinal_di" bpmnElement="GFinal" bioc:fill="#FFFFFF" bioc:stroke="#546E7A">
+        <dc:Bounds x="2520" y="740" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TechnicalFailureNote_di" bpmnElement="TechnicalFailureNote" bioc:fill="#FFFDE7" bioc:stroke="#757575">
+        <dc:Bounds x="1050" y="370" width="650" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="F_StartSubmit_di" bpmnElement="F_StartSubmit" bioc:stroke="#546E7A">
+        <di:waypoint x="116" y="268.0"/>
+        <di:waypoint x="150" y="265.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_SubmitValidate_di" bpmnElement="F_SubmitValidate" bioc:stroke="#546E7A">
+        <di:waypoint x="340" y="265.0"/>
+        <di:waypoint x="400" y="265.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_ValidateGateway_di" bpmnElement="F_ValidateGateway" bioc:stroke="#546E7A">
+        <di:waypoint x="570" y="265.0"/>
+        <di:waypoint x="630" y="265.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_FileValidDetect_di" bpmnElement="F_FileValidDetect" bioc:stroke="#546E7A">
+        <di:waypoint x="680" y="265.0"/>
+        <di:waypoint x="740" y="265.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_FileInvalidReupload_di" bpmnElement="F_FileInvalidReupload" bioc:stroke="#546E7A">
+        <di:waypoint x="655" y="290"/>
+        <di:waypoint x="655" y="645"/>
+        <di:waypoint x="1870" y="645"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_ValidateErrorReupload_di" bpmnElement="F_ValidateErrorReupload" bioc:stroke="#546E7A">
+        <di:waypoint x="553" y="328"/>
+        <di:waypoint x="553" y="690"/>
+        <di:waypoint x="1870" y="690"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_DetectClass_di" bpmnElement="F_DetectClass" bioc:stroke="#546E7A">
+        <di:waypoint x="925" y="265.0"/>
+        <di:waypoint x="985" y="265.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_ClassConfirmed_di" bpmnElement="F_ClassConfirmed" bioc:stroke="#546E7A">
+        <di:waypoint x="1035" y="265.0"/>
+        <di:waypoint x="1090" y="265.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_ClassNeedsConfirm_di" bpmnElement="F_ClassNeedsConfirm" bioc:stroke="#546E7A">
+        <di:waypoint x="1035" y="265"/>
+        <di:waypoint x="1060" y="265"/>
+        <di:waypoint x="1060" y="115"/>
+        <di:waypoint x="1040" y="115"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_ClassInvalid_di" bpmnElement="F_ClassInvalid" bioc:stroke="#546E7A">
+        <di:waypoint x="1010" y="290"/>
+        <di:waypoint x="1010" y="710"/>
+        <di:waypoint x="1870" y="710"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_ConfirmTypeGateway_di" bpmnElement="F_ConfirmTypeGateway" bioc:stroke="#546E7A">
+        <di:waypoint x="1240" y="115.0"/>
+        <di:waypoint x="1290" y="115.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_TypeConfirmed_di" bpmnElement="F_TypeConfirmed" bioc:stroke="#546E7A">
+        <di:waypoint x="1290" y="115"/>
+        <di:waypoint x="1275" y="115"/>
+        <di:waypoint x="1275" y="265"/>
+        <di:waypoint x="1260" y="265"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_TypeReupload_di" bpmnElement="F_TypeReupload" bioc:stroke="#546E7A">
+        <di:waypoint x="1315" y="140"/>
+        <di:waypoint x="1315" y="705"/>
+        <di:waypoint x="1870" y="705"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_OCRExtract_di" bpmnElement="F_OCRExtract" bioc:stroke="#546E7A">
+        <di:waypoint x="1260" y="265.0"/>
+        <di:waypoint x="1320" y="265.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_OCRErrorReupload_di" bpmnElement="F_OCRErrorReupload" bioc:stroke="#546E7A">
+        <di:waypoint x="1243" y="328"/>
+        <di:waypoint x="1243" y="675"/>
+        <di:waypoint x="1870" y="675"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_ExtractNormalize_di" bpmnElement="F_ExtractNormalize" bioc:stroke="#546E7A">
+        <di:waypoint x="1500" y="265.0"/>
+        <di:waypoint x="1560" y="265.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_NormalizeQuality_di" bpmnElement="F_NormalizeQuality" bioc:stroke="#546E7A">
+        <di:waypoint x="1750" y="265.0"/>
+        <di:waypoint x="1800" y="265.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_QualityGateway_di" bpmnElement="F_QualityGateway" bioc:stroke="#546E7A">
+        <di:waypoint x="1990" y="265.0"/>
+        <di:waypoint x="2040" y="265.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_QAuto_di" bpmnElement="F_QAuto" bioc:stroke="#546E7A">
+        <di:waypoint x="2090" y="265"/>
+        <di:waypoint x="2650" y="265"/>
+        <di:waypoint x="2650" y="125"/>
+        <di:waypoint x="2780" y="125"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_QUser_di" bpmnElement="F_QUser" bioc:stroke="#546E7A">
+        <di:waypoint x="2090" y="265"/>
+        <di:waypoint x="2125" y="265"/>
+        <di:waypoint x="2125" y="115"/>
+        <di:waypoint x="2160" y="115"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_QHR_di" bpmnElement="F_QHR" bioc:stroke="#546E7A">
+        <di:waypoint x="2090" y="265"/>
+        <di:waypoint x="2125" y="265"/>
+        <di:waypoint x="2125" y="305"/>
+        <di:waypoint x="2160" y="305"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_QReupload_di" bpmnElement="F_QReupload" bioc:stroke="#546E7A">
+        <di:waypoint x="2065" y="290"/>
+        <di:waypoint x="2065" y="600"/>
+        <di:waypoint x="1975" y="600"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_QDefaultHR_di" bpmnElement="F_QDefaultHR" bioc:stroke="#546E7A">
+        <di:waypoint x="2090" y="265"/>
+        <di:waypoint x="2135" y="265"/>
+        <di:waypoint x="2135" y="305"/>
+        <di:waypoint x="2160" y="305"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_UserGateway_di" bpmnElement="F_UserGateway" bioc:stroke="#546E7A">
+        <di:waypoint x="2360" y="115.0"/>
+        <di:waypoint x="2420" y="115.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_UserConfirmed_di" bpmnElement="F_UserConfirmed" bioc:stroke="#546E7A">
+        <di:waypoint x="2470" y="115"/>
+        <di:waypoint x="2625" y="115"/>
+        <di:waypoint x="2625" y="125"/>
+        <di:waypoint x="2780" y="125"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_UserCorrected_di" bpmnElement="F_UserCorrected" bioc:stroke="#546E7A">
+        <di:waypoint x="2470" y="115"/>
+        <di:waypoint x="2495" y="115"/>
+        <di:waypoint x="2495" y="210"/>
+        <di:waypoint x="2520" y="210"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_UserReupload_di" bpmnElement="F_UserReupload" bioc:stroke="#546E7A">
+        <di:waypoint x="2445" y="140"/>
+        <di:waypoint x="2445" y="500"/>
+        <di:waypoint x="1975" y="500"/>
+        <di:waypoint x="1975" y="600"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_UserUnresolved_di" bpmnElement="F_UserUnresolved" bioc:stroke="#546E7A">
+        <di:waypoint x="2420" y="115"/>
+        <di:waypoint x="2390" y="115"/>
+        <di:waypoint x="2390" y="305"/>
+        <di:waypoint x="2360" y="305"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_HRGateway_di" bpmnElement="F_HRGateway" bioc:stroke="#546E7A">
+        <di:waypoint x="2360" y="305.0"/>
+        <di:waypoint x="2420" y="305.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_HRConfirmed_di" bpmnElement="F_HRConfirmed" bioc:stroke="#546E7A">
+        <di:waypoint x="2470" y="305"/>
+        <di:waypoint x="2670" y="305"/>
+        <di:waypoint x="2670" y="125"/>
+        <di:waypoint x="2780" y="125"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_HRCorrected_di" bpmnElement="F_HRCorrected" bioc:stroke="#546E7A">
+        <di:waypoint x="2470" y="305"/>
+        <di:waypoint x="2495" y="305"/>
+        <di:waypoint x="2495" y="210"/>
+        <di:waypoint x="2520" y="210"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_HRReupload_di" bpmnElement="F_HRReupload" bioc:stroke="#546E7A">
+        <di:waypoint x="2445" y="330"/>
+        <di:waypoint x="2445" y="510"/>
+        <di:waypoint x="1975" y="510"/>
+        <di:waypoint x="1975" y="600"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_HRRejected_di" bpmnElement="F_HRRejected" bioc:stroke="#546E7A">
+        <di:waypoint x="2470" y="305"/>
+        <di:waypoint x="2780" y="325"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_CorrectionsNormalize_di" bpmnElement="F_CorrectionsNormalize" bioc:stroke="#546E7A">
+        <di:waypoint x="2730" y="210"/>
+        <di:waypoint x="2760" y="210"/>
+        <di:waypoint x="2760" y="25"/>
+        <di:waypoint x="1530" y="25"/>
+        <di:waypoint x="1530" y="265"/>
+        <di:waypoint x="1560" y="265"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_RegGateway_di" bpmnElement="F_RegGateway" bioc:stroke="#546E7A">
+        <di:waypoint x="2080" y="645.0"/>
+        <di:waypoint x="2140" y="645.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_ReuploadAllowed_di" bpmnElement="F_ReuploadAllowed" bioc:stroke="#546E7A">
+        <di:waypoint x="2190" y="645"/>
+        <di:waypoint x="2225" y="645"/>
+        <di:waypoint x="2225" y="585"/>
+        <di:waypoint x="2260" y="585"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_ReuploadLimit_di" bpmnElement="F_ReuploadLimit" bioc:stroke="#546E7A">
+        <di:waypoint x="2190" y="645"/>
+        <di:waypoint x="2220" y="645"/>
+        <di:waypoint x="2220" y="765"/>
+        <di:waypoint x="2260" y="765"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_UploadValidate_di" bpmnElement="F_UploadValidate" bioc:stroke="#546E7A">
+        <di:waypoint x="2260" y="585"/>
+        <di:waypoint x="2200" y="585"/>
+        <di:waypoint x="2200" y="915"/>
+        <di:waypoint x="370" y="915"/>
+        <di:waypoint x="370" y="265"/>
+        <di:waypoint x="400" y="265"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_FinalGateway_di" bpmnElement="F_FinalGateway" bioc:stroke="#546E7A">
+        <di:waypoint x="2460" y="765.0"/>
+        <di:waypoint x="2520" y="765.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_FinalApproved_di" bpmnElement="F_FinalApproved" bioc:stroke="#546E7A">
+        <di:waypoint x="2570" y="765"/>
+        <di:waypoint x="2710" y="765"/>
+        <di:waypoint x="2710" y="125"/>
+        <di:waypoint x="2780" y="125"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_FinalRejected_di" bpmnElement="F_FinalRejected" bioc:stroke="#546E7A">
+        <di:waypoint x="2570" y="765"/>
+        <di:waypoint x="2740" y="765"/>
+        <di:waypoint x="2740" y="325"/>
+        <di:waypoint x="2780" y="325"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_ApprovedUpdateHRIS_di" bpmnElement="F_ApprovedUpdateHRIS" bioc:stroke="#546E7A">
+        <di:waypoint x="2830" y="125.0"/>
+        <di:waypoint x="2860.0" y="125.0"/>
+        <di:waypoint x="2860.0" y="115.0"/>
+        <di:waypoint x="2890" y="115.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_UpdateNotifySuccess_di" bpmnElement="F_UpdateNotifySuccess" bioc:stroke="#546E7A">
+        <di:waypoint x="3080" y="115.0"/>
+        <di:waypoint x="3130" y="115.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_NotifySuccessEnd_di" bpmnElement="F_NotifySuccessEnd" bioc:stroke="#546E7A">
+        <di:waypoint x="3310" y="115.0"/>
+        <di:waypoint x="3370" y="115.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_RejectedNotify_di" bpmnElement="F_RejectedNotify" bioc:stroke="#546E7A">
+        <di:waypoint x="2830" y="325.0"/>
+        <di:waypoint x="2860.0" y="325.0"/>
+        <di:waypoint x="2860.0" y="315.0"/>
+        <di:waypoint x="2890" y="315.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_NotifyRejectedEnd_di" bpmnElement="F_NotifyRejectedEnd" bioc:stroke="#546E7A">
+        <di:waypoint x="3080" y="315.0"/>
+        <di:waypoint x="3140" y="315.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_TechnicalFailure_di" bpmnElement="Association_TechnicalFailure">
+        <di:waypoint x="1175" y="310"/>
+        <di:waypoint x="1175" y="370"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -1,9 +1,10 @@
 # Domain agent instructions
 
 - Domain không import framework, adapter, filesystem, HTTP hoặc model SDK.
-- Transition phải explicit; không sửa state trực tiếp từ application/adapters.
+- Domain không sở hữu BPMN transition, User Task, timer, retry, escalation hoặc
+  process state dài hạn; các trách nhiệm đó thuộc Camunda.
 - Giá trị trích xuất luôn giữ confidence, status và provenance.
 - Trường nhạy cảm không được auto-approve.
-- Khi thêm state/transition: cập nhật `docs/WORKFLOWS.md` và unit tests.
+- `SourceFormat`, `DocumentType` và `WorkflowType` phải độc lập.
+- Canonical model chỉ chứa kiểu Python chuẩn, không chứa object vendor.
 - Giữ model nhỏ, immutable khi phù hợp; không đưa raw image bytes vào audit event.
-

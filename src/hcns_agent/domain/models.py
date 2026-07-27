@@ -4,19 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
 from typing import Any
 
-
-class DocumentType(str, Enum):
-    UNKNOWN = "UNKNOWN"
-    CV = "CV"
-    IDENTITY_CARD = "IDENTITY_CARD"
-    PASSPORT = "PASSPORT"
-    EMPLOYMENT_CONTRACT = "EMPLOYMENT_CONTRACT"
-    HR_DECISION = "HR_DECISION"
-    LEAVE_REQUEST = "LEAVE_REQUEST"
-    TIMESHEET = "TIMESHEET"
+from hcns_agent.domain.documents import DocumentType as DocumentType
 
 
 class FieldStatus(str, Enum):
@@ -29,12 +19,14 @@ class FieldStatus(str, Enum):
 @dataclass(frozen=True, slots=True)
 class HrDocument:
     document_id: str
-    path: Path
+    filename: str
     document_type: DocumentType = DocumentType.UNKNOWN
 
     def __post_init__(self) -> None:
         if not self.document_id.strip():
             raise ValueError("document_id must not be empty")
+        if not self.filename.strip():
+            raise ValueError("filename must not be empty")
 
 
 @dataclass(frozen=True, slots=True)
