@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "1.0.0",
+  "dryRun": true,
+  "minimumOcrConfidence": 0.85,
+  "sensitiveFields": [
+    "identity_number",
+    "full_name",
+    "date_of_birth",
+    "contract_number",
+    "salary",
+    "bank_account"
+  ],
+  "alwaysReviewDocumentTypes": [
+    "IDENTITY_CARD",
+    "PASSPORT",
+    "EMPLOYMENT_CONTRACT",
+    "TIMESHEET"
+  ],
+  "allowedAutomaticActions": [
+    "CREATE_REVIEW_TASK",
+    "CREATE_MISSING_DOCUMENT_REMINDER",
+    "GENERATE_DRAFT_BUSINESS_JSON"
+  ],
+  "forbiddenAutomaticActions": [
+    "HIRE",
+    "TERMINATE",
+    "CHANGE_SALARY",
+    "APPROVE_LEAVE",
+    "SYNC_RESTRICTED_FIELDS"
+  ]
+}
+

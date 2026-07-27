@@ -1,0 +1,29 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+.env
+.env.*
+!.env.example
+
+# PII, uploads, OCR artifacts and models
+data/private/
+data/uploads/
+data/ground_truth/private/
+outputs/
+models/
+*.onnx
+*.pdmodel
+*.pdiparams
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+

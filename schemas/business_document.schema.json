@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/hcns/business_document.schema.json",
+  "title": "HCNS Business Document",
+  "type": "object",
+  "required": ["schemaVersion", "documentId", "documentType", "reviewStatus", "fields"],
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "documentId": {"type": "string", "minLength": 1},
+    "documentType": {"type": "string"},
+    "reviewStatus": {
+      "enum": ["NOT_REQUIRED", "PENDING", "APPROVED", "CORRECTED", "REJECTED"]
+    },
+    "fields": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["value", "confidence", "status", "provenance"],
+        "properties": {
+          "value": {},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "status": {"enum": ["ACCEPTED", "NEEDS_REVIEW", "NOT_FOUND", "INVALID"]},
+          "provenance": {
+            "type": "object",
+            "required": ["engine", "pageIndex"],
+            "properties": {
+              "engine": {"type": "string"},
+              "pageIndex": {"type": "integer", "minimum": 0},
+              "lineIndexes": {
+                "type": "array",
+                "items": {"type": "integer", "minimum": 0}
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
+
