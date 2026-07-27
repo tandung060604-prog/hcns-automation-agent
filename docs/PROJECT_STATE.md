@@ -1,6 +1,6 @@
 # Project State
 
-Current milestone: M3 / Phase 13.2 — EasyOCR selected for Vietnamese recognition pilot
+Current milestone: M3 / Phase 13.3 — hybrid OCR integrated, production promotion rejected
 
 Completed:
 - M1 Universal Document Intake, safety, canonical model and native/OCR routing
@@ -31,6 +31,10 @@ Completed:
 - PaddleOCR, EasyOCR and VietOCR evaluated on one dataset digest
 - EasyOCR `vi` selected for pilot: 82.92% Exact Match, 0.89% CER, 0.00% DER
 - EasyOCR/VietOCR agreement: 143/240 lines at 100% agreement precision
+- Hybrid orchestration: Paddle detector → EasyOCR primary → VietOCR verifier
+- Disagreement policy preserves the EasyOCR candidate and sets `needs_review`
+- Authorized real-scan pilot: 15 reviewed CCCD, 671 detected line crops
+- Real-scan agreement: 18/671 lines (2.68%); decision `NOT_PROMOTED`
 - 60+ synthetic unit/contract/safety/architecture/benchmark tests
 - Ruff, strict mypy, compile and repository hygiene gates
 
@@ -55,9 +59,9 @@ Known limits:
 - Supported extractors: CV, employment contract, leave request and timesheet
 - Administrative/other types require review until an extractor is approved
 - PPTX remains text-by-slide; legacy DOC/XLS require safe conversion
-- No authorized real-document benchmark yet
-- No fixed private line-crop corpus comparing Paddle, EasyOCR and VietOCR yet
-- No authorized real-document line-crop replication of Phase 13.2 yet
+- Real-scan pilot is only 15 CCCD and does not cover the HR document portfolio
+- Phase 13.3 document CER is 68.74%; detector/crop/recognizer chain needs diagnosis
+- Verifier agreement is not calibrated as correctness evidence on real scans
 - No Camunda deployment, review UI or HRM/BPM side effect
 - Camunda environment link and deployment evidence remain pending
 
@@ -69,8 +73,9 @@ Key commands:
 - `hcns-agent-benchmark evaluate --ground-truth <file> --predictions <file> --output <file>`
 
 Next:
-- Integrate Paddle detection + EasyOCR recognition + VietOCR verification
-- Repeat the 240-line protocol on authorized real HR scans
+- Build reviewed line-level Ground Truth for the 671 private real-scan crops
+- Diagnose perspective, crop padding, reading order and recognizer disagreement
+- Repeat the protocol on authorized real CV, contract, leave and timesheet scans
 - Calibrate EasyOCR/VietOCR confidence before changing auto-accept thresholds
 - Obtain approval/manifest for a fixed 30–50 page document Ground Truth outside Git
 - Run PaddleOCR baseline and MinerU document challenger on the same dataset digest

@@ -142,6 +142,12 @@ EasyOCR `vi` đạt 82,92% Exact Match và 0% DER, được chọn cho pilot; Vi
 trường chỉ được auto-accept khi hai engine đồng thuận và validation đạt, nếu
 không sẽ chuyển `needs_review`.
 
+Phase 13.3 đã tích hợp chuỗi Paddle detector → EasyOCR → VietOCR verifier và
+thử trên 15 CCCD scan thật đã xác nhận Ground Truth. Chỉ 18/671 dòng đồng thuận
+(2,68%), document CER hybrid 68,74%; vì vậy quyết định hiện tại là
+`NOT_PROMOTED`. Kết quả này xác nhận corpus synthetic chưa đủ để thay recognizer
+production và mọi dòng bất đồng vẫn phải qua human review.
+
 ## Camunda và Human-in-the-loop
 
 Camunda là nguồn sự thật cho BPMN, Service Task, User Task, timer, SLA, retry,

@@ -105,6 +105,23 @@ pilot chỉ cài dependency cần cho inference để không hạ phiên bản P
 EasyOCR. Triển khai dài hạn phải dùng môi trường VietOCR riêng, khóa hash weights
 và làm `pip check`; không dùng nguyên runtime pilot làm image production.
 
+## Phase 13.3 — hybrid real-scan pilot
+
+`HybridVietnameseOcrEngine` giữ detector và geometry tách khỏi recognizer:
+
+1. PaddleOCR cung cấp box dòng và raw detector evidence.
+2. EasyOCR `vi` nhận dạng crop độ phân giải cao và tạo candidate chính.
+3. VietOCR `vgg_seq2seq` đọc cùng crop để kiểm chứng.
+4. Chỉ candidate đồng thuận chính xác sau chuẩn hóa NFC mới có trạng thái
+   `accepted`; mọi bất đồng là `needs_review`.
+
+Kết quả 15 CCCD thật, digest
+`sha256:e60642e231d9c959423c94c622f5c46488edc8789036dd2318c7acefb513ea61`,
+cho thấy chỉ 18/671 crop đồng thuận (2.68%) và document CER hybrid là 68.74%.
+Vì vậy Phase 13.3 không được promote. Bước tiếp theo phải tạo Ground Truth ở cấp
+dòng/crop để tách lỗi detector/crop khỏi lỗi recognizer, rồi hiệu chỉnh padding,
+perspective và cấu hình nhận dạng trên từng nhóm trường.
+
 ## MinerU challenger
 
 Phù hợp khi:

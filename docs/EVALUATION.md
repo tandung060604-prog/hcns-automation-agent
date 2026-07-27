@@ -169,3 +169,34 @@ thay đổi. Cả ba backend phải dùng đúng cùng manifest digest.
 Ranking ưu tiên Exact Match cao nhất, sau đó DER thấp nhất, accepted precision
 cao nhất và latency p95 thấp nhất. Challenger chỉ được chọn cho pilot khi Exact
 Match và DER đều không tệ hơn baseline, đồng thời ít nhất một metric tốt hơn.
+
+### Phase 13.3 — lặp lại trên scan thật có quyền sử dụng
+
+Pipeline pilot dùng box của PaddleOCR, nhận dạng từng crop bằng EasyOCR `vi` và
+kiểm chứng độc lập bằng VietOCR `vgg_seq2seq`. Hai chuỗi chỉ được xem là đồng
+thuận sau NFC, `casefold` và chuẩn hóa khoảng trắng. Nếu bất đồng, pipeline giữ
+ứng viên EasyOCR nhưng bắt buộc gắn `needs_review`; VietOCR không được phép âm
+thầm sửa kết quả.
+
+Tập đánh giá private gồm 15 CCCD scan thật được người dùng xác nhận cả
+`comparedWithImage=true`, `allTextChecked=true` và đủ 8 trường Ground Truth.
+Manifest private cố định bằng SHA-256:
+
+```text
+sha256:e60642e231d9c959423c94c622f5c46488edc8789036dd2318c7acefb513ea61
+```
+
+Kết quả aggregate:
+
+| Chỉ số | Phase 9 reviewed baseline | Phase 13.3 hybrid |
+|---|---:|---:|
+| Document CER trung bình | 0.00% | 68.74% |
+| Document WER trung bình | 0.00% | 127.69% |
+| Document Exact Match | 100.00% | 0.00% |
+
+Phase 9 ở bảng trên là bản đã được hiệu chỉnh/xác nhận trong session, nên chỉ là
+reference vận hành, không phải raw-recognizer baseline. Hybrid có 671 crop; chỉ
+18 dòng đồng thuận (2.68%), 653 dòng phải review. Kết luận
+`NOT_PROMOTED`: kết quả synthetic Phase 13.2 không tái lập trên scan thật và chưa
+đủ bằng chứng để thay recognizer production. Manifest, crop, prediction và text
+Ground Truth nằm ngoài Git tại `private-data/output/phase13_3/`.
