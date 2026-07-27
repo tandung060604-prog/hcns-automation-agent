@@ -1,14 +1,15 @@
-from pathlib import Path
 from unittest import TestCase
 
+from synthetic_fixtures import administrative_image_bytes
+
 from hcns_agent.adapters.paddleocr import PaddleOcrEngine
-from hcns_agent.domain.models import HrDocument
+from hcns_agent.ports.document_parser import DocumentSource
 
 
 class _FakePredictor:
-    def predict(self, path: str, **options: object) -> list[dict[str, object]]:
-        if not path.endswith("synthetic.png"):
-            raise AssertionError("Unexpected input path")
+    def predict(self, image: object, **options: object) -> list[dict[str, object]]:
+        if getattr(image, "shape", None) != (240, 640, 3):
+            raise AssertionError("Unexpected normalized image")
         if options.get("use_doc_unwarping") is not False:
             raise AssertionError("Unsafe default options")
         return [
@@ -24,11 +25,14 @@ class PaddleOcrAdapterTests(TestCase):
     def test_normalizes_vendor_result_without_loading_models(self) -> None:
         engine = PaddleOcrEngine(predictor=_FakePredictor())
         result = engine.recognize(
-            HrDocument(document_id="SYNTHETIC-001", path=Path("synthetic.png"))
+            DocumentSource(
+                document_id="SYNTHETIC-001",
+                filename="synthetic.png",
+                content=administrative_image_bytes(),
+            )
         )
 
         self.assertEqual("paddleocr/pp-ocrv5-vi", result.engine)
         self.assertEqual("HỒ SƠ SYNTHETIC", result.pages[0].lines[0].text)
         self.assertEqual(0.97, result.pages[0].lines[0].confidence)
         self.assertEqual((100.0, 20.0), result.pages[0].lines[0].box[2])
-

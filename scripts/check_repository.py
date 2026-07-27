@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 REQUIRED_FILES = (
     "README.md",
     "AGENTS.md",
@@ -47,4 +46,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

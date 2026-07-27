@@ -1,35 +1,40 @@
 # Roadmap
 
-## M0 — Scaffold
+## M0 — Architecture scaffold (completed)
 
-- Domain, ports, mock adapter, HITL state machine.
-- Documentation, policies và repository guardrails.
+- Ports/adapters, OCR mock/Paddle adapter và policy HITL ban đầu.
 
-## M1 — Verified benchmark
+## M1 — Universal Document Intake (completed)
 
-- Import pipeline Ground Truth có quyền sử dụng.
-- Adapter PaddleOCR và contract tests.
-- Báo cáo theo document type, không chỉ metric tổng.
+- Canonical Document Model đa định dạng.
+- Content-based detection, file safety và deterministic parser registry.
+- Native PDF/DOCX/XLSX; OCR routing cho ảnh/PDF scan.
+- PPTX text extension point.
+- Durable result reference, idempotent job handler và Camunda-neutral ports.
+- Synthetic contract/safety/architecture tests.
 
-## M2 — Challenger
+## M2 — Classification and extraction (completed)
 
-- Adapter MinerU upstream trong environment tách biệt.
-- Bake-off PaddleOCR/MinerU trên cùng dataset.
-- Routing engine theo loại tài liệu nếu có bằng chứng.
+- DocumentType classifier độc lập SourceFormat, có confidence/provenance.
+- Extractor CV, hợp đồng lao động, đơn nghỉ phép và chấm công.
+- Required/conflict/date/sensitivity validation và quality gate.
+- Business JSON 2.0.0; Camunda summary có type/quality/review flag.
 
-## M3 — Review application
+## M3 — Verified understanding benchmark
 
-- Review queue, crop/provenance và correction history.
-- Role-based access, approval expiry và audit export.
+- Ground Truth 30–50 trang có quyền sử dụng.
+- Đo classification precision/recall và field exact match theo document type.
+- PaddleOCR baseline và MinerU upstream challenger trên cùng intake contract.
+- Promotion gate theo accuracy, false acceptance, privacy, latency/review effort.
 
-## M4 — Workflow pilot
+## M4 — Camunda pilot and Human Review
 
-- Onboarding và đơn nghỉ phép ở chế độ dry-run.
-- Connector BPM/HRM giả lập, idempotency và replay tests.
+- Chọn Camunda 7/8 ở infrastructure, triển khai SDK-specific job worker.
+- BPMN dry-run cho một workflow; Camunda User Task là nguồn sự thật.
+- Review UI hiển thị page/block/sheet/cell provenance, không tạo queue riêng.
 
-## M5 — Controlled production
+## M5 — Controlled integration
 
-- Threat model, DPIA, retention và backup/restore.
-- SLO, monitoring, incident response và rollback.
-- Cho phép từng side effect theo policy, không bật hàng loạt.
-
+- Result/object storage production, retention, authorization và audit.
+- HRM/BPM connector giả lập trước; idempotency/replay/incident tests.
+- Side effect thật chỉ bật từng action sau threat model, DPIA và approval.

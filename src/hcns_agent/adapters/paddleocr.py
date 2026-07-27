@@ -7,10 +7,12 @@ models. Use ``from_default`` only inside a trusted local runtime.
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from io import BytesIO
+from typing import Any
 
-from hcns_agent.domain.models import HrDocument
+from hcns_agent.ports.document_parser import DocumentSource
 from hcns_agent.ports.ocr import OcrLine, OcrPage, OcrResult
 
 
@@ -39,7 +41,7 @@ class PaddleOcrEngine:
     @classmethod
     def from_default(cls, *, device: str = "cpu") -> PaddleOcrEngine:
         try:
-            from paddleocr import PaddleOCR
+            from paddleocr import PaddleOCR  # type: ignore[import-not-found]
         except ImportError as error:
             raise RuntimeError(
                 'PaddleOCR is not installed. Run: python -m pip install -e ".[paddle]"'
@@ -53,13 +55,23 @@ class PaddleOcrEngine:
         )
         return cls(predictor=predictor, device=device)
 
-    def recognize(self, document: HrDocument) -> OcrResult:
+    def recognize(self, source: DocumentSource) -> OcrResult:
+        try:
+            import numpy as np
+            from PIL import Image
+        except ImportError as error:
+            raise RuntimeError(
+                "PaddleOCR image dependencies are missing; install the paddle extra"
+            ) from error
+
         started = time.perf_counter()
-        predictions = self.predictor.predict(str(document.path), **self.predict_options)
+        with Image.open(BytesIO(source.content)) as image:
+            rgb_image = np.asarray(image.convert("RGB"))
+        predictions = self.predictor.predict(rgb_image, **self.predict_options)
         pages = tuple(self._to_pages(predictions))
         duration_ms = round((time.perf_counter() - started) * 1000)
         return OcrResult(
-            document_id=document.document_id,
+            document_id=source.document_id,
             engine=self.name,
             pages=pages,
             duration_ms=duration_ms,
@@ -68,6 +80,7 @@ class PaddleOcrEngine:
                 "detectionModel": self.detection_model,
                 "recognitionModel": self.recognition_model,
                 "device": self.device,
+                "version": "3",
             },
         )
 
@@ -81,13 +94,8 @@ class PaddleOcrEngine:
             for line_index, text in enumerate(texts):
                 confidence = float(scores[line_index]) if line_index < len(scores) else 0.0
                 polygon = polygons[line_index] if line_index < len(polygons) else ()
-                box = tuple(
-                    (float(point[0]), float(point[1]))
-                    for point in _as_list(polygon)
-                )
-                lines.append(
-                    OcrLine(text=str(text), confidence=confidence, box=box)
-                )
+                box = tuple((float(point[0]), float(point[1])) for point in _as_list(polygon))
+                lines.append(OcrLine(text=str(text), confidence=confidence, box=box))
             yield OcrPage(page_index=page_index, lines=tuple(lines))
 
 
@@ -96,4 +104,3 @@ def _as_list(value: Any) -> list[Any]:
         converted = value.tolist()
         return list(converted)
     return list(value)
-

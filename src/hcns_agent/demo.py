@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import sys
 from dataclasses import asdict
-from pathlib import Path
 
 from hcns_agent.adapters.mock_ocr import DeterministicMockOcrEngine
 from hcns_agent.application.process_document import ProcessDocument
@@ -17,7 +16,7 @@ def main() -> None:
         sys.stdout.reconfigure(encoding="utf-8")
     document = HrDocument(
         document_id="SYNTHETIC-HR-0001",
-        path=Path("synthetic-input.png"),
+        filename="synthetic-input.png",
         document_type=DocumentType.EMPLOYMENT_CONTRACT,
     )
     proposal = ProcessDocument(DeterministicMockOcrEngine()).execute(document)

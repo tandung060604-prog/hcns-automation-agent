@@ -5,6 +5,22 @@
 Model chỉ tạo quan sát và đề xuất. Policy quyết định trường nào được chấp nhận,
 trường nào phải review và hành động nào có thể thực thi.
 
+Classifier rule-based M2 là baseline deterministic có version/provenance, không
+phải tuyên bố accuracy production. Model classifier/extractor sau này phải trả
+cùng port và không được dùng `SourceFormat` như nhãn business.
+
+## Native parser first
+
+Không dùng OCR như parser mặc định:
+
+- PDF có text dùng PyMuPDF native và giữ page/bounding box;
+- DOCX đọc OOXML để giữ heading, paragraph, list, table và metadata;
+- XLSX dùng openpyxl với `data_only=False`, giữ raw value, data type, formula và
+  merged range, không tính lại công thức;
+- ảnh và PDF scan mới gọi `OcrEngine`.
+
+SDK/model chỉ nằm trong adapter. Unit test dùng fake OCR và không tải weights.
+
 ## PaddleOCR baseline
 
 Phù hợp khi:
@@ -14,8 +30,8 @@ Phù hợp khi:
 - muốn license Apache 2.0 và dependency tương đối rõ;
 - tài liệu chủ yếu là biểu mẫu, giấy tờ hoặc trang scan đơn giản.
 
-Điểm cần đo: dấu tiếng Việt, ảnh mờ/nghiêng, CCCD, reading order nhiều cột và
-bảng chấm công.
+Điểm cần đo: dấu tiếng Việt, ảnh mờ/nghiêng, giấy tờ định danh, reading order
+nhiều cột và tài liệu scan có bảng.
 
 ## MinerU challenger
 
@@ -25,11 +41,13 @@ Phù hợp khi:
 - cần Markdown/JSON theo block và reading order;
 - có đủ RAM/VRAM và chấp nhận dependency lớn hơn.
 
-Không dùng một fork MinerU thiếu license/provenance. Khi thử nghiệm, pin phiên
+Không dùng fork MinerU thiếu license/provenance. Khi thử nghiệm, pin phiên
 bản upstream và lưu model manifest. Kiểm tra điều khoản attribution trước khi
 cung cấp dịch vụ online.
 
-## Luật chọn backend
+MinerU không đi vào domain/application và chưa được promote vào default intake.
+
+## Luật chọn OCR backend
 
 Không chọn theo demo hoặc benchmark chung. Hai engine phải chạy trên cùng:
 
@@ -59,4 +77,3 @@ Mỗi lần benchmark phải lưu:
 ```
 
 Không lưu raw PII trong manifest.
-
