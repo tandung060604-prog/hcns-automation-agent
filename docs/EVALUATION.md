@@ -140,3 +140,32 @@ hcns-agent-recognition evaluate `
 Ground Truth và prediction không được commit. Report aggregate chỉ được publish
 sau disclosure review; danh sách missing charset được phép lưu vì không chứa nội
 dung tài liệu.
+
+### Quy trình Phase 13.2
+
+```powershell
+python scripts/phase13_2_recognition.py prepare `
+  --source-root <private-native-pdf-root> `
+  --output-root <private-phase13-corpus> `
+  --max-cases 240 --dpi 300
+
+python scripts/phase13_2_recognition.py run `
+  --backend <paddle|easyocr|vietocr> `
+  --manifest <private-corpus-manifest.json> `
+  --output <private-predictions.json>
+
+python scripts/phase13_2_recognition.py select `
+  --report <paddle-report.json> `
+  --report <easyocr-report.json> `
+  --report <vietocr-report.json> `
+  --baseline-model latin_PP-OCRv5_mobile_rec `
+  --output <recognizer-selection.json>
+```
+
+Crop được tạo từ bounding box dòng của PDF native để loại detector khỏi biến số
+benchmark. Mỗi crop, source và toàn corpus đều có SHA-256; runner từ chối crop bị
+thay đổi. Cả ba backend phải dùng đúng cùng manifest digest.
+
+Ranking ưu tiên Exact Match cao nhất, sau đó DER thấp nhất, accepted precision
+cao nhất và latency p95 thấp nhất. Challenger chỉ được chọn cho pilot khi Exact
+Match và DER đều không tệ hơn baseline, đồng thời ít nhất một metric tốt hơn.

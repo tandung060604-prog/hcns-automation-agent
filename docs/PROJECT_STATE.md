@@ -1,6 +1,6 @@
 # Project State
 
-Current milestone: M3 / Phase 13.1 — Vietnamese recognition benchmark implemented; authorized run pending
+Current milestone: M3 / Phase 13.2 — EasyOCR selected for Vietnamese recognition pilot
 
 Completed:
 - M1 Universal Document Intake, safety, canonical model and native/OCR routing
@@ -27,6 +27,10 @@ Completed:
 - Recognition-only Ground Truth/prediction/report contracts
 - Vietnamese NFC charset audit with 134 extended characters
 - CER, WER, Exact Match, Diacritic Error Rate and accepted precision
+- Fixed 240-line synthetic Vietnamese crop corpus at 300 DPI in private-data
+- PaddleOCR, EasyOCR and VietOCR evaluated on one dataset digest
+- EasyOCR `vi` selected for pilot: 82.92% Exact Match, 0.89% CER, 0.00% DER
+- EasyOCR/VietOCR agreement: 143/240 lines at 100% agreement precision
 - 60+ synthetic unit/contract/safety/architecture/benchmark tests
 - Ruff, strict mypy, compile and repository hygiene gates
 
@@ -53,6 +57,7 @@ Known limits:
 - PPTX remains text-by-slide; legacy DOC/XLS require safe conversion
 - No authorized real-document benchmark yet
 - No fixed private line-crop corpus comparing Paddle, EasyOCR and VietOCR yet
+- No authorized real-document line-crop replication of Phase 13.2 yet
 - No Camunda deployment, review UI or HRM/BPM side effect
 - Camunda environment link and deployment evidence remain pending
 
@@ -64,9 +69,9 @@ Key commands:
 - `hcns-agent-benchmark evaluate --ground-truth <file> --predictions <file> --output <file>`
 
 Next:
-- Build a fixed authorized line-crop corpus outside Git
-- Run PaddleOCR, EasyOCR and VietOCR on the same crop digest
-- Select/fine-tune a Vietnamese recognizer only after aggregate comparison
+- Integrate Paddle detection + EasyOCR recognition + VietOCR verification
+- Repeat the 240-line protocol on authorized real HR scans
+- Calibrate EasyOCR/VietOCR confidence before changing auto-accept thresholds
 - Obtain approval/manifest for a fixed 30–50 page document Ground Truth outside Git
 - Run PaddleOCR baseline and MinerU document challenger on the same dataset digest
 - Review aggregate comparison; do not promote until every gate passes

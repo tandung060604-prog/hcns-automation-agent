@@ -65,6 +65,46 @@ NFC normalization chỉ chuẩn hóa biểu diễn Unicode, không được dùn
 dấu đã mất. Candidate hậu xử lý phải giữ raw OCR và chuyển `needs_review` nếu
 không có đủ bằng chứng.
 
+## Phase 13.2 — Kết quả recognition-only
+
+Corpus `synthetic-hr-v2-vi-lines` version `1.0.0` gồm 240 crop dòng ở 300 DPI,
+trong đó 204 dòng có ký tự Việt mở rộng. Corpus và prediction nằm trong
+private-data; digest cố định:
+
+```text
+sha256:aabe6e292dd1baff7c9a94f30aa5f83c4e4b741f9209fd5e5caf181d6223ee5b
+```
+
+| Recognizer | Exact Match | CER | DER | Accepted precision | p95 |
+|---|---:|---:|---:|---:|---:|
+| EasyOCR 1.7.2 `vi` greedy | 82.92% | 0.89% | 0.00% | 100.00% | 187.7 ms |
+| VietOCR 0.3.13 `vgg_seq2seq` | 72.50% | 3.67% | 3.01% | 0.00%* | 178.1 ms |
+| PaddleOCR 3.7.0 Latin v5 | 19.58% | 12.51% | 7.87% | 17.74% | 161.4 ms |
+
+`*` VietOCR không có prediction nào đạt confidence threshold 0.95; confidence
+giữa các engine không được so trực tiếp khi chưa calibration.
+
+Quyết định: `easyocr-vi-greedy` được chọn cho pilot recognition, chưa được
+promote production. VietOCR là recognizer kiểm chứng. EasyOCR và VietOCR đồng
+thuận 143/240 dòng; precision của nhóm đồng thuận đạt 100% trên corpus này.
+
+Policy pilot:
+
+1. Paddle detector tiếp tục tạo vùng dòng.
+2. EasyOCR nhận dạng crop độ phân giải cao.
+3. VietOCR nhận dạng độc lập cùng crop.
+4. Chỉ auto-accept khi hai chuỗi NFC đồng thuận và validation nghiệp vụ đạt.
+5. Mọi trường hợp khác là `needs_review`; không điền dấu bằng suy đoán.
+
+Corpus synthetic sạch không chứng minh accuracy production. Cần lặp lại policy
+trên line-crop corpus từ tài liệu thật có quyền sử dụng trước khi thay default
+recognizer.
+
+VietOCR 0.3.13 pin một số dependency training cũ, bao gồm Pillow 10.2. Runtime
+pilot chỉ cài dependency cần cho inference để không hạ phiên bản Pillow của
+EasyOCR. Triển khai dài hạn phải dùng môi trường VietOCR riêng, khóa hash weights
+và làm `pip check`; không dùng nguyên runtime pilot làm image production.
+
 ## MinerU challenger
 
 Phù hợp khi:

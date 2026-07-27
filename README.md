@@ -136,6 +136,12 @@ hcns-agent-recognition evaluate `
 Report chỉ chứa CER, WER, Exact Match, Diacritic Error Rate, accepted precision
 và latency; raw text vẫn nằm ngoài Git.
 
+Phase 13.2 đã chạy ba recognizer trên cùng corpus synthetic 240 crop dòng:
+EasyOCR `vi` đạt 82,92% Exact Match và 0% DER, được chọn cho pilot; VietOCR
+`vgg_seq2seq` làm recognizer kiểm chứng. Đây chưa phải tuyên bố production:
+trường chỉ được auto-accept khi hai engine đồng thuận và validation đạt, nếu
+không sẽ chuyển `needs_review`.
+
 ## Camunda và Human-in-the-loop
 
 Camunda là nguồn sự thật cho BPMN, Service Task, User Task, timer, SLA, retry,
@@ -251,6 +257,7 @@ Dự án hiện ở giai đoạn benchmark có thể kiểm chứng:
 - Canonical model, classifier, extractor và quality gate đã có.
 - Benchmark baseline/challenger và promotion gate đã có.
 - Benchmark recognition-only và audit charset tiếng Việt đã có.
+- EasyOCR đã được chọn cho pilot recognition; VietOCR dùng để kiểm chứng.
 - Camunda BPMN/DMN package tham chiếu đã được bổ sung.
 - Benchmark trên tài liệu thật có quyền sử dụng và triển khai Camunda thực tế
   vẫn đang chờ phê duyệt.
