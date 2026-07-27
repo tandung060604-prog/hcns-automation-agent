@@ -79,6 +79,23 @@ Business JSON `2.0.0` là projection nhỏ từ `IdpResult`, không chứa raw f
 toàn bộ canonical document. Chi tiết migration tại
 [ADR-0003](adr/0003-document-understanding-and-quality-gate.md).
 
+## Evaluation boundary
+
+M3 benchmark nhận `IdpResult` qua một adapter vendor-neutral rồi so với Ground
+Truth versioned. Baseline và challenger không được có đường metric riêng; cả hai
+phải dùng cùng dataset ID/version/digest và cùng prediction contract.
+
+```text
+authorized Ground Truth ─┐
+                         ├─ BenchmarkHarness ─ aggregate report
+IdpResult predictions ───┘                    └─ PromotionGate
+```
+
+Ground Truth và prediction có field value nằm ngoài Git. `BenchmarkReport` chỉ
+chứa count/rate, type/field name chuẩn, backend/model identifier, dataset
+version/digest và latency/failure aggregate. Promotion gate là kiểm soát phát hành,
+không ghi Camunda/HRM, không thay đổi `QualityReport` và không cấp quyền side effect.
+
 ## Safety trước parsing
 
 Format detector kết hợp extension, declared MIME, magic bytes và cấu trúc OOXML

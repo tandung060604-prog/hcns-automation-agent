@@ -57,3 +57,51 @@ benchmark cho đến khi có conversion path an toàn được phê duyệt.
 Rule classifier/extractors M2 chỉ là architecture baseline trên fixture
 synthetic. Không promote để auto-route production cho đến khi chạy Ground Truth
 có quyền sử dụng và kiểm false acceptance theo từng document type.
+
+## Benchmark contract M3
+
+Harness offline dùng bốn JSON Schema version `1.0.0`:
+
+- `benchmark_ground_truth.schema.json`: manifest quyền sử dụng/approval/retention,
+  dataset digest và Ground Truth;
+- `benchmark_predictions.schema.json`: backend/model version, output field, quality
+  status, latency và failure code;
+- `benchmark_report.schema.json`: metric tổng hợp, không có raw expected/predicted
+  field value;
+- `benchmark_comparison.schema.json`: hai aggregate report và quyết định
+  `PROMOTE|HOLD` có từng check.
+
+Ground Truth và prediction chứa field value nên phải nằm ngoài repository trong
+data root được kiểm soát. Unit test chỉ tạo fixture synthetic trong thư mục tạm và
+không đọc `dataset/`.
+
+`prediction_case_from_idp_result` chuyển `IdpResult` vendor-neutral thành benchmark
+prediction. Vì vậy PaddleOCR baseline và MinerU challenger phải đi qua cùng intake,
+classification, extraction và quality contract; harness không chứa nhánh riêng theo
+vendor.
+
+Field exact match là equality có kiểu trên scalar chuẩn của Business JSON. Candidate
+sai hoặc duplicate làm tăng predicted count; field không có candidate làm tăng
+not-found. Classification macro metric tính trên từng type có Ground Truth support,
+đồng thời báo riêng `UNKNOWN` rate. OCR metric dùng edit distance tổng hợp để tính
+CER/WER và exact line-sequence cho reading-order accuracy; raw transcription không
+đi vào report. Report còn có false PASS, false REJECT, review precision/rate,
+sensitive-field false acceptance, latency p50/p95 và failure rate.
+
+```powershell
+hcns-agent-benchmark evaluate `
+  --ground-truth <authorized-ground-truth.json> `
+  --predictions <predictions.json> `
+  --output <aggregate-report.json>
+
+hcns-agent-benchmark compare `
+  --ground-truth <authorized-ground-truth.json> `
+  --baseline <paddle-baseline.json> `
+  --challenger <mineru-challenger.json> `
+  --output <aggregate-comparison.json>
+```
+
+`compare` mặc định trả exit code `2` khi quyết định là `HOLD`. Approval flags không
+có giá trị mặc định đúng; operator phải cung cấp rõ sau khi contract/regression,
+privacy, license và model provenance đã được duyệt. Không commit report trước khi
+review disclosure, dù report không chứa raw value.

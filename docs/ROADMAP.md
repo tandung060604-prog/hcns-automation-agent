@@ -20,12 +20,13 @@
 - Required/conflict/date/sensitivity validation và quality gate.
 - Business JSON 2.0.0; Camunda summary có type/quality/review flag.
 
-## M3 — Verified understanding benchmark
+## M3 — Verified understanding benchmark (in progress)
 
-- Ground Truth 30–50 trang có quyền sử dụng.
-- Đo classification precision/recall và field exact match theo document type.
-- PaddleOCR baseline và MinerU upstream challenger trên cùng intake contract.
-- Promotion gate theo accuracy, false acceptance, privacy, latency/review effort.
+- Hoàn thành harness/schema offline và aggregate-only report.
+- Hoàn thành OCR CER/WER/reading-order, classification, extraction, quality và system metric.
+- Hoàn thành promotion gate và adapter từ vendor-neutral `IdpResult`.
+- Còn cần Ground Truth 30–50 trang có quyền sử dụng.
+- Còn cần chạy PaddleOCR baseline và MinerU challenger trên cùng dataset version.
 
 ## M4 — Camunda pilot and Human Review
 

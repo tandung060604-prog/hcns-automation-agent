@@ -9,6 +9,7 @@ from __future__ import annotations
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from importlib import import_module
 from io import BytesIO
 from typing import Any
 
@@ -41,7 +42,7 @@ class PaddleOcrEngine:
     @classmethod
     def from_default(cls, *, device: str = "cpu") -> PaddleOcrEngine:
         try:
-            from paddleocr import PaddleOCR  # type: ignore[import-not-found]
+            PaddleOCR = import_module("paddleocr").PaddleOCR
         except ImportError as error:
             raise RuntimeError(
                 'PaddleOCR is not installed. Run: python -m pip install -e ".[paddle]"'

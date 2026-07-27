@@ -1,81 +1,184 @@
 # HCNS Automation Agent
 
-Nền tảng **Agent tự động hóa nghiệp vụ hành chính nhân sự** với Intelligent
-Document Processing, Camunda orchestration và Human-in-the-loop.
+Nền tảng xử lý tài liệu hành chính nhân sự tiếng Việt theo hướng **Intelligent
+Document Processing (IDP)**, kết hợp quy trình kiểm duyệt của con người và khả
+năng điều phối bằng Camunda.
 
-> IDP đọc và hiểu tài liệu. Agent phân tích và đề xuất. Camunda điều phối quy
-> trình và con người.
+> IDP đọc và chuẩn hóa tài liệu. Agent phân tích và đề xuất. Camunda điều phối
+> quy trình. Con người phê duyệt các quyết định quan trọng.
 
-Sản phẩm tiếp nhận CV, hồ sơ nhân viên, giấy tờ định danh, hợp đồng, quyết định,
-đơn từ, bảng chấm công/lương, chứng chỉ, quy chế, công văn và biểu mẫu. CCCD chỉ
-là một document type; đây không phải ứng dụng OCR CCCD.
+Dự án được thiết kế để tiếp nhận nhiều loại hồ sơ HCNS, trích xuất dữ liệu có
+bằng chứng, đánh giá chất lượng và tạo Business JSON sẵn sàng cho tầng quy trình.
+CCCD chỉ là một trong nhiều loại tài liệu được hỗ trợ; mục tiêu của dự án không
+giới hạn ở nhận dạng giấy tờ định danh.
 
-## Universal Document Intake
+## Mục tiêu
+
+- Tiếp nhận thống nhất ảnh, PDF, DOCX, XLSX và PPTX.
+- Ưu tiên trích xuất native với tài liệu có lớp văn bản; chỉ dùng OCR cho ảnh
+  hoặc PDF scan.
+- Chuẩn hóa kết quả về Canonical Document Model có provenance.
+- Phân loại tài liệu, trích xuất trường nghiệp vụ và kiểm tra chất lượng.
+- Không tự suy đoán hoặc âm thầm điền trường thiếu bằng AI.
+- Chuyển trường không chắc chắn sang `needs_review` để con người đối chiếu.
+- Tạo Business JSON nhỏ gọn, có version và phù hợp để Camunda định tuyến.
+- Giữ tài liệu thật, OCR output và PII trong môi trường local/private.
+
+## Luồng xử lý tổng thể
 
 ```text
-file/reference
-  → format detection + file safety
-  → deterministic parser routing
-  → native PDF/DOCX/XLSX hoặc OCR cho ảnh/PDF scan
+Tài liệu hoặc document reference
+  → kiểm tra định dạng và an toàn tệp
+  → chọn native parser hoặc OCR
   → Canonical Document Model + provenance
-  → DocumentType classification + field extraction
-  → validation/quality gate + Business JSON v2
-  → durable result reference + small routing summary
-  → Camunda BPMN/User Task
+  → phân loại DocumentType
+  → trích xuất trường và bảng
+  → validation + quality gate
+  → PASS / REVIEW / REJECT
+  → Business JSON + resultReference
+  → Camunda Service Task / User Task
 ```
 
-`SourceFormat`, `DocumentType` và `WorkflowType` độc lập. Format chỉ chọn parser;
-classification nghiệp vụ và workflow routing là các bước khác có context riêng.
-Parser native được ưu tiên để giữ page, paragraph, table, sheet, cell, formula
-và merged range. OCR chỉ chạy cho ảnh hoặc PDF scan.
+Ba khái niệm được tách biệt:
 
-Safety gate không chỉ tin extension: nó kiểm tra MIME khai báo, magic bytes,
-OOXML ZIP, giới hạn size/page/archive, ZIP path traversal, expansion ratio,
-macro, encryption và corruption. Legacy DOC/XLS trả `CONVERSION_REQUIRED`,
-không tự chạy Office hay executable chuyển đổi.
+- `SourceFormat` quyết định cách đọc tệp.
+- `DocumentType` quyết định extractor nghiệp vụ.
+- `WorkflowType` là ngữ cảnh quy trình do Camunda quản lý.
 
-## Document understanding
+Thiết kế này giúp thay OCR backend hoặc mở rộng loại tài liệu mà không đưa logic
+Camunda vào domain của IDP.
 
-Classifier và extractor là hai port riêng. Baseline rule-based local phân loại
-CV, hợp đồng lao động, đơn nghỉ phép, bảng chấm công và biểu mẫu hành chính;
-extractor được phê duyệt hiện có cho bốn loại đầu. Type chưa biết/chưa có
-extractor, field thiếu/xung đột/confidence thấp hoặc field nhạy cảm đều chuyển
-review. Quality score không tự cấp quyền ghi HRM/BPM.
+## Khả năng hiện có
 
-Business JSON `2.0.0` giữ classification candidates, field/extractor provenance,
-structured validation issues và quality status. Raw canonical document tiếp tục
-nằm trong result store, không đi vào process variables.
+### Tiếp nhận đa định dạng
 
-## Camunda boundary
+| Định dạng | Cách xử lý ưu tiên |
+|---|---|
+| PNG, JPG, JPEG | OCR engine thông qua `OcrEngine` port |
+| PDF có text layer | Native PDF extraction |
+| PDF scan hoặc hybrid | Native extraction kết hợp OCR khi cần |
+| DOCX | Đọc paragraph và table trực tiếp |
+| XLSX | Đọc sheet, cell, formula và merged range trực tiếp |
+| PPTX | Trích xuất text theo slide |
+| DOC, XLS legacy | Trả `CONVERSION_REQUIRED`; không tự chạy Office |
 
-Camunda là nguồn sự thật cho BPMN, Service/User Task, timer, SLA, retry,
-escalation, assignment, incident và process state dài hạn. IDP chỉ validate,
-parse, classify, extract, quality-gate, lưu result, rồi trả `ResultReference`
-cùng các biến routing nhỏ. Raw file, OCR output và canonical payload không đi
-vào process variables.
+Safety gate kiểm tra MIME, magic bytes, cấu trúc OOXML ZIP, giới hạn dung lượng,
+page count, archive expansion ratio, path traversal, macro, encryption và file
+hỏng. Hệ thống không chỉ tin phần mở rộng của tên tệp.
 
-Worker contract có business/correlation/idempotency key và phân biệt technical
-error với business error. Kết quả phải lưu xong trước khi complete job; retry
-cùng idempotency key không tạo result thứ hai. Milestone này chưa chạy Camunda
-server, BPMN production, review UI hoặc side effect HRM/BPM thật.
+### Document understanding
+
+Kiến trúc đã có classifier và extractor độc lập, với baseline deterministic cho:
+
+- CV;
+- hợp đồng lao động;
+- đơn xin nghỉ phép;
+- bảng chấm công;
+- phiếu và biểu mẫu hành chính nhân sự.
+
+Các trường được trả kèm nguồn bằng chứng như trang, block, bounding box,
+sheet/row/cell hoặc source reference. Document type chưa chắc chắn, extractor
+chưa được phê duyệt, trường thiếu/xung đột hoặc confidence thấp đều phải qua
+Human-in-the-loop.
+
+### Quality gate và Business JSON
+
+Quality gate đánh giá required field, confidence, validation, xung đột, trường
+nhạy cảm và khả năng truy nguyên. Kết quả sử dụng ba trạng thái:
+
+- `PASS`: đủ điều kiện kỹ thuật theo policy hiện hành;
+- `REVIEW`: cần người có thẩm quyền kiểm tra;
+- `REJECT`: đầu vào không hợp lệ hoặc không thể xử lý an toàn.
+
+Business JSON `2.0.0` chứa classification candidates, field provenance,
+validation issues, quality status và `resultReference`. Raw file, toàn bộ OCR
+text và Canonical Document payload không được đưa vào process variables.
+
+## Benchmark có thể kiểm chứng
+
+Benchmark harness chạy offline và áp dụng cùng một `IdpResult` contract cho
+baseline lẫn challenger. Các nhóm metric gồm:
+
+- OCR CER, WER và exact reading order;
+- classification accuracy theo loại tài liệu;
+- field exact match và document completeness;
+- false `PASS`/`REJECT`, review rate và sensitive false acceptance;
+- latency, failure rate và promotion gate.
+
+Ground Truth, prediction chứa field value và tài liệu nguồn phải nằm ngoài Git.
+Report trong repository chỉ được chứa metric tổng hợp, không chứa raw PII.
+
+```powershell
+hcns-agent-benchmark evaluate `
+  --ground-truth <authorized-ground-truth.json> `
+  --predictions <baseline-predictions.json> `
+  --output <aggregate-report.json>
+```
+
+Challenger chỉ được promote khi sử dụng đúng cùng dataset version/digest, cải
+thiện metric mục tiêu và không làm tăng false `PASS`, sensitive false acceptance
+hoặc rủi ro vận hành.
+
+## Camunda và Human-in-the-loop
+
+Camunda là nguồn sự thật cho BPMN, Service Task, User Task, timer, SLA, retry,
+escalation, assignment, incident và process state dài hạn. IDP worker chỉ xử lý
+một job hữu hạn, lưu kết quả bền vững rồi trả `resultReference` cùng routing
+summary.
+
+Repository có package tham chiếu:
+
+- [`camunda/HR_DOCUMENT_AGENT_MVP_V2.bpmn`](camunda/HR_DOCUMENT_AGENT_MVP_V2.bpmn)
+- [`camunda/HR_DOCUMENT_QUALITY_ROUTING.dmn`](camunda/HR_DOCUMENT_QUALITY_ROUTING.dmn)
+
+Package hiện là tài sản thiết kế dành cho review/dry-run, chưa phải xác nhận đã
+deploy production. **Liên kết Camunda Modeler/Operate/Tasklist sẽ được cập nhật
+sau khi môi trường tích hợp được công bố.**
+
+Xem thêm [thiết kế workflow](docs/WORKFLOWS.md) và
+[Human-in-the-loop](docs/HUMAN_IN_THE_LOOP.md).
+
+## Cài đặt
+
+Yêu cầu Python 3.10 trở lên.
+
+```powershell
+git clone https://github.com/tandung060604-prog/hcns-automation-agent.git
+cd hcns-automation-agent
+
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+```
+
+PaddleOCR là dependency tùy chọn và được load lazy:
+
+```powershell
+python -m pip install -e ".[paddle]"
+```
+
+MinerU challenger:
+
+```powershell
+python -m pip install -e ".[mineru]"
+```
+
+Không cài cả hai backend nếu chỉ cần chạy unit/contract tests.
 
 ## Chạy kiểm thử
 
-Yêu cầu Python 3.10+.
-
 ```powershell
-python -m pip install -e ".[dev]"
 python -m unittest discover -s tests -v
 python -m ruff check src tests scripts
 python -m mypy src
 python scripts/check_repository.py
 ```
 
-55+ unit/contract tests dùng fixture hoàn toàn synthetic: CV PDF, hợp
-đồng DOCX, bảng chấm công XLSX và biểu mẫu ảnh. Test không dùng network, model
-weights, Camunda server hoặc dữ liệu thật.
+Test sử dụng fixture synthetic, không cần network, model weights, Camunda server
+hoặc tài liệu thật.
 
-Ví dụ composition root:
+## Ví dụ sử dụng pipeline
 
 ```python
 from hcns_agent.adapters.mock_ocr import DeterministicMockOcrEngine
@@ -88,32 +191,62 @@ result = pipeline.execute(
     DocumentSource(
         document_id="SYNTHETIC-001",
         filename="form.png",
-        content=synthetic_bytes,
+        content=b"synthetic-content",
     )
 )
 business_json = BusinessJsonBuilder().build(result)
 ```
 
-PaddleOCR được load lazy trong adapter và chỉ cài khi cần:
-
-```powershell
-python -m pip install -e ".[paddle]"
-```
-
-## Repository
+## Cấu trúc repository
 
 ```text
 src/hcns_agent/
-├── domain/          # Canonical/IDP result, classifications và quality models
-├── application/     # intake, understanding, quality gate và job handler
-├── ports/           # parser/OCR/classifier/extractor/storage/orchestrator
-└── adapters/        # native parsers, OCR, rule baseline và result store
-docs/                # architecture, security, evaluation và ADR
-tests/               # synthetic unit/contract tests
+├── domain/          # Canonical model, IDP result, quality và evaluation
+├── application/     # intake, understanding, benchmark và job handling
+├── ports/           # parser, OCR, classifier, extractor và orchestration
+└── adapters/        # native parsers, OCR, storage và benchmark JSON
+
+schemas/             # JSON Schema cho Business JSON và benchmark
+camunda/             # BPMN/DMN package tham chiếu
+configs/             # policy cấu hình được version hóa
+docs/                # kiến trúc, bảo mật, evaluation, workflow và ADR
+tests/               # synthetic unit/contract/architecture tests
+scripts/             # repository quality checks
 ```
 
-Đọc [kiến trúc](docs/ARCHITECTURE.md),
-[bảo mật dữ liệu](docs/DATA_SECURITY.md),
-[ADR-0002](docs/adr/0002-universal-document-intake-and-camunda-boundary.md) và
-[ADR-0003](docs/adr/0003-document-understanding-and-quality-gate.md) cùng
-[trạng thái dự án](docs/PROJECT_STATE.md) trước khi mở rộng.
+## An toàn dữ liệu
+
+- Không commit dataset, model weights, upload, Ground Truth riêng tư hoặc OCR
+  output thật.
+- Không gửi tài liệu HCNS lên cloud/API nếu chưa có phê duyệt rõ ràng.
+- Không đặt raw file, raw OCR hoặc PII đầy đủ trong Camunda process variables.
+- Không tự động hóa quyết định tuyển dụng, sa thải, lương, kỷ luật hoặc phúc lợi.
+- Mọi hành động ghi HRM/BPM phải có policy, idempotency key và human approval.
+
+Đọc [chính sách an toàn dữ liệu](docs/DATA_SECURITY.md) trước khi chạy với tài
+liệu thật.
+
+## Trạng thái dự án
+
+Dự án hiện ở giai đoạn benchmark có thể kiểm chứng:
+
+- Universal Document Intake và native/OCR routing đã có.
+- Canonical model, classifier, extractor và quality gate đã có.
+- Benchmark baseline/challenger và promotion gate đã có.
+- Camunda BPMN/DMN package tham chiếu đã được bổ sung.
+- Benchmark trên tài liệu thật có quyền sử dụng và triển khai Camunda thực tế
+  vẫn đang chờ phê duyệt.
+
+Các baseline rule-based và fixture synthetic dùng để kiểm tra kiến trúc/contract,
+không phải tuyên bố độ chính xác production. Xem
+[trạng thái dự án](docs/PROJECT_STATE.md), [kiến trúc](docs/ARCHITECTURE.md),
+[đánh giá](docs/EVALUATION.md) và [lộ trình](docs/ROADMAP.md).
+
+## Giấy phép và đóng góp
+
+Các dependency và model backend tuân theo giấy phép riêng của từng dự án. Trước
+khi đưa model hoặc dataset mới vào benchmark, cần ghi rõ nguồn, version, license
+và phạm vi sử dụng.
+
+Khi đóng góp, hãy chạy đầy đủ quality gates, không đưa dữ liệu thật vào commit và
+đảm bảo thay đổi public contract được cập nhật bằng test cùng tài liệu liên quan.

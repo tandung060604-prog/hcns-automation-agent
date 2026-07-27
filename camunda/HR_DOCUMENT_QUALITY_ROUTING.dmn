@@ -1,0 +1,137 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/" xmlns:camunda="http://camunda.org/schema/1.0/dmn" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_HR_Document_Quality" name="HR Document Quality Routing" namespace="http://example.com/hr-document-agent-mvp-v2/dmn" exporter="Camunda Modeler" exporterVersion="5.49.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.13.0">
+  <decision id="hr-document-quality-routing" name="HR Document Quality Routing">
+    <description>Routes sanitized OCR quality metadata. No raw PII or extracted field values are inputs.</description>
+    <decisionTable id="DecisionTable_HR_Document_Quality" hitPolicy="UNIQUE">
+      <input id="Input_missingCriticalField" label="missingCriticalField">
+        <inputExpression id="Input_missingCriticalField_expr" typeRef="boolean">
+          <text>missingCriticalField</text>
+        </inputExpression>
+      </input>
+      <input id="Input_businessInconsistency" label="businessInconsistency">
+        <inputExpression id="Input_businessInconsistency_expr" typeRef="boolean">
+          <text>businessInconsistency</text>
+        </inputExpression>
+      </input>
+      <input id="Input_requiredFieldsComplete" label="requiredFieldsComplete">
+        <inputExpression id="Input_requiredFieldsComplete_expr" typeRef="boolean">
+          <text>requiredFieldsComplete</text>
+        </inputExpression>
+      </input>
+      <input id="Input_overallConfidence" label="overallConfidence">
+        <inputExpression id="Input_overallConfidence_expr" typeRef="double">
+          <text>overallConfidence</text>
+        </inputExpression>
+      </input>
+      <output id="Output_recommendedAction" label="recommendedAction" name="recommendedAction" typeRef="string"/>
+      <rule id="Rule_MissingCritical">
+        <description>Thiếu trường trọng yếu</description>
+        <inputEntry id="Rule_MissingCritical_in_1">
+          <text>true</text>
+        </inputEntry>
+        <inputEntry id="Rule_MissingCritical_in_2">
+          <text>-</text>
+        </inputEntry>
+        <inputEntry id="Rule_MissingCritical_in_3">
+          <text>-</text>
+        </inputEntry>
+        <inputEntry id="Rule_MissingCritical_in_4">
+          <text>-</text>
+        </inputEntry>
+        <outputEntry id="Rule_MissingCritical_out">
+          <text>"REQUEST_REUPLOAD"</text>
+        </outputEntry>
+      </rule>
+      <rule id="Rule_Inconsistency">
+        <description>Bất nhất nghiệp vụ</description>
+        <inputEntry id="Rule_Inconsistency_in_1">
+          <text>false</text>
+        </inputEntry>
+        <inputEntry id="Rule_Inconsistency_in_2">
+          <text>true</text>
+        </inputEntry>
+        <inputEntry id="Rule_Inconsistency_in_3">
+          <text>-</text>
+        </inputEntry>
+        <inputEntry id="Rule_Inconsistency_in_4">
+          <text>-</text>
+        </inputEntry>
+        <outputEntry id="Rule_Inconsistency_out">
+          <text>"HR_REVIEW"</text>
+        </outputEntry>
+      </rule>
+      <rule id="Rule_Auto">
+        <description>Đủ trường và confidence cao</description>
+        <inputEntry id="Rule_Auto_in_1">
+          <text>false</text>
+        </inputEntry>
+        <inputEntry id="Rule_Auto_in_2">
+          <text>false</text>
+        </inputEntry>
+        <inputEntry id="Rule_Auto_in_3">
+          <text>true</text>
+        </inputEntry>
+        <inputEntry id="Rule_Auto_in_4">
+          <text>[0.9..1]</text>
+        </inputEntry>
+        <outputEntry id="Rule_Auto_out">
+          <text>"AUTO_CONTINUE"</text>
+        </outputEntry>
+      </rule>
+      <rule id="Rule_UserReview">
+        <description>Đủ trường nhưng cần xác nhận</description>
+        <inputEntry id="Rule_UserReview_in_1">
+          <text>false</text>
+        </inputEntry>
+        <inputEntry id="Rule_UserReview_in_2">
+          <text>false</text>
+        </inputEntry>
+        <inputEntry id="Rule_UserReview_in_3">
+          <text>true</text>
+        </inputEntry>
+        <inputEntry id="Rule_UserReview_in_4">
+          <text>[0.6..0.9[</text>
+        </inputEntry>
+        <outputEntry id="Rule_UserReview_out">
+          <text>"USER_REVIEW"</text>
+        </outputEntry>
+      </rule>
+      <rule id="Rule_HRIncomplete">
+        <description>Thiếu trường không trọng yếu</description>
+        <inputEntry id="Rule_HRIncomplete_in_1">
+          <text>false</text>
+        </inputEntry>
+        <inputEntry id="Rule_HRIncomplete_in_2">
+          <text>false</text>
+        </inputEntry>
+        <inputEntry id="Rule_HRIncomplete_in_3">
+          <text>false</text>
+        </inputEntry>
+        <inputEntry id="Rule_HRIncomplete_in_4">
+          <text>-</text>
+        </inputEntry>
+        <outputEntry id="Rule_HRIncomplete_out">
+          <text>"HR_REVIEW"</text>
+        </outputEntry>
+      </rule>
+      <rule id="Rule_LowConfidence">
+        <description>Confidence thấp</description>
+        <inputEntry id="Rule_LowConfidence_in_1">
+          <text>false</text>
+        </inputEntry>
+        <inputEntry id="Rule_LowConfidence_in_2">
+          <text>false</text>
+        </inputEntry>
+        <inputEntry id="Rule_LowConfidence_in_3">
+          <text>true</text>
+        </inputEntry>
+        <inputEntry id="Rule_LowConfidence_in_4">
+          <text>&lt; 0.6</text>
+        </inputEntry>
+        <outputEntry id="Rule_LowConfidence_out">
+          <text>"REQUEST_REUPLOAD"</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

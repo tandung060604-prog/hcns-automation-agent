@@ -12,6 +12,7 @@ dist/
 !.env.example
 
 # PII, uploads, OCR artifacts and models
+dataset/
 data/private/
 data/uploads/
 data/ground_truth/private/
@@ -21,9 +22,12 @@ models/
 *.pdmodel
 *.pdiparams
 
+# Camunda Modeler local state and deployment exports
+camunda/.camunda/
+camunda/*.bak
+
 # IDE / OS
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
-

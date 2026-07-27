@@ -56,3 +56,13 @@ tổng hợp.
 
 Fixture unit/contract test phải synthetic. Không đọc/copy private-data, upload,
 model weights hoặc OCR output thật vào repository.
+
+Ground Truth và prediction benchmark chứa field value nên kế thừa mức nhạy cảm của
+tài liệu nguồn. Hai file này phải nằm ngoài repository, được mã hóa, kiểm soát truy
+cập và xóa theo `retentionUntil`. Manifest dùng content digest để khóa đúng version;
+không dùng filename hoặc raw text làm định danh.
+
+Benchmark report chỉ được phép chứa count/rate/latency, `DocumentType`, field name
+chuẩn, backend/model identifier và dataset version/digest. Harness không ghi raw
+expected value, predicted value, OCR text, source path hoặc provenance location vào
+report. Aggregate report vẫn cần disclosure review trước khi commit hoặc chia sẻ.

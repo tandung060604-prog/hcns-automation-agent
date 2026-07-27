@@ -39,3 +39,16 @@ error code. Không giữ raw file, raw OCR, canonical payload, ảnh hoặc work
 
 Milestone này không chứa BPMN production, scheduler, task assignment engine,
 review queue, process persistence hoặc connector HRM thật.
+
+## Package tham chiếu
+
+Repository lưu hai tài sản thiết kế để review và dry-run:
+
+- `camunda/HR_DOCUMENT_AGENT_MVP_V2.bpmn`
+- `camunda/HR_DOCUMENT_QUALITY_ROUTING.dmn`
+
+Package mô tả luồng intake, kiểm tra chất lượng, Human Review và định tuyến bằng
+DMN cho Camunda Platform 7.13. Đây chưa phải bằng chứng triển khai production;
+endpoint, credentials, deployment ID và liên kết tới môi trường Camunda không
+được lưu trong Git. Liên kết Modeler/Operate/Tasklist sẽ được bổ sung sau khi môi
+trường tích hợp được phê duyệt.
