@@ -1,6 +1,6 @@
 # Project State
 
-Current milestone: M3 / Phase 13.3 — hybrid OCR integrated, production promotion rejected
+Current milestone: M3 / Phase 14 — real-scan OCR hardening and line review
 
 Completed:
 - M1 Universal Document Intake, safety, canonical model and native/OCR routing
@@ -31,10 +31,15 @@ Completed:
 - PaddleOCR, EasyOCR and VietOCR evaluated on one dataset digest
 - EasyOCR `vi` selected for pilot: 82.92% Exact Match, 0.89% CER, 0.00% DER
 - EasyOCR/VietOCR agreement: 143/240 lines at 100% agreement precision
-- Hybrid orchestration: Paddle detector → EasyOCR primary → VietOCR verifier
+- Hybrid orchestration: Paddle primary → EasyOCR/VietOCR independent verifiers
 - Disagreement policy preserves the EasyOCR candidate and sets `needs_review`
 - Authorized real-scan pilot: 15 reviewed CCCD, 671 detected line crops
 - Real-scan agreement: 18/671 lines (2.68%); decision `NOT_PROMOTED`
+- Phase 14 provisional line corpus: 4 reviewed documents, 77 index-aligned crops
+- Paddle raw: 75.32% Exact Match, 6.82% CER, 1.60% DER
+- Best EasyOCR crop profile: 5.19% Exact Match and 44.33% CER
+- VietOCR on the best crop: 20.78% Exact Match and 33.33% CER
+- Paddle confirmed by at least one verifier: 7/77 at 100% provisional precision
 - 60+ synthetic unit/contract/safety/architecture/benchmark tests
 - Ruff, strict mypy, compile and repository hygiene gates
 
@@ -62,6 +67,7 @@ Known limits:
 - Real-scan pilot is only 15 CCCD and does not cover the HR document portfolio
 - Phase 13.3 document CER is 68.74%; detector/crop/recognizer chain needs diagnosis
 - Verifier agreement is not calibrated as correctness evidence on real scans
+- Phase 14 line alignment is provisional until every crop is reviewed directly
 - No Camunda deployment, review UI or HRM/BPM side effect
 - Camunda environment link and deployment evidence remain pending
 
@@ -73,8 +79,9 @@ Key commands:
 - `hcns-agent-benchmark evaluate --ground-truth <file> --predictions <file> --output <file>`
 
 Next:
-- Build reviewed line-level Ground Truth for the 671 private real-scan crops
-- Diagnose perspective, crop padding, reading order and recognizer disagreement
+- Complete localhost review for the 77 provisionally aligned private crops
+- Expand line-level review to the remaining 594 Phase 13.3 crops
+- Keep Paddle as primary; do not replace it with EasyOCR/VietOCR
 - Repeat the protocol on authorized real CV, contract, leave and timesheet scans
 - Calibrate EasyOCR/VietOCR confidence before changing auto-accept thresholds
 - Obtain approval/manifest for a fixed 30–50 page document Ground Truth outside Git

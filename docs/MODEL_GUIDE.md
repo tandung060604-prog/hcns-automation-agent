@@ -122,6 +122,21 @@ Vì vậy Phase 13.3 không được promote. Bước tiếp theo phải tạo G
 dòng/crop để tách lỗi detector/crop khỏi lỗi recognizer, rồi hiệu chỉnh padding,
 perspective và cấu hình nhận dạng trên từng nhóm trường.
 
+## Phase 14 — thay đổi primary theo bằng chứng thật
+
+Trên 77 crop thật có ánh xạ Ground Truth provisional, Paddle raw đạt 75.32% Exact
+Match; EasyOCR tốt nhất chỉ đạt 5.19% và VietOCR đạt 20.78%. Vì vậy pipeline
+không còn chọn EasyOCR làm primary:
+
+1. Paddle giữ candidate và bounding box.
+2. EasyOCR và VietOCR đọc độc lập cùng vùng.
+3. Chỉ `accepted` nếu Paddle khớp ít nhất một verifier.
+4. Khi bất đồng, giữ Paddle nhưng đặt `needs_review`.
+
+Đồng thuận không được dùng thay Ground Truth. Hiện chỉ 7/77 dòng được ít nhất
+một verifier xác nhận; precision provisional là 100%. Quyết định vẫn là
+`NOT_PROMOTED`.
+
 ## MinerU challenger
 
 Phù hợp khi:

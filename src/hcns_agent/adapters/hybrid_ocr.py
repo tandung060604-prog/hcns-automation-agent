@@ -1,7 +1,7 @@
 """Evidence-preserving hybrid OCR orchestration.
 
-The detector owns geometry. The primary recognizer proposes text and the
-verifier may only confirm it; disagreement is never silently corrected.
+Paddle owns geometry and the selected text. Independent recognizers may only
+confirm that text; disagreement is never allowed to replace it silently.
 """
 
 from __future__ import annotations
@@ -43,6 +43,8 @@ def _normalized(value: str) -> str:
 @dataclass(slots=True)
 class HybridVietnameseOcrEngine:
     detector: OcrEngine
+    # Phase 14 keeps these names for API compatibility. Both are independent
+    # verifiers of the detector's Paddle recognition candidate.
     primary: DetectedLineRecognizer
     verifier: DetectedLineRecognizer
 
@@ -70,14 +72,19 @@ class HybridVietnameseOcrEngine:
                     line_index=line_index,
                     box=detected_line.box,
                 )
-                agreed = bool(_normalized(primary.text)) and _normalized(
-                    primary.text
+                detector_text = detected_line.text
+                confirmed_by_primary = bool(_normalized(detector_text)) and _normalized(
+                    detector_text
+                ) == _normalized(primary.text)
+                confirmed_by_verifier = bool(_normalized(detector_text)) and _normalized(
+                    detector_text
                 ) == _normalized(verifier.text)
-                status = "accepted" if agreed else "needs_review"
+                confirmed = confirmed_by_primary or confirmed_by_verifier
+                status = "accepted" if confirmed else "needs_review"
                 lines.append(
                     OcrLine(
-                        text=primary.text,
-                        confidence=primary.confidence,
+                        text=detector_text,
+                        confidence=detected_line.confidence,
                         box=detected_line.box,
                     )
                 )
@@ -85,17 +92,20 @@ class HybridVietnameseOcrEngine:
                     {
                         "lineIndex": line_index,
                         "status": status,
-                        "detectorText": detected_line.text,
-                        "primaryText": primary.text,
-                        "primaryConfidence": primary.confidence,
-                        "primaryModel": primary.model,
-                        "verifierText": verifier.text,
-                        "verifierConfidence": verifier.confidence,
-                        "verifierModel": verifier.model,
+                        "selectedText": detector_text,
+                        "selectedConfidence": detected_line.confidence,
+                        "easyOcrText": primary.text,
+                        "easyOcrConfidence": primary.confidence,
+                        "easyOcrModel": primary.model,
+                        "vietOcrText": verifier.text,
+                        "vietOcrConfidence": verifier.confidence,
+                        "vietOcrModel": verifier.model,
+                        "paddleEasyAgreed": confirmed_by_primary,
+                        "paddleVietAgreed": confirmed_by_verifier,
                         "rule": (
-                            "nfc_casefold_exact_agreement"
-                            if agreed
-                            else "primary_preserved_pending_human_review"
+                            "paddle_confirmed_by_at_least_one_independent_recognizer"
+                            if confirmed
+                            else "paddle_preserved_pending_human_review"
                         ),
                     }
                 )
@@ -121,9 +131,9 @@ class HybridVietnameseOcrEngine:
             duration_ms=round((time.perf_counter() - started) * 1000),
             model_manifest={
                 "detector": detected.engine,
-                "primary": self.primary.name,
-                "verifier": self.verifier.name,
-                "autoAcceptRule": "nfc_casefold_exact_agreement",
+                "primary": detected.engine,
+                "verifiers": f"{self.primary.name},{self.verifier.name}",
+                "autoAcceptRule": "paddle_matches_at_least_one_verifier",
                 "promotion": "pilot_only",
             },
         )

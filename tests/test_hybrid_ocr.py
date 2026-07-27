@@ -61,7 +61,7 @@ class HybridOcrTests(unittest.TestCase):
         primary = FakeRecognizer(
             "easyocr/vi",
             (
-                LineRecognition("NGUYỄN THỊ MAI", 0.96, "easyocr-vi"),
+                LineRecognition("NGUYN THI MAI", 0.96, "easyocr-vi"),
                 LineRecognition("Quận 1", 0.89, "easyocr-vi"),
             ),
         )
@@ -79,7 +79,7 @@ class HybridOcrTests(unittest.TestCase):
 
         page = result.pages[0]
         self.assertEqual(
-            [line.text for line in page.lines], ["NGUYỄN THỊ MAI", "Quận 1"]
+            [line.text for line in page.lines], ["NGUYN THI MAI", "Qun 1"]
         )
         self.assertEqual(
             page.lines[0].box,
@@ -95,6 +95,6 @@ class HybridOcrTests(unittest.TestCase):
         )
         self.assertEqual(
             page.metadata["lineVerification"][1]["rule"],
-            "primary_preserved_pending_human_review",
+            "paddle_preserved_pending_human_review",
         )
         self.assertEqual(result.model_manifest["promotion"], "pilot_only")

@@ -148,6 +148,11 @@ thử trên 15 CCCD scan thật đã xác nhận Ground Truth. Chỉ 18/671 dòn
 `NOT_PROMOTED`. Kết quả này xác nhận corpus synthetic chưa đủ để thay recognizer
 production và mọi dòng bất đồng vẫn phải qua human review.
 
+Phase 14 đã kiểm tra 77 crop thật có Ground Truth provisional. Paddle raw đạt
+75,32% Exact Match, cao hơn EasyOCR best (5,19%) và VietOCR (20,78%). Vì vậy
+Paddle tiếp tục là primary; hai recognizer còn lại chỉ xác nhận và không được
+âm thầm thay text Paddle. Local review phải hoàn tất trước khi promotion.
+
 ## Camunda và Human-in-the-loop
 
 Camunda là nguồn sự thật cho BPMN, Service Task, User Task, timer, SLA, retry,

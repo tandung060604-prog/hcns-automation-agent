@@ -200,3 +200,23 @@ reference vận hành, không phải raw-recognizer baseline. Hybrid có 671 cro
 `NOT_PROMOTED`: kết quả synthetic Phase 13.2 không tái lập trên scan thật và chưa
 đủ bằng chứng để thay recognizer production. Manifest, crop, prediction và text
 Ground Truth nằm ngoài Git tại `private-data/output/phase13_3/`.
+
+### Phase 14 — chẩn đoán ở cấp dòng thật
+
+Chỉ bốn tài liệu có số dòng Ground Truth đã review trùng hoàn toàn số crop Paddle,
+tạo ra 77 ánh xạ theo chỉ số. Digest private:
+
+```text
+sha256:eadcadc94b753999784baa5923f0ee19e138f9e3cc22dcf60780ad0ac4310d56
+```
+
+| Candidate | Exact Match | CER | WER | DER |
+|---|---:|---:|---:|---:|
+| Paddle raw | 75.32% | 6.82% | — | 1.60% |
+| EasyOCR best crop | 5.19% | 44.33% | 86.94% | 3.83% |
+| VietOCR best crop | 20.78% | 33.33% | 62.10% | 2.30% |
+
+Kết quả đảo ngược quyết định dựa trên synthetic: Paddle raw tiếp tục là primary.
+EasyOCR/VietOCR chỉ xác nhận candidate Paddle. Paddle khớp ít nhất một verifier
+trên 7/77 dòng và đạt 100% precision provisional trong nhóm này. Toàn bộ 77 ánh
+xạ vẫn phải được xác nhận trực tiếp trên crop trước khi dùng để promotion.
