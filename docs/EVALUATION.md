@@ -105,3 +105,38 @@ hcns-agent-benchmark compare `
 có giá trị mặc định đúng; operator phải cung cấp rõ sau khi contract/regression,
 privacy, license và model provenance đã được duyệt. Không commit report trước khi
 review disclosure, dù report không chứa raw value.
+
+## Phase 13.1 — Vietnamese recognition-only
+
+Benchmark tài liệu tổng thể không đủ để chẩn đoán hiện tượng mất dấu. Phase 13.1
+đánh giá các recognizer trên cùng crop dòng và cùng Ground Truth NFC bằng ba
+schema riêng:
+
+- `recognition_ground_truth.schema.json`: text chuẩn private và cờ xác nhận quyền
+  đánh giá local;
+- `recognition_predictions.schema.json`: text dự đoán, confidence và duration
+  private;
+- `recognition_report.schema.json`: metric aggregate, không chứa raw text.
+
+Ngoài CER, WER và Exact Match, report có:
+
+- `Diacritic Error Rate`: phần edit error còn lại sau khi bỏ dấu trên reference
+  và prediction;
+- `predictionNfcViolationCount`: số prediction chưa ở Unicode NFC;
+- `acceptedPrecision`: tỷ lệ exact trong nhóm confidence đạt threshold;
+- latency p50/p95.
+
+Confidence cao không thay thế Exact Match. Nếu model không có ký tự đúng trong
+output vocabulary, confidence vẫn có thể cao trong khi `acceptedPrecision` thấp.
+
+```powershell
+hcns-agent-recognition evaluate `
+  --ground-truth <private-line-ground-truth.json> `
+  --predictions <private-predictions.json> `
+  --output <aggregate-recognition-report.json> `
+  --confidence-threshold 0.95
+```
+
+Ground Truth và prediction không được commit. Report aggregate chỉ được publish
+sau disclosure review; danh sách missing charset được phép lưu vì không chứa nội
+dung tài liệu.

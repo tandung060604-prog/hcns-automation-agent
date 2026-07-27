@@ -119,6 +119,23 @@ Challenger chỉ được promote khi sử dụng đúng cùng dataset version/d
 thiện metric mục tiêu và không làm tăng false `PASS`, sensitive false acceptance
 hoặc rủi ro vận hành.
 
+Để chẩn đoán riêng lỗi mất dấu tiếng Việt, Phase 13.1 có CLI recognition-only:
+
+```powershell
+hcns-agent-recognition audit-charset `
+  --dictionary <recognition-dictionary.txt> `
+  --model-identifier <model-id> `
+  --output <charset-audit.json>
+
+hcns-agent-recognition evaluate `
+  --ground-truth <private-line-ground-truth.json> `
+  --predictions <private-recognizer-predictions.json> `
+  --output <aggregate-recognition-report.json>
+```
+
+Report chỉ chứa CER, WER, Exact Match, Diacritic Error Rate, accepted precision
+và latency; raw text vẫn nằm ngoài Git.
+
 ## Camunda và Human-in-the-loop
 
 Camunda là nguồn sự thật cho BPMN, Service Task, User Task, timer, SLA, retry,
@@ -233,6 +250,7 @@ Dự án hiện ở giai đoạn benchmark có thể kiểm chứng:
 - Universal Document Intake và native/OCR routing đã có.
 - Canonical model, classifier, extractor và quality gate đã có.
 - Benchmark baseline/challenger và promotion gate đã có.
+- Benchmark recognition-only và audit charset tiếng Việt đã có.
 - Camunda BPMN/DMN package tham chiếu đã được bổ sung.
 - Benchmark trên tài liệu thật có quyền sử dụng và triển khai Camunda thực tế
   vẫn đang chờ phê duyệt.

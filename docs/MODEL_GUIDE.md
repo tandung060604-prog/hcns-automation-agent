@@ -33,6 +33,38 @@ Phù hợp khi:
 Điểm cần đo: dấu tiếng Việt, ảnh mờ/nghiêng, giấy tờ định danh, reading order
 nhiều cột và tài liệu scan có bảng.
 
+### Giới hạn recognizer tiếng Việt
+
+`lang="vi"` không tự bảo đảm model có thể phát ra mọi ký tự tiếng Việt. Trước
+khi benchmark, phải audit dictionary/output vocabulary bằng:
+
+```powershell
+hcns-agent-recognition audit-charset `
+  --dictionary <recognition-dictionary.txt> `
+  --model-identifier <model-id> `
+  --output <aggregate-charset-audit.json>
+```
+
+Audit hiện dùng 134 chữ cái tiếng Việt mở rộng ở dạng Unicode NFC. Thay dictionary
+ở inference không sửa được model đã huấn luyện vì chỉ số lớp output phải khớp với
+dictionary lúc train. Model thiếu ký tự phải được thay hoặc fine-tune với charset
+đầy đủ.
+
+Phase 13.1 giữ detector hiện tại và đánh giá recognizer trên cùng tập crop dòng.
+Ground Truth/prediction chứa text phải ở private-data; report aggregate được phép
+lưu CER, WER, Exact Match, Diacritic Error Rate, accepted precision và latency.
+
+```powershell
+hcns-agent-recognition evaluate `
+  --ground-truth <private-line-ground-truth.json> `
+  --predictions <private-recognizer-predictions.json> `
+  --output <aggregate-recognition-report.json>
+```
+
+NFC normalization chỉ chuẩn hóa biểu diễn Unicode, không được dùng để tự đoán
+dấu đã mất. Candidate hậu xử lý phải giữ raw OCR và chuyển `needs_review` nếu
+không có đủ bằng chứng.
+
 ## MinerU challenger
 
 Phù hợp khi:

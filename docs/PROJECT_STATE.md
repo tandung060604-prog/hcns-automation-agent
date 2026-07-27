@@ -1,6 +1,6 @@
 # Project State
 
-Current milestone: M3 — Verified benchmark harness implemented; authorized run pending
+Current milestone: M3 / Phase 13.1 — Vietnamese recognition benchmark implemented; authorized run pending
 
 Completed:
 - M1 Universal Document Intake, safety, canonical model and native/OCR routing
@@ -24,6 +24,9 @@ Completed:
 - False PASS/REJECT, review, sensitive acceptance, latency/failure metrics
 - Baseline/challenger promotion gate with privacy/license/provenance evidence
 - Vendor-neutral IdpResult-to-benchmark adapter and CLI
+- Recognition-only Ground Truth/prediction/report contracts
+- Vietnamese NFC charset audit with 134 extended characters
+- CER, WER, Exact Match, Diacritic Error Rate and accepted precision
 - 60+ synthetic unit/contract/safety/architecture/benchmark tests
 - Ruff, strict mypy, compile and repository hygiene gates
 
@@ -49,6 +52,7 @@ Known limits:
 - Administrative/other types require review until an extractor is approved
 - PPTX remains text-by-slide; legacy DOC/XLS require safe conversion
 - No authorized real-document benchmark yet
+- No fixed private line-crop corpus comparing Paddle, EasyOCR and VietOCR yet
 - No Camunda deployment, review UI or HRM/BPM side effect
 - Camunda environment link and deployment evidence remain pending
 
@@ -60,7 +64,10 @@ Key commands:
 - `hcns-agent-benchmark evaluate --ground-truth <file> --predictions <file> --output <file>`
 
 Next:
-- Obtain approval/manifest for a fixed 30–50 page Ground Truth outside Git
-- Run PaddleOCR baseline and MinerU challenger on the same dataset digest
+- Build a fixed authorized line-crop corpus outside Git
+- Run PaddleOCR, EasyOCR and VietOCR on the same crop digest
+- Select/fine-tune a Vietnamese recognizer only after aggregate comparison
+- Obtain approval/manifest for a fixed 30–50 page document Ground Truth outside Git
+- Run PaddleOCR baseline and MinerU document challenger on the same dataset digest
 - Review aggregate comparison; do not promote until every gate passes
 - M4 Camunda generation selection, SDK worker and BPMN dry-run
