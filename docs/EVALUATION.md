@@ -201,10 +201,10 @@ reference vận hành, không phải raw-recognizer baseline. Hybrid có 671 cro
 đủ bằng chứng để thay recognizer production. Manifest, crop, prediction và text
 Ground Truth nằm ngoài Git tại `private-data/output/phase13_3/`.
 
-### Phase 14 — chẩn đoán ở cấp dòng thật
+### Phase 14.1 — Ground Truth cấp crop đã xác nhận
 
-Chỉ bốn tài liệu có số dòng Ground Truth đã review trùng hoàn toàn số crop Paddle,
-tạo ra 77 ánh xạ theo chỉ số. Digest private:
+Người dùng đã đối chiếu trực tiếp 77 crop thuộc bốn tài liệu, kiểm tra toàn bộ chữ
+và dấu tiếng Việt. Ground Truth và prediction vẫn nằm ngoài Git. Digest private:
 
 ```text
 sha256:eadcadc94b753999784baa5923f0ee19e138f9e3cc22dcf60780ad0ac4310d56
@@ -212,11 +212,10 @@ sha256:eadcadc94b753999784baa5923f0ee19e138f9e3cc22dcf60780ad0ac4310d56
 
 | Candidate | Exact Match | CER | WER | DER |
 |---|---:|---:|---:|---:|
-| Paddle raw | 75.32% | 6.82% | — | 1.60% |
-| EasyOCR best crop | 5.19% | 44.33% | 86.94% | 3.83% |
-| VietOCR best crop | 20.78% | 33.33% | 62.10% | 2.30% |
+| Paddle raw | 25.97% | 28.39% | 63.56% | 3.20% |
+| EasyOCR best crop | 7.79% | 41.49% | — | 4.74% |
+| VietOCR `vgg_seq2seq` | 42.86% | 15.59% | 32.20% | 0.77% |
 
-Kết quả đảo ngược quyết định dựa trên synthetic: Paddle raw tiếp tục là primary.
-EasyOCR/VietOCR chỉ xác nhận candidate Paddle. Paddle khớp ít nhất một verifier
-trên 7/77 dòng và đạt 100% precision provisional trong nhóm này. Toàn bộ 77 ánh
-xạ vẫn phải được xác nhận trực tiếp trên crop trước khi dùng để promotion.
+VietOCR được chọn làm primary cho controlled pilot trên crop `bbox_balanced_64`.
+Quyết định là `PROMOTE_TO_CONTROLLED_PILOT`, đồng thời
+`NOT_PRODUCTION_READY` vì corpus mới có bốn tài liệu.

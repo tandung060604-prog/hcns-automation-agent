@@ -122,20 +122,20 @@ Vì vậy Phase 13.3 không được promote. Bước tiếp theo phải tạo G
 dòng/crop để tách lỗi detector/crop khỏi lỗi recognizer, rồi hiệu chỉnh padding,
 perspective và cấu hình nhận dạng trên từng nhóm trường.
 
-## Phase 14 — thay đổi primary theo bằng chứng thật
+## Phase 14.1 — primary theo Ground Truth đã xác nhận
 
-Trên 77 crop thật có ánh xạ Ground Truth provisional, Paddle raw đạt 75.32% Exact
-Match; EasyOCR tốt nhất chỉ đạt 5.19% và VietOCR đạt 20.78%. Vì vậy pipeline
-không còn chọn EasyOCR làm primary:
+Sau khi người dùng đối chiếu trực tiếp toàn bộ 77 crop của bốn tài liệu, thứ hạng
+recognizer thay đổi: VietOCR `vgg_seq2seq` đạt 42.86% Exact Match và 15.59% CER;
+Paddle raw đạt 25.97% Exact Match và 28.39% CER; EasyOCR tốt nhất đạt 7.79%
+Exact Match và 41.49% CER.
 
-1. Paddle giữ candidate và bounding box.
-2. EasyOCR và VietOCR đọc độc lập cùng vùng.
-3. Chỉ `accepted` nếu Paddle khớp ít nhất một verifier.
-4. Khi bất đồng, giữ Paddle nhưng đặt `needs_review`.
+Pipeline pilot vì vậy dùng VietOCR trên crop `bbox_balanced_64`, nhưng vẫn giữ
+raw Paddle và toàn bộ geometry làm evidence. EasyOCR chỉ là verifier. Candidate
+chỉ được auto-accept khi recognizer độc lập đồng thuận chính xác sau NFC; các
+trường hợp khác bắt buộc `needs_review`.
 
-Đồng thuận không được dùng thay Ground Truth. Hiện chỉ 7/77 dòng được ít nhất
-một verifier xác nhận; precision provisional là 100%. Quyết định vẫn là
-`NOT_PROMOTED`.
+Kết quả chỉ cho phép `PROMOTE_TO_CONTROLLED_PILOT`, không cho phép production.
+Đồng thuận không được dùng thay Ground Truth và không được tự phục hồi dấu.
 
 ## MinerU challenger
 
