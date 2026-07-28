@@ -262,3 +262,30 @@ Ground Truth đạt 309/309; benchmark sau đó chỉ đọc artifact đã bịt
 trăm, WER và DER tăng, đồng thời p95 chậm hơn khoảng 4,3 lần. Kết luận:
 `vgg_seq2seq` tiếp tục là primary, challenger `NOT_PROMOTED` và hệ thống
 `NOT_PRODUCTION_READY`.
+
+### Phase 14.5 — error stratification và conditional fallback
+
+Toàn bộ 214 lỗi seq2seq được phân loại aggregate, không ghi raw text vào report:
+
+| Nhóm lỗi | Số dòng |
+|---|---:|
+| Thiếu/thay thế ký tự | 81 |
+| Thay thế/khoảng trắng | 56 |
+| Thừa/thay thế ký tự | 49 |
+| Chỉ sai dấu | 28 |
+
+Transformer đúng ở 16 dòng seq2seq sai; Paddle đúng ở 53 dòng. Rule fallback
+chọn threshold chỉ trên 14 document rồi replay document còn lại; cả 15 fold đều
+chọn confidence threshold 0,80.
+
+| Chỉ số | Seq2seq | Fallback LODO |
+|---|---:|---:|
+| Exact Match | 30,74% | 44,34% |
+| CER | 18,19% | 15,36% |
+| WER | 35,48% | 34,57% |
+| DER | 1,28% | 2,01% |
+
+Fallback chuyển 138/309 candidate, phục hồi 44 lỗi và làm mất hai dòng baseline
+vốn đúng. 13/15 document cải thiện theo tổng Exact Match, không document nào
+giảm tổng Exact, nhưng hai false switches vẫn vi phạm gate an toàn. Quyết định:
+`SHADOW_REVIEW_ONLY`, mọi switch phải `needs_review`.

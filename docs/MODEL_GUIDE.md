@@ -176,6 +176,24 @@ Transformer giảm CER nhưng giảm Exact Match, tăng WER/DER và chậm hơn 
 regression tùy ý, challenger là `NOT_PROMOTED`; seq2seq vẫn là primary và toàn
 bộ pipeline là `NOT_PRODUCTION_READY`.
 
+## Phase 14.5 — conditional fallback
+
+214 lỗi của seq2seq gồm 81 dòng thiếu/thay thế ký tự, 56 dòng thay thế/khoảng
+trắng, 49 dòng thừa/thay thế và 28 dòng chỉ sai dấu. Transformer phục hồi chính
+xác 16 lỗi của primary; raw Paddle phục hồi 53 lỗi. Oracle của ba recognizer đạt
+159/309 dòng (51,46%), nhưng oracle không tồn tại ở runtime.
+
+Rule review-only được đánh giá bằng leave-one-document-out:
+
+1. nếu Transformer khớp chính xác Paddle và khác seq2seq, đề xuất Transformer;
+2. nếu confidence seq2seq dưới 0,80, đưa Paddle làm review candidate;
+3. mọi candidate thay đổi text vẫn mang `needs_review`.
+
+Replay document-level đạt 44,34% Exact Match, 15,36% CER và 34,57% WER, phục
+hồi 44 lỗi nhưng làm mất hai dòng seq2seq vốn đúng. DER tăng từ 1,28% lên 2,01%.
+Vì vậy rule chỉ được chạy `SHADOW_REVIEW_ONLY`; không auto-accept và không thay
+primary production.
+
 ## MinerU challenger
 
 Phù hợp khi:

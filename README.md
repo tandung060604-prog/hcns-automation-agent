@@ -151,7 +151,9 @@ production và mọi dòng bất đồng vẫn phải qua human review.
 Phase 14 đã mở rộng Ground Truth lên 309/309 crop của 15 tài liệu thật có quyền
 sử dụng. Benchmark mù chọn VietOCR `vgg_seq2seq` (30,74% Exact Match,
 18,19% CER) thay vì `vgg_transformer` (27,18% Exact Match, 14,16% CER); model
-Transformer chậm hơn và không đạt promotion gate. Pipeline vẫn
+Transformer chậm hơn và không đạt promotion gate. Phase 14.5 thử fallback
+document-level, tăng Exact Match lên 44,34% nhưng làm mất hai dòng primary vốn
+đúng; vì vậy chỉ chạy `SHADOW_REVIEW_ONLY`. Pipeline vẫn
 `NOT_PRODUCTION_READY`; prediction bất đồng tiếp tục đi qua human review.
 
 ## Camunda và Human-in-the-loop
