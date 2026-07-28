@@ -1,6 +1,6 @@
 # Project State
 
-Current milestone: M3 / Phase 14.2 — controlled real-scan OCR pilot
+Current milestone: M3 / Phase 14.3 — multi-crop recognizer diagnosis
 
 Completed:
 - M1 Universal Document Intake, safety, canonical model and native/OCR routing
@@ -18,8 +18,6 @@ Completed:
 - Vendor-neutral IdpResult-to-benchmark adapter and CLI
 - Recognition-only contracts and Vietnamese NFC audit with 134 characters
 - CER, WER, Exact Match, Diacritic Error Rate and accepted precision
-- Fixed 240-line synthetic Vietnamese crop corpus at 300 DPI in private-data
-- PaddleOCR, EasyOCR and VietOCR evaluated on one dataset digest
 - EasyOCR `vi` selected for pilot: 82.92% Exact Match, 0.89% CER, 0.00% DER
 - EasyOCR/VietOCR agreement: 143/240 lines at 100% agreement precision
 - Hybrid orchestration: Paddle primary → EasyOCR/VietOCR independent verifiers
@@ -31,6 +29,8 @@ Completed:
 - Phase 14.1 decision: controlled pilot only; `NOT_PRODUCTION_READY`
 - Phase 14.2 processed 51 authorized sessions and 2,150 line crops without failure
 - Exact verifier agreement accepted 188/2,150 lines; 1,962 need review
+- Phase 14.3 kept `bbox_balanced_64`: 42.86% Exact Match and 15.29% CER
+- Of 44 errors, alternate VietOCR crops recover only two by oracle
 - 60+ synthetic unit/contract/safety/architecture/benchmark tests
 - Ruff, strict mypy, compile and repository hygiene gates
 
@@ -70,8 +70,8 @@ Key commands:
 - `hcns-agent-benchmark evaluate --ground-truth <file> --predictions <file> --output <file>`
 
 Next:
-- Expand Ground Truth beyond the four Phase 14.1 documents
-- Measure controlled-pilot accuracy; operational coverage is not accuracy
+- Expand Ground Truth to at least 15 authorized documents
+- Benchmark a second local recognizer weight on the same confirmed crops
 - Repeat the protocol on authorized real CV, contract, leave and timesheet scans
 - Calibrate EasyOCR/VietOCR confidence before changing auto-accept thresholds
 - Obtain approval/manifest for a fixed 30–50 page document Ground Truth outside Git

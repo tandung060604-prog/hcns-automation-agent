@@ -229,3 +229,20 @@ nhận 188 dòng (8,74%); 1.962 dòng được chuyển `needs_review`.
 Đây là phép đo coverage, không phải accuracy vì các session chưa có Ground Truth
 cấp dòng đầy đủ. Không dùng 8,74% để suy ra độ chính xác hoặc thay đổi production
 gate; accuracy tiếp tục tham chiếu tập 77 crop đã xác nhận.
+
+### Phase 14.3 — benchmark nhiều crop
+
+VietOCR `vgg_seq2seq` được chạy trên bốn profile crop của cùng 77 dòng đã xác
+nhận. `bbox_balanced_64` tiếp tục được chọn với 42,86% Exact Match và 15,29% CER.
+Ba profile khác chỉ phục hồi tối đa 2/44 lỗi nếu được chọn bằng oracle.
+
+| Nhóm lỗi của primary | Số dòng |
+|---|---:|
+| Thiếu/thay thế ký tự | 22 |
+| Thay thế/khoảng trắng | 13 |
+| Thừa/thay thế ký tự | 6 |
+| Chỉ sai dấu | 3 |
+
+Oracle recovery chỉ là trần phân tích, không phải rule runtime. Quyết định vẫn là
+giữ một crop cố định, chuyển bất đồng sang review và mở rộng corpus trước khi
+thử recognizer thứ hai.

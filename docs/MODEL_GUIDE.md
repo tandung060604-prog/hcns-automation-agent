@@ -148,6 +148,18 @@ Tỷ lệ chấp nhận này là chỉ số coverage vận hành, không phải 
 vẫn neo vào 77 crop có Ground Truth Phase 14.1; confidence không được dùng để
 nới auto-accept khi chưa được calibration.
 
+## Phase 14.3 — multi-crop diagnosis
+
+Bốn profile crop được chạy lại bằng cùng VietOCR `vgg_seq2seq`. Profile
+`bbox_balanced_64` vẫn tốt nhất với 42,86% Exact Match và 15,29% CER. Trong 44
+dòng baseline sai, các crop VietOCR thay thế chỉ phục hồi tối đa hai dòng nếu
+chọn bằng oracle; do đó không đủ bằng chứng để thêm runtime fallback theo crop.
+
+Phân loại lỗi aggregate gồm 22 dòng thiếu/thay thế ký tự, 13 dòng
+thay thế/khoảng trắng, sáu dòng thừa/thay thế và ba dòng chỉ sai dấu. Paddle có
+thể đúng ở một số dòng nhưng chỉ được dùng làm review candidate, không làm rule
+fallback tự động vì lựa chọn bằng Ground Truth tại runtime là không khả dụng.
+
 ## MinerU challenger
 
 Phù hợp khi:
