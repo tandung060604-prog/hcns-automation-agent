@@ -1,6 +1,6 @@
 # Project State
 
-Current milestone: M3 / Phase 14 — real-scan OCR hardening and line review
+Current milestone: M3 / Phase 14.2 — controlled real-scan OCR pilot
 
 Completed:
 - M1 Universal Document Intake, safety, canonical model and native/OCR routing
@@ -27,10 +27,10 @@ Completed:
 - Authorized real-scan pilot: 15 reviewed CCCD, 671 detected line crops
 - Real-scan agreement: 18/671 lines (2.68%); decision `NOT_PROMOTED`
 - Phase 14.1 corpus: 4 authorized documents and 77 user-confirmed line crops
-- Paddle raw: 25.97% Exact Match, 28.39% CER and 3.20% DER
-- Best EasyOCR crop: 7.79% Exact Match, 41.49% CER and 4.74% DER
 - VietOCR `vgg_seq2seq`: 42.86% Exact Match, 15.59% CER and 0.77% DER
 - Phase 14.1 decision: controlled pilot only; `NOT_PRODUCTION_READY`
+- Phase 14.2 processed 51 authorized sessions and 2,150 line crops without failure
+- Exact verifier agreement accepted 188/2,150 lines; 1,962 need review
 - 60+ synthetic unit/contract/safety/architecture/benchmark tests
 - Ruff, strict mypy, compile and repository hygiene gates
 
@@ -70,8 +70,8 @@ Key commands:
 - `hcns-agent-benchmark evaluate --ground-truth <file> --predictions <file> --output <file>`
 
 Next:
-- Expand the reviewed line corpus beyond the four Phase 14.1 documents
-- Keep VietOCR in a controlled pilot; do not promote it to production
+- Expand Ground Truth beyond the four Phase 14.1 documents
+- Measure controlled-pilot accuracy; operational coverage is not accuracy
 - Repeat the protocol on authorized real CV, contract, leave and timesheet scans
 - Calibrate EasyOCR/VietOCR confidence before changing auto-accept thresholds
 - Obtain approval/manifest for a fixed 30–50 page document Ground Truth outside Git

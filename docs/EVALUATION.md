@@ -219,3 +219,13 @@ sha256:eadcadc94b753999784baa5923f0ee19e138f9e3cc22dcf60780ad0ac4310d56
 VietOCR được chọn làm primary cho controlled pilot trên crop `bbox_balanced_64`.
 Quyết định là `PROMOTE_TO_CONTROLLED_PILOT`, đồng thời
 `NOT_PRODUCTION_READY` vì corpus mới có bốn tài liệu.
+
+### Phase 14.2 — coverage của controlled pilot
+
+Pipeline được chạy offline trên 51 session local có quyền sử dụng, gồm 2.150 crop
+dòng và không có session thất bại. Exact agreement giữa primary và verifier chấp
+nhận 188 dòng (8,74%); 1.962 dòng được chuyển `needs_review`.
+
+Đây là phép đo coverage, không phải accuracy vì các session chưa có Ground Truth
+cấp dòng đầy đủ. Không dùng 8,74% để suy ra độ chính xác hoặc thay đổi production
+gate; accuracy tiếp tục tham chiếu tập 77 crop đã xác nhận.

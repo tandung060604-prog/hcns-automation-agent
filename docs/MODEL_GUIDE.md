@@ -137,6 +137,17 @@ trường hợp khác bắt buộc `needs_review`.
 Kết quả chỉ cho phép `PROMOTE_TO_CONTROLLED_PILOT`, không cho phép production.
 Đồng thuận không được dùng thay Ground Truth và không được tự phục hồi dấu.
 
+## Phase 14.2 — controlled pilot
+
+Controlled pilot chạy offline trên 51 session local được cấp quyền, tổng cộng
+2.150 crop dòng và không có session thất bại. Rule đồng thuận chính xác giữa
+VietOCR primary và verifier chỉ chấp nhận 188 dòng (8,74%); 1.962 dòng còn lại
+giữ nguyên evidence và chuyển `needs_review`.
+
+Tỷ lệ chấp nhận này là chỉ số coverage vận hành, không phải accuracy. Accuracy
+vẫn neo vào 77 crop có Ground Truth Phase 14.1; confidence không được dùng để
+nới auto-accept khi chưa được calibration.
+
 ## MinerU challenger
 
 Phù hợp khi:
