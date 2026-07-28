@@ -246,3 +246,19 @@ Ba profile khác chỉ phục hồi tối đa 2/44 lỗi nếu được chọn b
 Oracle recovery chỉ là trần phân tích, không phải rule runtime. Quyết định vẫn là
 giữ một crop cố định, chuyển bất đồng sang review và mở rộng corpus trước khi
 thử recognizer thứ hai.
+
+### Phase 14.4 — benchmark mù recognizer thứ hai
+
+Corpus được mở rộng lên 309 crop thuộc 15 tài liệu có quyền sử dụng. Prediction
+của `vgg_seq2seq` và `vgg_transformer` được tính trước nhưng giữ ẩn cho đến khi
+Ground Truth đạt 309/309; benchmark sau đó chỉ đọc artifact đã bịt kín.
+
+| Profile | Exact Match | CER | WER | DER | p95 |
+|---|---:|---:|---:|---:|---:|
+| `vgg_seq2seq` | 30,74% | 18,19% | 35,48% | 1,28% | 114,9 ms |
+| `vgg_transformer` | 27,18% | 14,16% | 36,67% | 1,33% | 492,1 ms |
+
+`vgg_transformer` không đạt gate promote vì Exact Match giảm 3,56 điểm phần
+trăm, WER và DER tăng, đồng thời p95 chậm hơn khoảng 4,3 lần. Kết luận:
+`vgg_seq2seq` tiếp tục là primary, challenger `NOT_PROMOTED` và hệ thống
+`NOT_PRODUCTION_READY`.

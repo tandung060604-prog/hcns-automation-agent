@@ -1,6 +1,6 @@
 # Project State
 
-Current milestone: M3 / Phase 14.3 — multi-crop recognizer diagnosis
+Current milestone: M3 / Phase 14.4 — blinded second-recognizer benchmark
 
 Completed:
 - M1 Universal Document Intake, safety, canonical model and native/OCR routing
@@ -18,8 +18,6 @@ Completed:
 - Vendor-neutral IdpResult-to-benchmark adapter and CLI
 - Recognition-only contracts and Vietnamese NFC audit with 134 characters
 - CER, WER, Exact Match, Diacritic Error Rate and accepted precision
-- EasyOCR `vi` selected for pilot: 82.92% Exact Match, 0.89% CER, 0.00% DER
-- EasyOCR/VietOCR agreement: 143/240 lines at 100% agreement precision
 - Hybrid orchestration: Paddle primary → EasyOCR/VietOCR independent verifiers
 - Disagreement policy preserves the EasyOCR candidate and sets `needs_review`
 - Authorized real-scan pilot: 15 reviewed CCCD, 671 detected line crops
@@ -31,6 +29,8 @@ Completed:
 - Exact verifier agreement accepted 188/2,150 lines; 1,962 need review
 - Phase 14.3 kept `bbox_balanced_64`: 42.86% Exact Match and 15.29% CER
 - Of 44 errors, alternate VietOCR crops recover only two by oracle
+- Phase 14.4 corpus: 15 authorized documents and 309 confirmed line crops
+- Seq2seq: 30.74% Exact, 18.19% CER; Transformer: 27.18% Exact, 14.16% CER
 - 60+ synthetic unit/contract/safety/architecture/benchmark tests
 - Ruff, strict mypy, compile and repository hygiene gates
 
@@ -70,8 +70,8 @@ Key commands:
 - `hcns-agent-benchmark evaluate --ground-truth <file> --predictions <file> --output <file>`
 
 Next:
-- Expand Ground Truth to at least 15 authorized documents
-- Benchmark a second local recognizer weight on the same confirmed crops
+- Stratify the 214 seq2seq errors without exposing private text
+- Evaluate a conservative conditional fallback with document-level validation
 - Repeat the protocol on authorized real CV, contract, leave and timesheet scans
 - Calibrate EasyOCR/VietOCR confidence before changing auto-accept thresholds
 - Obtain approval/manifest for a fixed 30–50 page document Ground Truth outside Git

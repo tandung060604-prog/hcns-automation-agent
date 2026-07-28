@@ -160,6 +160,22 @@ thay thế/khoảng trắng, sáu dòng thừa/thay thế và ba dòng chỉ sai
 thể đúng ở một số dòng nhưng chỉ được dùng làm review candidate, không làm rule
 fallback tự động vì lựa chọn bằng Ground Truth tại runtime là không khả dụng.
 
+## Phase 14.4 — blinded second-recognizer benchmark
+
+Ground Truth được mở rộng lên 309 crop của 15 tài liệu. Cả hai model được chạy
+ngầm và giữ prediction ẩn cho đến khi 309/309 dòng được người dùng xác nhận,
+tránh annotation bias.
+
+| VietOCR profile | Exact Match | CER | WER | DER | Mean |
+|---|---:|---:|---:|---:|---:|
+| `vgg_seq2seq` | 30,74% | 18,19% | 35,48% | 1,28% | 58,3 ms |
+| `vgg_transformer` | 27,18% | 14,16% | 36,67% | 1,33% | 224,5 ms |
+
+Transformer giảm CER nhưng giảm Exact Match, tăng WER/DER và chậm hơn khoảng
+3,9 lần. Theo quality gate ưu tiên Exact Match và không cho phép CER/DER
+regression tùy ý, challenger là `NOT_PROMOTED`; seq2seq vẫn là primary và toàn
+bộ pipeline là `NOT_PRODUCTION_READY`.
+
 ## MinerU challenger
 
 Phù hợp khi:

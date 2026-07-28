@@ -148,10 +148,11 @@ thử trên 15 CCCD scan thật đã xác nhận Ground Truth. Chỉ 18/671 dòn
 `NOT_PROMOTED`. Kết quả này xác nhận corpus synthetic chưa đủ để thay recognizer
 production và mọi dòng bất đồng vẫn phải qua human review.
 
-Phase 14 đã kiểm tra 77 crop thật có Ground Truth provisional. Paddle raw đạt
-75,32% Exact Match, cao hơn EasyOCR best (5,19%) và VietOCR (20,78%). Vì vậy
-Paddle tiếp tục là primary; hai recognizer còn lại chỉ xác nhận và không được
-âm thầm thay text Paddle. Local review phải hoàn tất trước khi promotion.
+Phase 14 đã mở rộng Ground Truth lên 309/309 crop của 15 tài liệu thật có quyền
+sử dụng. Benchmark mù chọn VietOCR `vgg_seq2seq` (30,74% Exact Match,
+18,19% CER) thay vì `vgg_transformer` (27,18% Exact Match, 14,16% CER); model
+Transformer chậm hơn và không đạt promotion gate. Pipeline vẫn
+`NOT_PRODUCTION_READY`; prediction bất đồng tiếp tục đi qua human review.
 
 ## Camunda và Human-in-the-loop
 
