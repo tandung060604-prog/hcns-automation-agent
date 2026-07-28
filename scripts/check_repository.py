@@ -29,8 +29,12 @@ SKIPPED_DIRECTORY_NAMES = {
     ".pytest_cache",
     ".ruff_cache",
     ".venv",
+    ".next",
+    ".wrangler",
     "__pycache__",
+    "dist",
     "dataset",
+    "node_modules",
 }
 
 

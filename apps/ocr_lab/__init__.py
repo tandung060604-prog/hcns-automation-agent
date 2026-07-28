@@ -1,0 +1,1 @@
+"""Local OCR laboratory application."""

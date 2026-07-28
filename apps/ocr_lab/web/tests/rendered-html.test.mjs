@@ -1,0 +1,166 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+import {
+  pendingReviewCases,
+  resumePendingReview,
+} from "../app/review-queue.mjs";
+
+async function render() {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+
+  return worker.fetch(
+    new Request("http://localhost/", {
+      headers: { accept: "text/html" },
+    }),
+    {
+      ASSETS: {
+        fetch: async () => new Response("Not found", { status: 404 }),
+      },
+    },
+    {
+      waitUntil() {},
+      passThroughOnException() {},
+    },
+  );
+}
+
+test("server-renders the Vietnamese OCR dashboard", async () => {
+  const response = await render();
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+
+  const html = await response.text();
+  assert.match(html, /<title>HR Document Intelligence Lab \| OCR tiếng Việt<\/title>/i);
+  assert.match(html, /LOCAL PRIVATE OCR/);
+  assert.match(html, /Đọc tài liệu/);
+  assert.match(html, /Giữ bằng chứng/);
+  assert.match(html, /Một luồng xử lý, bằng chứng đi cùng dữ liệu/);
+  assert.match(html, /hr-document-intelligence-context\.webp/);
+  assert.match(html, /Đưa tài liệu thật vào/);
+  assert.match(html, /Không upload cloud/);
+  assert.doesNotMatch(html, /Your site is taking shape|Building your site/);
+});
+
+test("keeps Phase 11.4 CCCD controls in the local upload flow", async () => {
+  const [dashboard, css, page, layout] = await Promise.all([
+    readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(dashboard, /phase11_3/);
+  assert.match(dashboard, /phase11_4/);
+  assert.match(dashboard, /"11\.3"/);
+  assert.match(dashboard, /"11\.4"/);
+  assert.match(dashboard, /\/user\/phase11-3-evidence/);
+  assert.match(dashboard, /\/user\/phase11-4-evidence/);
+  assert.match(dashboard, /\/user\/identity-card/);
+  assert.match(dashboard, /Ground Truth theo trường CCCD/);
+  assert.match(dashboard, /phase9Before/);
+  assert.match(dashboard, /phase11After/);
+  assert.match(dashboard, /needs_review/);
+  assert.match(css, /\.identity-fields/);
+  assert.match(css, /\.identity-ground-truth-grid/);
+  assert.match(css, /\.field-evaluation/);
+  assert.match(page, /<Dashboard/);
+  assert.match(layout, /HR Document Intelligence Lab/);
+});
+
+test("exposes the Phase 12 multi-format IDP flow and JSON downloads", async () => {
+  const [dashboard, css] = await Promise.all([
+    readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(dashboard, /accept="\.png,\.jpg,\.jpeg,\.pdf,\.docx,\.xlsx"/);
+  assert.match(dashboard, /PNG, JPG, JPEG, PDF, DOCX, XLSX/);
+  assert.match(dashboard, /phase12\?:/);
+  assert.match(dashboard, /PHASE 12 \/ INGESTION/);
+  assert.match(dashboard, /Phase 1 → Phase 12/);
+  assert.match(dashboard, /Phase 13: pilot trên tài liệu thật/);
+  assert.match(dashboard, /\/user\/phase12-canonical/);
+  assert.match(dashboard, /\/user\/phase12-result/);
+  assert.match(dashboard, /\/user\/phase12-business/);
+  assert.match(dashboard, /Tải Business JSON/);
+  assert.match(css, /\.phase12-strip/);
+});
+
+test("shows the reviewed Phase 14 recognizer decision", async () => {
+  const [dashboard, css, api] = await Promise.all([
+    readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(
+      new URL("../../api/serve_dashboard_api.py", import.meta.url),
+      "utf8",
+    ),
+  ]);
+
+  assert.match(dashboard, /vietocr_best_crop/);
+  assert.match(dashboard, /controlled pilot/);
+  assert.match(dashboard, /productionDecision/);
+  assert.match(dashboard, /\/user\/controlled-pilot/);
+  assert.match(dashboard, /\/user\/phase14-2-result/);
+  assert.match(dashboard, /PHASE 14\.2 \/ CONTROLLED OCR PILOT/);
+  assert.match(dashboard, /controlledPilot/);
+  assert.match(dashboard, /Auto-accepted/);
+  assert.match(dashboard, /phase14_3/);
+  assert.match(dashboard, /Crop recovery ceiling/);
+  assert.match(dashboard, /PHASE 14\.4 \/ GROUND TRUTH EXPANSION/);
+  assert.match(dashboard, /groundTruthExpansion/);
+  assert.match(dashboard, /secondRecognizer/);
+  assert.match(dashboard, /weight local đã sẵn sàng/);
+  assert.match(dashboard, /blindedPrecompute/);
+  assert.match(dashboard, /Prediction đang được ẩn/);
+  assert.match(dashboard, /phase14PendingCases/);
+  assert.match(dashboard, /resumePendingReview/);
+  assert.match(dashboard, /Còn \{phase14CaseIndex \+ 1\}/);
+  assert.match(dashboard, /secondRecognizerBenchmark/);
+  assert.match(dashboard, /309\/309 Ground Truth đã xác nhận/);
+  assert.match(css, /\.phase14-evaluation-grid/);
+  assert.match(api, /PHASE14_REVIEWED_EVALUATION\.json/);
+  assert.match(api, /CONTROLLED_PILOT_SUMMARY\.json/);
+  assert.match(api, /PHASE14_3_EVALUATION\.json/);
+  assert.match(api, /review_queue_private\.json/);
+  assert.match(api, /SECOND_RECOGNIZER_EVALUATION\.json/);
+  assert.match(api, /run_controlled_pilot_phase14_2\.py/);
+  assert.match(api, /recommendedConfiguration/);
+});
+
+test("resumes after 172 persisted reviews instead of returning to the first crop", () => {
+  const cases = Array.from({ length: 309 }, (_, index) => ({
+    caseId: `LINE-${String(index + 1).padStart(3, "0")}`,
+    groundTruth: `synthetic-${index + 1}`,
+  }));
+  const lineReviews = Object.fromEntries(
+    cases.slice(0, 172).map((item) => [
+      item.caseId,
+      { groundTruth: item.groundTruth },
+    ]),
+  );
+
+  const resume = resumePendingReview(cases, lineReviews);
+
+  assert.equal(resume.pending.length, 137);
+  assert.equal(resume.index, 0);
+  assert.equal(resume.active.caseId, "LINE-173");
+  assert.equal(pendingReviewCases(cases, lineReviews)[0].caseId, "LINE-173");
+});
+
+test("returns an empty queue after all crops are verified", () => {
+  const cases = [
+    { caseId: "LINE-001", groundTruth: "synthetic-a" },
+    { caseId: "LINE-002", groundTruth: "synthetic-b" },
+  ];
+  const reviews = Object.fromEntries(
+    cases.map((item) => [item.caseId, { groundTruth: item.groundTruth }]),
+  );
+
+  const resume = resumePendingReview(cases, reviews);
+
+  assert.deepEqual(resume.pending, []);
+  assert.equal(resume.active, null);
+});

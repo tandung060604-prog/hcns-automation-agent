@@ -7,6 +7,13 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+node_modules/
+.next/
+.vinext/
+.wrangler/
+apps/ocr_lab/web/dist/
+!apps/ocr_lab/web/build/
+!apps/ocr_lab/web/build/sites-vite-plugin.ts
 .env
 .env.*
 !.env.example
@@ -21,6 +28,7 @@ models/
 *.onnx
 *.pdmodel
 *.pdiparams
+*.pth
 
 # Camunda Modeler local state and deployment exports
 camunda/.camunda/
