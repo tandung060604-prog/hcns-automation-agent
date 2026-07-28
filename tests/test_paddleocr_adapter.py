@@ -23,7 +23,12 @@ class _FakePredictor:
 
 class PaddleOcrAdapterTests(TestCase):
     def test_normalizes_vendor_result_without_loading_models(self) -> None:
-        engine = PaddleOcrEngine(predictor=_FakePredictor())
+        engine = PaddleOcrEngine(
+            predictor=_FakePredictor(),
+            image_converter=lambda image: _FakeImageInput(
+                shape=(image.height, image.width, 3)
+            ),
+        )
         result = engine.recognize(
             DocumentSource(
                 document_id="SYNTHETIC-001",
@@ -36,3 +41,8 @@ class PaddleOcrAdapterTests(TestCase):
         self.assertEqual("HỒ SƠ SYNTHETIC", result.pages[0].lines[0].text)
         self.assertEqual(0.97, result.pages[0].lines[0].confidence)
         self.assertEqual((100.0, 20.0), result.pages[0].lines[0].box[2])
+
+
+class _FakeImageInput:
+    def __init__(self, *, shape: tuple[int, int, int]) -> None:
+        self.shape = shape

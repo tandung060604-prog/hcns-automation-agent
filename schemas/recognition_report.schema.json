@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/hcns-agent/recognition-report.schema.json",
+  "title": "Aggregate Vietnamese Recognition Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "datasetId",
+    "datasetVersion",
+    "datasetContentDigest",
+    "backendName",
+    "backendVersion",
+    "modelIdentifier",
+    "metrics"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "datasetId": {"type": "string", "minLength": 1},
+    "datasetVersion": {"type": "string", "minLength": 1},
+    "datasetContentDigest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "backendName": {"type": "string", "minLength": 1},
+    "backendVersion": {"type": "string", "minLength": 1},
+    "modelIdentifier": {"type": "string", "minLength": 1},
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "caseCount",
+        "exactMatchCount",
+        "exactMatchRate",
+        "referenceCharacterCount",
+        "characterErrorCount",
+        "characterErrorRate",
+        "referenceWordCount",
+        "wordErrorCount",
+        "wordErrorRate",
+        "referenceDiacriticCount",
+        "diacriticErrorCount",
+        "diacriticErrorRate",
+        "predictionNfcViolationCount",
+        "acceptedCount",
+        "acceptedExactCount",
+        "acceptedPrecision",
+        "confidenceThreshold",
+        "latencyP50Ms",
+        "latencyP95Ms"
+      ],
+      "properties": {
+        "caseCount": {"type": "integer", "minimum": 1},
+        "exactMatchCount": {"type": "integer", "minimum": 0},
+        "exactMatchRate": {"type": "number", "minimum": 0, "maximum": 1},
+        "referenceCharacterCount": {"type": "integer", "minimum": 1},
+        "characterErrorCount": {"type": "integer", "minimum": 0},
+        "characterErrorRate": {"type": "number", "minimum": 0},
+        "referenceWordCount": {"type": "integer", "minimum": 1},
+        "wordErrorCount": {"type": "integer", "minimum": 0},
+        "wordErrorRate": {"type": "number", "minimum": 0},
+        "referenceDiacriticCount": {"type": "integer", "minimum": 0},
+        "diacriticErrorCount": {"type": "integer", "minimum": 0},
+        "diacriticErrorRate": {"type": "number", "minimum": 0},
+        "predictionNfcViolationCount": {"type": "integer", "minimum": 0},
+        "acceptedCount": {"type": "integer", "minimum": 0},
+        "acceptedExactCount": {"type": "integer", "minimum": 0},
+        "acceptedPrecision": {"type": "number", "minimum": 0, "maximum": 1},
+        "confidenceThreshold": {"type": "number", "minimum": 0, "maximum": 1},
+        "latencyP50Ms": {"type": "number", "minimum": 0},
+        "latencyP95Ms": {"type": "number", "minimum": 0}
+      }
+    }
+  }
+}

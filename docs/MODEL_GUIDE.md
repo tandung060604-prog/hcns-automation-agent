@@ -33,6 +33,167 @@ Phù hợp khi:
 Điểm cần đo: dấu tiếng Việt, ảnh mờ/nghiêng, giấy tờ định danh, reading order
 nhiều cột và tài liệu scan có bảng.
 
+### Giới hạn recognizer tiếng Việt
+
+`lang="vi"` không tự bảo đảm model có thể phát ra mọi ký tự tiếng Việt. Trước
+khi benchmark, phải audit dictionary/output vocabulary bằng:
+
+```powershell
+hcns-agent-recognition audit-charset `
+  --dictionary <recognition-dictionary.txt> `
+  --model-identifier <model-id> `
+  --output <aggregate-charset-audit.json>
+```
+
+Audit hiện dùng 134 chữ cái tiếng Việt mở rộng ở dạng Unicode NFC. Thay dictionary
+ở inference không sửa được model đã huấn luyện vì chỉ số lớp output phải khớp với
+dictionary lúc train. Model thiếu ký tự phải được thay hoặc fine-tune với charset
+đầy đủ.
+
+Phase 13.1 giữ detector hiện tại và đánh giá recognizer trên cùng tập crop dòng.
+Ground Truth/prediction chứa text phải ở private-data; report aggregate được phép
+lưu CER, WER, Exact Match, Diacritic Error Rate, accepted precision và latency.
+
+```powershell
+hcns-agent-recognition evaluate `
+  --ground-truth <private-line-ground-truth.json> `
+  --predictions <private-recognizer-predictions.json> `
+  --output <aggregate-recognition-report.json>
+```
+
+NFC normalization chỉ chuẩn hóa biểu diễn Unicode, không được dùng để tự đoán
+dấu đã mất. Candidate hậu xử lý phải giữ raw OCR và chuyển `needs_review` nếu
+không có đủ bằng chứng.
+
+## Phase 13.2 — Kết quả recognition-only
+
+Corpus `synthetic-hr-v2-vi-lines` version `1.0.0` gồm 240 crop dòng ở 300 DPI,
+trong đó 204 dòng có ký tự Việt mở rộng. Corpus và prediction nằm trong
+private-data; digest cố định:
+
+```text
+sha256:aabe6e292dd1baff7c9a94f30aa5f83c4e4b741f9209fd5e5caf181d6223ee5b
+```
+
+| Recognizer | Exact Match | CER | DER | Accepted precision | p95 |
+|---|---:|---:|---:|---:|---:|
+| EasyOCR 1.7.2 `vi` greedy | 82.92% | 0.89% | 0.00% | 100.00% | 187.7 ms |
+| VietOCR 0.3.13 `vgg_seq2seq` | 72.50% | 3.67% | 3.01% | 0.00%* | 178.1 ms |
+| PaddleOCR 3.7.0 Latin v5 | 19.58% | 12.51% | 7.87% | 17.74% | 161.4 ms |
+
+`*` VietOCR không có prediction nào đạt confidence threshold 0.95; confidence
+giữa các engine không được so trực tiếp khi chưa calibration.
+
+Quyết định: `easyocr-vi-greedy` được chọn cho pilot recognition, chưa được
+promote production. VietOCR là recognizer kiểm chứng. EasyOCR và VietOCR đồng
+thuận 143/240 dòng; precision của nhóm đồng thuận đạt 100% trên corpus này.
+
+Policy pilot:
+
+1. Paddle detector tiếp tục tạo vùng dòng.
+2. EasyOCR nhận dạng crop độ phân giải cao.
+3. VietOCR nhận dạng độc lập cùng crop.
+4. Chỉ auto-accept khi hai chuỗi NFC đồng thuận và validation nghiệp vụ đạt.
+5. Mọi trường hợp khác là `needs_review`; không điền dấu bằng suy đoán.
+
+Corpus synthetic sạch không chứng minh accuracy production. Cần lặp lại policy
+trên line-crop corpus từ tài liệu thật có quyền sử dụng trước khi thay default
+recognizer.
+
+VietOCR 0.3.13 pin một số dependency training cũ, bao gồm Pillow 10.2. Runtime
+pilot chỉ cài dependency cần cho inference để không hạ phiên bản Pillow của
+EasyOCR. Triển khai dài hạn phải dùng môi trường VietOCR riêng, khóa hash weights
+và làm `pip check`; không dùng nguyên runtime pilot làm image production.
+
+## Phase 13.3 — hybrid real-scan pilot
+
+`HybridVietnameseOcrEngine` giữ detector và geometry tách khỏi recognizer:
+
+1. PaddleOCR cung cấp box dòng và raw detector evidence.
+2. EasyOCR `vi` nhận dạng crop độ phân giải cao và tạo candidate chính.
+3. VietOCR `vgg_seq2seq` đọc cùng crop để kiểm chứng.
+4. Chỉ candidate đồng thuận chính xác sau chuẩn hóa NFC mới có trạng thái
+   `accepted`; mọi bất đồng là `needs_review`.
+
+Kết quả 15 CCCD thật, digest
+`sha256:e60642e231d9c959423c94c622f5c46488edc8789036dd2318c7acefb513ea61`,
+cho thấy chỉ 18/671 crop đồng thuận (2.68%) và document CER hybrid là 68.74%.
+Vì vậy Phase 13.3 không được promote. Bước tiếp theo phải tạo Ground Truth ở cấp
+dòng/crop để tách lỗi detector/crop khỏi lỗi recognizer, rồi hiệu chỉnh padding,
+perspective và cấu hình nhận dạng trên từng nhóm trường.
+
+## Phase 14.1 — primary theo Ground Truth đã xác nhận
+
+Sau khi người dùng đối chiếu trực tiếp toàn bộ 77 crop của bốn tài liệu, thứ hạng
+recognizer thay đổi: VietOCR `vgg_seq2seq` đạt 42.86% Exact Match và 15.59% CER;
+Paddle raw đạt 25.97% Exact Match và 28.39% CER; EasyOCR tốt nhất đạt 7.79%
+Exact Match và 41.49% CER.
+
+Pipeline pilot vì vậy dùng VietOCR trên crop `bbox_balanced_64`, nhưng vẫn giữ
+raw Paddle và toàn bộ geometry làm evidence. EasyOCR chỉ là verifier. Candidate
+chỉ được auto-accept khi recognizer độc lập đồng thuận chính xác sau NFC; các
+trường hợp khác bắt buộc `needs_review`.
+
+Kết quả chỉ cho phép `PROMOTE_TO_CONTROLLED_PILOT`, không cho phép production.
+Đồng thuận không được dùng thay Ground Truth và không được tự phục hồi dấu.
+
+## Phase 14.2 — controlled pilot
+
+Controlled pilot chạy offline trên 51 session local được cấp quyền, tổng cộng
+2.150 crop dòng và không có session thất bại. Rule đồng thuận chính xác giữa
+VietOCR primary và verifier chỉ chấp nhận 188 dòng (8,74%); 1.962 dòng còn lại
+giữ nguyên evidence và chuyển `needs_review`.
+
+Tỷ lệ chấp nhận này là chỉ số coverage vận hành, không phải accuracy. Accuracy
+vẫn neo vào 77 crop có Ground Truth Phase 14.1; confidence không được dùng để
+nới auto-accept khi chưa được calibration.
+
+## Phase 14.3 — multi-crop diagnosis
+
+Bốn profile crop được chạy lại bằng cùng VietOCR `vgg_seq2seq`. Profile
+`bbox_balanced_64` vẫn tốt nhất với 42,86% Exact Match và 15,29% CER. Trong 44
+dòng baseline sai, các crop VietOCR thay thế chỉ phục hồi tối đa hai dòng nếu
+chọn bằng oracle; do đó không đủ bằng chứng để thêm runtime fallback theo crop.
+
+Phân loại lỗi aggregate gồm 22 dòng thiếu/thay thế ký tự, 13 dòng
+thay thế/khoảng trắng, sáu dòng thừa/thay thế và ba dòng chỉ sai dấu. Paddle có
+thể đúng ở một số dòng nhưng chỉ được dùng làm review candidate, không làm rule
+fallback tự động vì lựa chọn bằng Ground Truth tại runtime là không khả dụng.
+
+## Phase 14.4 — blinded second-recognizer benchmark
+
+Ground Truth được mở rộng lên 309 crop của 15 tài liệu. Cả hai model được chạy
+ngầm và giữ prediction ẩn cho đến khi 309/309 dòng được người dùng xác nhận,
+tránh annotation bias.
+
+| VietOCR profile | Exact Match | CER | WER | DER | Mean |
+|---|---:|---:|---:|---:|---:|
+| `vgg_seq2seq` | 30,74% | 18,19% | 35,48% | 1,28% | 58,3 ms |
+| `vgg_transformer` | 27,18% | 14,16% | 36,67% | 1,33% | 224,5 ms |
+
+Transformer giảm CER nhưng giảm Exact Match, tăng WER/DER và chậm hơn khoảng
+3,9 lần. Theo quality gate ưu tiên Exact Match và không cho phép CER/DER
+regression tùy ý, challenger là `NOT_PROMOTED`; seq2seq vẫn là primary và toàn
+bộ pipeline là `NOT_PRODUCTION_READY`.
+
+## Phase 14.5 — conditional fallback
+
+214 lỗi của seq2seq gồm 81 dòng thiếu/thay thế ký tự, 56 dòng thay thế/khoảng
+trắng, 49 dòng thừa/thay thế và 28 dòng chỉ sai dấu. Transformer phục hồi chính
+xác 16 lỗi của primary; raw Paddle phục hồi 53 lỗi. Oracle của ba recognizer đạt
+159/309 dòng (51,46%), nhưng oracle không tồn tại ở runtime.
+
+Rule review-only được đánh giá bằng leave-one-document-out:
+
+1. nếu Transformer khớp chính xác Paddle và khác seq2seq, đề xuất Transformer;
+2. nếu confidence seq2seq dưới 0,80, đưa Paddle làm review candidate;
+3. mọi candidate thay đổi text vẫn mang `needs_review`.
+
+Replay document-level đạt 44,34% Exact Match, 15,36% CER và 34,57% WER, phục
+hồi 44 lỗi nhưng làm mất hai dòng seq2seq vốn đúng. DER tăng từ 1,28% lên 2,01%.
+Vì vậy rule chỉ được chạy `SHADOW_REVIEW_ONLY`; không auto-accept và không thay
+primary production.
+
 ## MinerU challenger
 
 Phù hợp khi:

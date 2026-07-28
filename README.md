@@ -119,6 +119,43 @@ Challenger chỉ được promote khi sử dụng đúng cùng dataset version/d
 thiện metric mục tiêu và không làm tăng false `PASS`, sensitive false acceptance
 hoặc rủi ro vận hành.
 
+Để chẩn đoán riêng lỗi mất dấu tiếng Việt, Phase 13.1 có CLI recognition-only:
+
+```powershell
+hcns-agent-recognition audit-charset `
+  --dictionary <recognition-dictionary.txt> `
+  --model-identifier <model-id> `
+  --output <charset-audit.json>
+
+hcns-agent-recognition evaluate `
+  --ground-truth <private-line-ground-truth.json> `
+  --predictions <private-recognizer-predictions.json> `
+  --output <aggregate-recognition-report.json>
+```
+
+Report chỉ chứa CER, WER, Exact Match, Diacritic Error Rate, accepted precision
+và latency; raw text vẫn nằm ngoài Git.
+
+Phase 13.2 đã chạy ba recognizer trên cùng corpus synthetic 240 crop dòng:
+EasyOCR `vi` đạt 82,92% Exact Match và 0% DER, được chọn cho pilot; VietOCR
+`vgg_seq2seq` làm recognizer kiểm chứng. Đây chưa phải tuyên bố production:
+trường chỉ được auto-accept khi hai engine đồng thuận và validation đạt, nếu
+không sẽ chuyển `needs_review`.
+
+Phase 13.3 đã tích hợp chuỗi Paddle detector → EasyOCR → VietOCR verifier và
+thử trên 15 CCCD scan thật đã xác nhận Ground Truth. Chỉ 18/671 dòng đồng thuận
+(2,68%), document CER hybrid 68,74%; vì vậy quyết định hiện tại là
+`NOT_PROMOTED`. Kết quả này xác nhận corpus synthetic chưa đủ để thay recognizer
+production và mọi dòng bất đồng vẫn phải qua human review.
+
+Phase 14 đã mở rộng Ground Truth lên 309/309 crop của 15 tài liệu thật có quyền
+sử dụng. Benchmark mù chọn VietOCR `vgg_seq2seq` (30,74% Exact Match,
+18,19% CER) thay vì `vgg_transformer` (27,18% Exact Match, 14,16% CER); model
+Transformer chậm hơn và không đạt promotion gate. Phase 14.5 thử fallback
+document-level, tăng Exact Match lên 44,34% nhưng làm mất hai dòng primary vốn
+đúng; vì vậy chỉ chạy `SHADOW_REVIEW_ONLY`. Pipeline vẫn
+`NOT_PRODUCTION_READY`; prediction bất đồng tiếp tục đi qua human review.
+
 ## Camunda và Human-in-the-loop
 
 Camunda là nguồn sự thật cho BPMN, Service Task, User Task, timer, SLA, retry,
@@ -233,6 +270,8 @@ Dự án hiện ở giai đoạn benchmark có thể kiểm chứng:
 - Universal Document Intake và native/OCR routing đã có.
 - Canonical model, classifier, extractor và quality gate đã có.
 - Benchmark baseline/challenger và promotion gate đã có.
+- Benchmark recognition-only và audit charset tiếng Việt đã có.
+- EasyOCR đã được chọn cho pilot recognition; VietOCR dùng để kiểm chứng.
 - Camunda BPMN/DMN package tham chiếu đã được bổ sung.
 - Benchmark trên tài liệu thật có quyền sử dụng và triển khai Camunda thực tế
   vẫn đang chờ phê duyệt.

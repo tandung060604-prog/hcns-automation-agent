@@ -7,7 +7,7 @@ models. Use ``from_default`` only inside a trusted local runtime.
 from __future__ import annotations
 
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from importlib import import_module
 from io import BytesIO
@@ -20,6 +20,7 @@ from hcns_agent.ports.ocr import OcrLine, OcrPage, OcrResult
 @dataclass(slots=True)
 class PaddleOcrEngine:
     predictor: Any
+    image_converter: Callable[[Any], Any] | None = None
     detection_model: str = "PP-OCRv5_mobile_det"
     recognition_model: str = "latin_PP-OCRv5_mobile_rec"
     device: str = "cpu"
@@ -58,17 +59,23 @@ class PaddleOcrEngine:
 
     def recognize(self, source: DocumentSource) -> OcrResult:
         try:
-            import numpy as np
             from PIL import Image
         except ImportError as error:
             raise RuntimeError(
-                "PaddleOCR image dependencies are missing; install the paddle extra"
+                "Pillow is required to decode OCR images"
             ) from error
 
         started = time.perf_counter()
         with Image.open(BytesIO(source.content)) as image:
-            rgb_image = np.asarray(image.convert("RGB"))
-        predictions = self.predictor.predict(rgb_image, **self.predict_options)
+            rgb_image = image.convert("RGB")
+            predictor_input = (
+                self.image_converter(rgb_image)
+                if self.image_converter is not None
+                else _to_numpy(rgb_image)
+            )
+        predictions = self.predictor.predict(
+            predictor_input, **self.predict_options
+        )
         pages = tuple(self._to_pages(predictions))
         duration_ms = round((time.perf_counter() - started) * 1000)
         return OcrResult(
@@ -105,3 +112,13 @@ def _as_list(value: Any) -> list[Any]:
         converted = value.tolist()
         return list(converted)
     return list(value)
+
+
+def _to_numpy(image: Any) -> Any:
+    try:
+        import numpy as np
+    except ImportError as error:
+        raise RuntimeError(
+            "NumPy is required by PaddleOCR; install the paddle extra"
+        ) from error
+    return np.asarray(image)

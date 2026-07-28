@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/hcns-agent/recognition-ground-truth.schema.json",
+  "title": "Vietnamese Recognition Ground Truth",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "datasetId",
+    "datasetVersion",
+    "contentDigest",
+    "authorizedForLocalEvaluation",
+    "cases"
+  ],
+  "properties": {
+    "datasetId": {"type": "string", "minLength": 1},
+    "datasetVersion": {"type": "string", "minLength": 1},
+    "contentDigest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "authorizedForLocalEvaluation": {"const": true},
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["caseId", "text"],
+        "properties": {
+          "caseId": {"type": "string", "minLength": 1},
+          "text": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}
