@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "phase14.6-benchmark-lock/1.0.0",
+  "frozenAt": "2026-07-28",
+  "containsRealPII": false,
+  "metricSpecVersion": "vi-ocr-metrics/1.0.0",
+  "policy": {
+    "policyId": "phase14.6-vietocr-conditional-review",
+    "version": "1.0.0",
+    "mode": "SHADOW_REVIEW_ONLY",
+    "metricSpecVersion": "vi-ocr-metrics/1.0.0",
+    "cropProfile": "bbox_balanced_64",
+    "primaryProfile": "vietocr_vgg_seq2seq",
+    "reviewCandidateProfiles": [
+      "vietocr_vgg_transformer",
+      "paddle_detector_raw"
+    ],
+    "primaryConfidenceReviewThreshold": 0.4,
+    "maximumBaselineCorrectLosses": 0,
+    "autoReplaceSelectedText": false,
+    "policyDigest": "sha256:ccb1cba5f41384266aa159b73376c5a87c2230ec1600159d899b9a7aba7a2522"
+  },
+  "models": [
+    {
+      "profile": "vietocr_vgg_seq2seq",
+      "root": "privateRuntime",
+      "relativePath": "vietocr_models/vgg_seq2seq.pth",
+      "bytes": 89575371,
+      "sha256": "0921503a41375a0584268e23ef3d414ea478a8fe8777865c7745d38f2d0bc5db"
+    },
+    {
+      "profile": "vietocr_vgg_transformer",
+      "root": "privateRuntime",
+      "relativePath": "vietocr_models/vgg_transformer.pth",
+      "bytes": 151815373,
+      "sha256": "380512193a8b6cbf6fad80deacdc9b6939d10d473d199892fc6408d13775ea59"
+    },
+    {
+      "profile": "paddle_detector_raw",
+      "root": "paddleModel",
+      "relativePath": "inference.pdiparams",
+      "bytes": 4692937,
+      "sha256": "54a85087b4d31fa3ea4e4aba100169a1ec3e3274cd3352b9068b3cfccbca7829"
+    }
+  ],
+  "paddleDetectorMetadata": {
+    "model": "PP-OCRv4_mobile_det",
+    "configSha256": "25b95390ab0264dc56cd61f88f61e110700eec419bf799e235230a50ff7591a9",
+    "inferenceJsonSha256": "05feef1acb00aa4cd7362b15f7f501fc4f99d7b1fa73c1c871e0c7b1504b0f5c",
+    "inferenceYamlSha256": "4f5bd0def48e20194d87d4c184a3ae3007a1299de7fed0ef763d3e7e873e77f6"
+  },
+  "heldOutProtocol": {
+    "minimumDocumentCount": 15,
+    "authorizedLocalDocumentsOnly": true,
+    "predictionsMustBeHiddenBeforeGroundTruth": true,
+    "groundTruthMustBeHumanConfirmed": true,
+    "thresholdRetuningAllowed": false,
+    "singleFinalEvaluation": true,
+    "promotionRequiresZeroBaselineCorrectLosses": true
+  }
+}

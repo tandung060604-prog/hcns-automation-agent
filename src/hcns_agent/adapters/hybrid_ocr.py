@@ -7,10 +7,14 @@ confirm that text; disagreement is never allowed to replace it silently.
 from __future__ import annotations
 
 import time
-import unicodedata
 from dataclasses import dataclass
 from typing import Protocol
 
+from hcns_agent.application.ocr_metrics import normalize_for_agreement
+from hcns_agent.application.recognition_policy import (
+    PADDLE_VERIFICATION_POLICY_V1,
+    RecognitionPolicy,
+)
 from hcns_agent.ports.document_parser import DocumentSource
 from hcns_agent.ports.ocr import OcrEngine, OcrLine, OcrPage, OcrResult
 
@@ -37,7 +41,7 @@ class DetectedLineRecognizer(Protocol):
 
 
 def _normalized(value: str) -> str:
-    return " ".join(unicodedata.normalize("NFC", value).casefold().split())
+    return normalize_for_agreement(value)
 
 
 @dataclass(slots=True)
@@ -47,6 +51,7 @@ class HybridVietnameseOcrEngine:
     # verifiers of the detector's Paddle recognition candidate.
     primary: DetectedLineRecognizer
     verifier: DetectedLineRecognizer
+    policy: RecognitionPolicy = PADDLE_VERIFICATION_POLICY_V1
 
     @property
     def name(self) -> str:
@@ -73,6 +78,7 @@ class HybridVietnameseOcrEngine:
                     box=detected_line.box,
                 )
                 detector_text = detected_line.text
+                selected_text = self.policy.selected_text(detector_text)
                 confirmed_by_primary = bool(_normalized(detector_text)) and _normalized(
                     detector_text
                 ) == _normalized(primary.text)
@@ -83,7 +89,7 @@ class HybridVietnameseOcrEngine:
                 status = "accepted" if confirmed else "needs_review"
                 lines.append(
                     OcrLine(
-                        text=detector_text,
+                        text=selected_text,
                         confidence=detected_line.confidence,
                         box=detected_line.box,
                     )
@@ -92,7 +98,7 @@ class HybridVietnameseOcrEngine:
                     {
                         "lineIndex": line_index,
                         "status": status,
-                        "selectedText": detector_text,
+                        "selectedText": selected_text,
                         "selectedConfidence": detected_line.confidence,
                         "easyOcrText": primary.text,
                         "easyOcrConfidence": primary.confidence,
@@ -124,6 +130,7 @@ class HybridVietnameseOcrEngine:
                     metadata=metadata,
                 )
             )
+        policy_manifest = self.policy.manifest()
         return OcrResult(
             document_id=source.document_id,
             engine=self.name,
@@ -135,5 +142,8 @@ class HybridVietnameseOcrEngine:
                 "verifiers": f"{self.primary.name},{self.verifier.name}",
                 "autoAcceptRule": "paddle_matches_at_least_one_verifier",
                 "promotion": "pilot_only",
+                "recognitionPolicyId": str(policy_manifest["policyId"]),
+                "recognitionPolicyVersion": str(policy_manifest["version"]),
+                "recognitionPolicyDigest": str(policy_manifest["policyDigest"]),
             },
         )

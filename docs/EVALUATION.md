@@ -126,8 +126,54 @@ Ngoài CER, WER và Exact Match, report có:
 - `acceptedPrecision`: tỷ lệ exact trong nhóm confidence đạt threshold;
 - latency p50/p95.
 
+Từ Phase 14.6, mọi recognition benchmark dùng metric spec
+`vi-ocr-metrics/1.0.0`:
+
+- Exact Match là so sánh nghiêm ngặt sau NFC và chuẩn hóa khoảng trắng, vẫn giữ
+  nguyên hoa/thường, dấu câu và dấu tiếng Việt;
+- `casefoldExactMatchRate` chỉ dùng chẩn đoán agreement, không được thay Exact
+  Match;
+- CER/WER dùng Levenshtein trên chuỗi/từ đã chuẩn hóa;
+- DER lấy số edit do dấu gây ra chia cho số ký tự reference có dấu.
+
+Các script Phase 14.1–14.5 gọi cùng adapter metric và có parity test với
+`VietnameseRecognitionBenchmark`. Report lịch sử dùng mẫu số DER theo tổng ký
+tự phải được xem là legacy và không so trực tiếp với report spec 1.0.0.
+
 Confidence cao không thay thế Exact Match. Nếu model không có ký tự đúng trong
 output vocabulary, confidence vẫn có thể cao trong khi `acceptedPrecision` thấp.
+
+### Protocol khóa Phase 14.6
+
+`config/phase14_6_benchmark_lock.json` cố định policy review-only, crop
+`bbox_balanced_64`, SHA-256 của hai VietOCR weights và Paddle detector. Script
+`validate_phase14_6_lock.py` từ chối chạy nếu code policy, metric spec, kích
+thước hoặc hash model thay đổi.
+
+Tập held-out phải có ít nhất 15 tài liệu được quyền dùng local. Trình tự không
+được đảo:
+
+1. xác minh lock và tạo prediction trong trạng thái ẩn;
+2. người dùng xác nhận Ground Truth chỉ dựa trên crop/ảnh gốc;
+3. mở prediction và đánh giá đúng một lần;
+4. không chỉnh threshold/crop/policy trên tập held-out;
+5. không promote nếu làm mất bất kỳ dòng baseline-correct nào.
+
+```powershell
+python scripts/phase14_6_heldout_protocol.py seal `
+  --predictions <private-hidden-predictions.json> `
+  --output <private-sealed-predictions.json>
+
+# Chỉ chạy sau khi Ground Truth đã được xác nhận mà không nhìn prediction.
+python scripts/phase14_6_heldout_protocol.py evaluate `
+  --sealed-predictions <private-sealed-predictions.json> `
+  --ground-truth <private-confirmed-ground-truth.json> `
+  --output <aggregate-heldout-evaluation.json>
+```
+
+Lệnh `evaluate` không hỗ trợ overwrite. Artifact kết quả đã tồn tại đồng nghĩa
+evaluation held-out đã được sử dụng; muốn thử policy khác phải thu thập một tập
+held-out mới.
 
 ```powershell
 hcns-agent-recognition evaluate `

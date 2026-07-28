@@ -5,6 +5,7 @@ from __future__ import annotations
 import unicodedata
 from collections.abc import Sequence
 
+from hcns_agent.application import ocr_metrics
 from hcns_agent.domain.recognition import (
     CharsetAuditReport,
     RecognitionGroundTruth,
@@ -145,51 +146,24 @@ def required_vietnamese_extended_characters() -> tuple[str, ...]:
 
 
 def normalize_for_evaluation(value: str) -> str:
-    return " ".join(unicodedata.normalize("NFC", value).split())
+    return ocr_metrics.normalize_for_evaluation(value)
 
 
 def strip_vietnamese_diacritics(value: str) -> str:
-    decomposed = unicodedata.normalize("NFD", value)
-    stripped = "".join(
-        character
-        for character in decomposed
-        if unicodedata.category(character) != "Mn"
-    )
-    return stripped.translate(str.maketrans("đĐ", "dD"))
+    return ocr_metrics.strip_vietnamese_diacritics(value)
 
 
 def count_vietnamese_diacritics(value: str) -> int:
-    return sum(
-        1
-        for character in unicodedata.normalize("NFC", value)
-        if strip_vietnamese_diacritics(character) != character
-    )
+    return ocr_metrics.count_vietnamese_diacritics(value)
 
 
 def edit_distance(reference: Sequence[str], prediction: Sequence[str]) -> int:
-    previous = list(range(len(prediction) + 1))
-    for reference_index, reference_value in enumerate(reference, start=1):
-        current = [reference_index]
-        for prediction_index, prediction_value in enumerate(prediction, start=1):
-            current.append(
-                min(
-                    current[-1] + 1,
-                    previous[prediction_index] + 1,
-                    previous[prediction_index - 1]
-                    + int(reference_value != prediction_value),
-                )
-            )
-        previous = current
-    return previous[-1]
+    return ocr_metrics.edit_distance(reference, prediction)
 
 
 def percentile(values: Sequence[float], quantile: float) -> float:
-    if not values:
-        return 0.0
-    ordered = sorted(values)
-    index = max(0, min(len(ordered) - 1, int(len(ordered) * quantile + 0.999999) - 1))
-    return round(float(ordered[index]), 4)
+    return ocr_metrics.percentile(values, quantile)
 
 
 def _rate(numerator: int, denominator: int) -> float:
-    return round(numerator / denominator, 6) if denominator else 0.0
+    return ocr_metrics.rate(numerator, denominator)
