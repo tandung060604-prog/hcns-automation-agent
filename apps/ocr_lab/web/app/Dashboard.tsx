@@ -719,30 +719,30 @@ const identityFieldLabels: Record<string, string> = {
   dateOfExpiry: "Có giá trị đến",
 };
 
-const phase13Steps = [
+const phase17Steps = [
   {
     order: 1,
-    title: "Chọn tài liệu thật có quyền xử lý",
+    title: "Khóa held-out v2",
     description:
-      "Ưu tiên đơn nghỉ phép, hợp đồng và bảng chấm công; giữ toàn bộ file trong private-data.",
+      "Chọn tối thiểu 15 tài liệu mới thuộc đủ năm họ HCNS, xác nhận quyền xử lý và khóa SHA-256.",
   },
   {
     order: 2,
-    title: "Xác nhận ground truth",
+    title: "Prediction ẩn trước Ground Truth",
     description:
-      "Đối chiếu trực tiếp với tài liệu gốc và xác nhận từng field/table trước khi đo.",
+      "Chạy policy/parser đã khóa; không hiển thị prediction trong quá trình xác nhận field và bảng.",
   },
   {
     order: 3,
-    title: "Đo lại theo từng loại",
+    title: "Evaluate-once theo từng họ",
     description:
-      "So sánh Field Exact, Table Cell Accuracy, Completeness và accepted precision với tập tổng hợp.",
+      "Báo macro F1, Field Exact, completeness và row/cell metrics TIMESHEET mà không retune held-out.",
   },
   {
     order: 4,
-    title: "Chốt quality gate Camunda",
+    title: "Quyết định promotion",
     description:
-      "Chỉ cho phép READY đi thẳng; mọi trường thiếu bằng chứng hoặc không chắc chắn phải vào human review.",
+      "Chỉ promote family/subtype vượt gate; phần còn lại tiếp tục SHADOW_REVIEW_ONLY và human review.",
   },
 ];
 
@@ -1315,7 +1315,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           <span>OCR LAB</span>
         </a>
         <nav aria-label="Điều hướng chính">
-          <a href="#phases">Phase 1-15</a>
+          <a href="#phases">Phase 1-17</a>
           <a href="#metrics">Chất lượng</a>
           <a href="#upload">OCR tài liệu thật</a>
           <a href="#explorer">Khám phá mẫu</a>
@@ -2849,7 +2849,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         <div className="section-heading">
           <div>
             <p className="eyebrow">EXECUTION MAP</p>
-            <h2>Phase 1 → Phase 16</h2>
+            <h2>Phase 1 → Phase 17</h2>
           </div>
           <p>Mỗi phase có một đầu ra kiểm chứng được và dừng đúng điểm kiểm soát.</p>
         </div>
@@ -2908,6 +2908,21 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             <small>
               Synthetic Field EM 30,92% → 37,50%; completeness 51,39% → 65,67%.
               Vẫn SHADOW_REVIEW_ONLY, chưa phải production gate.
+            </small>
+          </article>
+          <article className="phase-card">
+            <div className="phase-top">
+              <span>17</span>
+              <b>Locked</b>
+            </div>
+            <h3>TIMESHEET contract &amp; held-out v2</h3>
+            <p>
+              Tách schema bảng nhiều dòng, giữ table trong prediction contract
+              và khóa parser/policy bằng SHA-256.
+            </p>
+            <small>
+              Phase 16 held-out đã tiêu thụ; Phase 17 chờ tập mới để chạy
+              prediction ẩn → Ground Truth → evaluate-once.
             </small>
           </article>
         </div>
@@ -3078,15 +3093,15 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         <div className="section-heading">
           <div>
             <p className="eyebrow">RECOMMENDED NEXT</p>
-            <h2>Phase 13: pilot trên tài liệu thật</h2>
+            <h2>Phase 17: held-out v2 đa loại</h2>
           </div>
           <p>
-            Phase 12 đã hoàn tất trên tập tổng hợp. Bước tiếp theo là đo lại cùng
-            quality gate trên tài liệu thật do bạn có quyền xử lý.
+            Parser/policy đã khóa. Bước tiếp theo là đánh giá đúng một lần trên
+            tập tài liệu mới, có quyền xử lý và chưa từng dùng để chỉnh hệ thống.
           </p>
         </div>
         <div className="next-grid">
-          {phase13Steps.map((step) => (
+          {phase17Steps.map((step) => (
             <article key={step.order}>
               <span>0{step.order}</span>
               <h3>{step.title}</h3>

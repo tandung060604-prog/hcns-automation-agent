@@ -1,6 +1,6 @@
 # Project State
 
-Current milestone: M3 / Phase 16 plus M4 Camunda 7 shadow scaffolding
+Current milestone: M3 / Phase 17 plus M4 Camunda 7 shadow scaffolding
 Completed:
 - M1 Universal Document Intake, safety, canonical model and native/OCR routing
 - Independent SourceFormat/DocumentType/WorkflowType with vendor-neutral ports
@@ -30,9 +30,12 @@ Completed:
 - Contract/decision EM 25.00%; credential EM 27.50%; CER 60.30%, DER 1.55%; development-only
 - Phase 16 real held-out manifest locks 18 authorized documents across five families
 - Hidden predictions are sealed for 771 crops; 261 disagreements remain `needs_review`
-- Ground Truth is not confirmed and held-out accuracy metrics remain unopened
+- Phase 16 TIMESHEET Ground Truth stores native rows and aggregate row/cell metrics
+- Phase 16 Ground Truth confirmed for 18/18 documents with predictions hidden
+- Phase 16 evaluate-once: classification 77.78%, Field EM 13.00%,
+  completeness 28.00%, false acceptance 2; `NOT_PROMOTED`
 - Native PDF text, DOCX and XLSX bypass OCR and preserve native structures
-- Ruff, strict mypy, compile and repository hygiene gates
+- Phase 17 TIMESHEET contract, sensitive review policy and SHA-256 lock validated
 
 Architecture:
 - IDP reads/understands; Agent analyzes/proposes; Camunda orchestrates
@@ -53,9 +56,9 @@ Known limits:
 - Contract/decision and credential Field EM remain only 25.00%/27.50% after Phase 16
 - PPTX remains text-by-slide; legacy DOC/XLS require safe conversion
 - Phase 15 classification tuning used synthetic data and is not held-out evidence
+- Locked Phase 16 TIMESHEET predictions had legacy scalar output and no tables
 - Phase 14.5 fallback still regresses DER and one held-out baseline-correct line
-- Historical Phase 14 DER used a legacy denominator and must not be compared
-  directly with metric spec 1.0.0
+- Historical Phase 14 DER is not comparable with metric spec 1.0.0
 - Verifier agreement is not calibrated as correctness evidence on real scans
 - No Camunda deployment, bound stage operations or real HRIS side effect
 - Camunda environment link and deployment evidence remain pending
@@ -65,14 +68,11 @@ Key commands:
 - `python -m ruff check src tests scripts`
 - `python -m mypy src`
 - `python scripts/check_repository.py`
-- `python scripts/validate_phase14_6_lock.py --private-runtime <path> --paddle-model <path>`
-- `cd apps/ocr_lab/web && npm test`
 - `hcns-agent-benchmark evaluate --ground-truth <file> --predictions <file> --output <file>`
 
 Next:
-- Review all 18 Ground Truth documents directly from source with predictions hidden
-- Confirm Ground Truth only after checking every required field and Vietnamese diacritic
-- Run `evaluate-once`; require zero sensitive-field false acceptance and no retuning
+- Collect authorized, non-duplicate documents in `paddleocr-hr-heldout-v2`
+- Confirm authorization, prepare manifest and run hidden predictions
 - Add classification macro precision/recall/F1 and UNKNOWN rate on held-out data
 - Keep all unsupported/uncertain fields in `needs_review`
 - Promote only per family/subtype after its own quality gate passes

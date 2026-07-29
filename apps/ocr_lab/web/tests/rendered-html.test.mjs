@@ -81,9 +81,10 @@ test("exposes the Phase 15 multi-format IDP and field review flow", async () => 
   assert.match(dashboard, /phase12\?:/);
   assert.match(dashboard, /phase15\?:/);
   assert.match(dashboard, /PHASE 15 \/ UNIFIED INTAKE/);
-  assert.match(dashboard, /Phase 1 → Phase 16/);
+  assert.match(dashboard, /Phase 1 → Phase 17/);
   assert.match(dashboard, /Structured HR parser hardening/);
-  assert.match(dashboard, /Phase 13: pilot trên tài liệu thật/);
+  assert.match(dashboard, /TIMESHEET contract &amp; held-out v2/);
+  assert.match(dashboard, /Phase 17: held-out v2 đa loại/);
   assert.match(dashboard, /userResult\.phase15 \? "phase15" : "phase12"/);
   assert.match(dashboard, /\/user\/phase15-review/);
   assert.match(dashboard, /\/user\/phase15-reviewed-result/);

@@ -134,3 +134,58 @@ def test_evaluation_is_aggregate_only_and_blocks_false_acceptance() -> None:
     assert result["sensitiveFieldFalseAcceptanceCount"] == 1
     assert result["decision"]["controlledPilot"] == "NOT_PROMOTED"
     assert "ĐÚNG" not in json.dumps(result, ensure_ascii=False)
+
+
+def test_evaluation_counts_timesheet_cells_without_exposing_values() -> None:
+    sealed = {
+        "predictionsHiddenDuringReview": True,
+        "datasetDigest": "sha256:table",
+        "documents": [
+            {
+                "documentId": "H16-EFT-001",
+                "documentFamily": "EMPLOYEE_FORM_TABLE",
+                "fields": {},
+                "tables": [
+                    {
+                        "rows": [
+                            {"values": ["SYN-001", "Mẫu A", "Phòng A", "X"]},
+                            {"values": ["SYN-002", "Mẫu B", "Phòng B", "SAI"]},
+                        ]
+                    }
+                ],
+            }
+        ],
+    }
+    ground_truth = {
+        "datasetDigest": "sha256:table",
+        "groundTruthStatus": "USER_CONFIRMED_HELD_OUT_GROUND_TRUTH",
+        "predictionsVisibleDuringReview": False,
+        "documents": [
+            {
+                "documentId": "H16-EFT-001",
+                "documentFamily": "EMPLOYEE_FORM_TABLE",
+                "documentType": "TIMESHEET",
+                "reviewProfile": "TIMESHEET",
+                "fields": {},
+                "tables": {
+                    "attendance": {
+                        "status": CONFIRMED,
+                        "rows": [
+                            {"values": ["SYN-001", "Mẫu A", "Phòng A", "X"]},
+                            {"values": ["SYN-002", "Mẫu B", "Phòng B", "P"]},
+                        ],
+                    }
+                },
+            }
+        ],
+    }
+
+    result = evaluate_once(sealed, ground_truth)
+
+    table = result["byFamily"]["EMPLOYEE_FORM_TABLE"]
+    assert table["expectedTableCellCount"] == 8
+    assert table["exactTableCellCount"] == 7
+    assert table["tableExactCellRate"] == 0.875
+    rendered = json.dumps(result, ensure_ascii=False)
+    assert "SYN-001" not in rendered
+    assert "Phòng A" not in rendered

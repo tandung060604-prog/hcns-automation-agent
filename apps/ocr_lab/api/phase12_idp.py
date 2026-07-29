@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Phase 12 HR document classification, extraction, and business mapping."""
 
 from __future__ import annotations
 
-import json
 import re
 import unicodedata
-from collections import defaultdict
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable
-
+from typing import Any
 
 HR_DOCUMENT_TYPES = (
     "CV",
@@ -396,7 +393,14 @@ def _regex_field(
 
 
 def _employee_id(value: Any) -> bool:
-    return bool(re.fullmatch(r"[A-ZÀ-Ỹ0-9]+(?:[-/][A-ZÀ-Ỹ0-9]+)+", str(value), re.I))
+    return bool(
+        re.fullmatch(
+            r"(?=.*\d)[A-ZÀ-ỸĐ][A-ZÀ-ỸĐ0-9]{2,}"
+            r"(?:[-/][A-ZÀ-ỸĐ0-9]+)*",
+            str(value).strip(),
+            re.I,
+        )
+    )
 
 
 def _email(value: Any) -> bool:
@@ -672,8 +676,13 @@ def _employee_form_gender(
 TIMESHEET_HEADERS = {
     "employeeId": ("ma nv", "ma nhan vien"),
     "employeeName": ("ho va ten", "ho ten"),
-    "department": ("phong ban", "bo phan"),
-    "workDays": ("ngay cong", "so ngay cong"),
+    "department": ("phong ban", "bo phan", "chuc vu bo phan", "chuc vu"),
+    "workDays": (
+        "ngay cong",
+        "so ngay cong",
+        "tong cong ngay cong",
+        "tong ngay cong",
+    ),
     "leaveDays": ("nghi phep", "ngay nghi"),
     "overtimeHours": ("gio tang ca", "tang ca"),
     "status": ("trang thai",),
@@ -895,6 +904,7 @@ def parse_timesheet(canonical: dict[str, Any]) -> dict[str, Any]:
             normalized_rows.append(
                 {
                     "rowIndex": len(normalized_rows),
+                    "values": list(values[id_column:]),
                     "fields": fields,
                     "status": (
                         "accepted"
@@ -911,6 +921,15 @@ def parse_timesheet(canonical: dict[str, Any]) -> dict[str, Any]:
         canonical,
         ("Kỳ chấm công", "Tháng chấm công"),
     )
+    if period["value"] is None:
+        period = _regex_field(
+            canonical,
+            (
+                r"bảng\s+chấm\s+công\s+tháng\s+"
+                r"(\d{1,2}[/-]\d{4})",
+            ),
+            method="timesheet_title_period",
+        )
     company = _regex_field(
         canonical,
         (
@@ -947,6 +966,11 @@ def parse_timesheet(canonical: dict[str, Any]) -> dict[str, Any]:
         "tableType": "TIMESHEET_EMPLOYEES",
         "sourceKind": selected.get("sourceKind") if selected else None,
         "columnMapping": mapping,
+        "columns": (
+            list(selected.get("columns", []))[id_column:]
+            if selected and id_column is not None
+            else []
+        ),
         "rows": normalized_rows,
         "summary": {
             "rowCount": len(normalized_rows),
