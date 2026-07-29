@@ -76,6 +76,62 @@ type DashboardData = {
   samples: Sample[];
 };
 
+type HeldoutMetric = {
+  documentCount: number;
+  classificationAccuracy: number;
+  evaluatedFieldCount: number;
+  fieldExactMatchCount: number;
+  fieldExactMatchRate: number;
+  fieldCompleteness: number;
+  acceptedFieldRate: number;
+  cer: number;
+  wer: number;
+  der: number;
+  expectedTableRowCount: number;
+  exactTableRowCount: number;
+  tableExactRowRate: number;
+  expectedTableCellCount: number;
+  exactTableCellCount: number;
+  tableExactCellRate: number;
+  tableCompleteness: number;
+};
+
+type HeldoutDocument = {
+  documentId: string;
+  documentFamily: string;
+  sourceFormat: string;
+  sizeBytes: number;
+  previewAvailable: boolean;
+  sourceAvailable: boolean;
+};
+
+type HeldoutSummary = {
+  schemaVersion: string;
+  datasetId: string;
+  datasetDigest: string;
+  containsRealPII: true;
+  localAccessAuthorized: true;
+  publicReleaseAuthorized: boolean;
+  predictionsVisibleDuringGroundTruthReview: false;
+  recognitionPolicyDigest: string;
+  parserVersion: string;
+  metricSpecVersion: string;
+  evaluatedAt: string;
+  evaluationRunCount: number;
+  thresholdRetuned: false;
+  predictionsWereHidden: true;
+  documentCount: number;
+  countsByFamily: Record<string, number>;
+  overall: HeldoutMetric;
+  byFamily: Record<string, HeldoutMetric>;
+  sensitiveFieldFalseAcceptanceCount: number;
+  decision: {
+    controlledPilot: string;
+    production: string;
+  };
+  documents: HeldoutDocument[];
+};
+
 type Detail = {
   sampleId: string;
   documentId: string;
@@ -722,27 +778,27 @@ const identityFieldLabels: Record<string, string> = {
 const phase17Steps = [
   {
     order: 1,
-    title: "Khóa held-out v2",
+    title: "Lập error set từ held-out thật",
     description:
-      "Chọn tối thiểu 15 tài liệu mới thuộc đủ năm họ HCNS, xác nhận quyền xử lý và khóa SHA-256.",
+      "Phân nhóm lỗi detection, crop, mất dấu, thay ký tự, reading order, classifier và parser theo từng family/field.",
   },
   {
     order: 2,
-    title: "Prediction ẩn trước Ground Truth",
+    title: "Cải thiện trên development-only",
     description:
-      "Chạy policy/parser đã khóa; không hiển thị prediction trong quá trình xác nhận field và bảng.",
+      "Huấn luyện/fine-tune recognizer hoặc crop policy trên dữ liệu development riêng; tuyệt đối không chỉnh theo 18 tài liệu đã tiêu thụ.",
   },
   {
     order: 3,
-    title: "Evaluate-once theo từng họ",
+    title: "Gated fallback không phá dòng đúng",
     description:
-      "Báo macro F1, Field Exact, completeness và row/cell metrics TIMESHEET mà không retune held-out.",
+      "Chỉ cho phép switch khi có verifier agreement và regression chứng minh zero correct-line loss; còn lại needs_review.",
   },
   {
     order: 4,
-    title: "Quyết định promotion",
+    title: "Held-out v2 độc lập",
     description:
-      "Chỉ promote family/subtype vượt gate; phần còn lại tiếp tục SHADOW_REVIEW_ONLY và human review.",
+      "Khóa policy/model mới rồi prediction ẩn → Ground Truth → evaluate-once trên tập mới để quyết định promote theo family.",
   },
 ];
 
@@ -771,6 +827,13 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [detailError, setDetailError] = useState("");
   const [apiOnline, setApiOnline] = useState(false);
+  const [heldout, setHeldout] = useState<HeldoutSummary | null>(null);
+  const [heldoutError, setHeldoutError] = useState("");
+  const [activeHeldoutId, setActiveHeldoutId] = useState("");
+  const [evidenceMode, setEvidenceMode] = useState<"heldout" | "cccd">(
+    "heldout",
+  );
+  const [activeCccdSessionId, setActiveCccdSessionId] = useState("");
   const [viewProfile, setViewProfile] = useState<"phase7" | "baseline">("phase7");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -778,6 +841,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [uploadError, setUploadError] = useState("");
   const [userResult, setUserResult] = useState<UserResult | null>(null);
   const [userSessions, setUserSessions] = useState<UserSessionSummary[]>([]);
+  const [showSessionHistory, setShowSessionHistory] = useState(false);
   const [activeUserPage, setActiveUserPage] = useState(0);
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [textView, setTextView] = useState<"corrected" | "raw">("corrected");
@@ -899,6 +963,27 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         setApiOnline(true);
       })
       .catch(() => setApiOnline(false));
+    fetch(`${API_BASE}/heldout/summary`)
+      .then((response) => {
+        if (!response.ok) throw new Error("Real held-out unavailable");
+        return response.json();
+      })
+      .then((payload: HeldoutSummary) => {
+        setApiOnline(true);
+        setHeldout(payload);
+        setHeldoutError("");
+        setActiveHeldoutId(
+          payload.documents.find((item) => item.previewAvailable)?.documentId ??
+            payload.documents[0]?.documentId ??
+            "",
+        );
+      })
+      .catch(() => {
+        setHeldout(null);
+        setHeldoutError(
+          "Chưa kết nối được tập held-out thật đã xác nhận quyền xử lý.",
+        );
+      });
     refreshUserSessions();
     fetch(`${API_BASE}/phase14/benchmark`)
       .then((response) => {
@@ -1117,6 +1202,11 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     }
   };
 
+  const openCccdSession = async (sessionId: string) => {
+    await loadUserSession(sessionId);
+    window.location.hash = "upload";
+  };
+
   const reprocessPhase9 = async () => {
     if (!userResult || isReprocessing) return;
     setIsReprocessing(true);
@@ -1305,6 +1395,32 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     data.samples.find((sample) => sample.sampleId === "cv__HR-CV-0001_page_0") ??
     data.samples[0];
   const latestPrivateSession = userSessions[0] ?? null;
+  const reviewedCccdSessions = useMemo(() => {
+    const seenFiles = new Set<string>();
+    return userSessions.filter((session) => {
+      const fileKey = session.originalFileName.trim().toLocaleLowerCase("vi");
+      if (
+        session.documentType !== "IDENTITY_DOCUMENT" ||
+        !session.reviewed ||
+        /synthetic|demo/i.test(fileKey) ||
+        seenFiles.has(fileKey)
+      ) {
+        return false;
+      }
+      seenFiles.add(fileKey);
+      return true;
+    });
+  }, [userSessions]);
+  const activeCccdSession =
+    reviewedCccdSessions.find(
+      (session) => session.sessionId === activeCccdSessionId,
+    ) ??
+    reviewedCccdSessions[0] ??
+    null;
+  const activeHeldoutDocument =
+    heldout?.documents.find(
+      (document) => document.documentId === activeHeldoutId,
+    ) ?? null;
   const unifiedIdp = userResult?.phase15 ?? userResult?.phase12;
 
   return (
@@ -1315,10 +1431,10 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           <span>OCR LAB</span>
         </a>
         <nav aria-label="Điều hướng chính">
-          <a href="#phases">Phase 1-17</a>
-          <a href="#metrics">Chất lượng</a>
+          <a href="#metrics">Held-out thật</a>
           <a href="#upload">OCR tài liệu thật</a>
-          <a href="#explorer">Khám phá mẫu</a>
+          <a href="#explorer">Tài liệu &amp; CCCD</a>
+          <a href="#phases">Policy</a>
           <a href="#next">Tiếp theo</a>
         </nav>
         <span className={`live ${apiOnline ? "online" : ""}`}>
@@ -1349,24 +1465,19 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         </div>
         <figure className="hero-product">
           <div className="hero-product-frame">
-            {latestPrivateSession ? (
+            {activeHeldoutDocument?.previewAvailable ? (
+              <img
+                src={`${API_BASE}/heldout/document?id=${encodeURIComponent(
+                  activeHeldoutDocument.documentId,
+                )}&mode=preview`}
+                alt={`Tài liệu held-out thật ${activeHeldoutDocument.documentId}`}
+              />
+            ) : latestPrivateSession ? (
               <img
                 src={`${API_BASE}/user/visualization?id=${encodeURIComponent(
                   latestPrivateSession.sessionId,
                 )}&page=0`}
                 alt="Visualization OCR của tài liệu PII thật được xử lý trên máy local"
-                onError={(event) => {
-                  event.currentTarget.onerror = null;
-                  event.currentTarget.src =
-                    "/assets/hr-document-intelligence-context.webp";
-                }}
-              />
-            ) : featuredSample ? (
-              <img
-                src={`${API_BASE}/visualization?id=${encodeURIComponent(
-                  featuredSample.sampleId,
-                )}&profile=phase7`}
-                alt="Visualization OCR thật với bounding box trên tài liệu HCNS synthetic"
                 onError={(event) => {
                   event.currentTarget.onerror = null;
                   event.currentTarget.src =
@@ -1381,40 +1492,53 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             )}
           </div>
           <figcaption>
-            {latestPrivateSession
+            {activeHeldoutDocument
+              ? `${activeHeldoutDocument.documentId} — tài liệu thật trong held-out đã Ground Truth; chỉ phục vụ từ vùng private local.`
+              : latestPrivateSession
               ? "Visualization từ tài liệu PII thật gần nhất. Chỉ hiển thị và xử lý trên máy local."
-              : "Chưa có session PII thật. Đang hiển thị sample synthetic từ pipeline local."}
+              : "Chưa kết nối được bằng chứng tài liệu thật trên máy local."}
           </figcaption>
         </figure>
       </section>
 
       <section className="proof-strip" aria-label="Bằng chứng vận hành">
         <div>
-          <span>Native JSON</span>
-          <strong>{data.summary.nativeJsonCount}</strong>
-        </div>
-        <div>
-          <span>OCR thành công</span>
-          <strong>{pct(successRate)}</strong>
-        </div>
-        <div>
-          <span>Ground Truth</span>
-          <strong>{data.summary.matchedGroundTruthDocumentCount}/38</strong>
-        </div>
-        <div>
-          <span>Runtime</span>
+          <span>Bằng chứng thật</span>
           <strong>
-            {data.processing.ocrVersion} / {data.processing.device.toUpperCase()}
+            {heldout?.documentCount ?? "—"} HR + {reviewedCccdSessions.length} CCCD
           </strong>
+        </div>
+        <div>
+          <span>Phạm vi</span>
+          <strong>
+            {heldout ? Object.keys(heldout.byFamily).length : "—"} HR + ID
+          </strong>
+        </div>
+        <div>
+          <span>Field Exact</span>
+          <strong>{pct(heldout?.overall.fieldExactMatchRate ?? null)}</strong>
+        </div>
+        <div>
+          <span>Quyết định</span>
+          <strong>{heldout?.decision.production ?? "Chưa có"}</strong>
         </div>
       </section>
 
       <section className="section product-section" id="product">
         <figure className="product-context">
-          <img
-            src="/assets/hr-document-intelligence-context.webp"
-            alt="Nhân sự kiểm tra tài liệu đã khử thông tin nhận diện trên giao diện OCR"
-          />
+          {activeHeldoutDocument?.previewAvailable ? (
+            <img
+              src={`${API_BASE}/heldout/document?id=${encodeURIComponent(
+                activeHeldoutDocument.documentId,
+              )}&mode=preview`}
+              alt={`Tài liệu held-out thật ${activeHeldoutDocument.documentId}`}
+            />
+          ) : (
+            <div className="native-heldout-file">
+              <strong>Chưa kết nối private-data</strong>
+              <p>Khởi động API local với tham số --heldout-root.</p>
+            </div>
+          )}
         </figure>
         <div className="product-story">
           <h2>Một luồng xử lý, bằng chứng đi cùng dữ liệu.</h2>
@@ -1454,7 +1578,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           </p>
         </div>
 
-        {phase14 && (
+        {false && phase14 && (
           <div className="phase10-review">
             <div className="phase10-title">
               <div>
@@ -1841,10 +1965,17 @@ export default function Dashboard({ data }: { data: DashboardData }) {
 
             <div className="session-history">
               <div>
-                <h3>Session đã lưu</h3>
-                <span>{userSessions.length} session private</span>
+                <h3>Lịch sử upload private</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowSessionHistory((current) => !current)}
+                >
+                  {showSessionHistory
+                    ? "Ẩn lịch sử"
+                    : `Mở ${userSessions.length} session`}
+                </button>
               </div>
-              {userSessions.length ? (
+              {showSessionHistory && userSessions.length ? (
                 <ul>
                   {userSessions.slice(0, 20).map((session) => (
                     <li key={session.sessionId}>
@@ -1863,9 +1994,9 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                     </li>
                   ))}
                 </ul>
-              ) : (
+              ) : showSessionHistory ? (
                 <p>Chưa có tài liệu thật nào được lưu.</p>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -2848,81 +2979,63 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       <section className="section" id="phases">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">EXECUTION MAP</p>
-            <h2>Phase 1 → Phase 17</h2>
+            <p className="eyebrow">LOCKED RECOGNITION POLICY</p>
+            <h2>Phương pháp nào đang thực sự chạy?</h2>
           </div>
-          <p>Mỗi phase có một đầu ra kiểm chứng được và dừng đúng điểm kiểm soát.</p>
+          <p>
+            Pipeline scan hiện dùng policy đã khóa; “tối ưu” ở đây là cấu hình
+            tốt nhất trong tập ứng viên, chưa đồng nghĩa đạt chất lượng production.
+          </p>
         </div>
         <div className="phase-grid">
-          {data.phases.map((phase) => (
-            <article className="phase-card" key={phase.number}>
-              <div className="phase-top">
-                <span>{String(phase.number).padStart(2, "0")}</span>
-                <b>{phase.status === "complete" ? "Complete" : "Needs review"}</b>
-              </div>
-              <h3>{phase.name}</h3>
-              <p>{phase.summary}</p>
-              <small>{phase.result}</small>
-            </article>
-          ))}
           <article className="phase-card">
             <div className="phase-top">
-              <span>11</span>
-              <b>Complete</b>
+              <span>01</span>
+              <b>Geometry only</b>
             </div>
-            <h3>CCCD structured extraction</h3>
+            <h3>Paddle detector</h3>
             <p>
-              Chuẩn hóa hướng/phối cảnh, parser theo nhãn và tọa độ, crop riêng
-              cho họ tên và địa chỉ, acceptance gate bảo thủ.
+              PP-OCRv5 tìm vùng chữ và giữ bounding box làm bằng chứng. Text do
+              Paddle nhận dạng không còn đủ điều kiện tự động được chọn.
             </p>
-            <small>
-              Ground truth 001-029 đã được review; field không chắc chắn luôn
-              chuyển sang needs_review.
-            </small>
+            <small>selectionEligible=false</small>
           </article>
           <article className="phase-card">
             <div className="phase-top">
-              <span>12</span>
-              <b>Complete</b>
+              <span>02</span>
+              <b>Primary active</b>
             </div>
-            <h3>Multi-format HR IDP</h3>
+            <h3>VietOCR vgg_seq2seq</h3>
             <p>
-              Ingest PDF native/scan/hybrid, DOCX, XLSX; phân loại tám nhóm HCNS
-              và parser riêng cho biểu mẫu, văn bản và bảng.
+              Mỗi crop được nhận dạng lại bằng model có weight và SHA-256 đã
+              khóa. Kết quả này là primary đưa vào Canonical Document của scan.
             </p>
-            <small>
-              50/50 phân loại đúng; năm parser mục tiêu và 280/280 ô timesheet
-              đạt exact trên tập tổng hợp.
-            </small>
+            <small>primaryProfile=vietocr_vgg_seq2seq</small>
           </article>
           <article className="phase-card">
             <div className="phase-top">
-              <span>16</span>
-              <b>Development</b>
+              <span>03</span>
+              <b>Verifier active</b>
             </div>
-            <h3>Structured HR parser hardening</h3>
+            <h3>VietOCR vgg_transformer</h3>
             <p>
-              Tách nhãn–giá trị có biên, đọc block nhiều dòng và dùng cấu trúc văn
-              bằng/quyết định để phục hồi field có bằng chứng.
+              Transformer đọc cùng crop. Exact agreement được ghi nhận; bất đồng
+              giữ nguyên primary và bắt buộc human review.
             </p>
-            <small>
-              Synthetic Field EM 30,92% → 37,50%; completeness 51,39% → 65,67%.
-              Vẫn SHADOW_REVIEW_ONLY, chưa phải production gate.
-            </small>
+            <small>disagreementAction=preserve_primary_and_require_review</small>
           </article>
           <article className="phase-card">
             <div className="phase-top">
-              <span>17</span>
-              <b>Locked</b>
+              <span>04</span>
+              <b>Safety lock</b>
             </div>
-            <h3>TIMESHEET contract &amp; held-out v2</h3>
+            <h3>Không auto-switch fallback</h3>
             <p>
-              Tách schema bảng nhiều dòng, giữ table trong prediction contract
-              và khóa parser/policy bằng SHA-256.
+              LODO từng tăng tổng Exact Match nhưng làm hỏng dòng primary vốn
+              đúng. Vì vậy automatic replacement vẫn tắt.
             </p>
             <small>
-              Phase 16 held-out đã tiêu thụ; Phase 17 chờ tập mới để chạy
-              prediction ẩn → Ground Truth → evaluate-once.
+              mode=SHADOW_REVIEW_ONLY · autoReplaceSelectedText=false
             </small>
           </article>
         </div>
@@ -2931,70 +3044,100 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       <section className="section metrics-section" id="metrics">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">MEASURED, NOT GUESSED</p>
-            <h2>Chất lượng baseline</h2>
+            <p className="eyebrow">REAL HELD-OUT · EVALUATE ONCE</p>
+            <h2>Kết quả trên 18 tài liệu thật</h2>
           </div>
-          <p>Metric field-level trên 507 field instances; dấu tiếng Việt được giữ nguyên.</p>
+          <p>
+            Chỉ hiển thị tập đã xác nhận Ground Truth và có quyền xử lý local.
+            Không còn trộn số liệu Phase đầu, ảnh che PII hoặc synthetic vào đây.
+          </p>
         </div>
+        {heldoutError && <div className="api-warning">{heldoutError}</div>}
         <div className="metric-grid">
           <article className="metric-card accent">
-            <span>CER ↓</span>
-            <strong>{decimal(data.summary.cer)}</strong>
-            <p>Character Error Rate</p>
-            <small>Baseline {decimal(data.baselineSummary.cer)}</small>
+            <span>CLASSIFICATION ↑</span>
+            <strong>
+              {pct(heldout?.overall.classificationAccuracy ?? null)}
+            </strong>
+            <p>Đúng nhóm tài liệu</p>
+            <small>{heldout?.documentCount ?? 0} tài liệu / 5 nhóm HCNS</small>
           </article>
           <article className="metric-card">
-            <span>WER ↓</span>
-            <strong>{decimal(data.summary.wer)}</strong>
-            <p>Word Error Rate</p>
-            <small>Baseline {decimal(data.baselineSummary.wer)}</small>
+            <span>FIELD EXACT ↑</span>
+            <strong>
+              {pct(heldout?.overall.fieldExactMatchRate ?? null)}
+            </strong>
+            <p>Giá trị trường khớp tuyệt đối</p>
+            <small>
+              {heldout?.overall.fieldExactMatchCount ?? 0}/
+              {heldout?.overall.evaluatedFieldCount ?? 0} field
+            </small>
           </article>
           <article className="metric-card">
-            <span>EXACT MATCH ↑</span>
-            <strong>{pct(data.summary.exactMatchRate)}</strong>
-            <p>Field value xuất hiện nguyên vẹn</p>
-            <small>Baseline {pct(data.baselineSummary.exactMatchRate)}</small>
+            <span>COMPLETENESS ↑</span>
+            <strong>{pct(heldout?.overall.fieldCompleteness ?? null)}</strong>
+            <p>Trường có giá trị được trích xuất</p>
+            <small>
+              Accepted {pct(heldout?.overall.acceptedFieldRate ?? null)}
+            </small>
           </article>
           <article className="metric-card">
-            <span>FIELD PRESENCE ↑</span>
-            <strong>{pct(data.summary.fieldPresenceRate)}</strong>
-            <p>Exact hoặc CER ≤ 0.25</p>
-            <small>Baseline {pct(data.baselineSummary.fieldPresenceRate)}</small>
+            <span>CER / WER ↓</span>
+            <strong>{pct(heldout?.overall.cer ?? null, 2)}</strong>
+            <p>WER {pct(heldout?.overall.wer ?? null, 2)}</p>
+            <small>DER {pct(heldout?.overall.der ?? null, 2)}</small>
           </article>
           <article className="metric-card dark">
-            <span>MEAN DURATION</span>
-            <strong>{duration(data.summary.durationMs.mean)}</strong>
-            <p>P95 {duration(data.summary.durationMs.p95)} / CPU</p>
-            <small>Baseline {duration(data.baselineSummary.durationMs.mean)}</small>
+            <span>PRODUCTION DECISION</span>
+            <strong>
+              {heldout?.decision.production === "NOT_PRODUCTION_READY"
+                ? "Chưa sẵn sàng"
+                : heldout?.decision.production ?? "Chưa có"}
+            </strong>
+            <p>{heldout?.decision.controlledPilot ?? "Chưa đánh giá"}</p>
+            <small>
+              {heldout?.decision.production ?? "Prediction ẩn · không retune"}
+            </small>
           </article>
         </div>
         <div className="performance-panel">
           <div className="panel-title">
             <div>
-              <h3>CER theo loại tài liệu</h3>
-              <p>Thấp hơn là tốt hơn</p>
+              <h3>Kết quả theo nhóm tài liệu thật</h3>
+              <p>Field Exact Match và completeness</p>
             </div>
-          <span>Phase 7 / 114 synthetic samples</span>
+            <span>{heldout?.datasetId ?? "Real held-out chưa kết nối"}</span>
           </div>
           <div className="bars">
-            {typePerformance.map((item) => (
-              <div className="bar-row" key={item.name}>
-                <span>{typeLabels[item.name] ?? item.name}</span>
+            {Object.entries(heldout?.byFamily ?? {}).map(([name, metric]) => (
+              <div className="bar-row" key={name}>
+                <span>{familyLabels[name] ?? name}</span>
                 <div className="bar-track">
-                  <i style={{ width: `${Math.min(item.cer / 0.25, 1) * 100}%` }} />
+                  <i
+                    style={{
+                      width: `${Math.max(metric.fieldExactMatchRate * 100, 1)}%`,
+                    }}
+                  />
                 </div>
-                <b>{item.cer.toFixed(4)}</b>
+                <b>{pct(metric.fieldExactMatchRate)}</b>
               </div>
             ))}
           </div>
           <aside>
-            <span>BEST</span>
-            <strong>Employment Contract</strong>
-            <b>CER 0.0713</b>
+            <span>TABLE CONTRACT</span>
+            <strong>
+              {heldout?.overall.exactTableCellCount ?? 0}/
+              {heldout?.overall.expectedTableCellCount ?? 0} ô exact
+            </strong>
+            <b>
+              Completeness {pct(heldout?.overall.tableCompleteness ?? null)}
+            </b>
             <hr />
-            <span>NEEDS WORK</span>
-            <strong>Generic PDF</strong>
-            <b>CER 0.2300</b>
+            <span>ĐÁNH GIÁ</span>
+            <strong>{heldout?.evaluationRunCount ?? 0} lần duy nhất</strong>
+            <b>
+              {heldout?.thresholdRetuned ? "Có retune" : "Không retune held-out"}
+            </b>
           </aside>
         </div>
       </section>
@@ -3002,90 +3145,170 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       <section className="section explorer-section" id="explorer">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">RESULT EXPLORER</p>
-            <h2>Khám phá từng mẫu</h2>
+            <p className="eyebrow">LOCAL REAL-DOCUMENT EVIDENCE</p>
+            <h2>Tài liệu HCNS và CCCD đã review</h2>
           </div>
-          <p>Chọn một hàng để xem Native OCR text và visualization trực tiếp từ private-data.</p>
+          <p>
+            Ảnh/file được phục vụ trực tiếp từ private-data trên loopback, không
+            được đóng gói vào website hoặc commit lên Git.
+          </p>
         </div>
-        <div className="filters">
-          <label className="search-box">
-            <span>⌕</span>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Tìm document hoặc sample ID…"
-            />
-          </label>
-          <label>
-            <span>Loại tài liệu</span>
-            <select value={type} onChange={(event) => setType(event.target.value)}>
-              <option value="ALL">Tất cả</option>
-              {types.map((name) => (
-                <option key={name} value={name}>
-                  {typeLabels[name] ?? name}
-                </option>
+        <div className="evidence-switch" role="tablist">
+          <button
+            className={evidenceMode === "heldout" ? "active" : ""}
+            onClick={() => setEvidenceMode("heldout")}
+            role="tab"
+            aria-selected={evidenceMode === "heldout"}
+          >
+            18 tài liệu HCNS held-out
+          </button>
+          <button
+            className={evidenceMode === "cccd" ? "active" : ""}
+            onClick={() => setEvidenceMode("cccd")}
+            role="tab"
+            aria-selected={evidenceMode === "cccd"}
+          >
+            {reviewedCccdSessions.length} CCCD đã Ground Truth
+          </button>
+        </div>
+        {evidenceMode === "heldout" ? (
+          <div className="heldout-evidence-grid">
+            <div className="heldout-document-list" role="list">
+              {(heldout?.documents ?? []).map((document) => (
+                <button
+                  className={
+                    document.documentId === activeHeldoutId ? "active" : ""
+                  }
+                  key={document.documentId}
+                  onClick={() => setActiveHeldoutId(document.documentId)}
+                  role="listitem"
+                >
+                  <span>{document.documentId}</span>
+                  <strong>
+                    {familyLabels[document.documentFamily] ??
+                      document.documentFamily}
+                  </strong>
+                  <small>
+                    {document.sourceFormat} ·{" "}
+                    {document.previewAvailable ? "có preview" : "mở file gốc"}
+                  </small>
+                </button>
               ))}
-            </select>
-          </label>
-          <label>
-            <span>Biến thể</span>
-            <select value={variant} onChange={(event) => setVariant(event.target.value)}>
-              <option value="ALL">Tất cả</option>
-              {variants.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Trạng thái</span>
-            <select value={status} onChange={(event) => setStatus(event.target.value)}>
-              <option value="ALL">Tất cả</option>
-              <option value="SUCCESS">OCR success</option>
-              <option value="FAILED">Không nhận ra text</option>
-            </select>
-          </label>
-        </div>
-        <div className="table-meta">
-          <span>{filtered.length} / {data.samples.length} mẫu</span>
-          <span>Click một hàng để xem chi tiết</span>
-        </div>
-        <div className="results-table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Sample</th>
-                <th>Loại</th>
-                <th>Biến thể</th>
-                <th>Trạng thái</th>
-                <th>Confidence</th>
-                <th>CER</th>
-                <th>Exact</th>
-                <th>Duration</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((sample) => (
-                <tr key={sample.sampleId}>
-                  <td>
-                    <button onClick={() => setSelected(sample)}>{sample.sampleId}</button>
-                  </td>
-                  <td>{typeLabels[sample.documentType] ?? sample.documentType}</td>
-                  <td><code>{sample.variant}</code></td>
-                  <td>
-                    <span className={`status-pill ${sample.ocrSuccess ? "success" : "failed"}`}>
-                      {sample.ocrSuccess ? "Success" : "No text"}
+            </div>
+            <div className="heldout-preview">
+              {activeHeldoutDocument?.previewAvailable ? (
+                activeHeldoutDocument.sourceFormat === "PDF" ? (
+                  <iframe
+                    title={`Preview ${activeHeldoutDocument.documentId}`}
+                    src={`${API_BASE}/heldout/document?id=${encodeURIComponent(
+                      activeHeldoutDocument.documentId,
+                    )}&mode=preview`}
+                  />
+                ) : (
+                  <img
+                    src={`${API_BASE}/heldout/document?id=${encodeURIComponent(
+                      activeHeldoutDocument.documentId,
+                    )}&mode=preview`}
+                    alt={`Tài liệu thật ${activeHeldoutDocument.documentId}`}
+                  />
+                )
+              ) : (
+                <div className="native-heldout-file">
+                  <span>{activeHeldoutDocument?.sourceFormat ?? "—"}</span>
+                  <strong>Đối chiếu bằng ứng dụng local</strong>
+                  <p>
+                    DOCX/XLSX được đọc native nên không chuyển thành ảnh giả để
+                    trình bày.
+                  </p>
+                </div>
+              )}
+              {activeHeldoutDocument && (
+                <div className="heldout-preview-actions">
+                  <div>
+                    <strong>{activeHeldoutDocument.documentId}</strong>
+                    <span>
+                      {familyLabels[activeHeldoutDocument.documentFamily] ??
+                        activeHeldoutDocument.documentFamily}
                     </span>
-                  </td>
-                  <td>{pct(sample.avgConfidence)}</td>
-                  <td>{decimal(sample.cer)}</td>
-                  <td>{pct(sample.exactMatchRate)}</td>
-                  <td>{duration(sample.durationMs)}</td>
-                </tr>
+                  </div>
+                  <a
+                    href={`${API_BASE}/heldout/document?id=${encodeURIComponent(
+                      activeHeldoutDocument.documentId,
+                    )}&mode=source`}
+                  >
+                    Mở / tải file gốc
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="heldout-evidence-grid">
+            <div className="heldout-document-list" role="list">
+              {reviewedCccdSessions.map((session, index) => (
+                <button
+                  className={
+                    session.sessionId === activeCccdSession?.sessionId
+                      ? "active"
+                      : ""
+                  }
+                  key={session.sessionId}
+                  onClick={() => setActiveCccdSessionId(session.sessionId)}
+                  role="listitem"
+                >
+                  <span>CCCD-{String(index + 1).padStart(2, "0")}</span>
+                  <strong>{session.originalFileName}</strong>
+                  <small>
+                    Ground Truth ✓ · {session.recognizedTextLineCount} dòng ·{" "}
+                    {pct(session.avgConfidence)}
+                  </small>
+                </button>
               ))}
-            </tbody>
-          </table>
+            </div>
+            <div className="heldout-preview">
+              {activeCccdSession ? (
+                <img
+                  src={`${API_BASE}/user/source?id=${encodeURIComponent(
+                    activeCccdSession.sessionId,
+                  )}`}
+                  alt={`CCCD thật đã review ${activeCccdSession.originalFileName}`}
+                />
+              ) : (
+                <div className="native-heldout-file">
+                  <strong>Chưa có session CCCD đã Ground Truth</strong>
+                </div>
+              )}
+              {activeCccdSession && (
+                <div className="heldout-preview-actions">
+                  <div>
+                    <strong>{activeCccdSession.originalFileName}</strong>
+                    <span>
+                      CCCD · Ground Truth ✓ · confidence{" "}
+                      {pct(activeCccdSession.avgConfidence)}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() =>
+                      void openCccdSession(activeCccdSession.sessionId)
+                    }
+                  >
+                    Mở OCR, field và JSON
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        <div className="privacy-boundary">
+          <strong>
+            Phạm vi quyền hiện tại: local-only · publicReleaseAuthorized=
+            {String(heldout?.publicReleaseAuthorized ?? false)}
+          </strong>
+          <p>
+            Báo cáo Git chỉ công khai số liệu aggregate không chứa PII. Muốn đưa
+            ảnh thô vào repository công khai phải bổ sung quyền phân phối công
+            khai và sự đồng ý của chủ thể cho từng document ID.
+          </p>
         </div>
       </section>
 
@@ -3093,11 +3316,12 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         <div className="section-heading">
           <div>
             <p className="eyebrow">RECOMMENDED NEXT</p>
-            <h2>Phase 17: held-out v2 đa loại</h2>
+            <h2>Giải quyết recognizer bằng bằng chứng thật</h2>
           </div>
           <p>
-            Parser/policy đã khóa. Bước tiếp theo là đánh giá đúng một lần trên
-            tập tài liệu mới, có quyền xử lý và chưa từng dùng để chỉnh hệ thống.
+            Kết quả 18 tài liệu thật đã cho thấy lỗi không chỉ ở dấu tiếng Việt:
+            classifier, reading order, field parser và table contract đều đang
+            kéo metric xuống. Cần sửa theo tầng, không thể chỉ đổi một model.
           </p>
         </div>
         <div className="next-grid">

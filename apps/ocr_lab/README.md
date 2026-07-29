@@ -26,7 +26,8 @@ Khởi động từ thư mục gốc repository:
 
 ```powershell
 .\apps\ocr_lab\api\start_dashboard.ps1 `
-  -DataRoot "C:\Camunda\private-data\paddleocr-hr-baseline"
+  -DataRoot "C:\Camunda\private-data\paddleocr-hr-baseline" `
+  -HeldoutRoot "C:\Camunda\private-data\paddleocr-hr-heldout-v1"
 ```
 
 Script chỉ bind API vào loopback. Upload được kiểm tra theo nội dung: giới hạn
@@ -57,24 +58,20 @@ kiểm tra rồi bấm **Xác nhận các trường Phase 15**. API giữ nguyê
 động và tạo riêng `idp_result_reviewed.json` cùng `business_reviewed.json`.
 Tải lại trang vẫn thấy trạng thái `Field review ✓`.
 
-## Benchmark synthetic đa tài liệu
+## Bằng chứng held-out thật trên localhost
 
-```powershell
-$env:HCNS_PRIVATE_RUNTIME = "<private-runtime-root>"
-$env:PADDLE_MODEL_ROOT = "<local-paddle-model-root>"
+Màn hình chính chỉ hiển thị aggregate của 18 tài liệu held-out thật đã Ground
+Truth và cho phép đối chiếu tài liệu gốc từ `private-data`. Endpoint
+`/heldout/summary` không trả raw field value, OCR text, tên file hoặc PII.
+Endpoint `/heldout/document` chỉ hoạt động trên API loopback và chỉ resolve
+document ID đã có trong manifest. Tab CCCD lấy riêng các saved session
+`IDENTITY_DOCUMENT` đã Ground Truth, bỏ trùng theo tên file và phục vụ ảnh gốc
+qua `/user/source`; các session này không bị trộn vào metric held-out 18 tài
+liệu.
 
-python scripts\phase15_benchmark.py `
-  --dataset-root "<dataset-root>" prepare
-python scripts\phase15_benchmark.py `
-  --dataset-root "<dataset-root>" paddle
-python scripts\phase15_benchmark.py `
-  --dataset-root "<dataset-root>" vietocr
-python scripts\phase15_benchmark.py `
-  --dataset-root "<dataset-root>" evaluate
-```
-
-Report aggregate không chứa raw OCR/Ground Truth. Synthetic chỉ dùng regression;
-promotion cần held-out tài liệu thật có quyền sử dụng.
+Corpus hiện có `authorizedLocalDocumentsOnly=true`: tài liệu thật không được
+đóng gói vào web build hoặc commit Git. Report công khai chỉ chứa aggregate
+không có PII.
 
 ## Ground Truth và F5
 

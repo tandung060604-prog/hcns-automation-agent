@@ -23,6 +23,11 @@ from urllib.parse import parse_qs, urlparse
 
 import cv2
 import pypdfium2 as pdfium
+from heldout_dashboard import (
+    load_heldout_dashboard,
+    resolve_heldout_document,
+    resolve_heldout_root,
+)
 from local_server_security import require_loopback_host
 from paddleocr import PaddleOCR
 from phase9_pipeline import (
@@ -1144,6 +1149,7 @@ class UserOCRService:
 
 class DashboardHandler(BaseHTTPRequestHandler):
     data_root: Path
+    heldout_root: Path | None
     native_indexes: dict[str, dict[str, Path]]
     user_ocr: UserOCRService
 
@@ -1686,6 +1692,69 @@ class DashboardHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
 
+        if parsed.path == "/heldout/summary":
+            if self.heldout_root is None:
+                self.send_json(
+                    {"error": "Real held-out corpus is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            try:
+                self.send_json(load_heldout_dashboard(self.heldout_root))
+            except PermissionError as exc:
+                self.send_json(
+                    {"error": str(exc)},
+                    HTTPStatus.FORBIDDEN,
+                )
+            except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+                self.send_json(
+                    {"error": f"Real held-out evidence is unavailable: {exc}"},
+                    HTTPStatus.NOT_FOUND,
+                )
+            return
+
+        if parsed.path == "/heldout/document":
+            if self.heldout_root is None:
+                self.send_json(
+                    {"error": "Real held-out corpus is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            document_id = query.get("id", [""])[0]
+            mode = query.get("mode", ["preview"])[0]
+            if mode not in {"preview", "source"}:
+                self.send_json(
+                    {"error": "Invalid held-out document mode"},
+                    HTTPStatus.BAD_REQUEST,
+                )
+                return
+            try:
+                document_path, _item = resolve_heldout_document(
+                    self.heldout_root,
+                    document_id,
+                    preview=mode == "preview",
+                )
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+                return
+            except (OSError, FileNotFoundError):
+                self.send_json(
+                    {"error": "Held-out document is unavailable"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            content_type = (
+                mimetypes.guess_type(document_path.name)[0]
+                or "application/octet-stream"
+            )
+            download_name = (
+                f"{document_id}{document_path.suffix.lower()}"
+                if mode == "source"
+                else None
+            )
+            self.send_file(document_path, content_type, download_name)
+            return
+
         if parsed.path == "/phase14/benchmark":
             phase14_root = self.data_root / "output" / "phase14"
             benchmark_path = phase14_root / "line_benchmark_private.json"
@@ -1999,6 +2068,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         "phase13_3HybridEnabled": True,
                         "phase14_8VerifierEnabled": True,
                         "phase14LineReviewEnabled": True,
+                        "realHeldoutEvidenceEnabled": (
+                            self.heldout_root is not None
+                        ),
                         "modelLoaded": self.user_ocr.model_loaded,
                         "sessionCount": len(self.user_ocr.list_sessions()),
                         "formats": sorted(ALLOWED_EXTENSIONS),
@@ -2035,6 +2107,23 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     "application/json; charset=utf-8",
                     f"ocr-result-{session_id}.json",
                 )
+                return
+            if parsed.path == "/user/source":
+                source_paths = sorted(
+                    (session_dir / "input").glob("document.*")
+                )
+                if not source_paths:
+                    self.send_json(
+                        {"error": "Original session source not available"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                source_path = source_paths[0]
+                content_type = (
+                    mimetypes.guess_type(source_path.name)[0]
+                    or "application/octet-stream"
+                )
+                self.send_file(source_path, content_type)
                 return
             phase10_downloads = {
                 "/user/ground-truth": (
@@ -2331,6 +2420,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Serve the HR OCR dashboard API")
     parser.add_argument("--data-root", type=Path, required=True)
+    parser.add_argument(
+        "--heldout-root",
+        type=Path,
+        help=(
+            "Authorized local held-out root. Defaults to the "
+            "paddleocr-hr-heldout-v1 sibling of --data-root."
+        ),
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     return parser.parse_args()
@@ -2351,12 +2448,17 @@ def main() -> int:
     if not indexes["baseline"]:
         raise SystemExit("No Native OCR JSON available")
     DashboardHandler.data_root = args.data_root
+    DashboardHandler.heldout_root = resolve_heldout_root(
+        args.data_root,
+        args.heldout_root,
+    )
     DashboardHandler.native_indexes = indexes
     DashboardHandler.user_ocr = UserOCRService(args.data_root)
     server = ThreadingHTTPServer((args.host, args.port), DashboardHandler)
     print(
         f"Local dashboard API ready: http://{args.host}:{args.port} "
-        f"(baseline={len(indexes['baseline'])}, phase7={len(indexes['phase7'])})"
+        f"(baseline={len(indexes['baseline'])}, phase7={len(indexes['phase7'])}, "
+        f"real-heldout={'on' if DashboardHandler.heldout_root else 'off'})"
     )
     try:
         server.serve_forever()
