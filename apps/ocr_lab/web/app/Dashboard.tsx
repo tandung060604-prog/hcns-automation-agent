@@ -126,6 +126,74 @@ type IdentityField = {
   } | null;
 };
 
+type UnifiedBusinessField = {
+  value: unknown;
+  normalizedValue?: unknown;
+  dataType?: string;
+  confidence: number | null;
+  status: "accepted" | "needs_review" | "not_found";
+  sensitive?: boolean;
+  validation?: {
+    valid: boolean;
+    method?: string;
+  };
+  evidence: Record<string, unknown> | null;
+};
+
+type UnifiedIdpResult = {
+  version: string;
+  status: "READY" | "NEEDS_REVIEW";
+  ingestion: {
+    sourceFormat: string;
+    mode: "NATIVE" | "SCAN" | "HYBRID";
+    adapter: string;
+    pageCount: number;
+  };
+  classification: {
+    documentType: string;
+    documentSubtype?: string;
+    documentFamily?: string;
+    workflowDocumentType?: string;
+    schemaRef?: string;
+    confidence: number;
+    status: "accepted" | "needs_review";
+    evidence: string[];
+  };
+  extraction: {
+    fields: Record<string, UnifiedBusinessField>;
+    tables: Array<{
+      tableIndex?: number;
+      tableType?: string;
+      sourceKind?: string;
+      rows: Array<{
+        rowIndex: number;
+        values?: unknown;
+        status: "accepted" | "needs_review";
+      }>;
+      summary: {
+        rowCount: number;
+        acceptedRowCount: number;
+        columnCount: number;
+      };
+    }>;
+    summary: {
+      expectedFieldCount: number;
+      presentFieldCount: number;
+      acceptedFieldCount: number;
+      needsReviewFieldCount: number;
+      notFoundFieldCount: number;
+      documentCompleteness: number;
+      acceptedCoverage: number;
+    };
+  };
+  durationMs: number;
+  review?: {
+    reviewStatus: "USER_REVIEWED";
+    reviewedAt: string;
+    correctedFieldCount: number;
+  };
+};
+
 type UserResult = {
   sessionId: string;
   createdAt: string;
@@ -252,49 +320,26 @@ type UserResult = {
     >;
     durationMs: number;
   };
-  phase12?: {
+  phase14_8?: {
     version: string;
-    status: "READY" | "NEEDS_REVIEW";
-    ingestion: {
-      sourceFormat: string;
-      mode: "NATIVE" | "SCAN" | "HYBRID";
-      adapter: string;
+    status: string;
+    policy?: {
+      primaryProfile?: string;
+      verifierProfile?: string;
+      paddleSelectionEligible?: boolean;
+    };
+    summary: {
       pageCount: number;
-    };
-    classification: {
-      documentType: string;
-      confidence: number;
-      status: "accepted" | "needs_review";
-      evidence: string[];
-    };
-    extraction: {
-      fields: Record<string, IdentityField>;
-      tables: Array<{
-        name: string;
-        columns: string[];
-        rows: Array<{
-          rowIndex: number;
-          values: Record<string, IdentityField>;
-          status: "accepted" | "needs_review";
-        }>;
-        summary: {
-          rowCount: number;
-          acceptedRowCount: number;
-          columnCount: number;
-        };
-      }>;
-      summary: {
-        expectedFieldCount: number;
-        presentFieldCount: number;
-        acceptedFieldCount: number;
-        needsReviewFieldCount: number;
-        notFoundFieldCount: number;
-        documentCompleteness: number;
-        acceptedCoverage: number;
-      };
+      lineCount: number;
+      verifiedLineCount: number;
+      needsReviewLineCount: number;
+      verifiedRate?: number;
     };
     durationMs: number;
+    download?: string;
   };
+  phase12?: UnifiedIdpResult;
+  phase15?: UnifiedIdpResult;
 };
 
 type UserSessionSummary = {
@@ -310,6 +355,7 @@ type UserSessionSummary = {
   documentType?: string;
   qualityGate?: string | null;
   reviewed?: boolean;
+  phase15Reviewed?: boolean;
 };
 
 type Phase10Review = {
@@ -594,17 +640,72 @@ function normalizePhase10Review(payload: Phase10Review): Phase10Review {
 
 const typeLabels: Record<string, string> = {
   EMPLOYMENT_CONTRACT: "Hợp đồng",
+  PROBATION_AGREEMENT: "Hợp đồng thử việc",
   CV: "CV",
   EMPLOYEE_INFORMATION_FORM: "Phiếu nhân viên",
+  EMPLOYEE_INFO_UPDATE: "Phiếu cập nhật nhân sự",
+  EMPLOYEE_MASTER_LIST: "Danh sách nhân sự",
+  ONBOARDING_CHECKLIST: "Checklist tiếp nhận",
+  TRAINING_ATTENDANCE: "Danh sách đào tạo",
   HR_DECISION: "Quyết định",
   TIMESHEET: "Bảng chấm công",
   LEAVE_REQUEST: "Đơn nghỉ phép",
+  OVERTIME_REQUEST: "Phiếu làm thêm giờ",
+  BUSINESS_TRIP_REQUEST: "Đề nghị công tác",
+  EQUIPMENT_REQUEST: "Đề nghị cấp thiết bị",
   DEGREE: "Bằng cấp",
   DEGREE_CERTIFICATE: "Bằng cấp / chứng chỉ",
   GENERIC_PDF: "PDF tổng quát",
   GENERIC_DOCUMENT: "Tài liệu tổng quát",
   IDENTITY_DOCUMENT: "Giấy tờ định danh",
   PUBLIC_OCR: "Public OCR",
+};
+
+const familyLabels: Record<string, string> = {
+  CV: "CV & hồ sơ ứng viên",
+  ADMINISTRATIVE_REQUEST: "Đơn & biểu mẫu hành chính",
+  CONTRACT_DECISION: "Hợp đồng & quyết định nhân sự",
+  DEGREE_CERTIFICATE: "Bằng cấp & chứng chỉ",
+  EMPLOYEE_FORM_TABLE: "Phiếu nhân viên & bảng biểu",
+  IDENTITY_DOCUMENT: "Giấy tờ định danh",
+  OTHER_HR_DOCUMENT: "Tài liệu HCNS cần phân loại",
+};
+
+const businessFieldLabels: Record<string, string> = {
+  fullName: "Họ và tên",
+  headline: "Vị trí / tiêu đề nghề nghiệp",
+  email: "Email",
+  phoneNumber: "Số điện thoại",
+  address: "Địa chỉ",
+  education: "Học vấn",
+  experience: "Kinh nghiệm",
+  skills: "Kỹ năng",
+  documentTitle: "Tên biểu mẫu",
+  requestNumber: "Số phiếu",
+  employeeName: "Tên nhân viên",
+  employeeId: "Mã nhân viên",
+  department: "Phòng ban",
+  jobTitle: "Chức danh",
+  reason: "Lý do / mục đích",
+  startDate: "Ngày bắt đầu",
+  endDate: "Ngày kết thúc",
+  documentNumber: "Số văn bản",
+  action: "Nội dung quyết định",
+  salary: "Mức lương",
+  effectiveDate: "Ngày hiệu lực",
+  recipientName: "Người được cấp",
+  credentialType: "Loại văn bằng",
+  credentialId: "Số hiệu văn bằng",
+  issuingOrganization: "Đơn vị cấp",
+  fieldOfStudy: "Ngành đào tạo",
+  degreeLevel: "Trình độ",
+  classification: "Xếp loại",
+  issueDate: "Ngày cấp",
+  formNumber: "Mã biểu mẫu",
+  dateOfBirth: "Ngày sinh",
+  gender: "Giới tính",
+  organization: "Đơn vị",
+  joinDate: "Ngày vào làm",
 };
 
 const identityFieldLabels: Record<string, string> = {
@@ -689,6 +790,14 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     {},
   );
   const [isSavingReview, setIsSavingReview] = useState(false);
+  const [phase15FieldDraft, setPhase15FieldDraft] = useState<Record<string, string>>(
+    {},
+  );
+  const [phase15ReviewAssertions, setPhase15ReviewAssertions] = useState({
+    comparedWithSource: false,
+    allFieldsChecked: false,
+  });
+  const [isSavingPhase15Review, setIsSavingPhase15Review] = useState(false);
   const [isRunningChallenger, setIsRunningChallenger] = useState(false);
   const [isRunningHybrid, setIsRunningHybrid] = useState(false);
   const [phase14, setPhase14] = useState<Phase14Benchmark | null>(null);
@@ -708,6 +817,36 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     allTextChecked: false,
     acceptUnchangedDraft: false,
   });
+
+  const setLoadedUserResult = (result: UserResult | null) => {
+    setUserResult(result);
+    const phase = result?.phase15;
+    if (!phase) {
+      setPhase15FieldDraft({});
+      setPhase15ReviewAssertions({
+        comparedWithSource: false,
+        allFieldsChecked: false,
+      });
+      return;
+    }
+    setPhase15FieldDraft(
+      Object.fromEntries(
+        Object.entries(phase.extraction.fields).map(([name, field]) => [
+          name,
+          field.normalizedValue === null || field.normalizedValue === undefined
+            ? field.value === null || field.value === undefined
+              ? ""
+              : String(field.value)
+            : String(field.normalizedValue),
+        ]),
+      ),
+    );
+    const alreadyReviewed = phase.review?.reviewStatus === "USER_REVIEWED";
+    setPhase15ReviewAssertions({
+      comparedWithSource: alreadyReviewed,
+      allFieldsChecked: alreadyReviewed,
+    });
+  };
 
   const loadPhase10Review = async (sessionId: string) => {
     try {
@@ -937,7 +1076,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     if (!uploadFile || isUploading) return;
     setIsUploading(true);
     setUploadError("");
-    setUserResult(null);
+    setLoadedUserResult(null);
     setDeleteArmed(false);
     const formData = new FormData();
     formData.append("file", uploadFile);
@@ -948,7 +1087,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "OCR local thất bại");
-      setUserResult(payload as UserResult);
+      setLoadedUserResult(payload as UserResult);
       setActiveUserPage(0);
       setTextView("corrected");
       loadPhase10Review((payload as UserResult).sessionId);
@@ -969,7 +1108,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       );
       if (!response.ok) throw new Error("Không tải được session");
       const payload = (await response.json()) as UserResult;
-      setUserResult(payload);
+      setLoadedUserResult(payload);
       setActiveUserPage(0);
       setTextView("corrected");
       loadPhase10Review(payload.sessionId);
@@ -989,7 +1128,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       );
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Phase 9 thất bại");
-      setUserResult(payload as UserResult);
+      setLoadedUserResult(payload as UserResult);
       setActiveUserPage(0);
       setTextView("corrected");
       loadPhase10Review((payload as UserResult).sessionId);
@@ -1029,6 +1168,41 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       );
     } finally {
       setIsSavingReview(false);
+    }
+  };
+
+  const savePhase15Review = async () => {
+    if (!userResult?.phase15 || isSavingPhase15Review) return;
+    setIsSavingPhase15Review(true);
+    setUploadError("");
+    try {
+      const response = await fetch(
+        `${API_BASE}/user/phase15-review?id=${encodeURIComponent(
+          userResult.sessionId,
+        )}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fields: phase15FieldDraft,
+            assertions: phase15ReviewAssertions,
+          }),
+        },
+      );
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Không lưu được review Phase 15");
+      }
+      setLoadedUserResult(payload as UserResult);
+      refreshUserSessions();
+    } catch (error) {
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "Không lưu được review Phase 15",
+      );
+    } finally {
+      setIsSavingPhase15Review(false);
     }
   };
 
@@ -1104,7 +1278,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         { method: "DELETE" },
       );
       if (!response.ok) throw new Error("Không xóa được session");
-      setUserResult(null);
+      setLoadedUserResult(null);
       setUploadFile(null);
       setDeleteArmed(false);
       setPhase10Review(null);
@@ -1131,6 +1305,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     data.samples.find((sample) => sample.sampleId === "cv__HR-CV-0001_page_0") ??
     data.samples[0];
   const latestPrivateSession = userSessions[0] ?? null;
+  const unifiedIdp = userResult?.phase15 ?? userResult?.phase12;
 
   return (
     <main>
@@ -1140,7 +1315,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           <span>OCR LAB</span>
         </a>
         <nav aria-label="Điều hướng chính">
-          <a href="#phases">Phase 1-12</a>
+          <a href="#phases">Phase 1-15</a>
           <a href="#metrics">Chất lượng</a>
           <a href="#upload">OCR tài liệu thật</a>
           <a href="#explorer">Khám phá mẫu</a>
@@ -1680,6 +1855,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                             {session.format} / {session.pageCount} trang /{" "}
                             {session.recognizedTextLineCount} dòng
                             {session.reviewed ? " / Ground truth ✓" : ""}
+                            {session.phase15Reviewed ? " / Field review ✓" : ""}
                           </small>
                         </span>
                         <b>{pct(session.avgConfidence)}</b>
@@ -1807,41 +1983,212 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                   </div>
                 )}
 
-                {userResult.phase12 && (
-                  <div className="phase12-strip">
+                {userResult.phase14_8 && (
+                  <div className="phase14-8-strip">
                     <div>
-                      <span>PHASE 12 / INGESTION</span>
+                      <span>PHASE 14.8 / PRIMARY</span>
                       <strong>
-                        {userResult.phase12.ingestion.sourceFormat} /{" "}
-                        {userResult.phase12.ingestion.mode}
-                      </strong>
-                      <small>{userResult.phase12.ingestion.adapter}</small>
-                    </div>
-                    <div>
-                      <span>HR DOCUMENT TYPE</span>
-                      <strong>
-                        {typeLabels[userResult.phase12.classification.documentType] ??
-                          userResult.phase12.classification.documentType}
+                        {userResult.phase14_8.status === "NOT_REQUIRED_NATIVE_INPUT"
+                          ? "Native parser"
+                          : "VietOCR Seq2Seq"}
                       </strong>
                       <small>
-                        {pct(userResult.phase12.classification.confidence)} confidence /{" "}
-                        {userResult.phase12.classification.status}
+                        {userResult.phase14_8.status === "NOT_REQUIRED_NATIVE_INPUT"
+                          ? "Không OCR lại tài liệu native"
+                          : "Paddle chỉ cung cấp geometry"}
                       </small>
                     </div>
                     <div>
-                      <span>BUSINESS EXTRACTION</span>
-                      <strong>{userResult.phase12.status}</strong>
+                      <span>TRANSFORMER VERIFIER</span>
+                      <strong>{userResult.phase14_8.status}</strong>
                       <small>
-                        {pct(
-                          userResult.phase12.extraction.summary.documentCompleteness,
-                        )}{" "}
-                        completeness /{" "}
-                        {userResult.phase12.extraction.summary.acceptedFieldCount}/
-                        {userResult.phase12.extraction.summary.expectedFieldCount} accepted
+                        {userResult.phase14_8.summary.verifiedLineCount}/
+                        {userResult.phase14_8.summary.lineCount} dòng đồng thuận
+                      </small>
+                    </div>
+                    <div>
+                      <span>HUMAN REVIEW</span>
+                      <strong>
+                        {userResult.phase14_8.summary.needsReviewLineCount} dòng
+                      </strong>
+                      <small>
+                        Không tự thay text khi hai recognizer bất đồng
                       </small>
                     </div>
                   </div>
                 )}
+
+                {unifiedIdp && (
+                  <div className="phase12-strip">
+                    <div>
+                      <span>PHASE 15 / UNIFIED INTAKE</span>
+                      <strong>
+                        {unifiedIdp.ingestion.sourceFormat} /{" "}
+                        {unifiedIdp.ingestion.mode}
+                      </strong>
+                      <small>{unifiedIdp.ingestion.adapter}</small>
+                    </div>
+                    <div>
+                      <span>DOCUMENT FAMILY</span>
+                      <strong>
+                        {familyLabels[
+                          unifiedIdp.classification.documentFamily ??
+                            "OTHER_HR_DOCUMENT"
+                        ] ??
+                          unifiedIdp.classification.documentFamily ??
+                          "Chưa xác định"}
+                      </strong>
+                      <small>1 trong 5 họ tài liệu HCNS</small>
+                    </div>
+                    <div>
+                      <span>DOCUMENT SUBTYPE</span>
+                      <strong>
+                        {typeLabels[unifiedIdp.classification.documentType] ??
+                          unifiedIdp.classification.documentType}
+                      </strong>
+                      <small>
+                        {pct(unifiedIdp.classification.confidence)} confidence /{" "}
+                        {unifiedIdp.classification.status}
+                      </small>
+                    </div>
+                    <div>
+                      <span>BUSINESS EXTRACTION</span>
+                      <strong>{unifiedIdp.status}</strong>
+                      <small>
+                        {pct(
+                          unifiedIdp.extraction.summary.documentCompleteness,
+                        )}{" "}
+                        completeness /{" "}
+                        {unifiedIdp.extraction.summary.acceptedFieldCount}/
+                        {unifiedIdp.extraction.summary.expectedFieldCount} accepted
+                      </small>
+                    </div>
+                  </div>
+                )}
+
+                {unifiedIdp &&
+                  Object.keys(unifiedIdp.extraction.fields).length > 0 && (
+                    <section className="phase15-fields" aria-label="Trường dữ liệu HCNS">
+                      <div className="phase15-fields-head">
+                        <div>
+                          <span>STRUCTURED BUSINESS FIELDS</span>
+                          <h4>Thông tin trích xuất theo loại tài liệu</h4>
+                        </div>
+                        <small>
+                          Trường thiếu hoặc chưa chắc chắn luôn cần người duyệt
+                        </small>
+                      </div>
+                      <div className="phase15-field-grid">
+                        {Object.entries(unifiedIdp.extraction.fields).map(
+                          ([fieldName, field]) => (
+                            <article
+                              className={`phase15-field field-${field.status}`}
+                              key={fieldName}
+                            >
+                              <div>
+                                <span>
+                                  {businessFieldLabels[fieldName] ?? fieldName}
+                                </span>
+                                {field.sensitive && <em>Nhạy cảm</em>}
+                              </div>
+                              {userResult.phase15 ? (
+                                <textarea
+                                  aria-label={`Review ${
+                                    businessFieldLabels[fieldName] ?? fieldName
+                                  }`}
+                                  value={phase15FieldDraft[fieldName] ?? ""}
+                                  placeholder="Chưa tìm thấy"
+                                  onChange={(event) =>
+                                    setPhase15FieldDraft((current) => ({
+                                      ...current,
+                                      [fieldName]: event.target.value,
+                                    }))
+                                  }
+                                />
+                              ) : (
+                                <strong>
+                                  {field.value === null || field.value === ""
+                                    ? "Chưa tìm thấy"
+                                    : String(field.normalizedValue ?? field.value)}
+                                </strong>
+                              )}
+                              <small>
+                                {field.status} / {pct(field.confidence)}
+                              </small>
+                            </article>
+                          ),
+                        )}
+                      </div>
+                      {unifiedIdp.extraction.tables.length > 0 && (
+                        <div className="phase15-table-summary">
+                          <strong>
+                            {unifiedIdp.extraction.tables.length} bảng dữ liệu
+                          </strong>
+                          <span>
+                            {unifiedIdp.extraction.tables.reduce(
+                              (total, table) => total + table.summary.rowCount,
+                              0,
+                            )}{" "}
+                            dòng được giữ cùng provenance
+                          </span>
+                        </div>
+                      )}
+                      {userResult.phase15 && (
+                        <div className="phase15-review">
+                          <div className="phase15-review-checks">
+                            <label>
+                              <input
+                                type="checkbox"
+                                checked={phase15ReviewAssertions.comparedWithSource}
+                                onChange={(event) =>
+                                  setPhase15ReviewAssertions((current) => ({
+                                    ...current,
+                                    comparedWithSource: event.target.checked,
+                                  }))
+                                }
+                              />
+                              Tôi đã đối chiếu từng trường với tài liệu gốc
+                            </label>
+                            <label>
+                              <input
+                                type="checkbox"
+                                checked={phase15ReviewAssertions.allFieldsChecked}
+                                onChange={(event) =>
+                                  setPhase15ReviewAssertions((current) => ({
+                                    ...current,
+                                    allFieldsChecked: event.target.checked,
+                                  }))
+                                }
+                              />
+                              Tôi đã kiểm tra cả trường trống và dấu tiếng Việt
+                            </label>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={savePhase15Review}
+                            disabled={
+                              isSavingPhase15Review ||
+                              !phase15ReviewAssertions.comparedWithSource ||
+                              !phase15ReviewAssertions.allFieldsChecked
+                            }
+                          >
+                            {isSavingPhase15Review
+                              ? "Đang lưu review local…"
+                              : userResult.phase15.review
+                                ? "Cập nhật review Phase 15"
+                                : "Xác nhận các trường Phase 15"}
+                          </button>
+                          {userResult.phase15.review && (
+                            <small>
+                              USER_REVIEWED ·{" "}
+                              {userResult.phase15.review.correctedFieldCount} trường đã
+                              sửa · artifact tự động vẫn được giữ nguyên
+                            </small>
+                          )}
+                        </div>
+                      )}
+                    </section>
+                  )}
 
                 <div className="user-result-metrics">
                   <div>
@@ -1882,6 +2229,17 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                       Tải CCCD JSON
                     </a>
                   )}
+                  {userResult.phase14_8?.download && (
+                    <a
+                      className="secondary-download"
+                      href={`${API_BASE}/user/phase14-8-recognition?id=${encodeURIComponent(
+                        userResult.sessionId,
+                      )}`}
+                      download
+                    >
+                      Tải Recognition JSON
+                    </a>
+                  )}
                   {userResult.phase11_3 && (
                     <a
                       className="secondary-download"
@@ -1904,11 +2262,13 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                       Tải Phase 11.4 JSON
                     </a>
                   )}
-                  {userResult.phase12 && (
+                  {unifiedIdp && (
                     <>
                       <a
                         className="secondary-download"
-                        href={`${API_BASE}/user/phase12-canonical?id=${encodeURIComponent(
+                        href={`${API_BASE}/user/${
+                          userResult.phase15 ? "phase15" : "phase12"
+                        }-canonical?id=${encodeURIComponent(
                           userResult.sessionId,
                         )}`}
                         download
@@ -1917,7 +2277,9 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                       </a>
                       <a
                         className="secondary-download"
-                        href={`${API_BASE}/user/phase12-result?id=${encodeURIComponent(
+                        href={`${API_BASE}/user/${
+                          userResult.phase15 ? "phase15" : "phase12"
+                        }-result?id=${encodeURIComponent(
                           userResult.sessionId,
                         )}`}
                         download
@@ -1926,12 +2288,36 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                       </a>
                       <a
                         className="secondary-download"
-                        href={`${API_BASE}/user/phase12-business?id=${encodeURIComponent(
+                        href={`${API_BASE}/user/${
+                          userResult.phase15 ? "phase15" : "phase12"
+                        }-business?id=${encodeURIComponent(
                           userResult.sessionId,
                         )}`}
                         download
                       >
                         Tải Business JSON
+                      </a>
+                    </>
+                  )}
+                  {userResult.phase15?.review && (
+                    <>
+                      <a
+                        className="secondary-download"
+                        href={`${API_BASE}/user/phase15-reviewed-result?id=${encodeURIComponent(
+                          userResult.sessionId,
+                        )}`}
+                        download
+                      >
+                        Tải IDP đã duyệt
+                      </a>
+                      <a
+                        className="secondary-download"
+                        href={`${API_BASE}/user/phase15-reviewed-business?id=${encodeURIComponent(
+                          userResult.sessionId,
+                        )}`}
+                        download
+                      >
+                        Tải Business đã duyệt
                       </a>
                     </>
                   )}
@@ -2463,7 +2849,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         <div className="section-heading">
           <div>
             <p className="eyebrow">EXECUTION MAP</p>
-            <h2>Phase 1 → Phase 12</h2>
+            <h2>Phase 1 → Phase 16</h2>
           </div>
           <p>Mỗi phase có một đầu ra kiểm chứng được và dừng đúng điểm kiểm soát.</p>
         </div>
@@ -2507,6 +2893,21 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             <small>
               50/50 phân loại đúng; năm parser mục tiêu và 280/280 ô timesheet
               đạt exact trên tập tổng hợp.
+            </small>
+          </article>
+          <article className="phase-card">
+            <div className="phase-top">
+              <span>16</span>
+              <b>Development</b>
+            </div>
+            <h3>Structured HR parser hardening</h3>
+            <p>
+              Tách nhãn–giá trị có biên, đọc block nhiều dòng và dùng cấu trúc văn
+              bằng/quyết định để phục hồi field có bằng chứng.
+            </p>
+            <small>
+              Synthetic Field EM 30,92% → 37,50%; completeness 51,39% → 65,67%.
+              Vẫn SHADOW_REVIEW_ONLY, chưa phải production gate.
             </small>
           </article>
         </div>

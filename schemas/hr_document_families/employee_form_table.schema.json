@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hcns:idp:phase15:employee-form-table:2.0.0",
+  "title": "Phase 15 Employee Form and Table Business JSON",
+  "type": "object",
+  "required": ["schemaVersion", "documentFamily", "documentType", "idpStatus", "payload"],
+  "properties": {
+    "schemaVersion": {"const": "2.0.0"},
+    "documentFamily": {"const": "EMPLOYEE_FORM_TABLE"},
+    "documentType": {
+      "enum": [
+        "EMPLOYEE_INFORMATION_FORM",
+        "ONBOARDING_CHECKLIST",
+        "EMPLOYEE_MASTER_LIST",
+        "TIMESHEET",
+        "TRAINING_ATTENDANCE"
+      ]
+    },
+    "idpStatus": {"enum": ["READY", "NEEDS_REVIEW"]},
+    "payload": {
+      "type": "object",
+      "required": ["fields", "tables", "summary"],
+      "properties": {
+        "fields": {
+          "type": "object",
+          "required": [
+            "formNumber",
+            "employeeName",
+            "employeeId",
+            "dateOfBirth",
+            "gender",
+            "department",
+            "jobTitle",
+            "email",
+            "phoneNumber",
+            "address",
+            "organization",
+            "joinDate"
+          ]
+        },
+        "tables": {"type": "array"},
+        "summary": {"type": "object"}
+      }
+    }
+  }
+}

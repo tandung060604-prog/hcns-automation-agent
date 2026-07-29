@@ -70,7 +70,7 @@ test("keeps Phase 11.4 CCCD controls in the local upload flow", async () => {
   assert.match(layout, /HR Document Intelligence Lab/);
 });
 
-test("exposes the Phase 12 multi-format IDP flow and JSON downloads", async () => {
+test("exposes the Phase 15 multi-format IDP and field review flow", async () => {
   const [dashboard, css] = await Promise.all([
     readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
@@ -79,14 +79,19 @@ test("exposes the Phase 12 multi-format IDP flow and JSON downloads", async () =
   assert.match(dashboard, /accept="\.png,\.jpg,\.jpeg,\.pdf,\.docx,\.xlsx"/);
   assert.match(dashboard, /PNG, JPG, JPEG, PDF, DOCX, XLSX/);
   assert.match(dashboard, /phase12\?:/);
-  assert.match(dashboard, /PHASE 12 \/ INGESTION/);
-  assert.match(dashboard, /Phase 1 → Phase 12/);
+  assert.match(dashboard, /phase15\?:/);
+  assert.match(dashboard, /PHASE 15 \/ UNIFIED INTAKE/);
+  assert.match(dashboard, /Phase 1 → Phase 16/);
+  assert.match(dashboard, /Structured HR parser hardening/);
   assert.match(dashboard, /Phase 13: pilot trên tài liệu thật/);
-  assert.match(dashboard, /\/user\/phase12-canonical/);
-  assert.match(dashboard, /\/user\/phase12-result/);
-  assert.match(dashboard, /\/user\/phase12-business/);
+  assert.match(dashboard, /userResult\.phase15 \? "phase15" : "phase12"/);
+  assert.match(dashboard, /\/user\/phase15-review/);
+  assert.match(dashboard, /\/user\/phase15-reviewed-result/);
+  assert.match(dashboard, /\/user\/phase15-reviewed-business/);
+  assert.match(dashboard, /Xác nhận các trường Phase 15/);
   assert.match(dashboard, /Tải Business JSON/);
   assert.match(css, /\.phase12-strip/);
+  assert.match(css, /\.phase15-review/);
 });
 
 test("shows the reviewed Phase 14 recognizer decision", async () => {

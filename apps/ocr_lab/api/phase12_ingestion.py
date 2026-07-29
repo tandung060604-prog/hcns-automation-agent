@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Canonical local ingestion for Phase 12 PDF, DOCX, XLSX, and images."""
 
 from __future__ import annotations
 
 import difflib
-import math
 import re
 import textwrap
 import zipfile
@@ -15,7 +13,6 @@ from xml.etree import ElementTree as ET
 
 import pypdfium2 as pdfium
 from PIL import Image, ImageDraw, ImageFont
-
 
 WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -463,7 +460,7 @@ def _xlsx_value(
         )
         return _clean(value), formula
     value_node = cell.find("./x:v", NS_SHEET)
-    raw = value_node.text if value_node is not None else ""
+    raw = (value_node.text or "") if value_node is not None else ""
     if cell_type == "s":
         try:
             return shared_strings[int(raw)], formula
@@ -478,7 +475,7 @@ def _xlsx_value(
     try:
         number = float(raw)
         return int(number) if number.is_integer() else number, formula
-    except ValueError:
+    except (TypeError, ValueError):
         return _clean(raw), formula
 
 
