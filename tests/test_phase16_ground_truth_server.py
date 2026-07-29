@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts.serve_phase16_ground_truth import ReviewStore
+from scripts.serve_phase16_ground_truth import HTML, ReviewStore
 
 
 def write_json(path: Path, value: dict[str, object]) -> None:
@@ -14,6 +14,9 @@ def write_json(path: Path, value: dict[str, object]) -> None:
 def test_phase16_review_resumes_and_never_loads_predictions(
     tmp_path: Path,
 ) -> None:
+    assert "Loại/Nội dung văn bản" in HTML
+    assert "không tự động là ngày bắt đầu hay ngày hiệu lực" in HTML
+
     source = tmp_path / "source" / "01_cv" / "sample.jpg"
     source.parent.mkdir(parents=True)
     source.write_bytes(b"synthetic-image-fixture")

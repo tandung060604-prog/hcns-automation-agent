@@ -48,6 +48,7 @@ main{max-width:1500px;margin:auto;padding:20px}.toolbar,.panel{background:#fff;b
 .field{display:grid;grid-template-columns:160px 1fr auto;gap:10px;align-items:center;margin:9px 0}
 .field label{font-size:13px;font-weight:700}.field input[type=text]{width:100%;padding:10px;border:1px solid #bdcbc4;border-radius:8px}
 .skip{font-size:12px;white-space:nowrap}.save{width:100%;margin-top:14px;background:#17644d;color:#fff;font-size:16px}
+.guide{margin:12px 0;padding:12px;border-left:4px solid #b77a16;background:#fff7e8;color:#66440d;font-size:13px;line-height:1.5}
 #message{min-height:24px;padding-top:9px;color:#9b2f2f}.done{color:#17644d!important}
 @media(max-width:900px){.grid{grid-template-columns:1fr}#preview,.native{height:55vh}.field{grid-template-columns:1fr}.badge{margin-left:0}}
 </style>
@@ -58,16 +59,17 @@ main{max-width:1500px;margin:auto;padding:20px}.toolbar,.panel{background:#fff;b
   <div class="toolbar"><button id="prev">← Trước</button><button id="next">Sau →</button><span id="position"></span><span class="badge" id="progress"></span></div>
   <div class="grid">
     <section class="panel"><div class="meta"><div><strong id="docId"></strong><div class="muted" id="family"></div></div><div class="muted" id="sourceName"></div></div><div id="viewer"></div></section>
-    <section class="panel"><h2>Ground Truth theo trường</h2><div class="muted">Chỉ nhập giá trị nhìn thấy trực tiếp. Chọn “Không có” nếu tài liệu không chứa trường đó.</div><div id="fields"></div><button class="save" id="save">Xác nhận tài liệu và chuyển tiếp</button><div id="message"></div></section>
+    <section class="panel"><h2>Ground Truth theo trường</h2><div class="muted">Chỉ nhập giá trị nhìn thấy trực tiếp; không suy luận từ ngữ cảnh. Chọn “Không có” nếu tài liệu không chứa trường đó.</div><div class="guide" id="guide"></div><div id="fields"></div><button class="save" id="save">Xác nhận tài liệu và chuyển tiếp</button><div id="message"></div></section>
   </div>
 </main>
 <script>
-const labels={fullName:'Họ và tên',headline:'Tiêu đề nghề nghiệp',email:'Email',phoneNumber:'Số điện thoại',address:'Địa chỉ',documentTitle:'Tên tài liệu',requestNumber:'Số đơn',employeeName:'Tên nhân viên',employeeId:'Mã nhân viên',department:'Phòng ban',jobTitle:'Chức danh',reason:'Lý do',startDate:'Ngày bắt đầu',endDate:'Ngày kết thúc',documentNumber:'Số văn bản',action:'Nội dung quyết định',salary:'Mức lương',effectiveDate:'Ngày hiệu lực',credentialName:'Tên bằng/chứng chỉ',major:'Chuyên ngành',institution:'Đơn vị cấp',issueDate:'Ngày cấp',graduationYear:'Năm tốt nghiệp',classification:'Xếp loại',tableTitle:'Tên bảng',period:'Kỳ dữ liệu',rowCount:'Số dòng',columnCount:'Số cột'};
+const labels={fullName:'Họ và tên',headline:'Tiêu đề nghề nghiệp',email:'Email',phoneNumber:'Số điện thoại',address:'Địa chỉ',documentTitle:'Tên tài liệu',requestNumber:'Số đơn',employeeName:'Tên nhân viên',employeeId:'Mã nhân viên',department:'Phòng ban',jobTitle:'Chức danh/vị trí công việc',reason:'Lý do',startDate:'Ngày bắt đầu',endDate:'Ngày kết thúc',documentNumber:'Số văn bản',action:'Loại/Nội dung văn bản',salary:'Mức lương',effectiveDate:'Ngày hiệu lực',credentialName:'Tên bằng/chứng chỉ',major:'Chuyên ngành',institution:'Đơn vị cấp',issueDate:'Ngày cấp',graduationYear:'Năm tốt nghiệp',classification:'Xếp loại',tableTitle:'Tên bảng',period:'Kỳ dữ liệu',rowCount:'Số dòng',columnCount:'Số cột'};
+const familyGuides={CONTRACT_DECISION:'Với hợp đồng, “Loại/Nội dung văn bản” là tiêu đề hoặc loại hợp đồng nhìn thấy trực tiếp. Chỉ nhập chức danh khi tài liệu nêu rõ vị trí/chức vụ làm việc; trình độ học vấn hoặc chuyên môn không phải chức danh. Ngày ở phần đầu văn bản không tự động là ngày bắt đầu hay ngày hiệu lực.'};
 let state={documents:[]},index=0,current=null;
 const $=id=>document.getElementById(id);
 async function json(url,options){const r=await fetch(url,options);const v=await r.json();if(!r.ok)throw new Error(v.error||'Lỗi máy chủ');return v}
 async function loadState(){state=await json('/api/state');const pending=state.documents.findIndex(d=>d.status!=='CONFIRMED');index=pending<0?0:pending;await load()}
-async function load(){if(!state.documents.length)return;current=await json('/api/document?id='+encodeURIComponent(state.documents[index].documentId));$('docId').textContent=current.documentId;$('family').textContent=current.documentFamily;$('sourceName').textContent=current.sourceName;$('position').textContent=`${index+1}/${state.documents.length}`;$('progress').textContent=`${state.confirmed}/${state.total} đã xác nhận`;
+async function load(){if(!state.documents.length)return;current=await json('/api/document?id='+encodeURIComponent(state.documents[index].documentId));$('docId').textContent=current.documentId;$('family').textContent=current.documentFamily;$('sourceName').textContent=current.sourceName;$('position').textContent=`${index+1}/${state.documents.length}`;$('progress').textContent=`${state.confirmed}/${state.total} đã xác nhận`;$('guide').textContent=familyGuides[current.documentFamily]||'Chỉ nhập dữ liệu có bằng chứng trực tiếp trong tài liệu; trường không xuất hiện phải chọn “Không có”.';
  const ext=current.sourceExtension.toLowerCase(),url='/source?id='+encodeURIComponent(current.documentId),viewer=$('viewer');viewer.innerHTML='';
  if(['.jpg','.jpeg','.png','.pdf'].includes(ext)){const el=document.createElement(ext==='.pdf'?'iframe':'img');el.id='preview';el.src=url;el.alt='Tài liệu nguồn';viewer.appendChild(el)}
  else{viewer.innerHTML=`<div class="native"><div><b>Định dạng ${ext.slice(1).toUpperCase()}</b><p>Mở file gốc bằng ứng dụng local để đối chiếu.</p><a href="${url}">Mở / tải tài liệu nguồn</a></div></div>`}
