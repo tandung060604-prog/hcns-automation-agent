@@ -126,8 +126,54 @@ Ngoài CER, WER và Exact Match, report có:
 - `acceptedPrecision`: tỷ lệ exact trong nhóm confidence đạt threshold;
 - latency p50/p95.
 
+Từ Phase 14.6, mọi recognition benchmark dùng metric spec
+`vi-ocr-metrics/1.0.0`:
+
+- Exact Match là so sánh nghiêm ngặt sau NFC và chuẩn hóa khoảng trắng, vẫn giữ
+  nguyên hoa/thường, dấu câu và dấu tiếng Việt;
+- `casefoldExactMatchRate` chỉ dùng chẩn đoán agreement, không được thay Exact
+  Match;
+- CER/WER dùng Levenshtein trên chuỗi/từ đã chuẩn hóa;
+- DER lấy số edit do dấu gây ra chia cho số ký tự reference có dấu.
+
+Các script Phase 14.1–14.5 gọi cùng adapter metric và có parity test với
+`VietnameseRecognitionBenchmark`. Report lịch sử dùng mẫu số DER theo tổng ký
+tự phải được xem là legacy và không so trực tiếp với report spec 1.0.0.
+
 Confidence cao không thay thế Exact Match. Nếu model không có ký tự đúng trong
 output vocabulary, confidence vẫn có thể cao trong khi `acceptedPrecision` thấp.
+
+### Protocol khóa Phase 14.6
+
+`config/phase14_6_benchmark_lock.json` cố định policy review-only, crop
+`bbox_balanced_64`, SHA-256 của hai VietOCR weights và Paddle detector. Script
+`validate_phase14_6_lock.py` từ chối chạy nếu code policy, metric spec, kích
+thước hoặc hash model thay đổi.
+
+Tập held-out phải có ít nhất 15 tài liệu được quyền dùng local. Trình tự không
+được đảo:
+
+1. xác minh lock và tạo prediction trong trạng thái ẩn;
+2. người dùng xác nhận Ground Truth chỉ dựa trên crop/ảnh gốc;
+3. mở prediction và đánh giá đúng một lần;
+4. không chỉnh threshold/crop/policy trên tập held-out;
+5. không promote nếu làm mất bất kỳ dòng baseline-correct nào.
+
+```powershell
+python scripts/phase14_6_heldout_protocol.py seal `
+  --predictions <private-hidden-predictions.json> `
+  --output <private-sealed-predictions.json>
+
+# Chỉ chạy sau khi Ground Truth đã được xác nhận mà không nhìn prediction.
+python scripts/phase14_6_heldout_protocol.py evaluate `
+  --sealed-predictions <private-sealed-predictions.json> `
+  --ground-truth <private-confirmed-ground-truth.json> `
+  --output <aggregate-heldout-evaluation.json>
+```
+
+Lệnh `evaluate` không hỗ trợ overwrite. Artifact kết quả đã tồn tại đồng nghĩa
+evaluation held-out đã được sử dụng; muốn thử policy khác phải thu thập một tập
+held-out mới.
 
 ```powershell
 hcns-agent-recognition evaluate `
@@ -289,3 +335,87 @@ Fallback chuyển 138/309 candidate, phục hồi 44 lỗi và làm mất hai d�
 vốn đúng. 13/15 document cải thiện theo tổng Exact Match, không document nào
 giảm tổng Exact, nhưng hai false switches vẫn vi phạm gate an toàn. Quyết định:
 `SHADOW_REVIEW_ONLY`, mọi switch phải `needs_review`.
+
+### Phase 14.8 — policy recognizer đã khóa
+
+Policy `phase14.8-recognition-policy/1.0.0` dùng VietOCR `vgg_seq2seq` làm
+primary, `vgg_transformer` làm verifier và chỉ dùng Paddle cho geometry/audit.
+Paddle nằm trong `selectionExcludedProfiles`, vì vậy không thể được chọn làm text
+fallback. Đồng thuận phải exact sau NFC và chuẩn hóa khoảng trắng; bất đồng giữ
+nguyên Seq2Seq và chuyển `needs_review`.
+
+Policy, crop `bbox_balanced_64` và ba model artifact đã khóa SHA-256. Phân tích
+149 dòng diagnostic không được dùng để chỉnh threshold. Trạng thái vẫn là
+`SHADOW_REVIEW_ONLY` và `NOT_PRODUCTION_READY`.
+
+### Phase 15 — IDP năm họ tài liệu HCNS
+
+Benchmark development chạy 25 tài liệu synthetic, 31 trang và 1.025 crop dòng.
+Năm nhóm được báo riêng; các số dưới đây chỉ dùng regression và tìm khoảng trống
+extractor, không phải bằng chứng promote production.
+
+| Họ tài liệu | Classification | Field EM | Completeness | Field CER |
+|---|---:|---:|---:|---:|
+| CV | 100% | 32,00% | 75,00% | 66,54% |
+| Đơn/biểu mẫu hành chính | 100% | 51,22% | 88,89% | 43,74% |
+| Hợp đồng/quyết định | 100% | 10,00% | 22,22% | 116,78% |
+| Bằng cấp/chứng chỉ | 100% | 10,00% | 22,50% | 111,88% |
+| Phiếu nhân viên/bảng biểu | 100% | 46,15% | 48,33% | 39,45% |
+| **Tổng** | **100%** | **30,92%** | **51,39%** | **74,81%** |
+
+Nhóm bảng có Row Exact 60,00% và Cell Accuracy 62,71% trên 25 dòng/236 ô
+Ground Truth. Classification 100% đã được tinh chỉnh trên chính corpus synthetic
+này nên không được diễn giải là khả năng tổng quát hóa. Hợp đồng/quyết định và
+bằng cấp/chứng chỉ là hai khoảng trống lớn nhất; mọi field chưa chắc chắn vẫn
+`needs_review`.
+
+PDF có text layer, DOCX và XLSX dùng native parser; ảnh và PDF scan dùng Paddle
+detector → Seq2Seq primary → Transformer verifier. Giao diện local tạo riêng
+automatic JSON và human-reviewed JSON. Khi benchmark held-out mới, prediction
+phải được bịt kín trước Ground Truth và chỉ đánh giá một lần.
+
+### Phase 16 — parser cấu trúc cho hợp đồng và văn bằng
+
+Phase 16 chỉ thay parser trên cùng prediction đã khóa của corpus synthetic Phase
+15; không chạy lại recognizer và không thay Ground Truth. Baseline trước khi sửa
+được lưu riêng ngoài Git để phép so sánh trước/sau có thể tái lập.
+
+| Phạm vi | Field EM trước | Field EM sau | Completeness trước | Completeness sau | CER trước | CER sau |
+|---|---:|---:|---:|---:|---:|---:|
+| Hợp đồng/quyết định | 10,00% | 25,00% | 22,22% | 51,11% | 116,78% | 72,10% |
+| Bằng cấp/chứng chỉ | 10,00% | 27,50% | 22,50% | 65,00% | 111,88% | 80,20% |
+| **Tổng 5 họ** | **30,92%** | **37,50%** | **51,39%** | **65,67%** | **74,81%** | **60,30%** |
+
+Parser mới tách scalar theo nhãn có biên, đọc giá trị ở block kế tiếp, dùng marker
+cấu trúc để lấy người nhận/chương trình của văn bằng, và chỉ chuẩn hóa mã nhân
+viên khi OCR cung cấp đủ tiền tố lẫn chữ số. Mỗi giá trị vẫn bắt buộc có evidence;
+giá trị OCR dưới ngưỡng vẫn `needs_review`, còn `EMP` không đủ chữ số bị trả
+`not_found`.
+
+DER tổng tăng từ 1,11% lên 1,55% vì các field trước đây rỗng nay có prediction
+thực và lộ lỗi dấu của recognizer; riêng bằng cấp/chứng chỉ là 3,39%. Vì vậy kết
+quả này chứng minh parser phục hồi coverage/CER, không chứng minh recognizer đã
+đạt gate. Trạng thái tiếp tục là development-only và `SHADOW_REVIEW_ONLY`.
+
+### Phase 16 held-out thật — prediction đã niêm phong, chưa chạy evaluation
+
+Vùng intake private `paddleocr-hr-heldout-v1` đã được tạo cho năm họ tài liệu.
+Protocol yêu cầu tối thiểu 15 tài liệu chưa từng chạy prediction: 2 CV, 2 đơn
+hành chính, 4 hợp đồng/quyết định, 4 bằng cấp/chứng chỉ và 3 phiếu/bảng. Mỗi
+nguồn được khóa SHA-256 và kiểm tra trùng với corpus đã xem.
+
+Policy được cố định ở digest Phase 14.8
+`sha256:5dfd0186cacbe29a299c79d774aa4e2575f67a4675d6db15035762ed9b363fb6`,
+parser `phase16-structured-hr-parser/1.0.0` và metric
+`vi-ocr-metrics/1.0.0`. Queue Ground Truth cấm model output; prediction private
+phải được niêm phong và giữ ẩn. `evaluate-once` dùng create-only semantics nên
+không thể ghi đè báo cáo hoặc chạy lại cùng artifact.
+
+Manifest hiện khóa 18 tài liệu hợp lệ: 5 CV, 2 đơn hành chính, 4 hợp
+đồng/quyết định, 4 bằng cấp/chứng chỉ và 3 phiếu/bảng. Tất cả nguồn đều vượt
+kiểm tra quyền xử lý, trùng lặp và SHA-256. Paddle tạo 771 crop dòng; hai VietOCR
+model bất đồng 261 dòng và các dòng này tiếp tục mang `needs_review`.
+
+Prediction đã được niêm phong và giữ ẩn khỏi queue Ground Truth. Ground Truth
+chưa được xác nhận nên chưa có metric held-out thật hoặc quyết định promotion
+mới; số dòng đồng thuận không được diễn giải là accuracy.

@@ -6,6 +6,7 @@ from scripts.phase14_5_error_analysis import (
     LineRecord,
     build_analysis,
     conditional_prediction,
+    select_threshold,
 )
 
 
@@ -92,6 +93,35 @@ class Phase145FallbackTests(unittest.TestCase):
         self.assertFalse(
             payload["recommendedPolicy"]["autoAcceptChangedCandidate"]
         )
+
+    def test_threshold_selection_prioritizes_zero_baseline_correct_loss(
+        self,
+    ) -> None:
+        records = [
+            _record(
+                document="synthetic-a",
+                ground_truth="DÒNG ĐÚNG",
+                primary="DÒNG ĐÚNG",
+                transformer="KHÁC",
+                paddle="SAI",
+                confidence=0.3,
+            ),
+            *[
+                _record(
+                    document=f"synthetic-{index}",
+                    ground_truth=f"DÒNG CỨU {index}",
+                    primary=f"SAI {index}",
+                    transformer=f"KHÁC {index}",
+                    paddle=f"DÒNG CỨU {index}",
+                    confidence=0.3,
+                )
+                for index in range(2, 5)
+            ],
+        ]
+
+        threshold = select_threshold(records)
+
+        self.assertIsNone(threshold)
 
 
 if __name__ == "__main__":

@@ -30,8 +30,10 @@
 
 ## M4 — Camunda pilot and Human Review
 
-- Chọn Camunda 7/8 ở infrastructure, triển khai SDK-specific job worker.
-- BPMN dry-run cho một workflow; Camunda User Task là nguồn sự thật.
+- Đã chọn Camunda Platform 7.13 và scaffold External Task REST worker.
+- Đã khóa process-variable whitelist/schema, safety-first DMN và shadow mode.
+- Còn cần bind stage operations, deploy local và dry-run một workflow.
+- Camunda User Task tiếp tục là nguồn sự thật; custom UI chưa triển khai.
 - Review UI hiển thị page/block/sheet/cell provenance, không tạo queue riêng.
 
 ## M5 — Controlled integration

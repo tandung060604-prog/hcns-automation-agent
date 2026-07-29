@@ -1,15 +1,16 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:modeler="http://camunda.org/schema/modeler/1.0" xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Definitions_HR_Document_Agent_MVP_V2" targetNamespace="http://example.com/hr-document-agent-mvp-v2" exporter="OpenAI BPMN Review" exporterVersion="2.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.13.0">
   <bpmn:error id="Error_Document_Input_Invalid" name="Document input invalid" errorCode="DOCUMENT_INPUT_INVALID"/>
-  <bpmn:process id="hr_document_agent_mvp_v2" name="HR Document Processing and Onboarding Agent MVP V2" isExecutable="true">
+  <bpmn:process id="hr_document_agent_mvp_v2" name="HR Document Processing and Onboarding Agent MVP V2" isExecutable="true" camunda:versionTag="2.1.0-shadow">
     <bpmn:documentation>Camunda 7 workflow for HR document intake, OCR orchestration, quality routing, human review, controlled reupload, HRIS update and result notification. Raw files, raw OCR text and full PII remain outside Camunda. External workers must use complete for successful/business-quality results, bpmnError with DOCUMENT_INPUT_INVALID for invalid input, and failure for technical timeout/crash so retries and incidents remain operationally visible.</bpmn:documentation>
     <bpmn:startEvent id="Start" name="Bắt đầu">
-      <bpmn:documentation>Khởi tạo reuploadCount=0 và maxReuploadAttempts=3 trong engine; người nộp không được sửa chính sách này.</bpmn:documentation>
+      <bpmn:documentation>Khởi tạo reuploadCount=0, maxReuploadAttempts=3 và autoContinueEnabled=false trong engine; người nộp không được sửa chính sách này.</bpmn:documentation>
       <bpmn:extensionElements>
         <camunda:executionListener event="start">
           <camunda:script scriptFormat="javascript">var Long = Java.type('java.lang.Long');
 execution.setVariable('reuploadCount', Long.valueOf(0));
-execution.setVariable('maxReuploadAttempts', Long.valueOf(3));</camunda:script>
+execution.setVariable('maxReuploadAttempts', Long.valueOf(3));
+execution.setVariable('autoContinueEnabled', false);</camunda:script>
         </camunda:executionListener>
       </bpmn:extensionElements>
       <bpmn:outgoing>F_StartSubmit</bpmn:outgoing>
@@ -17,6 +18,9 @@ execution.setVariable('maxReuploadAttempts', Long.valueOf(3));</camunda:script>
     <bpmn:userTask camunda:candidateGroups="employees,new-hires" id="Submit" name="Cung cấp tài liệu HCNS">
       <bpmn:documentation>Người nộp chỉ cung cấp applicationId, opaque documentReference và loại tài liệu. Không upload raw image vào process variables.</bpmn:documentation>
       <bpmn:extensionElements>
+        <camunda:executionListener event="end">
+          <camunda:script scriptFormat="javascript">execution.setVariable('idempotencyKey', String(execution.getVariable('applicationId')) + ':' + String(execution.getVariable('documentReference')));</camunda:script>
+        </camunda:executionListener>
         <camunda:formData>
           <camunda:formField id="applicationId" label="Mã hồ sơ" type="string">
             <camunda:validation>
@@ -31,6 +35,7 @@ execution.setVariable('maxReuploadAttempts', Long.valueOf(3));</camunda:script>
           <camunda:formField id="declaredDocumentType" label="Loại tài liệu khai báo" type="enum">
             <camunda:value id="IDENTITY_DOCUMENT" name="Giấy tờ định danh"/>
             <camunda:value id="EMPLOYEE_INFORMATION_FORM" name="Phiếu thông tin nhân viên"/>
+            <camunda:value id="CV" name="Hồ sơ ứng viên / CV"/>
             <camunda:value id="DEGREE" name="Bằng cấp"/>
             <camunda:value id="CERTIFICATE" name="Chứng chỉ"/>
             <camunda:value id="EMPLOYMENT_CONTRACT" name="Hợp đồng/phụ lục lao động"/>
@@ -61,7 +66,7 @@ execution.setVariable('maxReuploadAttempts', Long.valueOf(3));</camunda:script>
     </bpmn:exclusiveGateway>
     <bpmn:serviceTask camunda:type="external" camunda:topic="document_detect_type" id="Detect" name="Nhận diện loại tài liệu">
       <bpmn:documentation>Worker trả classificationStatus thuộc CONFIRMED, MISMATCH, UNKNOWN hoặc INVALID; không trả raw OCR text.</bpmn:documentation>
-      <bpmn:incoming>F_FileValidDetect</bpmn:incoming>
+      <bpmn:incoming>F_OCRExtract</bpmn:incoming>
       <bpmn:outgoing>F_DetectClass</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:exclusiveGateway default="F_ClassInvalid" id="GClass" name="Loại tài liệu hợp lệ?">
@@ -72,10 +77,14 @@ execution.setVariable('maxReuploadAttempts', Long.valueOf(3));</camunda:script>
     </bpmn:exclusiveGateway>
     <bpmn:userTask camunda:candidateGroups="employees,new-hires" id="ConfirmType" name="Xác nhận loại tài liệu">
       <bpmn:extensionElements>
+        <camunda:executionListener event="end">
+          <camunda:script scriptFormat="javascript">if (execution.getVariable('documentTypeDecision') == 'CONFIRMED') { execution.setVariable('workflowDocumentType', execution.getVariable('confirmedDocumentType')); }</camunda:script>
+        </camunda:executionListener>
         <camunda:formData>
           <camunda:formField id="confirmedDocumentType" label="Loại tài liệu xác nhận" type="enum">
             <camunda:value id="IDENTITY_DOCUMENT" name="Giấy tờ định danh"/>
             <camunda:value id="EMPLOYEE_INFORMATION_FORM" name="Phiếu thông tin nhân viên"/>
+            <camunda:value id="CV" name="Hồ sơ ứng viên / CV"/>
             <camunda:value id="DEGREE" name="Bằng cấp"/>
             <camunda:value id="CERTIFICATE" name="Chứng chỉ"/>
             <camunda:value id="EMPLOYMENT_CONTRACT" name="Hợp đồng/phụ lục lao động"/>
@@ -105,19 +114,19 @@ execution.setVariable('maxReuploadAttempts', Long.valueOf(3));</camunda:script>
       <bpmn:outgoing>F_TypeConfirmed</bpmn:outgoing>
       <bpmn:outgoing>F_TypeReupload</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:serviceTask camunda:type="external" camunda:topic="document_ocr" id="OCR" name="OCR tài liệu">
-      <bpmn:documentation>OCR chạy ngoài engine. Raw image/raw text/full PII chỉ tồn tại trong private storage hoặc memory. Camunda chỉ nhận opaque ocrResultReference và sanitized status.</bpmn:documentation>
-      <bpmn:incoming>F_ClassConfirmed</bpmn:incoming>
-      <bpmn:incoming>F_TypeConfirmed</bpmn:incoming>
+    <bpmn:serviceTask camunda:type="external" camunda:topic="document_parse_content" id="OCR" name="Đọc và chuẩn hóa tài liệu">
+      <bpmn:documentation>Worker ưu tiên native parser và chỉ OCR ảnh/PDF scan. Raw file, raw text và full PII chỉ tồn tại trong private storage hoặc memory. Camunda chỉ nhận opaque resultReference cùng sanitized status.</bpmn:documentation>
+      <bpmn:incoming>F_FileValidDetect</bpmn:incoming>
       <bpmn:outgoing>F_OCRExtract</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask camunda:type="external" camunda:topic="document_extract" id="Extract" name="Trích xuất trường dữ liệu">
-      <bpmn:documentation>Trích xuất theo schema từng loại tài liệu. Full values không được ghi vào Camunda history; chỉ dùng private extractionResultReference.</bpmn:documentation>
-      <bpmn:incoming>F_OCRExtract</bpmn:incoming>
+      <bpmn:documentation>Trích xuất theo schema từng loại tài liệu. Full values không được ghi vào Camunda history; worker cập nhật artifact sau opaque resultReference.</bpmn:documentation>
+      <bpmn:incoming>F_ClassConfirmed</bpmn:incoming>
+      <bpmn:incoming>F_TypeConfirmed</bpmn:incoming>
       <bpmn:outgoing>F_ExtractNormalize</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask camunda:type="external" camunda:topic="document_normalize_validate" id="Normalize" name="Chuẩn hóa và kiểm tra dữ liệu">
-      <bpmn:documentation>Worker trả các biến sanitized: requiredFieldsComplete(Boolean), missingCriticalField(Boolean), businessInconsistency(Boolean), overallConfidence(Double), maskedPreview(String).</bpmn:documentation>
+      <bpmn:documentation>Worker trả các biến sanitized: qualityStatus, reviewRequired, sensitiveFieldNeedsReview, requiredFieldsComplete, missingCriticalField, businessInconsistency và overallConfidence. Không trả preview hoặc field value.</bpmn:documentation>
       <bpmn:incoming>F_ExtractNormalize</bpmn:incoming>
       <bpmn:incoming>F_CorrectionsNormalize</bpmn:incoming>
       <bpmn:outgoing>F_NormalizeQuality</bpmn:outgoing>
@@ -173,7 +182,7 @@ execution.setVariable('maxReuploadAttempts', Long.valueOf(3));</camunda:script>
             </camunda:validation>
           </camunda:formField>
           <camunda:formField id="correctionsReference" label="Mã tham chiếu dữ liệu đã sửa" type="string"/>
-          <camunda:formField id="hrReviewNote" label="Ghi chú HCNS" type="string"/>
+          <camunda:formField id="hrReviewNoteReference" label="Mã tham chiếu ghi chú HCNS" type="string"/>
         </camunda:formData>
       </bpmn:extensionElements>
       <bpmn:incoming>F_QHR</bpmn:incoming>
@@ -213,6 +222,9 @@ execution.setVariable('maxReuploadAttempts', Long.valueOf(3));</camunda:script>
     </bpmn:exclusiveGateway>
     <bpmn:userTask camunda:candidateGroups="employees,new-hires" id="UploadAgain" name="Tải lại tài liệu">
       <bpmn:extensionElements>
+        <camunda:executionListener event="end">
+          <camunda:script scriptFormat="javascript">execution.setVariable('idempotencyKey', String(execution.getVariable('applicationId')) + ':' + String(execution.getVariable('documentReference')));</camunda:script>
+        </camunda:executionListener>
         <camunda:formData>
           <camunda:formField id="documentReference" label="Mã tham chiếu tài liệu mới" type="string">
             <camunda:validation>
@@ -222,6 +234,7 @@ execution.setVariable('maxReuploadAttempts', Long.valueOf(3));</camunda:script>
           <camunda:formField id="declaredDocumentType" label="Loại tài liệu" type="enum">
             <camunda:value id="IDENTITY_DOCUMENT" name="Giấy tờ định danh"/>
             <camunda:value id="EMPLOYEE_INFORMATION_FORM" name="Phiếu thông tin nhân viên"/>
+            <camunda:value id="CV" name="Hồ sơ ứng viên / CV"/>
             <camunda:value id="DEGREE" name="Bằng cấp"/>
             <camunda:value id="CERTIFICATE" name="Chứng chỉ"/>
             <camunda:value id="EMPLOYMENT_CONTRACT" name="Hợp đồng/phụ lục lao động"/>
@@ -249,7 +262,7 @@ execution.setVariable('maxReuploadAttempts', Long.valueOf(3));</camunda:script>
               <camunda:constraint name="required"/>
             </camunda:validation>
           </camunda:formField>
-          <camunda:formField id="finalHrNote" label="Ghi chú quyết định cuối" type="string"/>
+          <camunda:formField id="finalHrNoteReference" label="Mã tham chiếu ghi chú quyết định cuối" type="string"/>
         </camunda:formData>
       </bpmn:extensionElements>
       <bpmn:incoming>F_ReuploadLimit</bpmn:incoming>
@@ -268,7 +281,7 @@ execution.setVariable('maxReuploadAttempts', Long.valueOf(3));</camunda:script>
       <bpmn:outgoing>F_ApprovedUpdateHRIS</bpmn:outgoing>
     </bpmn:exclusiveGateway>
     <bpmn:serviceTask camunda:type="external" camunda:topic="hris_update_employee_record" id="UpdateHRIS" name="Cập nhật hồ sơ nhân sự">
-      <bpmn:documentation>Bước nghiệp vụ hoàn chỉnh: cập nhật HRIS bằng approvedDataReference hoặc API nội bộ. Technical failure phải retry/incident; thao tác phải idempotent.</bpmn:documentation>
+      <bpmn:documentation>Bước nghiệp vụ hoàn chỉnh: cập nhật HRIS bằng opaque resultReference hoặc API nội bộ. Technical failure phải retry/incident; thao tác phải idempotent. M4 chỉ dùng mock handler.</bpmn:documentation>
       <bpmn:incoming>F_ApprovedUpdateHRIS</bpmn:incoming>
       <bpmn:outgoing>F_UpdateNotifySuccess</bpmn:outgoing>
     </bpmn:serviceTask>
@@ -297,7 +310,7 @@ execution.setVariable('maxReuploadAttempts', Long.valueOf(3));</camunda:script>
       <bpmn:outgoing>F_ValidateErrorReupload</bpmn:outgoing>
       <bpmn:errorEventDefinition errorRef="Error_Document_Input_Invalid"/>
     </bpmn:boundaryEvent>
-    <bpmn:boundaryEvent attachedToRef="OCR" cancelActivity="true" id="OCRInputError" name="Đầu vào OCR không hợp lệ">
+    <bpmn:boundaryEvent attachedToRef="OCR" cancelActivity="true" id="OCRInputError" name="Đầu vào đọc tài liệu không hợp lệ">
       <bpmn:outgoing>F_OCRErrorReupload</bpmn:outgoing>
       <bpmn:errorEventDefinition errorRef="Error_Document_Input_Invalid"/>
     </bpmn:boundaryEvent>
@@ -308,13 +321,13 @@ execution.setVariable('maxReuploadAttempts', Long.valueOf(3));</camunda:script>
     <bpmn:sequenceFlow id="F_StartSubmit" sourceRef="Start" targetRef="Submit"/>
     <bpmn:sequenceFlow id="F_SubmitValidate" sourceRef="Submit" targetRef="Validate"/>
     <bpmn:sequenceFlow id="F_ValidateGateway" sourceRef="Validate" targetRef="GFileValid"/>
-    <bpmn:sequenceFlow id="F_FileValidDetect" sourceRef="GFileValid" targetRef="Detect" name="VALID">
+    <bpmn:sequenceFlow id="F_FileValidDetect" sourceRef="GFileValid" targetRef="OCR" name="VALID">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${fileValidationStatus == 'VALID'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F_FileInvalidReupload" sourceRef="GFileValid" targetRef="RegisterReupload" name="INVALID / UNKNOWN"/>
     <bpmn:sequenceFlow id="F_ValidateErrorReupload" sourceRef="ValidateInputError" targetRef="RegisterReupload" name="DOCUMENT_INPUT_INVALID"/>
     <bpmn:sequenceFlow id="F_DetectClass" sourceRef="Detect" targetRef="GClass"/>
-    <bpmn:sequenceFlow id="F_ClassConfirmed" sourceRef="GClass" targetRef="OCR" name="CONFIRMED">
+    <bpmn:sequenceFlow id="F_ClassConfirmed" sourceRef="GClass" targetRef="Extract" name="CONFIRMED">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${classificationStatus == 'CONFIRMED'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F_ClassNeedsConfirm" sourceRef="GClass" targetRef="ConfirmType" name="MISMATCH / UNKNOWN">
@@ -322,11 +335,11 @@ execution.setVariable('maxReuploadAttempts', Long.valueOf(3));</camunda:script>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F_ClassInvalid" sourceRef="GClass" targetRef="RegisterReupload" name="INVALID"/>
     <bpmn:sequenceFlow id="F_ConfirmTypeGateway" sourceRef="ConfirmType" targetRef="GType"/>
-    <bpmn:sequenceFlow id="F_TypeConfirmed" sourceRef="GType" targetRef="OCR" name="CONFIRMED">
+    <bpmn:sequenceFlow id="F_TypeConfirmed" sourceRef="GType" targetRef="Extract" name="CONFIRMED">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${documentTypeDecision == 'CONFIRMED'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F_TypeReupload" sourceRef="GType" targetRef="RegisterReupload" name="REQUEST_REUPLOAD"/>
-    <bpmn:sequenceFlow id="F_OCRExtract" sourceRef="OCR" targetRef="Extract"/>
+    <bpmn:sequenceFlow id="F_OCRExtract" sourceRef="OCR" targetRef="Detect"/>
     <bpmn:sequenceFlow id="F_OCRErrorReupload" sourceRef="OCRInputError" targetRef="RegisterReupload" name="DOCUMENT_INPUT_INVALID"/>
     <bpmn:sequenceFlow id="F_ExtractNormalize" sourceRef="Extract" targetRef="Normalize"/>
     <bpmn:sequenceFlow id="F_NormalizeQuality" sourceRef="Normalize" targetRef="QualityDecision"/>
@@ -423,22 +436,22 @@ execution.setVariable('maxReuploadAttempts', Long.valueOf(3));</camunda:script>
         <dc:Bounds x="630" y="240" width="50" height="50"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Detect_di" bpmnElement="Detect" bioc:fill="#FFF8E1" bioc:stroke="#F9A825">
-        <dc:Bounds x="740" y="220" width="185" height="90"/>
+        <dc:Bounds x="985" y="220" width="185" height="90"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="GClass_di" bpmnElement="GClass" bioc:fill="#FFFFFF" bioc:stroke="#546E7A">
-        <dc:Bounds x="985" y="240" width="50" height="50"/>
+        <dc:Bounds x="1230" y="240" width="50" height="50"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="ConfirmType_di" bpmnElement="ConfirmType" bioc:fill="#E3F2FD" bioc:stroke="#1565C0">
-        <dc:Bounds x="1040" y="70" width="200" height="90"/>
+        <dc:Bounds x="1280" y="70" width="200" height="90"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="GType_di" bpmnElement="GType" bioc:fill="#FFFFFF" bioc:stroke="#546E7A">
-        <dc:Bounds x="1290" y="90" width="50" height="50"/>
+        <dc:Bounds x="1510" y="90" width="50" height="50"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="OCR_di" bpmnElement="OCR" bioc:fill="#FFF8E1" bioc:stroke="#F9A825">
-        <dc:Bounds x="1090" y="220" width="170" height="90"/>
+        <dc:Bounds x="740" y="220" width="185" height="90"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="OCRInputError_di" bpmnElement="OCRInputError" bioc:fill="#FFF3E0" bioc:stroke="#EF6C00">
-        <dc:Bounds x="1225" y="292" width="36" height="36"/>
+        <dc:Bounds x="890" y="292" width="36" height="36"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Extract_di" bpmnElement="Extract" bioc:fill="#FFF8E1" bioc:stroke="#F9A825">
         <dc:Bounds x="1320" y="220" width="180" height="90"/>
@@ -533,46 +546,45 @@ execution.setVariable('maxReuploadAttempts', Long.valueOf(3));</camunda:script>
         <di:waypoint x="1870" y="690"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_DetectClass_di" bpmnElement="F_DetectClass" bioc:stroke="#546E7A">
-        <di:waypoint x="925" y="265.0"/>
-        <di:waypoint x="985" y="265.0"/>
+        <di:waypoint x="1170" y="265.0"/>
+        <di:waypoint x="1230" y="265.0"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_ClassConfirmed_di" bpmnElement="F_ClassConfirmed" bioc:stroke="#546E7A">
-        <di:waypoint x="1035" y="265.0"/>
-        <di:waypoint x="1090" y="265.0"/>
+        <di:waypoint x="1280" y="265.0"/>
+        <di:waypoint x="1320" y="265.0"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_ClassNeedsConfirm_di" bpmnElement="F_ClassNeedsConfirm" bioc:stroke="#546E7A">
-        <di:waypoint x="1035" y="265"/>
-        <di:waypoint x="1060" y="265"/>
-        <di:waypoint x="1060" y="115"/>
-        <di:waypoint x="1040" y="115"/>
+        <di:waypoint x="1280" y="265"/>
+        <di:waypoint x="1300" y="265"/>
+        <di:waypoint x="1300" y="115"/>
+        <di:waypoint x="1280" y="115"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_ClassInvalid_di" bpmnElement="F_ClassInvalid" bioc:stroke="#546E7A">
-        <di:waypoint x="1010" y="290"/>
-        <di:waypoint x="1010" y="710"/>
+        <di:waypoint x="1255" y="290"/>
+        <di:waypoint x="1255" y="710"/>
         <di:waypoint x="1870" y="710"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_ConfirmTypeGateway_di" bpmnElement="F_ConfirmTypeGateway" bioc:stroke="#546E7A">
-        <di:waypoint x="1240" y="115.0"/>
-        <di:waypoint x="1290" y="115.0"/>
+        <di:waypoint x="1480" y="115.0"/>
+        <di:waypoint x="1510" y="115.0"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_TypeConfirmed_di" bpmnElement="F_TypeConfirmed" bioc:stroke="#546E7A">
-        <di:waypoint x="1290" y="115"/>
-        <di:waypoint x="1275" y="115"/>
-        <di:waypoint x="1275" y="265"/>
-        <di:waypoint x="1260" y="265"/>
+        <di:waypoint x="1510" y="115"/>
+        <di:waypoint x="1500" y="115"/>
+        <di:waypoint x="1500" y="265"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_TypeReupload_di" bpmnElement="F_TypeReupload" bioc:stroke="#546E7A">
-        <di:waypoint x="1315" y="140"/>
-        <di:waypoint x="1315" y="705"/>
+        <di:waypoint x="1535" y="140"/>
+        <di:waypoint x="1535" y="705"/>
         <di:waypoint x="1870" y="705"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_OCRExtract_di" bpmnElement="F_OCRExtract" bioc:stroke="#546E7A">
-        <di:waypoint x="1260" y="265.0"/>
-        <di:waypoint x="1320" y="265.0"/>
+        <di:waypoint x="925" y="265.0"/>
+        <di:waypoint x="985" y="265.0"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_OCRErrorReupload_di" bpmnElement="F_OCRErrorReupload" bioc:stroke="#546E7A">
-        <di:waypoint x="1243" y="328"/>
-        <di:waypoint x="1243" y="675"/>
+        <di:waypoint x="908" y="328"/>
+        <di:waypoint x="908" y="675"/>
         <di:waypoint x="1870" y="675"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_ExtractNormalize_di" bpmnElement="F_ExtractNormalize" bioc:stroke="#546E7A">

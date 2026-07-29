@@ -59,17 +59,17 @@ class HybridOcrTests(unittest.TestCase):
             declared_media_type="image/png",
         )
         primary = FakeRecognizer(
-            "easyocr/vi",
+            "vietocr/vgg_seq2seq",
             (
-                LineRecognition("NGUYN THI MAI", 0.96, "easyocr-vi"),
-                LineRecognition("Quận 1", 0.89, "easyocr-vi"),
+                LineRecognition("NGUYỄN THỊ MAI", 0.96, "vgg_seq2seq"),
+                LineRecognition("Quận 1", 0.89, "vgg_seq2seq"),
             ),
         )
         verifier = FakeRecognizer(
-            "vietocr/vgg_seq2seq",
+            "vietocr/vgg_transformer",
             (
-                LineRecognition("Nguyễn Thị Mai", 0.95, "vgg_seq2seq"),
-                LineRecognition("Quận I", 0.80, "vgg_seq2seq"),
+                LineRecognition("NGUYỄN THỊ MAI", 0.95, "vgg_transformer"),
+                LineRecognition("Quận I", 0.80, "vgg_transformer"),
             ),
         )
 
@@ -79,22 +79,28 @@ class HybridOcrTests(unittest.TestCase):
 
         page = result.pages[0]
         self.assertEqual(
-            [line.text for line in page.lines], ["NGUYN THI MAI", "Qun 1"]
+            [line.text for line in page.lines], ["NGUYỄN THỊ MAI", "Quận 1"]
         )
         self.assertEqual(
             page.lines[0].box,
             ((1.0, 2.0), (20.0, 2.0), (20.0, 8.0), (1.0, 8.0)),
         )
-        self.assertEqual(page.metadata["acceptedLineCount"], 1)
+        self.assertEqual(page.metadata["verifiedLineCount"], 1)
+        self.assertEqual(page.metadata["acceptedLineCount"], 0)
         self.assertEqual(page.metadata["needsReviewLineCount"], 1)
         self.assertEqual(
-            page.metadata["lineVerification"][0]["status"], "accepted"
+            page.metadata["lineVerification"][0]["status"], "verified"
         )
         self.assertEqual(
             page.metadata["lineVerification"][1]["status"], "needs_review"
         )
         self.assertEqual(
             page.metadata["lineVerification"][1]["rule"],
-            "paddle_preserved_pending_human_review",
+            "primary_preserved_transformer_disagreement_review",
         )
-        self.assertEqual(result.model_manifest["promotion"], "pilot_only")
+        self.assertFalse(
+            page.metadata["lineVerification"][1]["paddleEligibleForSelection"]
+        )
+        self.assertEqual(
+            result.model_manifest["promotion"], "shadow_review_only"
+        )

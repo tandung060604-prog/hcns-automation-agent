@@ -1,65 +1,63 @@
 # Project State
 
-Current milestone: M3 / Phase 14.5 — conditional OCR fallback analysis
-
+Current milestone: M3 / Phase 16 plus M4 Camunda 7 shadow scaffolding
 Completed:
 - M1 Universal Document Intake, safety, canonical model and native/OCR routing
 - Independent SourceFormat/DocumentType/WorkflowType with vendor-neutral ports
-- Deterministic classifier and extractors for CV, contract, leave and timesheet
-- Required-field, confidence, sensitivity and extractor-availability validation
-- Duplicate field conflict and ISO date/range validation
+- Unified five-family classifier/extractors for 15 Vietnamese HR subtypes
 - Quality score/status with explicit Human Review reasons
-- IdpResult persisted before Camunda job completion
 - Business JSON schema 2.0.0 with classification/quality/field provenance
-- Camunda summary carries documentType, qualityStatus and reviewRequired
 - Offline benchmark Ground Truth/prediction/report/comparison schemas 1.0.0
-- Aggregate OCR, classification, field, safety, review and latency metrics
 - Baseline/challenger promotion gate with privacy/license/provenance evidence
-- Vendor-neutral IdpResult-to-benchmark adapter and CLI
 - Recognition-only contracts and Vietnamese NFC audit with 134 characters
-- CER, WER, Exact Match, Diacritic Error Rate and accepted precision
-- Hybrid orchestration: Paddle primary → EasyOCR/VietOCR independent verifiers
-- Disagreement policy preserves the EasyOCR candidate and sets `needs_review`
+- Phase 14.8: Seq2Seq primary, Transformer verifier, Paddle detector-only evidence
+- Strict disagreement policy preserves Seq2Seq and always sets `needs_review`
 - Authorized real-scan pilot: 15 reviewed CCCD, 671 detected line crops
 - Real-scan agreement: 18/671 lines (2.68%); decision `NOT_PROMOTED`
-- Phase 14.5 stratified all 214 seq2seq errors without publishing private text
-- Document-level fallback replay: 44.34% Exact, 15.36% CER and 2.01% DER
-- Fallback recovered 44 errors but lost two correct lines; `SHADOW_REVIEW_ONLY`
-- Phase 14.2 processed 51 authorized sessions and 2,150 line crops without failure
-- Exact verifier agreement accepted 188/2,150 lines; 1,962 need review
-- Phase 14.3 kept `bbox_balanced_64`: 42.86% Exact Match and 15.29% CER
-- Of 44 errors, alternate VietOCR crops recover only two by oracle
-- Phase 14.4 corpus: 15 authorized documents and 309 confirmed line crops
-- Seq2seq: 30.74% Exact, 18.19% CER; Transformer: 27.18% Exact, 14.16% CER
-- 60+ synthetic unit/contract/safety/architecture/benchmark tests
+- Phase 14.8 dev corpus keeps fallback disabled; LODO recovered 30 errors but lost one correct line
+- Separate diagnostic analysis covers 149 locked Ground Truth lines without raw text
+- Canonical metric spec `vi-ocr-metrics/1.0.0` shared across Phase 14 adapters
+- Versioned recognition policies never auto-replace text in shadow mode
+- Phase 14.6 lock pins policy, crop and SHA-256 for three local model artifacts
+- Held-out runner seals predictions, rejects Ground Truth leakage and evaluates once
+- OCR Lab supports upload → classify → extract → review → JSON; reviewed state resumes on F5
+- Camunda 7 REST client covers fetch/complete/failure/BPMN error/lock extension
+- BPMN parses content before classification; DMN blocks unsafe auto-continue
+- Process-variable schema/whitelist and nine-topic shadow handler registry
+- Phase 15 development benchmark: 25 documents, 31 pages and 1,025 line crops
+- Five-family classification is 100% on synthetic development data only
+- Phase 16 structured parser raises Field EM 30.92%→37.50% and completeness 51.39%→65.67%
+- Contract/decision EM 25.00%; credential EM 27.50%; CER 60.30%, DER 1.55%; development-only
+- Phase 16 real held-out manifest locks 18 authorized documents across five families
+- Hidden predictions are sealed for 771 crops; 261 disagreements remain `needs_review`
+- Ground Truth is not confirmed and held-out accuracy metrics remain unopened
+- Native PDF text, DOCX and XLSX bypass OCR and preserve native structures
 - Ruff, strict mypy, compile and repository hygiene gates
 
 Architecture:
 - IDP reads/understands; Agent analyzes/proposes; Camunda orchestrates
-- SourceFormat selects parser; DocumentType selects extractor
-- Quality gate never grants HRM/BPM side-effect authority
+- SourceFormat selects native/OCR parser; family and subtype select extractor/schema
 - Benchmark compares every backend through the same IdpResult contract
 - Benchmark report is aggregate-only and contains no raw field values
 - Camunda owns BPMN, User Task, timer, retry, escalation and process state
-- Camunda 7 BPMN/DMN reference package added for review and dry-run
+- Camunda owns routing; adapter remains shadow-only until OCR promotion
 
 Security:
 - No real PII, private-data, upload, OCR output or model weights added
-- Classifier evidence stores source locations, not copied raw text
-- Validation issues do not include field values
 - Business JSON and canonical content stay behind result references
 - Ground Truth/predictions stay outside Git; report requires disclosure review
 
 Known limits:
 - Rule classifier/extractors are architecture baselines, not accuracy-promoted models
-- Supported extractors: CV, employment contract, leave request and timesheet
-- Administrative/other types require review until an extractor is approved
+- Five family schemas cover CV, administrative, contract/decision, credential and table
+- Contract/decision and credential Field EM remain only 25.00%/27.50% after Phase 16
 - PPTX remains text-by-slide; legacy DOC/XLS require safe conversion
-- Real-scan pilot is only 15 CCCD and does not cover the HR document portfolio
-- Phase 14.5 fallback still regresses DER and two baseline-correct lines
+- Phase 15 classification tuning used synthetic data and is not held-out evidence
+- Phase 14.5 fallback still regresses DER and one held-out baseline-correct line
+- Historical Phase 14 DER used a legacy denominator and must not be compared
+  directly with metric spec 1.0.0
 - Verifier agreement is not calibrated as correctness evidence on real scans
-- Phase 14.1 covers only four documents; it does not represent the HR portfolio
-- No Camunda deployment, review UI or HRM/BPM side effect
+- No Camunda deployment, bound stage operations or real HRIS side effect
 - Camunda environment link and deployment evidence remain pending
 
 Key commands:
@@ -67,14 +65,16 @@ Key commands:
 - `python -m ruff check src tests scripts`
 - `python -m mypy src`
 - `python scripts/check_repository.py`
+- `python scripts/validate_phase14_6_lock.py --private-runtime <path> --paddle-model <path>`
+- `cd apps/ocr_lab/web && npm test`
 - `hcns-agent-benchmark evaluate --ground-truth <file> --predictions <file> --output <file>`
 
 Next:
-- Repeat the frozen fallback on new held-out authorized documents
-- Require zero baseline-correct loss before any controlled auto-selection
-- Repeat the protocol on authorized real CV, contract, leave and timesheet scans
-- Calibrate EasyOCR/VietOCR confidence before changing auto-accept thresholds
-- Obtain approval/manifest for a fixed 30–50 page document Ground Truth outside Git
-- Run PaddleOCR baseline and MinerU document challenger on the same dataset digest
-- Review aggregate comparison; do not promote until every gate passes
-- M4 Camunda generation selection, SDK worker and BPMN dry-run
+- Review all 18 Ground Truth documents directly from source with predictions hidden
+- Confirm Ground Truth only after checking every required field and Vietnamese diacritic
+- Run `evaluate-once`; require zero sensitive-field false acceptance and no retuning
+- Add classification macro precision/recall/F1 and UNKNOWN rate on held-out data
+- Keep all unsupported/uncertain fields in `needs_review`
+- Promote only per family/subtype after its own quality gate passes
+- Keep reviewed Business JSON behind `resultReference`, never process variables
+- Bind M4 stage operations and execute Camunda 7.13 local dry-run

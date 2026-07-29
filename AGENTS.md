@@ -21,6 +21,7 @@ Chỉ đọc các file cần cho tác vụ:
 | Intake/parser | `docs/ARCHITECTURE.md`, ADR-0002, `tests/AGENTS.md` |
 | Classification/extraction | ADR-0003, `schemas/`, `docs/EVALUATION.md` |
 | Workflow/HITL | `docs/WORKFLOWS.md`, `docs/HUMAN_IN_THE_LOOP.md` |
+| Camunda 7 integration | `docs/CAMUNDA_MVP_V2_INTEGRATION_PLAN.md`, ADR-0002 |
 | Kiến trúc | `docs/ARCHITECTURE.md`, ADR liên quan |
 | Schema | `schemas/`, `docs/DATA_SECURITY.md` |
 | Test/benchmark | `docs/EVALUATION.md`, `tests/AGENTS.md` |

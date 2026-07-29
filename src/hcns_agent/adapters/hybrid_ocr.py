@@ -1,16 +1,20 @@
-"""Evidence-preserving hybrid OCR orchestration.
+"""Evidence-preserving hybrid OCR orchestration for Phase 14.8.
 
-Paddle owns geometry and the selected text. Independent recognizers may only
-confirm that text; disagreement is never allowed to replace it silently.
+Paddle owns geometry only. VietOCR Seq2Seq owns the selected text and the
+Transformer independently verifies it. No Paddle recognition text participates
+in fallback selection.
 """
 
 from __future__ import annotations
 
 import time
-import unicodedata
 from dataclasses import dataclass
 from typing import Protocol
 
+from hcns_agent.application.recognition_policy import (
+    PHASE14_8_TRANSFORMER_VERIFIER_POLICY,
+    VerifierRecognitionPolicy,
+)
 from hcns_agent.ports.document_parser import DocumentSource
 from hcns_agent.ports.ocr import OcrEngine, OcrLine, OcrPage, OcrResult
 
@@ -36,21 +40,17 @@ class DetectedLineRecognizer(Protocol):
     ) -> LineRecognition: ...
 
 
-def _normalized(value: str) -> str:
-    return " ".join(unicodedata.normalize("NFC", value).casefold().split())
-
-
 @dataclass(slots=True)
 class HybridVietnameseOcrEngine:
     detector: OcrEngine
-    # Phase 14 keeps these names for API compatibility. Both are independent
-    # verifiers of the detector's Paddle recognition candidate.
+    # Paddle supplies geometry. Primary and verifier recognize the same crop.
     primary: DetectedLineRecognizer
     verifier: DetectedLineRecognizer
+    policy: VerifierRecognitionPolicy = PHASE14_8_TRANSFORMER_VERIFIER_POLICY
 
     @property
     def name(self) -> str:
-        return "hybrid/paddle-easyocr-vietocr-pilot"
+        return "hybrid/paddle-detector-vietocr-seq2seq-transformer"
 
     def recognize(self, source: DocumentSource) -> OcrResult:
         started = time.perf_counter()
@@ -73,47 +73,45 @@ class HybridVietnameseOcrEngine:
                     box=detected_line.box,
                 )
                 detector_text = detected_line.text
-                confirmed_by_primary = bool(_normalized(detector_text)) and _normalized(
-                    detector_text
-                ) == _normalized(primary.text)
-                confirmed_by_verifier = bool(_normalized(detector_text)) and _normalized(
-                    detector_text
-                ) == _normalized(verifier.text)
-                confirmed = confirmed_by_primary or confirmed_by_verifier
-                status = "accepted" if confirmed else "needs_review"
+                decision = self.policy.decide(
+                    primary_text=primary.text,
+                    primary_confidence=primary.confidence,
+                    verifier_text=verifier.text,
+                )
                 lines.append(
                     OcrLine(
-                        text=detector_text,
-                        confidence=detected_line.confidence,
+                        text=decision.selected_text,
+                        confidence=decision.selected_confidence,
                         box=detected_line.box,
                     )
                 )
                 decisions.append(
                     {
                         "lineIndex": line_index,
-                        "status": status,
-                        "selectedText": detector_text,
-                        "selectedConfidence": detected_line.confidence,
-                        "easyOcrText": primary.text,
-                        "easyOcrConfidence": primary.confidence,
-                        "easyOcrModel": primary.model,
-                        "vietOcrText": verifier.text,
-                        "vietOcrConfidence": verifier.confidence,
-                        "vietOcrModel": verifier.model,
-                        "paddleEasyAgreed": confirmed_by_primary,
-                        "paddleVietAgreed": confirmed_by_verifier,
-                        "rule": (
-                            "paddle_confirmed_by_at_least_one_independent_recognizer"
-                            if confirmed
-                            else "paddle_preserved_pending_human_review"
+                        "status": decision.status,
+                        "selectedText": decision.selected_text,
+                        "selectedConfidence": decision.selected_confidence,
+                        "primaryText": primary.text,
+                        "primaryConfidence": primary.confidence,
+                        "primaryModel": primary.model,
+                        "verifierText": verifier.text,
+                        "verifierConfidence": verifier.confidence,
+                        "verifierModel": verifier.model,
+                        "detectorRawText": detector_text,
+                        "detectorConfidence": detected_line.confidence,
+                        "primaryVerifierExactAgreement": (
+                            decision.exact_agreement
                         ),
+                        "paddleEligibleForSelection": False,
+                        "rule": decision.rule,
                     }
                 )
             metadata = dict(page.metadata)
             metadata["lineVerification"] = decisions
-            metadata["acceptedLineCount"] = sum(
-                decision["status"] == "accepted" for decision in decisions
+            metadata["verifiedLineCount"] = sum(
+                decision["status"] == "verified" for decision in decisions
             )
+            metadata["acceptedLineCount"] = 0
             metadata["needsReviewLineCount"] = sum(
                 decision["status"] == "needs_review" for decision in decisions
             )
@@ -124,6 +122,7 @@ class HybridVietnameseOcrEngine:
                     metadata=metadata,
                 )
             )
+        policy_manifest = self.policy.manifest()
         return OcrResult(
             document_id=source.document_id,
             engine=self.name,
@@ -131,9 +130,13 @@ class HybridVietnameseOcrEngine:
             duration_ms=round((time.perf_counter() - started) * 1000),
             model_manifest={
                 "detector": detected.engine,
-                "primary": detected.engine,
-                "verifiers": f"{self.primary.name},{self.verifier.name}",
-                "autoAcceptRule": "paddle_matches_at_least_one_verifier",
-                "promotion": "pilot_only",
+                "primary": self.primary.name,
+                "verifier": self.verifier.name,
+                "paddleSelectionEligible": "false",
+                "verificationRule": "seq2seq_exactly_matches_transformer",
+                "promotion": "shadow_review_only",
+                "recognitionPolicyId": str(policy_manifest["policyId"]),
+                "recognitionPolicyVersion": str(policy_manifest["version"]),
+                "recognitionPolicyDigest": str(policy_manifest["policyDigest"]),
             },
         )

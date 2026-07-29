@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hcns:idp:phase15:contract-decision:2.0.0",
+  "title": "Phase 15 Contract and HR Decision Business JSON",
+  "type": "object",
+  "required": ["schemaVersion", "documentFamily", "documentType", "idpStatus", "payload"],
+  "properties": {
+    "schemaVersion": {"const": "2.0.0"},
+    "documentFamily": {"const": "CONTRACT_DECISION"},
+    "documentType": {
+      "enum": ["EMPLOYMENT_CONTRACT", "PROBATION_AGREEMENT", "HR_DECISION"]
+    },
+    "idpStatus": {"enum": ["READY", "NEEDS_REVIEW"]},
+    "payload": {
+      "type": "object",
+      "required": ["fields", "tables", "summary"],
+      "properties": {
+        "fields": {"type": "object", "minProperties": 6},
+        "tables": {"type": "array"},
+        "summary": {"type": "object"}
+      }
+    }
+  }
+}

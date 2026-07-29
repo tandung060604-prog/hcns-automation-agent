@@ -1,0 +1,2371 @@
+#!/usr/bin/env python3
+"""Serve baseline results and local-only OCR sessions for the dashboard."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import mimetypes
+import re
+import shutil
+import subprocess
+import threading
+import time
+import uuid
+from datetime import datetime, timezone
+from email import policy
+from email.parser import BytesParser
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any
+from urllib.parse import parse_qs, urlparse
+
+import cv2
+import pypdfium2 as pdfium
+from local_server_security import require_loopback_host
+from paddleocr import PaddleOCR
+from phase9_pipeline import (
+    classify_document,
+    enrich_result,
+    prepare_routed_page,
+    reading_order,
+)
+from phase10_review import review_payload, save_review
+from phase11_cccd import (
+    extract_cccd_fields,
+    is_identity_likely,
+    orientation_diagnostics,
+    prepare_identity_card_page,
+    rotate_image,
+    select_orientation,
+)
+from phase12_ingestion import (
+    ingest_document,
+    render_native_previews,
+)
+from phase14_review_store import save_line_review
+from phase15_idp import (
+    build_phase15_business_json,
+    classify_phase15_document,
+    extract_phase15_document,
+)
+from phase15_review import apply_phase15_field_review
+from PIL import Image
+from run_paddleocr_baseline import draw_ocr_boxes, jsonable
+from run_paddleocr_phase7 import PROFILES, prepare_image
+from upload_safety import validate_local_upload
+
+from hcns_agent.domain.errors import DocumentIntakeError
+
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+MAX_REVIEW_BYTES = 2 * 1024 * 1024
+MAX_PDF_PAGES = 50
+ALLOWED_EXTENSIONS = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".pdf",
+    ".docx",
+    ".xlsx",
+}
+SESSION_ID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+PHASE14_CASE_ID_RE = re.compile(r"^[0-9a-f]{20}$")
+PHASE14_PROFILE_RE = re.compile(r"^[a-z0-9_]{1,80}$")
+
+
+def build_index(native_root: Path) -> dict[str, Path]:
+    index: dict[str, Path] = {}
+    for path in native_root.rglob("*.json"):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            sample_id = payload.get("sampleId")
+            if isinstance(sample_id, str) and sample_id:
+                index[sample_id] = path
+        except (OSError, json.JSONDecodeError):
+            continue
+    return index
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def deduplicate(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    output: list[str] = []
+    for value in values:
+        normalized = " ".join(value.split())
+        if normalized and normalized.casefold() not in seen:
+            seen.add(normalized.casefold())
+            output.append(normalized)
+    return output
+
+
+def extract_candidates(text: str) -> dict[str, list[str]]:
+    return {
+        "emails": deduplicate(
+            re.findall(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", text, re.I)
+        ),
+        "phoneNumbers": deduplicate(
+            re.findall(r"(?<!\d)(?:\+?84|0)(?:[\s.\-]?\d){8,10}(?!\d)", text)
+        ),
+        "dates": deduplicate(
+            re.findall(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b", text)
+        ),
+        "identityNumberCandidates": deduplicate(
+            re.findall(r"(?<!\d)\d{9,12}(?!\d)", text)
+        ),
+        "employeeCodeCandidates": deduplicate(
+            re.findall(r"\b(?:NV|EMP|MSNV)[\s\-:]?[A-Z0-9]{3,12}\b", text, re.I)
+        ),
+    }
+
+
+def rescale_boxes(boxes: list[Any], scale: int) -> list[Any]:
+    if scale == 1:
+        return boxes
+    return [
+        [[round(float(point[0]) / scale, 3), round(float(point[1]) / scale, 3)] for point in box]
+        for box in boxes
+    ]
+
+
+class UserOCRService:
+    def __init__(self, data_root: Path) -> None:
+        self.data_root = data_root
+        self.sessions_root = data_root / "user_uploads" / "sessions"
+        self.sessions_root.mkdir(parents=True, exist_ok=True)
+        self._ocr: PaddleOCR | None = None
+        self._lock = threading.Lock()
+
+    @property
+    def model_loaded(self) -> bool:
+        return self._ocr is not None
+
+    def get_ocr(self) -> PaddleOCR:
+        if self._ocr is None:
+            profile = PROFILES["v5_enhanced"]
+            self._ocr = PaddleOCR(
+                text_detection_model_name=profile["textDetection"],
+                text_recognition_model_name=profile["textRecognition"],
+                device="cpu",
+                enable_mkldnn=False,
+                cpu_threads=4,
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
+                use_textline_orientation=True,
+                text_det_limit_side_len=1600,
+                text_det_limit_type="max",
+                text_det_box_thresh=0.45,
+                text_rec_score_thresh=0.0,
+            )
+        return self._ocr
+
+    def session_dir(self, session_id: str) -> Path | None:
+        if not SESSION_ID_RE.fullmatch(session_id):
+            return None
+        path = self.sessions_root / session_id
+        return path if path.is_dir() else None
+
+    def render_pages(self, input_path: Path, pages_dir: Path) -> list[Path]:
+        pages_dir.mkdir(parents=True, exist_ok=True)
+        if input_path.suffix.lower() == ".pdf":
+            document = pdfium.PdfDocument(input_path)
+            try:
+                if len(document) > MAX_PDF_PAGES:
+                    raise ValueError(f"PDF exceeds {MAX_PDF_PAGES} pages")
+                if len(document) == 0:
+                    raise ValueError("PDF has no pages")
+                output: list[Path] = []
+                for page_index in range(len(document)):
+                    output_path = pages_dir / f"page_{page_index:03d}.png"
+                    page = document[page_index]
+                    try:
+                        page.render(scale=2.0).to_pil().convert("RGB").save(output_path)
+                    finally:
+                        page.close()
+                    output.append(output_path)
+                return output
+            finally:
+                document.close()
+
+        output_path = pages_dir / "page_000.png"
+        with Image.open(input_path) as image:
+            image.convert("RGB").save(output_path)
+        return [output_path]
+
+    def predict_page(
+        self,
+        page_path: Path,
+        visualization_path: Path | None,
+    ) -> dict[str, Any]:
+        prepared, preprocessing = prepare_image(page_path)
+        started = time.perf_counter()
+        predictions = list(
+            self.get_ocr().predict(
+                prepared,
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
+                use_textline_orientation=True,
+                text_det_limit_side_len=1600,
+                text_det_limit_type="max",
+                text_det_box_thresh=0.45,
+                text_rec_score_thresh=0.0,
+            )
+        )
+        duration_ms = round((time.perf_counter() - started) * 1000)
+        texts: list[str] = []
+        scores: list[float] = []
+        boxes: list[Any] = []
+        for prediction in predictions:
+            texts.extend(str(value) for value in prediction.get("rec_texts", []))
+            scores.extend(float(value) for value in prediction.get("rec_scores", []))
+            boxes.extend(jsonable(prediction.get("rec_polys", [])))
+        boxes = rescale_boxes(boxes, int(preprocessing["adaptiveUpscale"]))
+        if visualization_path is not None:
+            visualization_path.parent.mkdir(parents=True, exist_ok=True)
+        if boxes and visualization_path is not None:
+            draw_ocr_boxes(page_path, boxes, visualization_path)
+        return {
+            "recognizedTexts": texts,
+            "recognizedText": "\n".join(texts),
+            "recognitionScores": scores,
+            "recognizedBoxes": boxes,
+            "avgConfidence": round(sum(scores) / len(scores), 6) if scores else None,
+            "durationMs": duration_ms,
+            "preprocessing": preprocessing,
+            "visualizationAvailable": bool(boxes and visualization_path is not None),
+        }
+
+    def apply_phase9(
+        self,
+        result: dict[str, Any],
+        page_paths: list[Path],
+        session_dir: Path,
+    ) -> dict[str, Any]:
+        phase9_started = time.perf_counter()
+        raw_text = result.get("phase9", {}).get("rawOcr", {}).get("pages")
+        if raw_text:
+            classification_text = "\n".join(
+                text
+                for page in raw_text
+                for text in page.get("recognizedTexts", [])
+            )
+        else:
+            classification_text = result["document"].get("rawRecognizedText") or result[
+                "document"
+            ].get("recognizedText", "")
+        document_type, _, _ = classify_document(
+            classification_text, result["source"].get("format", "")
+        )
+        routed_pages: list[dict[str, Any]] = []
+        route_metadata: list[dict[str, Any] | None] = []
+        for page_index, page_path in enumerate(page_paths):
+            routed_path = (
+                session_dir / "phase9" / "pages" / f"page_{page_index:03d}.png"
+            )
+            metadata = prepare_routed_page(page_path, document_type, routed_path)
+            route_metadata.append(metadata)
+            if metadata is None:
+                continue
+            page_result = self.predict_page(
+                routed_path,
+                session_dir
+                / "phase9"
+                / "visualization"
+                / f"page_{page_index:03d}.png",
+            )
+            page_result["pageIndex"] = page_index
+            routed_pages.append(page_result)
+        enriched = enrich_result(
+            result,
+            routed_pages=routed_pages or None,
+            preprocessing=route_metadata,
+        )
+        enriched["processing"]["phase9DurationMs"] = round(
+            (time.perf_counter() - phase9_started) * 1000
+        )
+        return enriched
+
+    def apply_phase11(
+        self,
+        result: dict[str, Any],
+        page_paths: list[Path],
+        session_dir: Path,
+    ) -> dict[str, Any]:
+        phase_started = time.perf_counter()
+        raw_pages = (
+            result.get("phase9", {}).get("rawOcr", {}).get("pages")
+            or result.get("document", {}).get("pages", [])
+        )
+        candidate_root = session_dir / "phase11" / "orientation_candidates"
+        oriented_root = session_dir / "phase11" / "oriented"
+        candidate_root.mkdir(parents=True, exist_ok=True)
+        oriented_root.mkdir(parents=True, exist_ok=True)
+
+        provisional_pages: list[dict[str, Any]] = []
+        oriented_paths: list[Path] = []
+        orientation_pages: list[dict[str, Any]] = []
+        for page_index, page_path in enumerate(page_paths):
+            image = cv2.imread(str(page_path), cv2.IMREAD_COLOR)
+            if image is None:
+                raise ValueError("Cannot read rendered page for Phase 11")
+            candidate_records: list[
+                tuple[dict[str, Any], dict[str, Any], Path]
+            ] = []
+            for rotation_degrees in (0, 90, 180, 270):
+                if rotation_degrees == 0:
+                    candidate_path = page_path
+                    if page_index < len(raw_pages):
+                        candidate_page = raw_pages[page_index]
+                    else:
+                        candidate_page = self.predict_page(candidate_path, None)
+                    candidate_image = image
+                else:
+                    candidate_image = rotate_image(image, rotation_degrees)
+                    candidate_path = (
+                        candidate_root
+                        / f"page_{page_index:03d}_rot_{rotation_degrees:03d}.png"
+                    )
+                    if not cv2.imwrite(str(candidate_path), candidate_image):
+                        raise OSError("Cannot write Phase 11 orientation candidate")
+                    candidate_page = self.predict_page(candidate_path, None)
+                candidate_page = dict(candidate_page)
+                candidate_page["pageIndex"] = page_index
+                diagnostic = orientation_diagnostics(
+                    candidate_page,
+                    rotation_degrees,
+                    (candidate_image.shape[1], candidate_image.shape[0]),
+                )
+                candidate_records.append(
+                    (candidate_page, diagnostic, candidate_path)
+                )
+
+            selected_page, selected_diagnostic = select_orientation(
+                [(page, diagnostic) for page, diagnostic, _ in candidate_records]
+            )
+            original_record = candidate_records[0]
+            selected_record = next(
+                record
+                for record in candidate_records
+                if record[1]["rotationDegrees"]
+                == selected_diagnostic["rotationDegrees"]
+            )
+            if (
+                not is_identity_likely(selected_diagnostic)
+                or (
+                    selected_diagnostic["rotationDegrees"] != 0
+                    and float(selected_diagnostic["score"])
+                    < float(original_record[1]["score"]) + 0.35
+                )
+            ):
+                selected_record = original_record
+                selected_page, selected_diagnostic, selected_path = selected_record
+            else:
+                selected_page, selected_diagnostic, selected_path = selected_record
+
+            oriented_path = oriented_root / f"page_{page_index:03d}.png"
+            selected_image = cv2.imread(str(selected_path), cv2.IMREAD_COLOR)
+            if selected_image is None or not cv2.imwrite(
+                str(oriented_path), selected_image
+            ):
+                raise OSError("Cannot write Phase 11 oriented page")
+            provisional_pages.append(selected_page)
+            oriented_paths.append(oriented_path)
+            orientation_pages.append(
+                {
+                    "pageIndex": page_index,
+                    "selectedRotationDegrees": int(
+                        selected_diagnostic["rotationDegrees"]
+                    ),
+                    "selectionScore": selected_diagnostic["score"],
+                    "identityLikely": any(
+                        is_identity_likely(record[1])
+                        for record in candidate_records
+                    ),
+                    "selectedIdentityLikely": is_identity_likely(
+                        selected_diagnostic
+                    ),
+                    "candidates": [record[1] for record in candidate_records],
+                }
+            )
+
+        classification_text = "\n".join(
+            text
+            for page in provisional_pages
+            for text in page.get("recognizedTexts", [])
+        )
+        document_type, route_confidence, route_evidence = classify_document(
+            classification_text,
+            result.get("source", {}).get("format", ""),
+        )
+        identity_likely = any(
+            page["identityLikely"] for page in orientation_pages
+        )
+        if identity_likely:
+            document_type = "IDENTITY_DOCUMENT"
+
+        if document_type != "IDENTITY_DOCUMENT":
+            result["phase11"] = {
+                "version": "1.2.0",
+                "status": "NOT_APPLICABLE",
+                "documentRoute": {
+                    "type": document_type,
+                    "confidence": route_confidence,
+                    "evidence": route_evidence,
+                },
+                "orientation": {
+                    "strategy": "four_way_ocr_anchor_score",
+                    "pages": orientation_pages,
+                },
+                "identityCard": None,
+                "durationMs": round(
+                    (time.perf_counter() - phase_started) * 1000
+                ),
+            }
+            return result
+
+        canonical_root = session_dir / "phase11" / "canonical"
+        selected_root = session_dir / "phase11" / "pages"
+        visualization_root = session_dir / "phase11" / "visualization"
+        canonical_root.mkdir(parents=True, exist_ok=True)
+        selected_root.mkdir(parents=True, exist_ok=True)
+        visualization_root.mkdir(parents=True, exist_ok=True)
+        phase11_pages: list[dict[str, Any]] = []
+        canonicalization: list[dict[str, Any]] = []
+        selected_variants: list[str] = []
+        all_scores: list[float] = []
+        for page_index, oriented_path in enumerate(oriented_paths):
+            canonical_path = canonical_root / f"page_{page_index:03d}.png"
+            canonical_metadata = prepare_identity_card_page(
+                oriented_path,
+                canonical_path,
+            )
+            canonical_page = self.predict_page(canonical_path, None)
+            canonical_page["pageIndex"] = page_index
+            canonical_image = cv2.imread(str(canonical_path), cv2.IMREAD_COLOR)
+            if canonical_image is None:
+                raise ValueError("Cannot read canonical Phase 11 page")
+            canonical_diagnostic = orientation_diagnostics(
+                canonical_page,
+                0,
+                (canonical_image.shape[1], canonical_image.shape[0]),
+            )
+            oriented_page = provisional_pages[page_index]
+            oriented_diagnostic = next(
+                candidate
+                for candidate in orientation_pages[page_index]["candidates"]
+                if candidate["rotationDegrees"]
+                == orientation_pages[page_index]["selectedRotationDegrees"]
+            )
+            use_canonical = bool(
+                canonical_metadata["perspectiveCorrected"]
+                and float(canonical_diagnostic["score"])
+                >= float(oriented_diagnostic["score"]) - 0.10
+            )
+            if not canonical_metadata["perspectiveCorrected"]:
+                use_canonical = (
+                    float(canonical_diagnostic["score"])
+                    >= float(oriented_diagnostic["score"]) + 0.05
+                )
+            selected_page = canonical_page if use_canonical else oriented_page
+            selected_source = canonical_path if use_canonical else oriented_path
+            selected_variant = (
+                "phase11_canonical" if use_canonical else "phase11_oriented"
+            )
+            selected_variants.append(selected_variant)
+            selected_path = selected_root / f"page_{page_index:03d}.png"
+            selected_image = cv2.imread(str(selected_source), cv2.IMREAD_COLOR)
+            if selected_image is None or not cv2.imwrite(
+                str(selected_path), selected_image
+            ):
+                raise OSError("Cannot write selected Phase 11 page")
+            selected_boxes = selected_page.get("recognizedBoxes", [])
+            visualization_path = (
+                visualization_root / f"page_{page_index:03d}.png"
+            )
+            if selected_boxes:
+                draw_ocr_boxes(selected_path, selected_boxes, visualization_path)
+            selected_page["visualizationAvailable"] = bool(selected_boxes)
+            ordered, strategy = reading_order(
+                selected_page.get("recognizedTexts", []),
+                selected_page.get("recognitionScores", []),
+                selected_boxes,
+                "IDENTITY_DOCUMENT",
+                int(selected_image.shape[1]),
+            )
+            for output_index, line in enumerate(ordered):
+                line["outputIndex"] = output_index
+                line["correctedText"] = line["rawText"]
+                line["correctionApplied"] = False
+                line["correctionMethod"] = None
+                line["warning"] = (
+                    "LOW_CONFIDENCE"
+                    if line.get("confidence") is not None
+                    and float(line["confidence"]) < 0.80
+                    else None
+                )
+                line.pop("centerX", None)
+                line.pop("centerY", None)
+            page_scores = [
+                float(line["confidence"])
+                for line in ordered
+                if line.get("confidence") is not None
+            ]
+            all_scores.extend(page_scores)
+            phase11_pages.append(
+                {
+                    "pageIndex": page_index,
+                    "selectedVariant": selected_variant,
+                    "readingOrderStrategy": strategy,
+                    "recognizedTexts": [
+                        line["rawText"] for line in ordered
+                    ],
+                    "recognitionScores": [
+                        line.get("confidence") for line in ordered
+                    ],
+                    "recognizedBoxes": [
+                        line.get("box", []) for line in ordered
+                    ],
+                    "lines": ordered,
+                    "rawText": "\n".join(
+                        line["rawText"] for line in ordered
+                    ),
+                }
+            )
+            canonicalization.append(
+                {
+                    "pageIndex": page_index,
+                    **canonical_metadata,
+                    "canonicalOcrScore": canonical_diagnostic["score"],
+                    "orientedOcrScore": oriented_diagnostic["score"],
+                    "selectedVariant": selected_variant,
+                }
+            )
+
+        identity_card = extract_cccd_fields(
+            phase11_pages,
+            engine="PaddleOCR/PP-OCRv5",
+        )
+        result["schemaVersion"] = "3.0.0"
+        result["document"]["documentType"] = "IDENTITY_DOCUMENT"
+        result["document"]["recognizedText"] = "\n".join(
+            page["rawText"] for page in phase11_pages
+        )
+        result["document"]["recognizedTextLineCount"] = sum(
+            len(page["lines"]) for page in phase11_pages
+        )
+        result["document"]["avgConfidence"] = (
+            round(sum(all_scores) / len(all_scores), 6)
+            if all_scores
+            else None
+        )
+        result["document"]["structuredFields"] = identity_card["fields"]
+        result["phase11"] = {
+            "version": "1.2.0",
+            "status": (
+                "PASS"
+                if identity_card["summary"]["readyForAutomaticUse"]
+                else "NEEDS_REVIEW"
+            ),
+            "documentRoute": {
+                "type": "IDENTITY_DOCUMENT",
+                "confidence": route_confidence,
+                "evidence": route_evidence,
+            },
+            "orientation": {
+                "strategy": "four_way_ocr_anchor_layout_score",
+                "pages": orientation_pages,
+            },
+            "canonicalization": canonicalization,
+            "selectedVariants": selected_variants,
+            "pages": phase11_pages,
+            "identityCard": identity_card,
+            "durationMs": round(
+                (time.perf_counter() - phase_started) * 1000
+            ),
+        }
+        result["processing"]["phase11DurationMs"] = result["phase11"]["durationMs"]
+        identity_output = {
+            "schemaVersion": identity_card["schemaVersion"],
+            "sessionId": result["sessionId"],
+            "createdAt": utc_now(),
+            "containsRealPII": True,
+            **identity_card,
+        }
+        identity_path = session_dir / "phase11" / "identity_card.json"
+        identity_path.write_text(
+            json.dumps(identity_output, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return result
+
+    def apply_phase15(
+        self,
+        result: dict[str, Any],
+        input_path: Path,
+        session_dir: Path,
+        canonical_document: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        phase_started = time.perf_counter()
+        if canonical_document is None:
+            ocr_pages = (
+                result.get("phase9", {})
+                .get("rawOcr", {})
+                .get("pages")
+                or result.get("document", {}).get("pages", [])
+            )
+            canonical_document = ingest_document(input_path, ocr_pages)
+        classification = classify_phase15_document(
+            canonical_document,
+            result.get("document", {}).get("documentType"),
+        )
+        extraction = extract_phase15_document(
+            canonical_document,
+            classification,
+        )
+        business_json = build_phase15_business_json(
+            result["sessionId"],
+            canonical_document,
+            classification,
+            extraction,
+            contains_real_pii=True,
+            result_reference="phase15/idp_result.json",
+        )
+        duration_ms = round((time.perf_counter() - phase_started) * 1000)
+        phase15_dir = session_dir / "phase15"
+        phase15_dir.mkdir(parents=True, exist_ok=True)
+        canonical_path = phase15_dir / "canonical_document.json"
+        business_path = phase15_dir / "business.json"
+        idp_path = phase15_dir / "idp_result.json"
+        canonical_path.write_text(
+            json.dumps(
+                {
+                    "sessionId": result["sessionId"],
+                    "createdAt": utc_now(),
+                    "containsRealPII": True,
+                    **canonical_document,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        business_path.write_text(
+            json.dumps(business_json, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        idp_result = {
+            "schemaVersion": "2.0.0",
+            "sessionId": result["sessionId"],
+            "createdAt": utc_now(),
+            "containsRealPII": True,
+            "classification": classification,
+            "extraction": extraction,
+            "ingestion": {
+                "sourceFormat": canonical_document["sourceFormat"],
+                "mode": canonical_document["ingestionMode"],
+                "adapter": canonical_document["adapter"],
+                "pageCount": canonical_document["pageCount"],
+            },
+            "businessJson": "phase15/business.json",
+        }
+        idp_path.write_text(
+            json.dumps(idp_result, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        result["schemaVersion"] = "5.0.0"
+        result["document"]["documentType"] = classification["documentType"]
+        result["document"]["documentFamily"] = classification["documentFamily"]
+        result["document"]["recognizedText"] = canonical_document["plainText"]
+        result["document"]["recognizedTextLineCount"] = sum(
+            len(page.get("blocks", []))
+            for page in canonical_document.get("pages", [])
+        )
+        result["document"]["structuredFields"] = extraction["fields"]
+        result["document"]["structuredTables"] = extraction["tables"]
+        result.pop("phase12", None)
+        result["phase15"] = {
+            "version": "2.0.0",
+            "status": business_json["idpStatus"],
+            "ingestion": idp_result["ingestion"],
+            "classification": classification,
+            "extraction": extraction,
+            "durationMs": duration_ms,
+            "downloads": {
+                "canonicalDocument": "phase15/canonical_document.json",
+                "idpResult": "phase15/idp_result.json",
+                "businessJson": "phase15/business.json",
+            },
+        }
+        result["processing"].pop("phase12DurationMs", None)
+        result["processing"]["phase15DurationMs"] = duration_ms
+        return result
+
+    def apply_phase14_8_recognition(
+        self,
+        result: dict[str, Any],
+        input_path: Path,
+        session_dir: Path,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Replace Paddle text with locked Seq2Seq output before Phase 15."""
+        result_path = session_dir / "result.json"
+        result_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        runtime_python = (
+            self.data_root
+            / "runtime"
+            / "easyocr_venv"
+            / "Scripts"
+            / "python.exe"
+        )
+        script_path = Path(__file__).with_name(
+            "run_phase14_8_session.py"
+        )
+        started = time.perf_counter()
+        failure_type: str | None = None
+        if runtime_python.is_file():
+            try:
+                subprocess.run(
+                    [
+                        str(runtime_python),
+                        str(script_path),
+                        "--data-root",
+                        str(self.data_root),
+                        "--session-id",
+                        result["sessionId"],
+                        "--overwrite",
+                    ],
+                    cwd=str(script_path.parent),
+                    capture_output=True,
+                    text=True,
+                    timeout=1800,
+                    check=True,
+                )
+                payload = json.loads(
+                    (
+                        session_dir
+                        / "phase14_8"
+                        / "recognition.json"
+                    ).read_text(encoding="utf-8")
+                )
+                canonical = ingest_document(
+                    input_path,
+                    payload["pages"],
+                )
+                result["phase14_8"] = {
+                    "version": "1.0.0",
+                    "status": payload["status"],
+                    "policy": payload["policy"],
+                    "summary": payload["summary"],
+                    "durationMs": payload["durationMs"],
+                    "download": "phase14_8/recognition.json",
+                }
+                result["processing"]["engine"] = (
+                    "Paddle detector + VietOCR Seq2Seq/Transformer"
+                )
+                result["processing"]["profile"] = (
+                    "phase14.8-seq2seq-transformer-verifier"
+                )
+                result["processing"]["models"] = {
+                    "textDetection": "PP-OCRv5_mobile_det",
+                    "textRecognitionPrimary": "VietOCR/vgg_seq2seq",
+                    "textRecognitionVerifier": (
+                        "VietOCR/vgg_transformer"
+                    ),
+                    "paddleSelectionEligible": False,
+                }
+                result["processing"]["phase14_8DurationMs"] = round(
+                    (time.perf_counter() - started) * 1000
+                )
+                return result, canonical
+            except subprocess.TimeoutExpired:
+                failure_type = "TIMEOUT"
+            except (subprocess.CalledProcessError, OSError, ValueError):
+                failure_type = "RUNTIME_FAILURE"
+        else:
+            failure_type = "RUNTIME_UNAVAILABLE"
+
+        review_pages = []
+        for page in result.get("document", {}).get("pages", []):
+            review_pages.append(
+                {
+                    **page,
+                    "recognitionScores": [
+                        0.0 for _ in page.get("recognizedTexts", [])
+                    ],
+                }
+            )
+        canonical = ingest_document(input_path, review_pages)
+        result["phase14_8"] = {
+            "version": "1.0.0",
+            "status": failure_type,
+            "policy": {
+                "primaryProfile": "vietocr_vgg_seq2seq",
+                "verifierProfile": "vietocr_vgg_transformer",
+                "paddleSelectionEligible": False,
+                "fallbackAction": (
+                    "Paddle evidence retained at zero acceptance confidence"
+                ),
+            },
+            "summary": {
+                "pageCount": len(review_pages),
+                "lineCount": sum(
+                    len(page.get("recognizedTexts", []))
+                    for page in review_pages
+                ),
+                "verifiedLineCount": 0,
+                "needsReviewLineCount": sum(
+                    len(page.get("recognizedTexts", []))
+                    for page in review_pages
+                ),
+            },
+            "durationMs": round(
+                (time.perf_counter() - started) * 1000
+            ),
+        }
+        result["processing"]["phase14_8DurationMs"] = result[
+            "phase14_8"
+        ]["durationMs"]
+        return result, canonical
+
+    def reprocess_session(self, session_id: str) -> dict[str, Any]:
+        with self._lock:
+            session_dir = self.session_dir(session_id)
+            if session_dir is None:
+                raise FileNotFoundError("Session not found")
+            result_path = session_dir / "result.json"
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+            page_paths = sorted((session_dir / "pages").glob("page_*.png"))
+            if not page_paths:
+                raise FileNotFoundError("Rendered pages not found")
+            input_paths = sorted(
+                (session_dir / "input").glob("document.*")
+            )
+            if not input_paths:
+                raise FileNotFoundError("Original input not found")
+            input_path = input_paths[0]
+            canonical_document: dict[str, Any] | None = None
+            if input_path.suffix.lower() in {".docx", ".xlsx"}:
+                canonical_document = ingest_document(input_path)
+                enriched = enrich_result(result)
+            elif input_path.suffix.lower() == ".pdf":
+                pdf_preflight = ingest_document(input_path)
+                if pdf_preflight.get("ingestionMode") == "NATIVE":
+                    canonical_document = pdf_preflight
+                    enriched = enrich_result(result)
+                else:
+                    enriched = self.apply_phase9(
+                        result,
+                        page_paths,
+                        session_dir,
+                    )
+            else:
+                enriched = self.apply_phase9(
+                    result,
+                    page_paths,
+                    session_dir,
+                )
+            if canonical_document is None:
+                enriched = self.apply_phase11(
+                    enriched,
+                    page_paths,
+                    session_dir,
+                )
+            else:
+                enriched.pop("phase11", None)
+                enriched.get("processing", {}).pop(
+                    "phase11DurationMs",
+                    None,
+                )
+            enriched.pop("phase11_3", None)
+            enriched.pop("phase11_4", None)
+            if canonical_document is None:
+                enriched, canonical_document = (
+                    self.apply_phase14_8_recognition(
+                        enriched,
+                        input_path,
+                        session_dir,
+                    )
+                )
+            else:
+                enriched["phase14_8"] = {
+                    "version": "1.0.0",
+                    "status": "NOT_REQUIRED_NATIVE_INPUT",
+                    "summary": {
+                        "pageCount": canonical_document["pageCount"],
+                        "lineCount": sum(
+                            len(page.get("blocks", []))
+                            for page in canonical_document.get("pages", [])
+                        ),
+                        "verifiedLineCount": 0,
+                        "needsReviewLineCount": 0,
+                    },
+                    "durationMs": 0,
+                }
+            enriched = self.apply_phase15(
+                enriched,
+                input_path,
+                session_dir,
+                canonical_document,
+            )
+            result_path.write_text(
+                json.dumps(enriched, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            return enriched
+
+    def process_upload(
+        self,
+        session_id: str,
+        original_filename: str,
+        extension: str,
+        content: bytes,
+    ) -> dict[str, Any]:
+        with self._lock:
+            session_dir = self.sessions_root / session_id
+            input_dir = session_dir / "input"
+            pages_dir = session_dir / "pages"
+            visualization_dir = session_dir / "visualization"
+            input_dir.mkdir(parents=True, exist_ok=False)
+            input_path = input_dir / f"document{extension}"
+            input_path.write_bytes(content)
+
+            total_started = time.perf_counter()
+            canonical_document: dict[str, Any] | None = None
+            page_results: list[dict[str, Any]]
+            if extension in {".docx", ".xlsx"}:
+                canonical_document = ingest_document(input_path)
+                page_paths, page_results = render_native_previews(
+                    canonical_document,
+                    pages_dir,
+                    visualization_dir,
+                )
+            elif extension == ".pdf":
+                pdf_preflight = ingest_document(input_path)
+                if int(pdf_preflight.get("pageCount", 0)) > MAX_PDF_PAGES:
+                    raise ValueError(
+                        f"PDF exceeds the {MAX_PDF_PAGES}-page limit"
+                    )
+                if pdf_preflight.get("ingestionMode") == "NATIVE":
+                    canonical_document = pdf_preflight
+                    page_paths, page_results = render_native_previews(
+                        canonical_document,
+                        pages_dir,
+                        visualization_dir,
+                    )
+                else:
+                    page_paths = self.render_pages(input_path, pages_dir)
+                    page_results = []
+                    for page_index, page_path in enumerate(page_paths):
+                        page_result = self.predict_page(
+                            page_path,
+                            visualization_dir / f"page_{page_index:03d}.png",
+                        )
+                        page_result["pageIndex"] = page_index
+                        page_results.append(page_result)
+            else:
+                page_paths = self.render_pages(input_path, pages_dir)
+                page_results = []
+                for page_index, page_path in enumerate(page_paths):
+                    page_result = self.predict_page(
+                        page_path,
+                        visualization_dir / f"page_{page_index:03d}.png",
+                    )
+                    page_result["pageIndex"] = page_index
+                    page_results.append(page_result)
+            all_texts: list[str] = []
+            all_scores: list[float] = []
+            inference_duration_ms = 0
+            for _page_index, page_result in enumerate(page_results):
+                texts = page_result["recognizedTexts"]
+                scores = page_result["recognitionScores"]
+                inference_duration_ms += int(page_result["durationMs"])
+                all_texts.extend(texts)
+                all_scores.extend(scores)
+
+            recognized_text = "\n".join(all_texts)
+            total_duration_ms = round((time.perf_counter() - total_started) * 1000)
+            result = {
+                "schemaVersion": "1.0.0",
+                "sessionId": session_id,
+                "createdAt": utc_now(),
+                "containsRealPII": True,
+                "retention": "persistent_until_deleted",
+                "source": {
+                    "originalFileName": original_filename,
+                    "format": extension.lstrip(".").upper(),
+                    "sizeBytes": len(content),
+                    "pageCount": len(page_paths),
+                },
+                "processing": {
+                    "engine": (
+                        (
+                            "NativeOOXML"
+                            if extension in {".docx", ".xlsx"}
+                            else "NativePDF"
+                        )
+                        if canonical_document is not None
+                        else "PaddleOCR"
+                    ),
+                    "profile": (
+                        "phase12_native"
+                        if canonical_document
+                        else "v5_enhanced"
+                    ),
+                    "ocrVersion": (
+                        "not_required"
+                        if canonical_document
+                        else "PP-OCRv5"
+                    ),
+                    "language": "vi",
+                    "device": "cpu",
+                    "models": {
+                        "textDetection": "PP-OCRv5_mobile_det",
+                        "textRecognition": "latin_PP-OCRv5_mobile_rec",
+                    },
+                    "inferenceDurationMs": inference_duration_ms,
+                    "totalDurationMs": total_duration_ms,
+                },
+                "document": {
+                    "documentType": "USER_UPLOAD",
+                    "ocrSuccess": bool(all_texts),
+                    "recognizedText": recognized_text,
+                    "recognizedTextLineCount": len(all_texts),
+                    "avgConfidence": (
+                        round(sum(all_scores) / len(all_scores), 6)
+                        if all_scores
+                        else None
+                    ),
+                    "extractedCandidates": extract_candidates(recognized_text),
+                    "pages": page_results,
+                },
+            }
+            if canonical_document:
+                result = enrich_result(result)
+            else:
+                result = self.apply_phase9(
+                    result,
+                    page_paths,
+                    session_dir,
+                )
+            if canonical_document is None:
+                result = self.apply_phase11(
+                    result,
+                    page_paths,
+                    session_dir,
+                )
+                result, canonical_document = (
+                    self.apply_phase14_8_recognition(
+                        result,
+                        input_path,
+                        session_dir,
+                    )
+                )
+            else:
+                result["phase14_8"] = {
+                    "version": "1.0.0",
+                    "status": "NOT_REQUIRED_NATIVE_INPUT",
+                    "summary": {
+                        "pageCount": canonical_document["pageCount"],
+                        "lineCount": sum(
+                            len(page.get("blocks", []))
+                            for page in canonical_document.get("pages", [])
+                        ),
+                        "verifiedLineCount": 0,
+                        "needsReviewLineCount": 0,
+                    },
+                    "durationMs": 0,
+                }
+            result = self.apply_phase15(
+                result,
+                input_path,
+                session_dir,
+                canonical_document,
+            )
+            result["processing"]["totalDurationMs"] = round(
+                (time.perf_counter() - total_started) * 1000
+            )
+            (session_dir / "result.json").write_text(
+                json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            return result
+
+    def list_sessions(self) -> list[dict[str, Any]]:
+        sessions: list[dict[str, Any]] = []
+        for result_path in self.sessions_root.glob("*/result.json"):
+            try:
+                result = json.loads(result_path.read_text(encoding="utf-8"))
+                ground_truth_path = (
+                    result_path.parent / "phase10" / "ground_truth.json"
+                )
+                reviewed = False
+                if ground_truth_path.is_file():
+                    ground_truth = json.loads(
+                        ground_truth_path.read_text(encoding="utf-8")
+                    )
+                    assertions = ground_truth.get("verificationAssertions", {})
+                    reviewed = bool(
+                        assertions.get("comparedWithImage")
+                        and assertions.get("allTextChecked")
+                    )
+                phase15_reviewed = (
+                    result_path.parent / "phase15" / "review.json"
+                ).is_file()
+                sessions.append(
+                    {
+                        "sessionId": result["sessionId"],
+                        "createdAt": result["createdAt"],
+                        "originalFileName": result["source"]["originalFileName"],
+                        "format": result["source"]["format"],
+                        "pageCount": result["source"]["pageCount"],
+                        "ocrSuccess": result["document"]["ocrSuccess"],
+                        "recognizedTextLineCount": result["document"][
+                            "recognizedTextLineCount"
+                        ],
+                        "avgConfidence": result["document"]["avgConfidence"],
+                        "totalDurationMs": result["processing"]["totalDurationMs"],
+                        "documentType": result["document"].get(
+                            "documentType", "USER_UPLOAD"
+                        ),
+                        "qualityGate": result.get("phase9", {})
+                        .get("qualityGate", {})
+                        .get("status"),
+                        "reviewed": reviewed,
+                        "phase15Reviewed": phase15_reviewed,
+                    }
+                )
+            except (OSError, KeyError, json.JSONDecodeError):
+                continue
+        return sorted(sessions, key=lambda row: row["createdAt"], reverse=True)
+
+
+class DashboardHandler(BaseHTTPRequestHandler):
+    data_root: Path
+    native_indexes: dict[str, dict[str, Path]]
+    user_ocr: UserOCRService
+
+    def log_message(self, format: str, *args: object) -> None:
+        # Never log session IDs, filenames, paths, or raw OCR text.
+        return
+
+    def cors_headers(self) -> None:
+        self.send_header("Access-Control-Allow-Origin", "http://localhost:3000")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Cache-Control", "no-store")
+
+    def send_json(self, payload: object, status: HTTPStatus = HTTPStatus.OK) -> None:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.cors_headers()
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_file(
+        self,
+        path: Path,
+        content_type: str,
+        download_name: str | None = None,
+    ) -> None:
+        body = path.read_bytes()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        if download_name:
+            self.send_header(
+                "Content-Disposition", f'attachment; filename="{download_name}"'
+            )
+        self.cors_headers()
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(HTTPStatus.NO_CONTENT)
+        self.cors_headers()
+        self.end_headers()
+
+    def do_POST(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path == "/phase14/review":
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                content_length = 0
+            if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                self.send_json(
+                    {"error": "Review payload is empty or too large"},
+                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                )
+                return
+            try:
+                payload = json.loads(
+                    self.rfile.read(content_length).decode("utf-8")
+                )
+                case_id = str(payload.get("caseId", ""))
+                ground_truth = str(payload.get("groundTruth", "")).strip()
+                compared = payload.get("comparedWithCrop") is True
+                checked = payload.get("allTextChecked") is True
+                if not PHASE14_CASE_ID_RE.fullmatch(case_id):
+                    raise ValueError("Invalid Phase 14 case id")
+                if not ground_truth:
+                    raise ValueError("Ground Truth must not be empty")
+                if not (compared and checked):
+                    raise ValueError("Both review assertions are required")
+                phase14_root = self.data_root / "output" / "phase14"
+                benchmark_path = phase14_root / "line_benchmark_private.json"
+                review_root = phase14_root
+                expansion_root = self.data_root / "output" / "phase14_4"
+                expansion_path = expansion_root / "review_queue_private.json"
+                benchmark = json.loads(
+                    benchmark_path.read_text(encoding="utf-8")
+                )
+                if expansion_path.is_file():
+                    expansion = json.loads(
+                        expansion_path.read_text(encoding="utf-8")
+                    )
+                    if any(
+                        case.get("caseId") == case_id
+                        for case in expansion.get("cases", [])
+                    ):
+                        benchmark = expansion
+                        review_root = expansion_root
+                if not any(
+                    case.get("caseId") == case_id
+                    for case in benchmark.get("cases", [])
+                ):
+                    raise ValueError("Phase 14 case not found")
+                reviews_path = review_root / "line_reviews.json"
+                reviews = save_line_review(
+                    reviews_path,
+                    case_id=case_id,
+                    ground_truth=ground_truth,
+                    reviewed_at=utc_now(),
+                )
+                self.send_json(
+                    {
+                        "saved": True,
+                        "caseId": case_id,
+                        "reviewedCount": len(reviews["reviews"]),
+                    }
+                )
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if parsed.path == "/user/phase15-review":
+            session_id = parse_qs(parsed.query).get("id", [""])[0]
+            session_dir = self.user_ocr.session_dir(session_id)
+            if session_dir is None:
+                self.send_json({"error": "Session not found"}, HTTPStatus.NOT_FOUND)
+                return
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                content_length = 0
+            if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                self.send_json(
+                    {"error": "Review payload is empty or too large"},
+                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                )
+                return
+            try:
+                payload = json.loads(
+                    self.rfile.read(content_length).decode("utf-8")
+                )
+                fields = payload.get("fields")
+                assertions = payload.get("assertions")
+                if not isinstance(fields, dict):
+                    raise ValueError("fields must be an object")
+                if not isinstance(assertions, dict) or not (
+                    assertions.get("comparedWithSource") is True
+                    and assertions.get("allFieldsChecked") is True
+                ):
+                    raise ValueError("Both Phase 15 review assertions are required")
+
+                result_path = session_dir / "result.json"
+                result = json.loads(result_path.read_text(encoding="utf-8"))
+                phase15 = result.get("phase15")
+                if not isinstance(phase15, dict):
+                    raise ValueError("Phase 15 result is not available")
+                reviewed_at = utc_now()
+                reviewed_extraction, corrected_count = apply_phase15_field_review(
+                    phase15.get("extraction", {}),
+                    fields,
+                    reviewed_at=reviewed_at,
+                )
+                canonical = json.loads(
+                    (
+                        session_dir / "phase15" / "canonical_document.json"
+                    ).read_text(encoding="utf-8")
+                )
+                classification = dict(phase15["classification"])
+                business = build_phase15_business_json(
+                    session_id,
+                    canonical,
+                    classification,
+                    reviewed_extraction,
+                    contains_real_pii=True,
+                    result_reference="phase15/idp_result_reviewed.json",
+                )
+                review_record = {
+                    "schemaVersion": "1.0.0",
+                    "sessionId": session_id,
+                    "reviewStatus": "USER_REVIEWED",
+                    "reviewedAt": reviewed_at,
+                    "containsRealPII": True,
+                    "assertions": {
+                        "comparedWithSource": True,
+                        "allFieldsChecked": True,
+                    },
+                    "correctedFieldCount": corrected_count,
+                    "automaticResultReference": "phase15/idp_result.json",
+                    "reviewedResultReference": "phase15/idp_result_reviewed.json",
+                    "reviewedBusinessReference": "phase15/business_reviewed.json",
+                }
+                reviewed_idp = {
+                    "schemaVersion": "2.0.0",
+                    "sessionId": session_id,
+                    "createdAt": reviewed_at,
+                    "containsRealPII": True,
+                    "classification": classification,
+                    "extraction": reviewed_extraction,
+                    "ingestion": phase15["ingestion"],
+                    "review": review_record,
+                    "businessJson": "phase15/business_reviewed.json",
+                }
+                phase15_dir = session_dir / "phase15"
+                (phase15_dir / "review.json").write_text(
+                    json.dumps(review_record, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                (phase15_dir / "idp_result_reviewed.json").write_text(
+                    json.dumps(reviewed_idp, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                (phase15_dir / "business_reviewed.json").write_text(
+                    json.dumps(business, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                phase15["extraction"] = reviewed_extraction
+                phase15["status"] = business["idpStatus"]
+                phase15["review"] = review_record
+                result["document"]["structuredFields"] = reviewed_extraction["fields"]
+                result_path.write_text(
+                    json.dumps(result, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                self.send_json(result)
+            except (
+                KeyError,
+                OSError,
+                UnicodeDecodeError,
+                json.JSONDecodeError,
+                ValueError,
+            ) as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if parsed.path == "/user/review":
+            session_id = parse_qs(parsed.query).get("id", [""])[0]
+            session_dir = self.user_ocr.session_dir(session_id)
+            if session_dir is None:
+                self.send_json({"error": "Session not found"}, HTTPStatus.NOT_FOUND)
+                return
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                content_length = 0
+            if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                self.send_json(
+                    {"error": "Review payload is empty or too large"},
+                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                )
+                return
+            try:
+                payload = json.loads(
+                    self.rfile.read(content_length).decode("utf-8")
+                )
+                pages = payload.get("pages")
+                assertions = payload.get("assertions")
+                identity_fields = payload.get("identityFields")
+                if not isinstance(pages, list):
+                    raise ValueError("pages must be an array")
+                if not isinstance(assertions, dict):
+                    raise ValueError("verification assertions are required")
+                result = json.loads(
+                    (session_dir / "result.json").read_text(encoding="utf-8")
+                )
+                self.send_json(
+                    save_review(
+                        session_dir,
+                        result,
+                        pages,
+                        assertions,
+                        identity_fields=identity_fields,
+                    )
+                )
+            except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+                self.send_json(
+                    {"error": str(exc)}, HTTPStatus.BAD_REQUEST
+                )
+            return
+        if parsed.path == "/user/easyocr":
+            session_id = parse_qs(parsed.query).get("id", [""])[0]
+            session_dir = self.user_ocr.session_dir(session_id)
+            if session_dir is None:
+                self.send_json({"error": "Session not found"}, HTTPStatus.NOT_FOUND)
+                return
+            easy_python = (
+                self.data_root / "runtime" / "easyocr_venv" / "Scripts" / "python.exe"
+            )
+            script_path = Path(__file__).with_name("run_easyocr_phase10.py")
+            if not easy_python.is_file():
+                self.send_json(
+                    {"error": "EasyOCR runtime is not installed"},
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                )
+                return
+            try:
+                subprocess.run(
+                    [
+                        str(easy_python),
+                        str(script_path),
+                        "--data-root",
+                        str(self.data_root),
+                        "--session-id",
+                        session_id,
+                        "--overwrite",
+                    ],
+                    cwd=str(script_path.parent),
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                    check=True,
+                )
+                result = json.loads(
+                    (session_dir / "result.json").read_text(encoding="utf-8")
+                )
+                self.send_json(review_payload(session_dir, result))
+            except subprocess.TimeoutExpired:
+                self.send_json(
+                    {"error": "EasyOCR timed out"},
+                    HTTPStatus.GATEWAY_TIMEOUT,
+                )
+            except subprocess.CalledProcessError:
+                self.send_json(
+                    {"error": "EasyOCR challenger failed"},
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
+            return
+        if parsed.path == "/user/controlled-pilot":
+            session_id = parse_qs(parsed.query).get("id", [""])[0]
+            session_dir = self.user_ocr.session_dir(session_id)
+            if session_dir is None:
+                self.send_json({"error": "Session not found"}, HTTPStatus.NOT_FOUND)
+                return
+            pilot_python = (
+                self.data_root / "runtime" / "easyocr_venv" / "Scripts" / "python.exe"
+            )
+            script_path = Path(__file__).with_name(
+                "run_controlled_pilot_phase14_2.py"
+            )
+            if not pilot_python.is_file():
+                self.send_json(
+                    {"error": "VietOCR runtime is not installed"},
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                )
+                return
+            try:
+                subprocess.run(
+                    [
+                        str(pilot_python),
+                        str(script_path),
+                        "--data-root",
+                        str(self.data_root),
+                        "--session-id",
+                        session_id,
+                        "--overwrite",
+                    ],
+                    cwd=str(script_path.parent),
+                    capture_output=True,
+                    text=True,
+                    timeout=1200,
+                    check=True,
+                )
+                result = json.loads(
+                    (session_dir / "result.json").read_text(encoding="utf-8")
+                )
+                self.send_json(review_payload(session_dir, result))
+            except subprocess.TimeoutExpired:
+                self.send_json(
+                    {"error": "Phase 14.2 controlled pilot timed out"},
+                    HTTPStatus.GATEWAY_TIMEOUT,
+                )
+            except subprocess.CalledProcessError:
+                self.send_json(
+                    {"error": "Phase 14.2 controlled pilot failed"},
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
+            return
+        if parsed.path == "/user/hybrid-ocr":
+            session_id = parse_qs(parsed.query).get("id", [""])[0]
+            session_dir = self.user_ocr.session_dir(session_id)
+            if session_dir is None:
+                self.send_json({"error": "Session not found"}, HTTPStatus.NOT_FOUND)
+                return
+            hybrid_python = (
+                self.data_root / "runtime" / "easyocr_venv" / "Scripts" / "python.exe"
+            )
+            script_path = Path(__file__).with_name("run_hybrid_phase13_3.py")
+            if not hybrid_python.is_file():
+                self.send_json(
+                    {"error": "EasyOCR/VietOCR runtime is not installed"},
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                )
+                return
+            try:
+                subprocess.run(
+                    [
+                        str(hybrid_python),
+                        str(script_path),
+                        "--data-root",
+                        str(self.data_root),
+                        "--session-id",
+                        session_id,
+                        "--overwrite",
+                    ],
+                    cwd=str(script_path.parent),
+                    capture_output=True,
+                    text=True,
+                    timeout=1200,
+                    check=True,
+                )
+                result = json.loads(
+                    (session_dir / "result.json").read_text(encoding="utf-8")
+                )
+                self.send_json(review_payload(session_dir, result))
+            except subprocess.TimeoutExpired:
+                self.send_json(
+                    {"error": "Phase 13.3 hybrid OCR timed out"},
+                    HTTPStatus.GATEWAY_TIMEOUT,
+                )
+            except subprocess.CalledProcessError:
+                self.send_json(
+                    {"error": "Phase 13.3 hybrid OCR failed"},
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
+            return
+        if parsed.path == "/user/reprocess":
+            session_id = parse_qs(parsed.query).get("id", [""])[0]
+            try:
+                result = self.user_ocr.reprocess_session(session_id)
+                self.send_json(result)
+            except FileNotFoundError:
+                self.send_json({"error": "Session not found"}, HTTPStatus.NOT_FOUND)
+            except Exception as exc:
+                self.send_json(
+                    {
+                        "error": "Phase 9 processing failed",
+                        "errorType": type(exc).__name__,
+                    },
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
+            return
+        if parsed.path != "/user/upload":
+            self.send_json({"error": "Unknown endpoint"}, HTTPStatus.NOT_FOUND)
+            return
+        try:
+            content_length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            content_length = 0
+        if content_length <= 0 or content_length > MAX_UPLOAD_BYTES:
+            self.send_json(
+                {"error": "File is empty or exceeds 50 MB"},
+                HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+            )
+            return
+        content_type = self.headers.get("Content-Type", "")
+        if not content_type.startswith("multipart/form-data"):
+            self.send_json({"error": "multipart/form-data required"}, HTTPStatus.BAD_REQUEST)
+            return
+        body = self.rfile.read(content_length)
+        message = BytesParser(policy=policy.default).parsebytes(
+            f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode(
+                "ascii"
+            )
+            + body
+        )
+        file_part = next(
+            (
+                part
+                for part in message.iter_parts()
+                if part.get_content_disposition() == "form-data"
+                and part.get_filename()
+            ),
+            None,
+        )
+        if file_part is None:
+            self.send_json({"error": "No file part"}, HTTPStatus.BAD_REQUEST)
+            return
+        submitted_filename = str(file_part.get_filename())
+        original_filename = Path(submitted_filename).name
+        extension = Path(original_filename).suffix.lower()
+        if extension not in ALLOWED_EXTENSIONS:
+            self.send_json(
+                {
+                    "error": (
+                        "Supported formats: PNG, JPG, JPEG, PDF, "
+                        "DOCX, XLSX"
+                    )
+                },
+                HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+            )
+            return
+        content = file_part.get_payload(decode=True) or b""
+        if not content:
+            self.send_json({"error": "Uploaded file is empty"}, HTTPStatus.BAD_REQUEST)
+            return
+        try:
+            validate_local_upload(
+                submitted_filename,
+                content,
+                declared_media_type=file_part.get_content_type(),
+            )
+        except DocumentIntakeError as exc:
+            self.send_json(
+                {
+                    "error": "Upload rejected by the local safety policy",
+                    "code": exc.code.value,
+                },
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+            )
+            return
+        session_id = str(uuid.uuid4())
+        try:
+            result = self.user_ocr.process_upload(
+                session_id, original_filename, extension, content
+            )
+            self.send_json(result, HTTPStatus.CREATED)
+        except Exception as exc:
+            failure_dir = self.user_ocr.sessions_root / session_id
+            failure_dir.mkdir(parents=True, exist_ok=True)
+            (failure_dir / "failure.json").write_text(
+                json.dumps(
+                    {
+                        "sessionId": session_id,
+                        "createdAt": utc_now(),
+                        "errorType": type(exc).__name__,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            self.send_json(
+                {"error": "Local OCR processing failed", "errorType": type(exc).__name__},
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    def do_DELETE(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path != "/user/session":
+            self.send_json({"error": "Unknown endpoint"}, HTTPStatus.NOT_FOUND)
+            return
+        session_id = parse_qs(parsed.query).get("id", [""])[0]
+        session_dir = self.user_ocr.session_dir(session_id)
+        if session_dir is None:
+            self.send_json({"error": "Session not found"}, HTTPStatus.NOT_FOUND)
+            return
+        shutil.rmtree(session_dir)
+        self.send_json({"deleted": True})
+
+    def do_GET(self) -> None:
+        parsed = urlparse(self.path)
+        query = parse_qs(parsed.query)
+
+        if parsed.path == "/phase14/benchmark":
+            phase14_root = self.data_root / "output" / "phase14"
+            benchmark_path = phase14_root / "line_benchmark_private.json"
+            if not benchmark_path.is_file():
+                self.send_json(
+                    {"error": "Phase 14 benchmark not available"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
+            reviews_path = phase14_root / "line_reviews.json"
+            reviews = (
+                json.loads(reviews_path.read_text(encoding="utf-8")).get(
+                    "reviews", {}
+                )
+                if reviews_path.is_file()
+                else {}
+            )
+            benchmark["lineReviews"] = reviews
+            benchmark["reviewedLineCount"] = len(reviews)
+            reviewed_path = phase14_root / "PHASE14_REVIEWED_EVALUATION.json"
+            if reviewed_path.is_file():
+                reviewed = json.loads(reviewed_path.read_text(encoding="utf-8"))
+                reviewed_selection = reviewed.get("selection", {})
+                selection = dict(benchmark.get("selection", {}))
+                for key in (
+                    "bestEasyProfile",
+                    "bestEasyCropProfile",
+                    "vietocrCropProfile",
+                    "recommendedPrimary",
+                    "promotionDecision",
+                    "productionDecision",
+                    "verifierPolicy",
+                    "qualityGate",
+                ):
+                    if key in reviewed_selection:
+                        selection[key] = reviewed_selection[key]
+                recommended_agreement = reviewed_selection.get(
+                    "recommendedPrimaryAgreement", {}
+                )
+                selection["recommendedPrimaryAgreementCount"] = (
+                    recommended_agreement.get("count", 0)
+                )
+                selection["recommendedPrimaryAgreementCoverage"] = (
+                    recommended_agreement.get("coverage", 0.0)
+                )
+                selection["recommendedPrimaryAgreementPrecision"] = (
+                    recommended_agreement.get("precision", 0.0)
+                )
+                benchmark["alignmentStatus"] = reviewed.get(
+                    "groundTruthStatus", benchmark.get("alignmentStatus")
+                )
+                benchmark["reviewedLineCount"] = reviewed.get(
+                    "reviewedLineCount", len(reviews)
+                )
+                benchmark["profiles"] = reviewed.get(
+                    "profiles", benchmark.get("profiles", {})
+                )
+                benchmark["selection"] = selection
+                benchmark["recommendedConfiguration"] = reviewed.get(
+                    "recommendedConfiguration", {}
+                )
+            pilot_summary_path = (
+                self.data_root
+                / "output"
+                / "phase14_2"
+                / "CONTROLLED_PILOT_SUMMARY.json"
+            )
+            if pilot_summary_path.is_file():
+                benchmark["controlledPilot"] = json.loads(
+                    pilot_summary_path.read_text(encoding="utf-8")
+                )
+            phase14_3_path = (
+                self.data_root
+                / "output"
+                / "phase14_3"
+                / "PHASE14_3_EVALUATION.json"
+            )
+            if phase14_3_path.is_file():
+                phase14_3 = json.loads(
+                    phase14_3_path.read_text(encoding="utf-8")
+                )
+                benchmark["phase14_3"] = phase14_3
+                benchmark["profiles"].update(phase14_3.get("profiles", {}))
+                selected = phase14_3.get("selected", {})
+                benchmark["selection"].update(
+                    {
+                        "recommendedPrimary": selected.get(
+                            "selectedPrimaryProfile"
+                        ),
+                        "bestCropProfile": selected.get(
+                            "selectedCropProfile",
+                            benchmark["selection"].get("bestCropProfile"),
+                        ),
+                        "fallbackRecognizer": selected.get(
+                            "fallbackRecognizer"
+                        ),
+                        "autoAcceptVerifier": selected.get(
+                            "autoAcceptVerifier"
+                        ),
+                        "productionDecision": selected.get(
+                            "productionDecision"
+                        ),
+                        "verifierPolicy": "EASY_EXACT_AGREEMENT_ONLY",
+                    }
+                )
+            expansion_root = self.data_root / "output" / "phase14_4"
+            expansion_path = expansion_root / "review_queue_private.json"
+            expansion_reviews_path = expansion_root / "line_reviews.json"
+            if expansion_path.is_file():
+                expansion = json.loads(
+                    expansion_path.read_text(encoding="utf-8")
+                )
+                expansion_reviews = (
+                    json.loads(
+                        expansion_reviews_path.read_text(encoding="utf-8")
+                    ).get("reviews", {})
+                    if expansion_reviews_path.is_file()
+                    else {}
+                )
+                benchmark["evaluationDocumentCount"] = benchmark.get(
+                    "documentCount", 0
+                )
+                benchmark["evaluationLineCount"] = benchmark.get(
+                    "lineCount", 0
+                )
+                benchmark["documentCount"] = expansion.get(
+                    "documentCount", 0
+                )
+                benchmark["lineCount"] = expansion.get("lineCount", 0)
+                benchmark["cases"] = expansion.get("cases", [])
+                benchmark["lineReviews"] = expansion_reviews
+                benchmark["reviewedLineCount"] = len(expansion_reviews)
+                benchmark["groundTruthExpansion"] = {
+                    "status": expansion.get("groundTruthStatus"),
+                    "documentCount": expansion.get("documentCount", 0),
+                    "lineCount": expansion.get("lineCount", 0),
+                    "reviewedLineCount": len(expansion_reviews),
+                    "pendingReviewLineCount": max(
+                        0,
+                        int(expansion.get("lineCount", 0))
+                        - len(expansion_reviews),
+                    ),
+                    "cropProfile": expansion.get("cropProfile"),
+                    "queueDigest": expansion.get("queueDigest"),
+                }
+                transformer_weight = (
+                    self.data_root
+                    / "runtime"
+                    / "vietocr_models"
+                    / "vgg_transformer.pth"
+                )
+                benchmark["secondRecognizer"] = {
+                    "config": "vgg_transformer",
+                    "weightAvailable": transformer_weight.is_file(),
+                    "weightBytes": (
+                        transformer_weight.stat().st_size
+                        if transformer_weight.is_file()
+                        else 0
+                    ),
+                    "benchmarkReady": (
+                        transformer_weight.is_file()
+                        and len(expansion_reviews)
+                        == int(expansion.get("lineCount", 0))
+                    ),
+                    "blockedByPendingReviewCount": max(
+                        0,
+                        int(expansion.get("lineCount", 0))
+                        - len(expansion_reviews),
+                    ),
+                }
+                blinded_status_path = (
+                    expansion_root / "BLINDED_PRECOMPUTE_STATUS.json"
+                )
+                if blinded_status_path.is_file():
+                    blinded_status = json.loads(
+                        blinded_status_path.read_text(encoding="utf-8")
+                    )
+                    benchmark["blindedPrecompute"] = {
+                        "status": blinded_status.get("status"),
+                        "lineCount": blinded_status.get("lineCount", 0),
+                        "predictionsHiddenDuringReview": blinded_status.get(
+                            "predictionsHiddenDuringReview", False
+                        ),
+                        "queueDigestMatches": (
+                            blinded_status.get("queueDigest")
+                            == expansion.get("queueDigest")
+                        ),
+                        "privateArtifactSha256": blinded_status.get(
+                            "privateArtifactSha256"
+                        ),
+                        "runtime": blinded_status.get("runtime", {}),
+                        "totalDurationMs": blinded_status.get(
+                            "totalDurationMs", 0.0
+                        ),
+                    }
+                second_benchmark_path = (
+                    expansion_root
+                    / "benchmark"
+                    / "SECOND_RECOGNIZER_EVALUATION.json"
+                )
+                if second_benchmark_path.is_file():
+                    second_benchmark = json.loads(
+                        second_benchmark_path.read_text(encoding="utf-8")
+                    )
+                    benchmark["secondRecognizerBenchmark"] = second_benchmark
+                    benchmark["selection"].update(
+                        {
+                            "recommendedPrimary": second_benchmark.get(
+                                "decision", {}
+                            ).get("selectedPrimary"),
+                            "promotionDecision": second_benchmark.get(
+                                "decision", {}
+                            ).get("challengerDecision"),
+                            "productionDecision": second_benchmark.get(
+                                "decision", {}
+                            ).get("productionDecision"),
+                        }
+                    )
+            self.send_json(benchmark)
+            return
+
+        if parsed.path == "/phase14/crop":
+            case_id = query.get("caseId", [""])[0]
+            profile = query.get("profile", [""])[0]
+            if not (
+                PHASE14_CASE_ID_RE.fullmatch(case_id)
+                and PHASE14_PROFILE_RE.fullmatch(profile)
+            ):
+                self.send_json(
+                    {"error": "Invalid Phase 14 crop request"},
+                    HTTPStatus.BAD_REQUEST,
+                )
+                return
+            phase14_root = self.data_root / "output" / "phase14"
+            benchmark_path = phase14_root / "line_benchmark_private.json"
+            if not benchmark_path.is_file():
+                self.send_json(
+                    {"error": "Phase 14 benchmark not available"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            case = None
+            crop_root = phase14_root
+            sources = [
+                (
+                    self.data_root / "output" / "phase14_4",
+                    self.data_root
+                    / "output"
+                    / "phase14_4"
+                    / "review_queue_private.json",
+                ),
+                (phase14_root, benchmark_path),
+            ]
+            for candidate_root, candidate_manifest in sources:
+                if not candidate_manifest.is_file():
+                    continue
+                candidate_payload = json.loads(
+                    candidate_manifest.read_text(encoding="utf-8")
+                )
+                case = next(
+                    (
+                        item
+                        for item in candidate_payload.get("cases", [])
+                        if item.get("caseId") == case_id
+                    ),
+                    None,
+                )
+                if case is not None:
+                    crop_root = candidate_root
+                    break
+            crop_info = case.get("crops", {}).get(profile) if case else None
+            if not crop_info:
+                self.send_json(
+                    {"error": "Phase 14 crop not found"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            relative_path = Path(str(crop_info.get("path", "")))
+            if relative_path.is_absolute() or ".." in relative_path.parts:
+                self.send_json(
+                    {"error": "Unsafe crop path"},
+                    HTTPStatus.BAD_REQUEST,
+                )
+                return
+            crop_path = (crop_root / relative_path).resolve()
+            if crop_root.resolve() not in crop_path.parents or not crop_path.is_file():
+                self.send_json(
+                    {"error": "Phase 14 crop not found"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            self.send_file(crop_path, "image/png")
+            return
+
+        if parsed.path == "/health":
+            self.send_json(
+                {
+                    "status": "ok",
+                    "profiles": {
+                        name: len(index) for name, index in self.native_indexes.items()
+                    },
+                    "userUpload": {
+                        "enabled": True,
+                        "phase9Enabled": True,
+                        "phase10ReviewEnabled": True,
+                        "phase11CccdEnabled": True,
+                        "phase11_4EvidenceEnabled": True,
+                        "phase12IdpEnabled": True,
+                        "phase15UnifiedIdpEnabled": True,
+                        "phase13_3HybridEnabled": True,
+                        "phase14_8VerifierEnabled": True,
+                        "phase14LineReviewEnabled": True,
+                        "modelLoaded": self.user_ocr.model_loaded,
+                        "sessionCount": len(self.user_ocr.list_sessions()),
+                        "formats": sorted(ALLOWED_EXTENSIONS),
+                        "maxUploadBytes": MAX_UPLOAD_BYTES,
+                    },
+                }
+            )
+            return
+
+        if parsed.path == "/user/sessions":
+            self.send_json({"sessions": self.user_ocr.list_sessions()})
+            return
+
+        if parsed.path.startswith("/user/"):
+            session_id = query.get("id", [""])[0]
+            session_dir = self.user_ocr.session_dir(session_id)
+            if session_dir is None:
+                self.send_json({"error": "Session not found"}, HTTPStatus.NOT_FOUND)
+                return
+            result_path = session_dir / "result.json"
+            if not result_path.is_file():
+                self.send_json({"error": "Result not available"}, HTTPStatus.NOT_FOUND)
+                return
+            if parsed.path == "/user/session":
+                self.send_json(json.loads(result_path.read_text(encoding="utf-8")))
+                return
+            if parsed.path == "/user/review":
+                result = json.loads(result_path.read_text(encoding="utf-8"))
+                self.send_json(review_payload(session_dir, result))
+                return
+            if parsed.path == "/user/download":
+                self.send_file(
+                    result_path,
+                    "application/json; charset=utf-8",
+                    f"ocr-result-{session_id}.json",
+                )
+                return
+            phase10_downloads = {
+                "/user/ground-truth": (
+                    session_dir / "phase10" / "ground_truth.json",
+                    f"ground-truth-{session_id}.json",
+                ),
+                "/user/evaluation": (
+                    session_dir / "phase10" / "evaluation.json",
+                    f"evaluation-{session_id}.json",
+                ),
+                "/user/business": (
+                    session_dir / "phase10" / "business.json",
+                    f"business-{session_id}.json",
+                ),
+            }
+            phase11_download = (
+                session_dir / "phase11" / "identity_card.json",
+                f"identity-card-{session_id}.json",
+            )
+            phase14_8_download = (
+                session_dir / "phase14_8" / "recognition.json",
+                f"phase14-8-recognition-{session_id}.json",
+            )
+            phase12_downloads = {
+                "/user/phase12-canonical": (
+                    session_dir / "phase12" / "canonical_document.json",
+                    f"canonical-document-{session_id}.json",
+                ),
+                "/user/phase12-result": (
+                    session_dir / "phase12" / "idp_result.json",
+                    f"idp-result-{session_id}.json",
+                ),
+                "/user/phase12-business": (
+                    session_dir / "phase12" / "business.json",
+                    f"camunda-business-{session_id}.json",
+                ),
+            }
+            phase15_downloads = {
+                "/user/phase15-canonical": (
+                    session_dir / "phase15" / "canonical_document.json",
+                    f"canonical-document-{session_id}.json",
+                ),
+                "/user/phase15-result": (
+                    session_dir / "phase15" / "idp_result.json",
+                    f"idp-result-{session_id}.json",
+                ),
+                "/user/phase15-business": (
+                    session_dir / "phase15" / "business.json",
+                    f"camunda-business-{session_id}.json",
+                ),
+                "/user/phase15-reviewed-result": (
+                    session_dir / "phase15" / "idp_result_reviewed.json",
+                    f"idp-result-reviewed-{session_id}.json",
+                ),
+                "/user/phase15-reviewed-business": (
+                    session_dir / "phase15" / "business_reviewed.json",
+                    f"camunda-business-reviewed-{session_id}.json",
+                ),
+            }
+            if parsed.path == "/user/phase13-3-result":
+                download_path = (
+                    session_dir / "phase13_3" / "hybrid_ocr.json"
+                )
+                if not download_path.is_file():
+                    self.send_json(
+                        {"error": "Phase 13.3 hybrid result not available"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                self.send_file(
+                    download_path,
+                    "application/json; charset=utf-8",
+                    f"hybrid-ocr-{session_id}.json",
+                )
+                return
+            if parsed.path == "/user/phase14-2-result":
+                download_path = (
+                    session_dir / "phase14_2" / "controlled_pilot.json"
+                )
+                if not download_path.is_file():
+                    self.send_json(
+                        {"error": "Phase 14.2 pilot result not available"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                self.send_file(
+                    download_path,
+                    "application/json; charset=utf-8",
+                    f"controlled-pilot-{session_id}.json",
+                )
+                return
+            if parsed.path == "/user/identity-card":
+                download_path, download_name = phase11_download
+                if not download_path.is_file():
+                    self.send_json(
+                        {"error": "Structured CCCD JSON not available"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                self.send_file(
+                    download_path,
+                    "application/json; charset=utf-8",
+                    download_name,
+                )
+                return
+            if parsed.path == "/user/phase14-8-recognition":
+                download_path, download_name = phase14_8_download
+                if not download_path.is_file():
+                    self.send_json(
+                        {"error": "Phase 14.8 recognition JSON not available"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                self.send_file(
+                    download_path,
+                    "application/json; charset=utf-8",
+                    download_name,
+                )
+                return
+            if parsed.path == "/user/phase11-3-evidence":
+                download_path = (
+                    session_dir / "phase11_3" / "paddle_recognition.json"
+                )
+                if not download_path.is_file():
+                    self.send_json(
+                        {"error": "Phase 11.3 evidence JSON not available"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                self.send_file(
+                    download_path,
+                    "application/json; charset=utf-8",
+                    f"phase11-3-evidence-{session_id}.json",
+                )
+                return
+            if parsed.path == "/user/phase11-4-evidence":
+                download_path = (
+                    session_dir / "phase11_4" / "field_consensus.json"
+                )
+                if not download_path.is_file():
+                    self.send_json(
+                        {"error": "Phase 11.4 evidence JSON not available"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                self.send_file(
+                    download_path,
+                    "application/json; charset=utf-8",
+                    f"phase11-4-evidence-{session_id}.json",
+                )
+                return
+            if parsed.path in phase12_downloads:
+                download_path, download_name = phase12_downloads[parsed.path]
+                if not download_path.is_file():
+                    self.send_json(
+                        {"error": "Phase 12 IDP JSON not available"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                self.send_file(
+                    download_path,
+                    "application/json; charset=utf-8",
+                    download_name,
+                )
+                return
+            if parsed.path in phase15_downloads:
+                download_path, download_name = phase15_downloads[parsed.path]
+                if not download_path.is_file():
+                    self.send_json(
+                        {"error": "Phase 15 unified IDP JSON not available"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                self.send_file(
+                    download_path,
+                    "application/json; charset=utf-8",
+                    download_name,
+                )
+                return
+            if parsed.path in phase10_downloads:
+                download_path, download_name = phase10_downloads[parsed.path]
+                if not download_path.is_file():
+                    self.send_json(
+                        {"error": "Phase 10 review not available"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                self.send_file(
+                    download_path,
+                    "application/json; charset=utf-8",
+                    download_name,
+                )
+                return
+            if parsed.path == "/user/visualization":
+                try:
+                    page_index = int(query.get("page", ["0"])[0])
+                except ValueError:
+                    page_index = -1
+                result = json.loads(result_path.read_text(encoding="utf-8"))
+                if result.get("phase11", {}).get("status") in {
+                    "PASS",
+                    "NEEDS_REVIEW",
+                }:
+                    visualization = (
+                        session_dir
+                        / "phase11"
+                        / "visualization"
+                        / f"page_{page_index:03d}.png"
+                    )
+                elif (
+                    result.get("phase9", {}).get("selectedVariant")
+                    == "phase9_routed"
+                ):
+                    visualization = (
+                        session_dir
+                        / "phase9"
+                        / "visualization"
+                        / f"page_{page_index:03d}.png"
+                    )
+                else:
+                    visualization = (
+                        session_dir / "visualization" / f"page_{page_index:03d}.png"
+                    )
+                if not visualization.is_file():
+                    self.send_json(
+                        {"error": "Visualization not available"}, HTTPStatus.NOT_FOUND
+                    )
+                    return
+                self.send_file(visualization, "image/png")
+                return
+            self.send_json({"error": "Unknown endpoint"}, HTTPStatus.NOT_FOUND)
+            return
+
+        sample_id = query.get("id", [""])[0]
+        profile = query.get("profile", ["phase7"])[0]
+        native_path = self.native_indexes.get(profile, {}).get(sample_id)
+        if native_path is None:
+            self.send_json({"error": "Sample not found"}, HTTPStatus.NOT_FOUND)
+            return
+
+        if parsed.path == "/detail":
+            native = json.loads(native_path.read_text(encoding="utf-8"))
+            texts = [
+                str(text)
+                for page in native.get("pages", [])
+                for text in page.get("recognizedTexts", [])
+            ]
+            scores = [
+                float(score)
+                for page in native.get("pages", [])
+                for score in page.get("recognitionScores", [])
+            ]
+            self.send_json(
+                {
+                    "sampleId": native.get("sampleId"),
+                    "documentId": native.get("documentId"),
+                    "sourceRelativePath": native.get("sourceRelativePath"),
+                    "variant": native.get("variant"),
+                    "processing": native.get("processing"),
+                    "recognizedTexts": texts,
+                    "recognitionScores": scores,
+                    "hasVisualization": bool(texts),
+                }
+            )
+            return
+
+        if parsed.path == "/visualization":
+            native = json.loads(native_path.read_text(encoding="utf-8"))
+            relative = Path(native["sourceRelativePath"])
+            visualization = (
+                (
+                    self.data_root / "output" / "visualization"
+                    if profile == "baseline"
+                    else self.data_root
+                    / "output"
+                    / "phase7"
+                    / "v5_enhanced"
+                    / "visualization"
+                )
+                / relative.with_name(f"{relative.stem}_vis.png")
+            )
+            if not visualization.is_file():
+                self.send_json({"error": "Visualization not available"}, HTTPStatus.NOT_FOUND)
+                return
+            self.send_file(
+                visualization,
+                mimetypes.guess_type(visualization)[0] or "image/png",
+            )
+            return
+
+        self.send_json({"error": "Unknown endpoint"}, HTTPStatus.NOT_FOUND)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Serve the HR OCR dashboard API")
+    parser.add_argument("--data-root", type=Path, required=True)
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8765)
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    try:
+        args.host = require_loopback_host(args.host)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    indexes = {
+        "baseline": build_index(args.data_root / "output" / "native_json"),
+        "phase7": build_index(
+            args.data_root / "output" / "phase7" / "v5_enhanced" / "native_json"
+        ),
+    }
+    if not indexes["baseline"]:
+        raise SystemExit("No Native OCR JSON available")
+    DashboardHandler.data_root = args.data_root
+    DashboardHandler.native_indexes = indexes
+    DashboardHandler.user_ocr = UserOCRService(args.data_root)
+    server = ThreadingHTTPServer((args.host, args.port), DashboardHandler)
+    print(
+        f"Local dashboard API ready: http://{args.host}:{args.port} "
+        f"(baseline={len(indexes['baseline'])}, phase7={len(indexes['phase7'])})"
+    )
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

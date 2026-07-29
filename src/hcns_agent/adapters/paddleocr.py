@@ -116,7 +116,7 @@ def _as_list(value: Any) -> list[Any]:
 
 def _to_numpy(image: Any) -> Any:
     try:
-        import numpy as np
+        import numpy as np  # type: ignore[import-not-found,unused-ignore]
     except ImportError as error:
         raise RuntimeError(
             "NumPy is required by PaddleOCR; install the paddle extra"

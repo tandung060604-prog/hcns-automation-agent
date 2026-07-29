@@ -136,6 +136,11 @@ hcns-agent-recognition evaluate `
 Report chỉ chứa CER, WER, Exact Match, Diacritic Error Rate, accepted precision
 và latency; raw text vẫn nằm ngoài Git.
 
+Từ Phase 14.6, các phase recognition dùng chung metric spec
+`vi-ocr-metrics/1.0.0`. Exact Match giữ nguyên hoa/thường và dấu câu; agreement
+sau `casefold` được báo cáo riêng. DER dùng số ký tự reference có dấu làm mẫu
+số, nên report cũ trước spec này không được so trực tiếp.
+
 Phase 13.2 đã chạy ba recognizer trên cùng corpus synthetic 240 crop dòng:
 EasyOCR `vi` đạt 82,92% Exact Match và 0% DER, được chọn cho pilot; VietOCR
 `vgg_seq2seq` làm recognizer kiểm chứng. Đây chưa phải tuyên bố production:
@@ -151,10 +156,24 @@ production và mọi dòng bất đồng vẫn phải qua human review.
 Phase 14 đã mở rộng Ground Truth lên 309/309 crop của 15 tài liệu thật có quyền
 sử dụng. Benchmark mù chọn VietOCR `vgg_seq2seq` (30,74% Exact Match,
 18,19% CER) thay vì `vgg_transformer` (27,18% Exact Match, 14,16% CER); model
-Transformer chậm hơn và không đạt promotion gate. Phase 14.5 thử fallback
-document-level, tăng Exact Match lên 44,34% nhưng làm mất hai dòng primary vốn
+Transformer chậm hơn và không đạt promotion gate. Khi tính lại theo metric spec
+1.0.0, Phase 14.5 fallback document-level đạt 40,13% Exact Match nhưng làm mất
+một dòng primary vốn
 đúng; vì vậy chỉ chạy `SHADOW_REVIEW_ONLY`. Pipeline vẫn
 `NOT_PRODUCTION_READY`; prediction bất đồng tiếp tục đi qua human review.
+
+Phase 14.6 đã khóa `bbox_balanced_64`, policy review-only và SHA-256 của
+VietOCR seq2seq, VietOCR transformer cùng Paddle detector. Khi dataset mới sẵn
+sàng, hệ thống phải tạo prediction ẩn trước, xác nhận Ground Truth từ ảnh gốc,
+rồi đánh giá một lần mà không chỉnh threshold trên tập held-out.
+
+## OCR Lab local
+
+Source website và API local nằm tại [`apps/ocr_lab`](apps/ocr_lab/README.md).
+Giao diện hỗ trợ upload, xem evidence/JSON, xác nhận Ground Truth dòng và tiếp
+tục đúng crop chưa review sau khi tải lại trang. Upload được kiểm tra magic
+content, format mismatch, encryption, macro, archive expansion và page limit
+trước parser/OCR.
 
 ## Camunda và Human-in-the-loop
 
@@ -172,8 +191,16 @@ Package hiện là tài sản thiết kế dành cho review/dry-run, chưa phả
 deploy production. **Liên kết Camunda Modeler/Operate/Tasklist sẽ được cập nhật
 sau khi môi trường tích hợp được công bố.**
 
+M4 shadow scaffolding đã khóa Camunda Platform 7.13, bổ sung External Task REST
+client, handler registry cho chín topic, process-variable whitelist/schema và
+mock HRIS/notification. BPMN hiện đọc native/OCR trước khi phân loại nội dung;
+DMN không thể `AUTO_CONTINUE` khi có trường nhạy cảm cần review và cờ
+`autoContinueEnabled` mặc định là `false`. Stage operation thật, Camunda
+deployment và User Task UI vẫn chờ OCR Phase 14.6 vượt promotion gate.
+
 Xem thêm [thiết kế workflow](docs/WORKFLOWS.md) và
-[Human-in-the-loop](docs/HUMAN_IN_THE_LOOP.md).
+[Human-in-the-loop](docs/HUMAN_IN_THE_LOOP.md). Kế hoạch/điều kiện rollout nằm
+tại [Camunda MVP V2 integration plan](docs/CAMUNDA_MVP_V2_INTEGRATION_PLAN.md).
 
 ## Cài đặt
 
@@ -272,7 +299,7 @@ Dự án hiện ở giai đoạn benchmark có thể kiểm chứng:
 - Benchmark baseline/challenger và promotion gate đã có.
 - Benchmark recognition-only và audit charset tiếng Việt đã có.
 - EasyOCR đã được chọn cho pilot recognition; VietOCR dùng để kiểm chứng.
-- Camunda BPMN/DMN package tham chiếu đã được bổ sung.
+- Camunda 7 shadow contract, BPMN/DMN safety routing và REST worker runtime đã có.
 - Benchmark trên tài liệu thật có quyền sử dụng và triển khai Camunda thực tế
   vẫn đang chờ phê duyệt.
 

@@ -10,13 +10,22 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import unicodedata
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from hcns_agent.application.ocr_metrics import (
+    METRIC_SPEC_VERSION,
+    edit_distance,
+    evaluate_text_pairs,
+    normalize_for_agreement,
+    normalize_for_evaluation,
+    strip_vietnamese_diacritics,
+)
+from hcns_agent.application.recognition_policy import PHASE14_6_SHADOW_POLICY
 
 PRIMARY_PROFILE = "vietocr_vgg_seq2seq"
 TRANSFORMER_PROFILE = "vietocr_vgg_transformer"
@@ -37,32 +46,11 @@ class LineRecord:
 
 
 def normalize(value: Any) -> str:
-    return " ".join(unicodedata.normalize("NFC", str(value)).casefold().split())
+    return normalize_for_evaluation(str(value))
 
 
 def strip_diacritics(value: str) -> str:
-    value = value.replace("đ", "d").replace("Đ", "D")
-    return "".join(
-        character
-        for character in unicodedata.normalize("NFD", value)
-        if unicodedata.category(character) != "Mn"
-    )
-
-
-def edit_distance(reference: Sequence[Any], hypothesis: Sequence[Any]) -> int:
-    previous = list(range(len(hypothesis) + 1))
-    for row, reference_item in enumerate(reference, start=1):
-        current = [row]
-        for column, hypothesis_item in enumerate(hypothesis, start=1):
-            current.append(
-                min(
-                    current[-1] + 1,
-                    previous[column] + 1,
-                    previous[column - 1] + (reference_item != hypothesis_item),
-                )
-            )
-        previous = current
-    return previous[-1]
+    return strip_vietnamese_diacritics(value)
 
 
 def classify_error(reference: str, prediction: str) -> str:
@@ -85,33 +73,28 @@ def aggregate_metrics(
 ) -> dict[str, Any]:
     if len(records) != len(predictions):
         raise ValueError("Prediction count does not match record count")
-    char_errors = 0
-    char_count = 0
-    word_errors = 0
-    word_count = 0
-    base_errors = 0
-    exact_count = 0
-    for record, prediction in zip(records, predictions, strict=True):
-        reference = record.ground_truth
-        char_errors += edit_distance(reference, prediction)
-        char_count += len(reference)
-        word_errors += edit_distance(reference.split(), prediction.split())
-        word_count += len(reference.split())
-        base_errors += edit_distance(
-            strip_diacritics(reference),
-            strip_diacritics(prediction),
-        )
-        exact_count += reference == prediction
+    metrics = evaluate_text_pairs(
+        [
+            (record.ground_truth, prediction)
+            for record, prediction in zip(records, predictions, strict=True)
+        ]
+    )
     return {
-        "lineCount": len(records),
-        "exactMatchCount": exact_count,
-        "exactMatchRate": round(exact_count / max(1, len(records)), 6),
-        "cer": round(char_errors / max(1, char_count), 6),
-        "wer": round(word_errors / max(1, word_count), 6),
-        "diacriticErrorRate": round(
-            max(0, char_errors - base_errors) / max(1, char_count),
-            6,
-        ),
+        "metricSpecVersion": METRIC_SPEC_VERSION,
+        "lineCount": metrics.case_count,
+        "exactMatchCount": metrics.strict_exact_count,
+        "exactMatchRate": metrics.strict_exact_rate,
+        "casefoldExactMatchCount": metrics.casefold_exact_count,
+        "casefoldExactMatchRate": metrics.casefold_exact_rate,
+        "referenceCharacterCount": metrics.reference_character_count,
+        "characterErrorCount": metrics.character_error_count,
+        "cer": metrics.character_error_rate,
+        "referenceWordCount": metrics.reference_word_count,
+        "wordErrorCount": metrics.word_error_count,
+        "wer": metrics.word_error_rate,
+        "referenceDiacriticCount": metrics.reference_diacritic_count,
+        "diacriticErrorCount": metrics.diacritic_error_count,
+        "diacriticErrorRate": metrics.diacritic_error_rate,
     }
 
 
@@ -174,15 +157,18 @@ def conditional_prediction(
 ) -> tuple[str, str]:
     if (
         record.transformer
-        and record.transformer == record.paddle
-        and record.transformer != record.primary
+        and normalize_for_agreement(record.transformer)
+        == normalize_for_agreement(record.paddle)
+        and normalize_for_agreement(record.transformer)
+        != normalize_for_agreement(record.primary)
     ):
         return record.transformer, "transformer_paddle_agreement"
     if (
         threshold is not None
         and record.primary_confidence < threshold
         and record.paddle
-        and record.paddle != record.primary
+        and normalize_for_agreement(record.paddle)
+        != normalize_for_agreement(record.primary)
     ):
         return record.paddle, "low_primary_confidence_paddle_candidate"
     return record.primary, "primary_unchanged"
@@ -212,7 +198,9 @@ def selection_score(
     char_errors = 0
     for record, prediction in zip(records, predictions, strict=True):
         exact_count += prediction == record.ground_truth
-        switched = prediction != record.primary
+        switched = normalize_for_agreement(prediction) != normalize_for_agreement(
+            record.primary
+        )
         switches += switched
         baseline_losses += (
             switched
@@ -220,7 +208,10 @@ def selection_score(
             and prediction != record.ground_truth
         )
         char_errors += edit_distance(record.ground_truth, prediction)
-    return exact_count, -baseline_losses, -switches, -char_errors
+    # Zero regression is the first constraint. An exploratory threshold may
+    # recover more errors, but it must not outrank a threshold that preserves
+    # every baseline-correct line.
+    return -baseline_losses, exact_count, -switches, -char_errors
 
 
 def select_threshold(records: Sequence[LineRecord]) -> float | None:
@@ -281,7 +272,9 @@ def pairwise_agreement(
     for record in records:
         left_value = getattr(record, left)
         right_value = getattr(record, right)
-        if left_value and left_value == right_value:
+        if left_value and normalize_for_agreement(
+            left_value
+        ) == normalize_for_agreement(right_value):
             agreed += 1
             exact += left_value == record.ground_truth
     return {
@@ -303,7 +296,9 @@ def outcome_summary(
     for record, prediction in zip(records, predictions, strict=True):
         primary_exact = record.primary == record.ground_truth
         selected_exact = prediction == record.ground_truth
-        switched = prediction != record.primary
+        switched = normalize_for_agreement(prediction) != normalize_for_agreement(
+            record.primary
+        )
         switches += switched
         recovered += switched and selected_exact and not primary_exact
         lost += switched and primary_exact and not selected_exact
@@ -370,6 +365,7 @@ def build_analysis(
     primary_taxonomy.pop("exact", None)
     return {
         "schemaVersion": "14.5.0-private-aggregate",
+        "metricSpecVersion": METRIC_SPEC_VERSION,
         "createdAt": datetime.now(timezone.utc).isoformat(),
         "containsRealPII": False,
         "sourceArtifactSha256": f"sha256:{source_digest}",
@@ -424,6 +420,7 @@ def build_analysis(
             "selectionReasons": dict(sorted(recommended_reasons.items())),
         },
         "recommendedPolicy": {
+            **PHASE14_6_SHADOW_POLICY.manifest(),
             "status": "SHADOW_REVIEW_ONLY",
             "primary": PRIMARY_PROFILE,
             "rules": [
