@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "phase14.8-recognition-policy/1.0.0",
+  "frozenAt": "2026-07-28",
+  "containsRealPII": false,
+  "status": "SHADOW_REVIEW_ONLY",
+  "policy": {
+    "policyId": "phase14.8-seq2seq-transformer-verifier",
+    "version": "1.0.0",
+    "mode": "SHADOW_REVIEW_ONLY",
+    "metricSpecVersion": "vi-ocr-metrics/1.0.0",
+    "cropProfile": "bbox_balanced_64",
+    "primaryProfile": "vietocr_vgg_seq2seq",
+    "verifierProfile": "vietocr_vgg_transformer",
+    "detectorEvidenceProfile": "paddle_detector_raw",
+    "selectionExcludedProfiles": [
+      "paddle_detector_raw"
+    ],
+    "agreementRule": "strict_nfc_whitespace_case_sensitive",
+    "agreementAction": "mark_verified_evidence_only",
+    "disagreementAction": "preserve_primary_and_require_review",
+    "autoReplaceSelectedText": false,
+    "policyDigest": "sha256:5dfd0186cacbe29a299c79d774aa4e2575f67a4675d6db15035762ed9b363fb6"
+  },
+  "models": [
+    {
+      "profile": "vietocr_vgg_seq2seq",
+      "bytes": 89575371,
+      "sha256": "0921503a41375a0584268e23ef3d414ea478a8fe8777865c7745d38f2d0bc5db"
+    },
+    {
+      "profile": "vietocr_vgg_transformer",
+      "bytes": 151815373,
+      "sha256": "380512193a8b6cbf6fad80deacdc9b6939d10d473d199892fc6408d13775ea59"
+    },
+    {
+      "profile": "paddle_detector_raw",
+      "role": "DETECTOR_GEOMETRY_AND_AUDIT_EVIDENCE_ONLY",
+      "selectionEligible": false,
+      "bytes": 4692937,
+      "sha256": "54a85087b4d31fa3ea4e4aba100169a1ec3e3274cd3352b9068b3cfccbca7829"
+    }
+  ],
+  "developmentEvidence": {
+    "documentCount": 15,
+    "lineCount": 309,
+    "groundTruthSha256": "dbcb03c0efca878a87f5ecfd631e87622d9325cf914e8eb8f6aedefc30d1ff30",
+    "predictionsSha256": "61420a93fe3f6ce0e66a71ea0f82366c6f611b300e5e55aee01c5d2ac96c184f"
+  },
+  "heldOutDiagnosticEvidence": {
+    "documentCount": 8,
+    "confirmedLineCount": 149,
+    "skippedLineCount": 8,
+    "usedForThresholdTuning": false,
+    "groundTruthSha256": "3080b39489fb8e192952065043c5220cd2b4485f82a530819ffffd6975de4448",
+    "predictionsSha256": "4bc050aafd2520c9e47b3be212619b57c4470c0e92ec58ed7ed3cfb9f2f60769"
+  },
+  "aggregateAnalysisSha256": "085d1985ed4630fa452c3249bf75619ac80869055ea7de7018ecb6fab7b15ee1",
+  "productionDecision": "NOT_PRODUCTION_READY"
+}
