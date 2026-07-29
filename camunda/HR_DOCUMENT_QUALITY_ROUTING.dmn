@@ -1,8 +1,23 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/" xmlns:camunda="http://camunda.org/schema/1.0/dmn" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_HR_Document_Quality" name="HR Document Quality Routing" namespace="http://example.com/hr-document-agent-mvp-v2/dmn" exporter="Camunda Modeler" exporterVersion="5.49.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.13.0">
-  <decision id="hr-document-quality-routing" name="HR Document Quality Routing">
-    <description>Routes sanitized OCR quality metadata. No raw PII or extracted field values are inputs.</description>
-    <decisionTable id="DecisionTable_HR_Document_Quality" hitPolicy="UNIQUE">
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:camunda="http://camunda.org/schema/1.0/dmn" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_HR_Document_Quality" name="HR Document Quality Routing" namespace="http://example.com/hr-document-agent-mvp-v2/dmn" exporter="Camunda Modeler" exporterVersion="5.49.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.13.0">
+  <decision id="hr-document-quality-routing" name="HR Document Quality Routing" camunda:versionTag="2.1.0-shadow">
+    <description>Routes sanitized quality metadata only. FIRST hit policy applies safety rules before automation. No raw PII or extracted field values are inputs.</description>
+    <decisionTable id="DecisionTable_HR_Document_Quality" hitPolicy="FIRST">
+      <input id="Input_qualityStatus" label="qualityStatus">
+        <inputExpression id="Input_qualityStatus_expr" typeRef="string">
+          <text>qualityStatus</text>
+        </inputExpression>
+      </input>
+      <input id="Input_reviewRequired" label="reviewRequired">
+        <inputExpression id="Input_reviewRequired_expr" typeRef="boolean">
+          <text>reviewRequired</text>
+        </inputExpression>
+      </input>
+      <input id="Input_sensitiveFieldNeedsReview" label="sensitiveFieldNeedsReview">
+        <inputExpression id="Input_sensitiveFieldNeedsReview_expr" typeRef="boolean">
+          <text>sensitiveFieldNeedsReview</text>
+        </inputExpression>
+      </input>
       <input id="Input_missingCriticalField" label="missingCriticalField">
         <inputExpression id="Input_missingCriticalField_expr" typeRef="boolean">
           <text>missingCriticalField</text>
@@ -23,114 +38,131 @@
           <text>overallConfidence</text>
         </inputExpression>
       </input>
+      <input id="Input_autoContinueEnabled" label="autoContinueEnabled">
+        <inputExpression id="Input_autoContinueEnabled_expr" typeRef="boolean">
+          <text>autoContinueEnabled</text>
+        </inputExpression>
+      </input>
       <output id="Output_recommendedAction" label="recommendedAction" name="recommendedAction" typeRef="string"/>
+      <rule id="Rule_Rejected">
+        <description>Quality gate rejected the document</description>
+        <inputEntry id="Rule_Rejected_1"><text>"REJECTED"</text></inputEntry>
+        <inputEntry id="Rule_Rejected_2"><text>-</text></inputEntry>
+        <inputEntry id="Rule_Rejected_3"><text>-</text></inputEntry>
+        <inputEntry id="Rule_Rejected_4"><text>-</text></inputEntry>
+        <inputEntry id="Rule_Rejected_5"><text>-</text></inputEntry>
+        <inputEntry id="Rule_Rejected_6"><text>-</text></inputEntry>
+        <inputEntry id="Rule_Rejected_7"><text>-</text></inputEntry>
+        <inputEntry id="Rule_Rejected_8"><text>-</text></inputEntry>
+        <outputEntry id="Rule_Rejected_out"><text>"REQUEST_REUPLOAD"</text></outputEntry>
+      </rule>
       <rule id="Rule_MissingCritical">
         <description>Thiếu trường trọng yếu</description>
-        <inputEntry id="Rule_MissingCritical_in_1">
-          <text>true</text>
-        </inputEntry>
-        <inputEntry id="Rule_MissingCritical_in_2">
-          <text>-</text>
-        </inputEntry>
-        <inputEntry id="Rule_MissingCritical_in_3">
-          <text>-</text>
-        </inputEntry>
-        <inputEntry id="Rule_MissingCritical_in_4">
-          <text>-</text>
-        </inputEntry>
-        <outputEntry id="Rule_MissingCritical_out">
-          <text>"REQUEST_REUPLOAD"</text>
-        </outputEntry>
+        <inputEntry id="Rule_MissingCritical_1"><text>-</text></inputEntry>
+        <inputEntry id="Rule_MissingCritical_2"><text>-</text></inputEntry>
+        <inputEntry id="Rule_MissingCritical_3"><text>-</text></inputEntry>
+        <inputEntry id="Rule_MissingCritical_4"><text>true</text></inputEntry>
+        <inputEntry id="Rule_MissingCritical_5"><text>-</text></inputEntry>
+        <inputEntry id="Rule_MissingCritical_6"><text>-</text></inputEntry>
+        <inputEntry id="Rule_MissingCritical_7"><text>-</text></inputEntry>
+        <inputEntry id="Rule_MissingCritical_8"><text>-</text></inputEntry>
+        <outputEntry id="Rule_MissingCritical_out"><text>"REQUEST_REUPLOAD"</text></outputEntry>
+      </rule>
+      <rule id="Rule_Sensitive">
+        <description>Trường nhạy cảm luôn cần HCNS xác nhận</description>
+        <inputEntry id="Rule_Sensitive_1"><text>-</text></inputEntry>
+        <inputEntry id="Rule_Sensitive_2"><text>-</text></inputEntry>
+        <inputEntry id="Rule_Sensitive_3"><text>true</text></inputEntry>
+        <inputEntry id="Rule_Sensitive_4"><text>false</text></inputEntry>
+        <inputEntry id="Rule_Sensitive_5"><text>-</text></inputEntry>
+        <inputEntry id="Rule_Sensitive_6"><text>-</text></inputEntry>
+        <inputEntry id="Rule_Sensitive_7"><text>-</text></inputEntry>
+        <inputEntry id="Rule_Sensitive_8"><text>-</text></inputEntry>
+        <outputEntry id="Rule_Sensitive_out"><text>"HR_REVIEW"</text></outputEntry>
       </rule>
       <rule id="Rule_Inconsistency">
         <description>Bất nhất nghiệp vụ</description>
-        <inputEntry id="Rule_Inconsistency_in_1">
-          <text>false</text>
-        </inputEntry>
-        <inputEntry id="Rule_Inconsistency_in_2">
-          <text>true</text>
-        </inputEntry>
-        <inputEntry id="Rule_Inconsistency_in_3">
-          <text>-</text>
-        </inputEntry>
-        <inputEntry id="Rule_Inconsistency_in_4">
-          <text>-</text>
-        </inputEntry>
-        <outputEntry id="Rule_Inconsistency_out">
-          <text>"HR_REVIEW"</text>
-        </outputEntry>
+        <inputEntry id="Rule_Inconsistency_1"><text>-</text></inputEntry>
+        <inputEntry id="Rule_Inconsistency_2"><text>-</text></inputEntry>
+        <inputEntry id="Rule_Inconsistency_3"><text>false</text></inputEntry>
+        <inputEntry id="Rule_Inconsistency_4"><text>false</text></inputEntry>
+        <inputEntry id="Rule_Inconsistency_5"><text>true</text></inputEntry>
+        <inputEntry id="Rule_Inconsistency_6"><text>-</text></inputEntry>
+        <inputEntry id="Rule_Inconsistency_7"><text>-</text></inputEntry>
+        <inputEntry id="Rule_Inconsistency_8"><text>-</text></inputEntry>
+        <outputEntry id="Rule_Inconsistency_out"><text>"HR_REVIEW"</text></outputEntry>
       </rule>
-      <rule id="Rule_Auto">
-        <description>Đủ trường và confidence cao</description>
-        <inputEntry id="Rule_Auto_in_1">
-          <text>false</text>
-        </inputEntry>
-        <inputEntry id="Rule_Auto_in_2">
-          <text>false</text>
-        </inputEntry>
-        <inputEntry id="Rule_Auto_in_3">
-          <text>true</text>
-        </inputEntry>
-        <inputEntry id="Rule_Auto_in_4">
-          <text>[0.9..1]</text>
-        </inputEntry>
-        <outputEntry id="Rule_Auto_out">
-          <text>"AUTO_CONTINUE"</text>
-        </outputEntry>
-      </rule>
-      <rule id="Rule_UserReview">
-        <description>Đủ trường nhưng cần xác nhận</description>
-        <inputEntry id="Rule_UserReview_in_1">
-          <text>false</text>
-        </inputEntry>
-        <inputEntry id="Rule_UserReview_in_2">
-          <text>false</text>
-        </inputEntry>
-        <inputEntry id="Rule_UserReview_in_3">
-          <text>true</text>
-        </inputEntry>
-        <inputEntry id="Rule_UserReview_in_4">
-          <text>[0.6..0.9[</text>
-        </inputEntry>
-        <outputEntry id="Rule_UserReview_out">
-          <text>"USER_REVIEW"</text>
-        </outputEntry>
-      </rule>
-      <rule id="Rule_HRIncomplete">
+      <rule id="Rule_Incomplete">
         <description>Thiếu trường không trọng yếu</description>
-        <inputEntry id="Rule_HRIncomplete_in_1">
-          <text>false</text>
-        </inputEntry>
-        <inputEntry id="Rule_HRIncomplete_in_2">
-          <text>false</text>
-        </inputEntry>
-        <inputEntry id="Rule_HRIncomplete_in_3">
-          <text>false</text>
-        </inputEntry>
-        <inputEntry id="Rule_HRIncomplete_in_4">
-          <text>-</text>
-        </inputEntry>
-        <outputEntry id="Rule_HRIncomplete_out">
-          <text>"HR_REVIEW"</text>
-        </outputEntry>
+        <inputEntry id="Rule_Incomplete_1"><text>-</text></inputEntry>
+        <inputEntry id="Rule_Incomplete_2"><text>-</text></inputEntry>
+        <inputEntry id="Rule_Incomplete_3"><text>false</text></inputEntry>
+        <inputEntry id="Rule_Incomplete_4"><text>false</text></inputEntry>
+        <inputEntry id="Rule_Incomplete_5"><text>false</text></inputEntry>
+        <inputEntry id="Rule_Incomplete_6"><text>false</text></inputEntry>
+        <inputEntry id="Rule_Incomplete_7"><text>-</text></inputEntry>
+        <inputEntry id="Rule_Incomplete_8"><text>-</text></inputEntry>
+        <outputEntry id="Rule_Incomplete_out"><text>"HR_REVIEW"</text></outputEntry>
       </rule>
       <rule id="Rule_LowConfidence">
         <description>Confidence thấp</description>
-        <inputEntry id="Rule_LowConfidence_in_1">
-          <text>false</text>
-        </inputEntry>
-        <inputEntry id="Rule_LowConfidence_in_2">
-          <text>false</text>
-        </inputEntry>
-        <inputEntry id="Rule_LowConfidence_in_3">
-          <text>true</text>
-        </inputEntry>
-        <inputEntry id="Rule_LowConfidence_in_4">
-          <text>&lt; 0.6</text>
-        </inputEntry>
-        <outputEntry id="Rule_LowConfidence_out">
-          <text>"REQUEST_REUPLOAD"</text>
-        </outputEntry>
+        <inputEntry id="Rule_LowConfidence_1"><text>-</text></inputEntry>
+        <inputEntry id="Rule_LowConfidence_2"><text>-</text></inputEntry>
+        <inputEntry id="Rule_LowConfidence_3"><text>false</text></inputEntry>
+        <inputEntry id="Rule_LowConfidence_4"><text>false</text></inputEntry>
+        <inputEntry id="Rule_LowConfidence_5"><text>false</text></inputEntry>
+        <inputEntry id="Rule_LowConfidence_6"><text>true</text></inputEntry>
+        <inputEntry id="Rule_LowConfidence_7"><text>&lt; 0.6</text></inputEntry>
+        <inputEntry id="Rule_LowConfidence_8"><text>-</text></inputEntry>
+        <outputEntry id="Rule_LowConfidence_out"><text>"REQUEST_REUPLOAD"</text></outputEntry>
+      </rule>
+      <rule id="Rule_Auto">
+        <description>Chỉ tự động khi policy rollout được bật rõ ràng</description>
+        <inputEntry id="Rule_Auto_1"><text>"PASS"</text></inputEntry>
+        <inputEntry id="Rule_Auto_2"><text>false</text></inputEntry>
+        <inputEntry id="Rule_Auto_3"><text>false</text></inputEntry>
+        <inputEntry id="Rule_Auto_4"><text>false</text></inputEntry>
+        <inputEntry id="Rule_Auto_5"><text>false</text></inputEntry>
+        <inputEntry id="Rule_Auto_6"><text>true</text></inputEntry>
+        <inputEntry id="Rule_Auto_7"><text>[0.9..1]</text></inputEntry>
+        <inputEntry id="Rule_Auto_8"><text>true</text></inputEntry>
+        <outputEntry id="Rule_Auto_out"><text>"AUTO_CONTINUE"</text></outputEntry>
+      </rule>
+      <rule id="Rule_QualityReview">
+        <description>Quality gate yêu cầu người nộp xác nhận</description>
+        <inputEntry id="Rule_QualityReview_1"><text>"REVIEW_REQUIRED"</text></inputEntry>
+        <inputEntry id="Rule_QualityReview_2"><text>true</text></inputEntry>
+        <inputEntry id="Rule_QualityReview_3"><text>false</text></inputEntry>
+        <inputEntry id="Rule_QualityReview_4"><text>false</text></inputEntry>
+        <inputEntry id="Rule_QualityReview_5"><text>false</text></inputEntry>
+        <inputEntry id="Rule_QualityReview_6"><text>true</text></inputEntry>
+        <inputEntry id="Rule_QualityReview_7"><text>[0.6..1]</text></inputEntry>
+        <inputEntry id="Rule_QualityReview_8"><text>-</text></inputEntry>
+        <outputEntry id="Rule_QualityReview_out"><text>"USER_REVIEW"</text></outputEntry>
+      </rule>
+      <rule id="Rule_ShadowHighConfidence">
+        <description>Shadow mode giữ hồ sơ high-confidence ở User Review</description>
+        <inputEntry id="Rule_ShadowHighConfidence_1"><text>"PASS"</text></inputEntry>
+        <inputEntry id="Rule_ShadowHighConfidence_2"><text>false</text></inputEntry>
+        <inputEntry id="Rule_ShadowHighConfidence_3"><text>false</text></inputEntry>
+        <inputEntry id="Rule_ShadowHighConfidence_4"><text>false</text></inputEntry>
+        <inputEntry id="Rule_ShadowHighConfidence_5"><text>false</text></inputEntry>
+        <inputEntry id="Rule_ShadowHighConfidence_6"><text>true</text></inputEntry>
+        <inputEntry id="Rule_ShadowHighConfidence_7"><text>[0.9..1]</text></inputEntry>
+        <inputEntry id="Rule_ShadowHighConfidence_8"><text>false</text></inputEntry>
+        <outputEntry id="Rule_ShadowHighConfidence_out"><text>"USER_REVIEW"</text></outputEntry>
+      </rule>
+      <rule id="Rule_UserReview">
+        <description>Đủ trường nhưng confidence trung bình</description>
+        <inputEntry id="Rule_UserReview_1"><text>-</text></inputEntry>
+        <inputEntry id="Rule_UserReview_2"><text>-</text></inputEntry>
+        <inputEntry id="Rule_UserReview_3"><text>false</text></inputEntry>
+        <inputEntry id="Rule_UserReview_4"><text>false</text></inputEntry>
+        <inputEntry id="Rule_UserReview_5"><text>false</text></inputEntry>
+        <inputEntry id="Rule_UserReview_6"><text>true</text></inputEntry>
+        <inputEntry id="Rule_UserReview_7"><text>[0.6..0.9[</text></inputEntry>
+        <inputEntry id="Rule_UserReview_8"><text>-</text></inputEntry>
+        <outputEntry id="Rule_UserReview_out"><text>"USER_REVIEW"</text></outputEntry>
       </rule>
     </decisionTable>
   </decision>

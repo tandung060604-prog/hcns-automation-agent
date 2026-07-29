@@ -191,8 +191,16 @@ Package hiện là tài sản thiết kế dành cho review/dry-run, chưa phả
 deploy production. **Liên kết Camunda Modeler/Operate/Tasklist sẽ được cập nhật
 sau khi môi trường tích hợp được công bố.**
 
+M4 shadow scaffolding đã khóa Camunda Platform 7.13, bổ sung External Task REST
+client, handler registry cho chín topic, process-variable whitelist/schema và
+mock HRIS/notification. BPMN hiện đọc native/OCR trước khi phân loại nội dung;
+DMN không thể `AUTO_CONTINUE` khi có trường nhạy cảm cần review và cờ
+`autoContinueEnabled` mặc định là `false`. Stage operation thật, Camunda
+deployment và User Task UI vẫn chờ OCR Phase 14.6 vượt promotion gate.
+
 Xem thêm [thiết kế workflow](docs/WORKFLOWS.md) và
-[Human-in-the-loop](docs/HUMAN_IN_THE_LOOP.md).
+[Human-in-the-loop](docs/HUMAN_IN_THE_LOOP.md). Kế hoạch/điều kiện rollout nằm
+tại [Camunda MVP V2 integration plan](docs/CAMUNDA_MVP_V2_INTEGRATION_PLAN.md).
 
 ## Cài đặt
 
@@ -291,7 +299,7 @@ Dự án hiện ở giai đoạn benchmark có thể kiểm chứng:
 - Benchmark baseline/challenger và promotion gate đã có.
 - Benchmark recognition-only và audit charset tiếng Việt đã có.
 - EasyOCR đã được chọn cho pilot recognition; VietOCR dùng để kiểm chứng.
-- Camunda BPMN/DMN package tham chiếu đã được bổ sung.
+- Camunda 7 shadow contract, BPMN/DMN safety routing và REST worker runtime đã có.
 - Benchmark trên tài liệu thật có quyền sử dụng và triển khai Camunda thực tế
   vẫn đang chờ phê duyệt.
 

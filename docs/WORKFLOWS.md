@@ -52,3 +52,19 @@ DMN cho Camunda Platform 7.13. Đây chưa phải bằng chứng triển khai pr
 endpoint, credentials, deployment ID và liên kết tới môi trường Camunda không
 được lưu trong Git. Liên kết Modeler/Operate/Tasklist sẽ được bổ sung sau khi môi
 trường tích hợp được phê duyệt.
+
+## M4 shadow scaffolding
+
+Adapter `camunda7` dùng External Task REST API và chỉ trao đổi process variables
+thuộc whitelist/schema. Luồng BPMN thực hiện `document_parse_content` trước
+`document_detect_type`, vì business classification cần Canonical Document đã
+được đọc native hoặc OCR. Các stage handler nhận operation qua composition root;
+domain/application không import Camunda.
+
+DMN dùng safety-first routing và cờ `autoContinueEnabled`. Cờ này được process
+khởi tạo bằng `false`; hồ sơ high-confidence vẫn đi User Review cho đến khi OCR
+held-out, privacy và promotion gate được duyệt. HRIS/notification chỉ có mock
+handler trong M4, không tạo side effect thật.
+
+Chi tiết contract, gate và kịch bản dry-run tại
+[`CAMUNDA_MVP_V2_INTEGRATION_PLAN.md`](CAMUNDA_MVP_V2_INTEGRATION_PLAN.md).

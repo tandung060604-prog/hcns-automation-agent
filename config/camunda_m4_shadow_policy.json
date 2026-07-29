@@ -1,0 +1,19 @@
+{
+  "policyId": "camunda-m4-shadow",
+  "version": "1.0.0",
+  "camundaPlatform": "7.13",
+  "mode": "SHADOW",
+  "autoContinueEnabled": false,
+  "realSideEffectsEnabled": false,
+  "ocrEntryGate": {
+    "minimumHeldOutDocuments": 15,
+    "requiresFrozenModelHashes": true,
+    "requiresFrozenCropProfile": true,
+    "requiresFrozenRecognitionPolicy": true,
+    "maximumBaselineCorrectLosses": 0,
+    "allowExactMatchRegression": false,
+    "allowDiacriticErrorRateRegression": false,
+    "maximumSensitiveFieldFalseAcceptances": 0,
+    "allowHeldOutRetuning": false
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/hcns/camunda_process_variables.schema.json",
+  "title": "Sanitized Camunda 7 Process Variables",
+  "type": "object",
+  "properties": {
+    "applicationId": {"$ref": "#/$defs/reference"},
+    "documentReference": {"$ref": "#/$defs/reference"},
+    "declaredDocumentType": {"$ref": "#/$defs/workflowDocumentType"},
+    "confirmedDocumentType": {"$ref": "#/$defs/workflowDocumentType"},
+    "detectedDocumentType": {"type": "string", "minLength": 1, "maxLength": 128},
+    "workflowDocumentType": {"$ref": "#/$defs/workflowDocumentType"},
+    "sourceFormat": {"type": "string", "minLength": 1, "maxLength": 64},
+    "fileValidationStatus": {"enum": ["VALID", "INVALID", "UNKNOWN"]},
+    "classificationStatus": {"enum": ["CONFIRMED", "MISMATCH", "UNKNOWN", "INVALID"]},
+    "classificationConfidence": {"$ref": "#/$defs/confidence"},
+    "parseStatus": {"enum": ["SUCCESS", "PARTIAL", "CONVERSION_REQUIRED", "REJECTED", "FAILED"]},
+    "qualityStatus": {"enum": ["PASS", "REVIEW_REQUIRED", "REJECTED"]},
+    "reviewRequired": {"type": "boolean"},
+    "sensitiveFieldNeedsReview": {"type": "boolean"},
+    "missingCriticalField": {"type": "boolean"},
+    "businessInconsistency": {"type": "boolean"},
+    "requiredFieldsComplete": {"type": "boolean"},
+    "overallConfidence": {"$ref": "#/$defs/confidence"},
+    "resultReference": {"$ref": "#/$defs/reference"},
+    "schemaVersion": {"type": "string", "minLength": 1, "maxLength": 64},
+    "errorCode": {"type": "string", "minLength": 1, "maxLength": 128},
+    "idempotencyKey": {"$ref": "#/$defs/reference"},
+    "documentTypeDecision": {"enum": ["CONFIRMED", "REQUEST_REUPLOAD"]},
+    "userReviewDecision": {"enum": ["CONFIRMED", "CORRECTED", "REQUEST_REUPLOAD", "UNRESOLVED"]},
+    "correctionsReference": {"$ref": "#/$defs/reference"},
+    "hrReviewDecision": {"enum": ["CONFIRMED", "CORRECTED", "REQUEST_REUPLOAD", "REJECTED"]},
+    "hrReviewNoteReference": {"$ref": "#/$defs/reference"},
+    "reuploadCount": {"type": "integer", "minimum": 0},
+    "maxReuploadAttempts": {"type": "integer", "minimum": 1},
+    "finalHrDecision": {"enum": ["APPROVED", "REJECTED"]},
+    "finalHrNoteReference": {"$ref": "#/$defs/reference"},
+    "recommendedAction": {"enum": ["AUTO_CONTINUE", "USER_REVIEW", "HR_REVIEW", "REQUEST_REUPLOAD"]},
+    "autoContinueEnabled": {"type": "boolean"},
+    "hrisUpdateStatus": {"enum": ["SIMULATED", "COMPLETED", "FAILED"]},
+    "notificationStatus": {"enum": ["SIMULATED", "COMPLETED", "FAILED"]},
+    "processingOutcome": {"enum": ["APPROVED", "REJECTED"]}
+  },
+  "$defs": {
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "reference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "workflowDocumentType": {
+      "enum": [
+        "IDENTITY_DOCUMENT",
+        "EMPLOYEE_INFORMATION_FORM",
+        "CV",
+        "DEGREE",
+        "CERTIFICATE",
+        "EMPLOYMENT_CONTRACT",
+        "HR_DECISION",
+        "LEAVE_REQUEST",
+        "HANDOVER_RECORD",
+        "TIMESHEET",
+        "OTHER_HR_DOCUMENT"
+      ]
+    }
+  },
+  "additionalProperties": false
+}
