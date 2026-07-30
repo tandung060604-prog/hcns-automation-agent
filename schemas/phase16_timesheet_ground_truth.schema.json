@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hcns:ground-truth:phase16:timesheet:1.0.0",
+  "title": "Phase 16 Timesheet Ground Truth",
+  "type": "object",
+  "required": [
+    "documentType",
+    "reviewProfile",
+    "fields",
+    "tables"
+  ],
+  "properties": {
+    "documentType": {
+      "const": "TIMESHEET"
+    },
+    "reviewProfile": {
+      "const": "TIMESHEET"
+    },
+    "fields": {
+      "type": "object",
+      "required": [
+        "documentTitle",
+        "timesheetPeriod",
+        "organization",
+        "department",
+        "attendanceLegend"
+      ],
+      "additionalProperties": false
+    },
+    "tables": {
+      "type": "object",
+      "required": [
+        "attendance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "attendance": {
+          "type": "object",
+          "required": [
+            "status",
+            "rows"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "PENDING_REVIEW",
+                "CONFIRMED"
+              ]
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "values"
+                ],
+                "properties": {
+                  "values": {
+                    "type": "array",
+                    "minItems": 4,
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}

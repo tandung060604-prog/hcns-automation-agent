@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "phase17-parser-lock/1.0.0",
+  "frozenAt": "2026-07-29",
+  "parserVersion": "phase17-structured-hr-parser/2.0.0",
+  "protocolVersion": "phase17-real-five-family-heldout/2.0.0",
+  "mode": "SHADOW_REVIEW_ONLY",
+  "automaticFallbackEnabled": false,
+  "sensitiveOcrAutoAccept": false,
+  "timesheetContract": {
+    "documentType": "TIMESHEET",
+    "schema": "schemas/hr_document_families/timesheet.schema.json",
+    "predictionTablesRequired": true,
+    "primaryTableMetrics": [
+      "tableExactRowRate",
+      "tableExactCellRate",
+      "tableCompleteness"
+    ]
+  },
+  "heldOutProtocol": {
+    "minimumDocumentCount": 15,
+    "authorizedLocalDocumentsOnly": true,
+    "predictionsMustBeHiddenBeforeGroundTruth": true,
+    "singleFinalEvaluation": true,
+    "thresholdRetuningAllowed": false,
+    "consumedPhase16MayNotBeReused": true
+  },
+  "artifacts": [
+    {
+      "path": "apps/ocr_lab/api/phase12_idp.py",
+      "sha256": "4fdfc7fb60c24836cd2ef2a05c4a10bb7055cb9629c1c3ef68a2635b73ace875"
+    },
+    {
+      "path": "apps/ocr_lab/api/phase15_idp.py",
+      "sha256": "bd8c9353516a3064b77c187a1b343590fcaaa17bc7c381b34140027593ef0c0e"
+    },
+    {
+      "path": "scripts/phase16_hidden_predictions.py",
+      "sha256": "a4217f99bc1924c2dde42c3aeaa2390df93674fbdef0372354c7322f253bfb7d"
+    },
+    {
+      "path": "src/hcns_agent/application/phase16_heldout.py",
+      "sha256": "16db70b9607048093cad90fec59fa578ed44791c5e2f20bcda8518f50f19ead6"
+    },
+    {
+      "path": "schemas/hr_document_families/timesheet.schema.json",
+      "sha256": "acb6985262ff7c26f88210ec7d689913c99ff99c36f48055170b8c72dc99d34d"
+    },
+    {
+      "path": "schemas/phase16_timesheet_ground_truth.schema.json",
+      "sha256": "15aed27055311912adfb47235474a579a09d98c3d7e90beb5bde8de816ed647a"
+    },
+    {
+      "path": "config/phase14_8_recognition_policy.json",
+      "sha256": "2c26b316416217c9fbd1fa3b7380e2dd65be0d85914f181c24147ee6c1c376c0"
+    }
+  ]
+}

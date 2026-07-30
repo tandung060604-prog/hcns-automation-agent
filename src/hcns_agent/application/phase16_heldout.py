@@ -19,8 +19,8 @@ from hcns_agent.application.ocr_metrics import (
     normalize_for_evaluation,
 )
 
-PROTOCOL_VERSION = "phase16-real-five-family-heldout/1.0.0"
-PARSER_VERSION = "phase16-structured-hr-parser/1.0.0"
+PROTOCOL_VERSION = "phase17-real-five-family-heldout/2.0.0"
+PARSER_VERSION = "phase17-structured-hr-parser/2.0.0"
 LOCKED_POLICY_DIGEST = (
     "sha256:5dfd0186cacbe29a299c79d774aa4e2575f67a4675d6db15035762ed9b363fb6"
 )
@@ -94,6 +94,15 @@ FAMILY_SPECS: dict[str, dict[str, Any]] = {
         ),
     },
 }
+
+TIMESHEET_REVIEW_PROFILE = "TIMESHEET"
+TIMESHEET_FIELDS = (
+    "documentTitle",
+    "timesheetPeriod",
+    "organization",
+    "department",
+    "attendanceLegend",
+)
 
 SUPPORTED_EXTENSIONS = frozenset({".pdf", ".png", ".jpg", ".jpeg", ".docx", ".xlsx"})
 SENSITIVE_FIELDS = frozenset(
@@ -177,8 +186,8 @@ def contains_ground_truth(value: Any) -> bool:
 
 def authorization_template() -> dict[str, Any]:
     return {
-        "schemaVersion": "phase16-heldout-authorization/1.0.0",
-        "datasetId": "phase16-real-five-family-heldout-v1",
+        "schemaVersion": "phase17-heldout-authorization/2.0.0",
+        "datasetId": "phase17-real-five-family-heldout-v2",
         "containsRealPII": True,
         "authorizedLocalDocumentsOnly": True,
         "processingRightsConfirmed": False,
@@ -301,7 +310,7 @@ def prepare_manifest(
         code = "".join(part[0] for part in family.split("_"))
         documents.append(
             {
-                "documentId": f"H16-{code}-{family_indexes[family]:03d}",
+                "documentId": f"H17-{code}-{family_indexes[family]:03d}",
                 **source,
             }
         )
@@ -331,6 +340,7 @@ def prepare_manifest(
         "predictionsVisibleDuringGroundTruthReview": False,
         "recognitionPolicyDigest": LOCKED_POLICY_DIGEST,
         "parserVersion": PARSER_VERSION,
+        "parserLockId": "phase17-parser-lock/1.0.0",
         "metricSpecVersion": METRIC_SPEC_VERSION,
         "documentCount": len(documents),
         "countsByFamily": dict(audit["countsByFamily"]),
@@ -353,7 +363,7 @@ def prepare_manifest(
             }
         )
     review_queue = {
-        "schemaVersion": "phase16-heldout-ground-truth-queue/1.0.0",
+        "schemaVersion": "phase17-heldout-ground-truth-queue/2.0.0",
         "datasetId": manifest["datasetId"],
         "datasetDigest": manifest["datasetDigest"],
         "createdAt": utc_now(),
@@ -385,9 +395,27 @@ def validate_review_queue(queue: Mapping[str, Any]) -> None:
             raise ValueError("Ground Truth queue contains an unsupported family")
         document_ids.add(document_id)
         fields = document.get("fields")
-        expected = set(FAMILY_SPECS[family]["fields"])
+        review_profile = str(document.get("reviewProfile") or "")
+        expected = set(
+            TIMESHEET_FIELDS
+            if review_profile == TIMESHEET_REVIEW_PROFILE
+            else FAMILY_SPECS[family]["fields"]
+        )
         if not isinstance(fields, dict) or set(fields) != expected:
             raise ValueError("Ground Truth field set does not match the family")
+        tables = document.get("tables")
+        if review_profile == TIMESHEET_REVIEW_PROFILE:
+            if family != "EMPLOYEE_FORM_TABLE":
+                raise ValueError("TIMESHEET review profile uses the wrong family")
+            if (
+                not isinstance(tables, dict)
+                or set(tables) != {"attendance"}
+                or not isinstance(tables["attendance"], dict)
+                or not isinstance(tables["attendance"].get("rows"), list)
+            ):
+                raise ValueError("TIMESHEET Ground Truth table is invalid")
+        elif tables is not None:
+            raise ValueError("Unexpected Ground Truth table")
 
 
 def confirmed_ground_truth(queue: Mapping[str, Any]) -> dict[str, Any]:
@@ -406,16 +434,31 @@ def confirmed_ground_truth(queue: Mapping[str, Any]) -> dict[str, Any]:
                 "status": status,
                 "value": value if status == CONFIRMED else "",
             }
+        if document.get("reviewProfile") == TIMESHEET_REVIEW_PROFILE:
+            attendance = document["tables"]["attendance"]
+            if attendance.get("status") != CONFIRMED or not attendance.get("rows"):
+                raise ValueError(
+                    "TIMESHEET Ground Truth table must be confirmed"
+                )
         documents.append(
             {
                 "documentId": document["documentId"],
                 "documentFamily": document["documentFamily"],
+                **(
+                    {
+                        "documentType": "TIMESHEET",
+                        "reviewProfile": TIMESHEET_REVIEW_PROFILE,
+                        "tables": document["tables"],
+                    }
+                    if document.get("reviewProfile") == TIMESHEET_REVIEW_PROFILE
+                    else {}
+                ),
                 "sourceSha256": document["sourceSha256"],
                 "fields": confirmed_fields,
             }
         )
     return {
-        "schemaVersion": "phase16-heldout-ground-truth/1.0.0",
+        "schemaVersion": "phase17-heldout-ground-truth/2.0.0",
         "datasetId": queue["datasetId"],
         "datasetDigest": queue["datasetDigest"],
         "confirmedAt": utc_now(),
@@ -450,7 +493,7 @@ def seal_predictions(
     if predicted_ids != expected_ids:
         raise ValueError("Prediction document IDs do not match the manifest")
     return {
-        "schemaVersion": "phase16-heldout-sealed-predictions/1.0.0",
+        "schemaVersion": "phase17-heldout-sealed-predictions/2.0.0",
         "sealedAt": utc_now(),
         "containsRealPII": True,
         "predictionsHiddenDuringReview": True,
@@ -493,6 +536,16 @@ def evaluate_once(
     families: dict[str, list[tuple[str, str, str, str]]] = {
         family: [] for family in FAMILY_SPECS
     }
+    table_counts_by_family = {
+        family: {
+            "expectedRows": 0,
+            "exactRows": 0,
+            "expectedCells": 0,
+            "exactCells": 0,
+            "presentCells": 0,
+        }
+        for family in FAMILY_SPECS
+    }
     classification_counts = {
         family: {"documents": 0, "correct": 0} for family in FAMILY_SPECS
     }
@@ -524,13 +577,24 @@ def evaluate_once(
                 != normalize_for_evaluation(value)
             ):
                 sensitive_false_acceptance += 1
+        expected_tables = expected_document.get("tables") or {}
+        if expected_tables:
+            predicted_tables = predicted_document.get("tables") or []
+            _accumulate_table_counts(
+                table_counts_by_family[family],
+                expected_tables,
+                predicted_tables,
+            )
 
     by_family = {
-        family: _family_metrics(
-            pairs,
-            classification_counts[family]["documents"],
-            classification_counts[family]["correct"],
-        )
+        family: {
+            **_family_metrics(
+                pairs,
+                classification_counts[family]["documents"],
+                classification_counts[family]["correct"],
+            ),
+            **_table_metrics(table_counts_by_family[family]),
+        }
         for family, pairs in families.items()
     }
     all_pairs = [item for pairs in families.values() for item in pairs]
@@ -540,7 +604,27 @@ def evaluate_once(
     total_correct = sum(
         value["correct"] for value in classification_counts.values()
     )
-    overall = _family_metrics(all_pairs, total_documents, total_correct)
+    overall_table_counts = {
+        name: sum(counts[name] for counts in table_counts_by_family.values())
+        for name in (
+            "expectedRows",
+            "exactRows",
+            "expectedCells",
+            "exactCells",
+            "presentCells",
+        )
+    }
+    overall = {
+        **_family_metrics(all_pairs, total_documents, total_correct),
+        **_table_metrics(overall_table_counts),
+    }
+    table_gate_passed = (
+        overall["expectedTableCellCount"] == 0
+        or (
+            overall["tableExactCellRate"] >= 0.90
+            and overall["tableCompleteness"] >= 0.95
+        )
+    )
     promotion_eligible = (
         sensitive_false_acceptance == 0
         and overall["classificationAccuracy"] == 1.0
@@ -548,9 +632,10 @@ def evaluate_once(
         and overall["fieldCompleteness"] >= 0.95
         and overall["cer"] <= 0.05
         and overall["der"] <= 0.02
+        and table_gate_passed
     )
     return {
-        "schemaVersion": "phase16-heldout-evaluation/1.0.0",
+        "schemaVersion": "phase17-heldout-evaluation/2.0.0",
         "evaluatedAt": utc_now(),
         "containsRealPII": False,
         "evaluationRunCount": 1,
@@ -597,4 +682,69 @@ def _family_metrics(
         "cer": metrics.character_error_rate,
         "wer": metrics.word_error_rate,
         "der": metrics.diacritic_error_rate,
+    }
+
+
+def _normalized_table_row(row: Any) -> list[str]:
+    values = row.get("values", []) if isinstance(row, Mapping) else row
+    if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
+        return []
+    return [normalize_for_evaluation(str(value or "")) for value in values]
+
+
+def _accumulate_table_counts(
+    counts: dict[str, int],
+    expected_tables: Mapping[str, Any],
+    predicted_tables: Any,
+) -> None:
+    expected = expected_tables.get("attendance") or {}
+    expected_rows = expected.get("rows") or []
+    predicted_rows = [
+        _normalized_table_row(row)
+        for table in (predicted_tables if isinstance(predicted_tables, list) else [])
+        for row in (table.get("rows", []) if isinstance(table, Mapping) else [])
+    ]
+    predicted_by_key = {
+        row[0]: row for row in predicted_rows if row and row[0]
+    }
+    for expected_row_value in expected_rows:
+        expected_row = _normalized_table_row(expected_row_value)
+        if not expected_row:
+            continue
+        predicted_row = predicted_by_key.get(expected_row[0], [])
+        counts["expectedRows"] += 1
+        counts["expectedCells"] += len(expected_row)
+        counts["presentCells"] += sum(
+            index < len(predicted_row) and bool(predicted_row[index])
+            for index in range(len(expected_row))
+        )
+        exact_cells = sum(
+            index < len(predicted_row)
+            and predicted_row[index] == expected_value
+            for index, expected_value in enumerate(expected_row)
+        )
+        counts["exactCells"] += exact_cells
+        counts["exactRows"] += int(exact_cells == len(expected_row))
+
+
+def _table_metrics(counts: Mapping[str, int]) -> dict[str, Any]:
+    expected_rows = int(counts["expectedRows"])
+    expected_cells = int(counts["expectedCells"])
+    return {
+        "expectedTableRowCount": expected_rows,
+        "exactTableRowCount": int(counts["exactRows"]),
+        "tableExactRowRate": round(
+            int(counts["exactRows"]) / max(1, expected_rows),
+            6,
+        ),
+        "expectedTableCellCount": expected_cells,
+        "exactTableCellCount": int(counts["exactCells"]),
+        "tableExactCellRate": round(
+            int(counts["exactCells"]) / max(1, expected_cells),
+            6,
+        ),
+        "tableCompleteness": round(
+            int(counts["presentCells"]) / max(1, expected_cells),
+            6,
+        ),
     }

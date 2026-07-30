@@ -11,6 +11,7 @@ import ipaddress
 import json
 import mimetypes
 import threading
+import unicodedata
 import urllib.parse
 import uuid
 from datetime import datetime, timezone
@@ -22,6 +23,8 @@ from hcns_agent.application.phase16_heldout import (
     CONFIRMED,
     PENDING,
     SKIPPED,
+    TIMESHEET_FIELDS,
+    TIMESHEET_REVIEW_PROFILE,
     validate_review_queue,
 )
 
@@ -47,9 +50,13 @@ main{max-width:1500px;margin:auto;padding:20px}.toolbar,.panel{background:#fff;b
 .native a{display:inline-block;margin-top:12px;color:#126044;font-weight:700}
 .field{display:grid;grid-template-columns:160px 1fr auto;gap:10px;align-items:center;margin:9px 0}
 .field label{font-size:13px;font-weight:700}.field input[type=text]{width:100%;padding:10px;border:1px solid #bdcbc4;border-radius:8px}
+.table-editor{margin-top:16px;padding-top:14px;border-top:1px solid #d9e1dc}.table-editor textarea{width:100%;min-height:230px;padding:10px;border:1px solid #bdcbc4;border-radius:8px;font:12px Consolas,monospace;white-space:pre}
+.table-help{font-size:12px;color:#65736d;line-height:1.5;margin:7px 0}
 .skip{font-size:12px;white-space:nowrap}.save{width:100%;margin-top:14px;background:#17644d;color:#fff;font-size:16px}
+.guide{margin:12px 0;padding:12px;border-left:4px solid #b77a16;background:#fff7e8;color:#66440d;font-size:13px;line-height:1.5}
+.results{margin-top:16px}.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}.metric{padding:12px;border:1px solid #d9e1dc;border-radius:9px}.metric b{display:block;font-size:20px;margin-top:5px}.decision{color:#9b2f2f}
 #message{min-height:24px;padding-top:9px;color:#9b2f2f}.done{color:#17644d!important}
-@media(max-width:900px){.grid{grid-template-columns:1fr}#preview,.native{height:55vh}.field{grid-template-columns:1fr}.badge{margin-left:0}}
+@media(max-width:900px){.grid{grid-template-columns:1fr}#preview,.native{height:55vh}.field{grid-template-columns:1fr}.badge{margin-left:0}.metric-grid{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
@@ -58,21 +65,29 @@ main{max-width:1500px;margin:auto;padding:20px}.toolbar,.panel{background:#fff;b
   <div class="toolbar"><button id="prev">← Trước</button><button id="next">Sau →</button><span id="position"></span><span class="badge" id="progress"></span></div>
   <div class="grid">
     <section class="panel"><div class="meta"><div><strong id="docId"></strong><div class="muted" id="family"></div></div><div class="muted" id="sourceName"></div></div><div id="viewer"></div></section>
-    <section class="panel"><h2>Ground Truth theo trường</h2><div class="muted">Chỉ nhập giá trị nhìn thấy trực tiếp. Chọn “Không có” nếu tài liệu không chứa trường đó.</div><div id="fields"></div><button class="save" id="save">Xác nhận tài liệu và chuyển tiếp</button><div id="message"></div></section>
+    <section class="panel"><h2>Ground Truth theo trường</h2><div class="muted">Chỉ nhập giá trị nhìn thấy trực tiếp; không suy luận từ ngữ cảnh. Chọn “Không có” nếu tài liệu không chứa trường đó.</div><div class="guide" id="guide"></div><div id="fields"></div><button class="save" id="save">Xác nhận tài liệu và chuyển tiếp</button><div id="message"></div></section>
   </div>
+  <section class="panel results" id="resultsPanel" hidden><h2>Kết quả held-out Phase 16</h2><div class="muted">Báo cáo aggregate sau khi Ground Truth 18/18 được khóa; không hiển thị raw prediction hoặc PII.</div><div class="metric-grid" id="resultMetrics"></div></section>
 </main>
 <script>
-const labels={fullName:'Họ và tên',headline:'Tiêu đề nghề nghiệp',email:'Email',phoneNumber:'Số điện thoại',address:'Địa chỉ',documentTitle:'Tên tài liệu',requestNumber:'Số đơn',employeeName:'Tên nhân viên',employeeId:'Mã nhân viên',department:'Phòng ban',jobTitle:'Chức danh',reason:'Lý do',startDate:'Ngày bắt đầu',endDate:'Ngày kết thúc',documentNumber:'Số văn bản',action:'Nội dung quyết định',salary:'Mức lương',effectiveDate:'Ngày hiệu lực',credentialName:'Tên bằng/chứng chỉ',major:'Chuyên ngành',institution:'Đơn vị cấp',issueDate:'Ngày cấp',graduationYear:'Năm tốt nghiệp',classification:'Xếp loại',tableTitle:'Tên bảng',period:'Kỳ dữ liệu',rowCount:'Số dòng',columnCount:'Số cột'};
+const labels={fullName:'Họ và tên',headline:'Tiêu đề nghề nghiệp',email:'Email',phoneNumber:'Số điện thoại',address:'Địa chỉ',documentTitle:'Tên tài liệu',requestNumber:'Số đơn',employeeName:'Tên nhân viên',employeeId:'Mã nhân viên',department:'Phòng ban',jobTitle:'Chức danh/vị trí công việc',reason:'Lý do',startDate:'Ngày bắt đầu',endDate:'Ngày kết thúc',documentNumber:'Số văn bản',action:'Loại/Nội dung văn bản',salary:'Mức lương',effectiveDate:'Ngày hiệu lực',credentialName:'Tên bằng/chứng chỉ',major:'Chuyên ngành',institution:'Đơn vị cấp',issueDate:'Ngày cấp',graduationYear:'Năm tốt nghiệp',classification:'Xếp loại',tableTitle:'Tên bảng',period:'Kỳ dữ liệu',rowCount:'Số dòng',columnCount:'Số cột',timesheetPeriod:'Kỳ chấm công',organization:'Tổ chức/Công ty',attendanceLegend:'Ký hiệu chấm công'};
+const familyGuides={CONTRACT_DECISION:'Với hợp đồng, “Loại/Nội dung văn bản” là tiêu đề hoặc loại hợp đồng nhìn thấy trực tiếp. Chỉ nhập chức danh khi tài liệu nêu rõ vị trí/chức vụ làm việc; trình độ học vấn hoặc chuyên môn không phải chức danh. Ngày ở phần đầu văn bản không tự động là ngày bắt đầu hay ngày hiệu lực.',TIMESHEET:'Đây là bảng chấm công nhiều nhân viên. Không lấy một nhân viên để điền vào form hồ sơ đơn. Điền thông tin cấp tài liệu, sau đó dán vùng dữ liệu nhân viên từ Excel vào bảng bên dưới.'};
 let state={documents:[]},index=0,current=null;
 const $=id=>document.getElementById(id);
 async function json(url,options){const r=await fetch(url,options);const v=await r.json();if(!r.ok)throw new Error(v.error||'Lỗi máy chủ');return v}
-async function loadState(){state=await json('/api/state');const pending=state.documents.findIndex(d=>d.status!=='CONFIRMED');index=pending<0?0:pending;await load()}
-async function load(){if(!state.documents.length)return;current=await json('/api/document?id='+encodeURIComponent(state.documents[index].documentId));$('docId').textContent=current.documentId;$('family').textContent=current.documentFamily;$('sourceName').textContent=current.sourceName;$('position').textContent=`${index+1}/${state.documents.length}`;$('progress').textContent=`${state.confirmed}/${state.total} đã xác nhận`;
+async function loadState(){state=await json('/api/state');const pending=state.documents.findIndex(d=>d.status!=='CONFIRMED');index=pending<0?0:pending;await load();await loadResults()}
+async function loadResults(){try{const result=await json('/api/results'),overall=result.overall||{},items=[['Quyết định',result.decision?.controlledPilot||'—','decision'],['Phân loại',percent(overall.classificationAccuracy),''],['Field Exact Match',percent(overall.fieldExactMatchRate),''],['Field Completeness',percent(overall.fieldCompleteness),''],['Table Cell Exact',percent(overall.tableExactCellRate),''],['Table Completeness',percent(overall.tableCompleteness),''],['CER',percent(overall.cer),''],['Sensitive false acceptance',String(result.sensitiveFieldFalseAcceptanceCount??'—'),'decision']];$('resultMetrics').innerHTML=items.map(([label,value,cls])=>`<div class="metric"><span class="muted">${label}</span><b class="${cls}">${value}</b></div>`).join('');$('resultsPanel').hidden=false}catch(e){$('resultsPanel').hidden=true}}
+function percent(value){return typeof value==='number'?`${(value*100).toFixed(2)}%`:'—'}
+async function load(){if(!state.documents.length)return;current=await json('/api/document?id='+encodeURIComponent(state.documents[index].documentId));$('docId').textContent=current.documentId;$('family').textContent=current.reviewProfile||current.documentFamily;$('sourceName').textContent=current.sourceName;$('position').textContent=`${index+1}/${state.documents.length}`;$('progress').textContent=`${state.confirmed}/${state.total} đã xác nhận`;$('guide').textContent=familyGuides[current.reviewProfile]||familyGuides[current.documentFamily]||'Chỉ nhập dữ liệu có bằng chứng trực tiếp trong tài liệu; trường không xuất hiện phải chọn “Không có”.';
  const ext=current.sourceExtension.toLowerCase(),url='/source?id='+encodeURIComponent(current.documentId),viewer=$('viewer');viewer.innerHTML='';
  if(['.jpg','.jpeg','.png','.pdf'].includes(ext)){const el=document.createElement(ext==='.pdf'?'iframe':'img');el.id='preview';el.src=url;el.alt='Tài liệu nguồn';viewer.appendChild(el)}
  else{viewer.innerHTML=`<div class="native"><div><b>Định dạng ${ext.slice(1).toUpperCase()}</b><p>Mở file gốc bằng ứng dụng local để đối chiếu.</p><a href="${url}">Mở / tải tài liệu nguồn</a></div></div>`}
- const fields=$('fields');fields.innerHTML='';Object.entries(current.fields).forEach(([name,field])=>{const row=document.createElement('div');row.className='field';row.innerHTML=`<label>${labels[name]||name}</label><input type="text" data-name="${name}"><label class="skip"><input type="checkbox" data-skip="${name}"> Không có</label>`;const input=row.querySelector('input[type=text]'),skip=row.querySelector('input[type=checkbox]');input.value=field.value||'';skip.checked=field.status==='SKIPPED';input.disabled=skip.checked;skip.onchange=()=>{input.disabled=skip.checked;if(skip.checked)input.value=''};fields.appendChild(row)});$('message').textContent='';$('message').className=''}
-async function save(){try{const fields={},skipped=[];document.querySelectorAll('[data-name]').forEach(el=>fields[el.dataset.name]=el.value);document.querySelectorAll('[data-skip]:checked').forEach(el=>skipped.push(el.dataset.skip));await json('/api/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({documentId:current.documentId,fields,skipped})});$('message').textContent='Đã lưu cục bộ';$('message').className='done';await loadState()}catch(e){$('message').textContent=e.message}}
+ const fields=$('fields');fields.innerHTML='';Object.entries(current.fields).forEach(([name,field])=>{const row=document.createElement('div');row.className='field';row.innerHTML=`<label>${labels[name]||name}</label><input type="text" data-name="${name}"><label class="skip"><input type="checkbox" data-skip="${name}"> Không có</label>`;const input=row.querySelector('input[type=text]'),skip=row.querySelector('input[type=checkbox]');input.value=field.value||'';skip.checked=field.status==='SKIPPED';input.disabled=skip.checked;skip.onchange=()=>{input.disabled=skip.checked;if(skip.checked)input.value=''};fields.appendChild(row)});
+ if(current.reviewProfile==='TIMESHEET'){const editor=document.createElement('div');editor.className='table-editor';const rows=(current.tables?.attendance?.rows||[]).map(row=>(row.values||row).join('\\t')).join('\\n');const help=current.sourceExtension.toLowerCase()==='.xlsx'?'Trong Excel, chọn vùng bắt đầu từ <b>Mã NV</b>, gồm Họ tên, Chức vụ/Bộ phận và toàn bộ cột ngày; không gồm TT, dòng tổng hoặc bảng ký hiệu. Nhấn Ctrl+C rồi dán vào đây.':'Đối chiếu trực tiếp với ảnh. Nhập mỗi nhân viên trên một dòng theo thứ tự <b>Mã NV → Họ tên → Chức vụ/Bộ phận → ngày 1…n → tổng công</b>; các cột cách nhau bằng phím Tab. Không nhập cột TT, dòng Tổng số hoặc chữ ký.';editor.innerHTML=`<b>Bảng nhân viên và chấm công</b><div class="table-help">${help}</div><textarea id="attendanceRows" placeholder="NV001[TAB]Nguyễn Văn Mẫu[TAB]Chức vụ / Bộ phận[TAB]X[TAB]..."></textarea><div class="table-help" id="tableSummary"></div>`;fields.appendChild(editor);$('attendanceRows').value=rows;$('attendanceRows').oninput=updateTableSummary;updateTableSummary()}
+ $('message').textContent='';$('message').className=''}
+function attendanceRows(){const area=$('attendanceRows');if(!area)return[];return area.value.trim().split(/\\r?\\n/).filter(Boolean).map(line=>line.split('\\t').map(value=>value.trim()))}
+function updateTableSummary(){const rows=attendanceRows(),widths=[...new Set(rows.map(row=>row.length))];$('tableSummary').textContent=!rows.length?'Chưa có dòng dữ liệu.':widths.length===1?`${rows.length} nhân viên · ${widths[0]} cột mỗi dòng`:'Các dòng đang có số cột không đồng nhất.'}
+async function save(){try{const fields={},skipped=[];document.querySelectorAll('[data-name]').forEach(el=>fields[el.dataset.name]=el.value);document.querySelectorAll('[data-skip]:checked').forEach(el=>skipped.push(el.dataset.skip));const payload={documentId:current.documentId,fields,skipped};if(current.reviewProfile==='TIMESHEET')payload.tableRows=attendanceRows();await json('/api/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});$('message').textContent='Đã lưu cục bộ';$('message').className='done';await loadState()}catch(e){$('message').textContent=e.message}}
 $('prev').onclick=()=>{index=(index-1+state.documents.length)%state.documents.length;load()};$('next').onclick=()=>{index=(index+1)%state.documents.length;load()};$('save').onclick=save;loadState().catch(e=>$('message').textContent=e.message);
 </script>
 </body></html>"""
@@ -101,6 +116,7 @@ class ReviewStore:
         self.status_path = (
             self.root / "predictions" / "HIDDEN_PREDICTIONS_STATUS.json"
         )
+        self.report_path = self.root / "reports" / "PHASE16_HELDOUT_RESULTS.json"
         self._lock = threading.Lock()
         self.verify()
 
@@ -113,6 +129,8 @@ class ReviewStore:
 
     def verify(self) -> None:
         queue = self.read_json(self.queue_path)
+        if self.upgrade_timesheet_review(queue):
+            atomic_write_json(self.queue_path, queue)
         validate_review_queue(queue)
         status = self.read_json(self.status_path)
         if status.get("status") != "BLINDED_PREDICTIONS_READY":
@@ -121,6 +139,48 @@ class ReviewStore:
             raise ValueError("Predictions are not marked hidden")
         if status.get("datasetDigest") != queue.get("datasetDigest"):
             raise ValueError("Ground Truth queue and predictions do not match")
+
+    @staticmethod
+    def upgrade_timesheet_review(queue: dict[str, Any]) -> bool:
+        """Migrate only pending native timesheets from the legacy scalar form."""
+        changed = False
+        for document in queue.get("documents", []):
+            source_path = str(document.get("sourcePath") or "")
+            folded_name = "".join(
+                character
+                for character in unicodedata.normalize("NFKD", source_path)
+                if not unicodedata.combining(character)
+            ).casefold()
+            normalized_name = folded_name.replace("-", "_").replace(" ", "_")
+            is_timesheet = (
+                document.get("documentFamily") == "EMPLOYEE_FORM_TABLE"
+                and "cham_cong" in normalized_name
+                and Path(source_path).suffix.casefold()
+                in {".xlsx", ".pdf", ".png", ".jpg", ".jpeg"}
+            )
+            if (
+                not is_timesheet
+                or document.get("reviewProfile") == TIMESHEET_REVIEW_PROFILE
+            ):
+                continue
+            if document.get("status") == CONFIRMED:
+                raise ValueError(
+                    "A confirmed legacy timesheet requires explicit migration"
+                )
+            document["documentType"] = "TIMESHEET"
+            document["reviewProfile"] = TIMESHEET_REVIEW_PROFILE
+            document["fields"] = {
+                name: {"status": PENDING, "value": ""}
+                for name in TIMESHEET_FIELDS
+            }
+            document["tables"] = {
+                "attendance": {
+                    "status": PENDING,
+                    "rows": [],
+                }
+            }
+            changed = True
+        return changed
 
     def state(self) -> dict[str, Any]:
         with self._lock:
@@ -143,6 +203,25 @@ class ReviewStore:
                 "documents": documents,
             }
 
+    def results(self) -> dict[str, Any]:
+        with self._lock:
+            report = self.read_json(self.report_path)
+            if report.get("containsRealPII") is not False:
+                raise ValueError("Phase 16 report is not aggregate-only")
+            allowed = {
+                "schemaVersion",
+                "evaluatedAt",
+                "documentCount",
+                "overall",
+                "byFamily",
+                "sensitiveFieldFalseAcceptanceCount",
+                "decision",
+                "evaluationRunCount",
+                "thresholdRetuned",
+                "predictionsWereHidden",
+            }
+            return {key: report[key] for key in allowed if key in report}
+
     def document(self, document_id: str) -> dict[str, Any]:
         with self._lock:
             queue = self.read_json(self.queue_path)
@@ -160,10 +239,13 @@ class ReviewStore:
             return {
                 "documentId": document["documentId"],
                 "documentFamily": document["documentFamily"],
+                "documentType": document.get("documentType"),
+                "reviewProfile": document.get("reviewProfile"),
                 "status": document["status"],
                 "sourceName": source.name,
                 "sourceExtension": source.suffix,
                 "fields": document["fields"],
+                "tables": document.get("tables"),
                 "predictionsVisibleDuringReview": False,
             }
 
@@ -203,6 +285,38 @@ class ReviewStore:
                     raise ValueError(
                         f"Field {name} requires a value or 'Không có'"
                     )
+            if document.get("reviewProfile") == TIMESHEET_REVIEW_PROFILE:
+                rows = payload.get("tableRows")
+                if not isinstance(rows, list) or not rows:
+                    raise ValueError(
+                        "Bảng chấm công cần ít nhất một dòng nhân viên"
+                    )
+                normalized_rows: list[dict[str, list[str]]] = []
+                expected_width: int | None = None
+                for row in rows:
+                    if (
+                        not isinstance(row, list)
+                        or len(row) < 4
+                        or any(not isinstance(value, str) for value in row)
+                    ):
+                        raise ValueError(
+                            "Mỗi dòng chấm công cần Mã NV, Họ tên, "
+                            "Chức vụ/Bộ phận và ít nhất một cột ngày"
+                        )
+                    values_row = [value.strip() for value in row]
+                    if not values_row[0] or not values_row[1]:
+                        raise ValueError("Mã NV và Họ tên không được để trống")
+                    if expected_width is None:
+                        expected_width = len(values_row)
+                    elif len(values_row) != expected_width:
+                        raise ValueError(
+                            "Các dòng chấm công phải có cùng số cột"
+                        )
+                    normalized_rows.append({"values": values_row})
+                document["tables"]["attendance"] = {
+                    "status": CONFIRMED,
+                    "rows": normalized_rows,
+                }
             document["status"] = CONFIRMED
             document["reviewedAt"] = utc_now()
             if all(item["status"] == CONFIRMED for item in queue["documents"]):
@@ -300,6 +414,8 @@ def handler_factory(store: ReviewStore) -> type[BaseHTTPRequestHandler]:
                     self.send_value(200, HTML, "text/html; charset=utf-8")
                 elif parsed.path == "/api/state":
                     self.send_value(200, store.state())
+                elif parsed.path == "/api/results":
+                    self.send_value(200, store.results())
                 elif parsed.path == "/api/document":
                     self.send_value(200, store.document(query.get("id", [""])[0]))
                 elif parsed.path == "/source":

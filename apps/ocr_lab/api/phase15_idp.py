@@ -17,6 +17,7 @@ try:
         _schema_output,
         accent_key,
         classify_hr_document,
+        parse_timesheet,
     )
 except ImportError:  # Direct script execution used by the local OCR server.
     from phase12_idp import (
@@ -28,6 +29,7 @@ except ImportError:  # Direct script execution used by the local OCR server.
         _schema_output,
         accent_key,
         classify_hr_document,
+        parse_timesheet,
     )
 
 
@@ -39,7 +41,7 @@ DOCUMENT_FAMILIES = (
     "EMPLOYEE_FORM_TABLE",
 )
 
-IDP_PARSER_VERSION = "phase16-structured-hr-parser/1.0.0"
+IDP_PARSER_VERSION = "phase17-structured-hr-parser/2.0.0"
 
 DOCUMENT_FAMILY_BY_TYPE = {
     "CV": "CV",
@@ -86,6 +88,10 @@ BUSINESS_SCHEMA_BY_FAMILY = {
     ),
     "IDENTITY_DOCUMENT": "schemas/business_document.schema.json",
     "OTHER_HR_DOCUMENT": "schemas/business_document.schema.json",
+}
+
+BUSINESS_SCHEMA_BY_TYPE = {
+    "TIMESHEET": "schemas/hr_document_families/timesheet.schema.json",
 }
 
 FAMILY_FIELD_SCHEMAS: dict[str, tuple[str, ...]] = {
@@ -324,7 +330,10 @@ def classify_phase15_document(
             for document_type, score in scores.items()
         },
         "supportedDocumentFamilies": list(DOCUMENT_FAMILIES),
-        "schemaRef": BUSINESS_SCHEMA_BY_FAMILY[family],
+        "schemaRef": BUSINESS_SCHEMA_BY_TYPE.get(
+            selected,
+            BUSINESS_SCHEMA_BY_FAMILY[family],
+        ),
     }
 
 
@@ -832,8 +841,14 @@ _TABLE_HEADER_MARKERS: dict[str, tuple[str, ...]] = {
         "trang thai",
     ),
     "TIMESHEET": (
+        "tt",
         "ma nv",
+        "ma nhan vien",
         "ho va ten",
+        "chuc vu",
+        "bo phan",
+        "ngay trong thang",
+        "tong cong",
         "cong",
         "phep",
         "ot",
@@ -1076,7 +1091,12 @@ def _coordinate_table(
             continue
         leftmost = next((value for value in values if value), "")
         has_employee_id = any(
-            re.fullmatch(r"EMP[- ]?\d{3,}", value, re.IGNORECASE)
+            re.fullmatch(
+                r"(?=.*\d)[A-ZÀ-ỸĐ][A-ZÀ-ỸĐ0-9]{2,}"
+                r"(?:[-/][A-ZÀ-ỸĐ0-9]+)*",
+                value,
+                re.IGNORECASE,
+            )
             for value in values
         )
         starts_row = bool(re.fullmatch(r"\d{1,3}", leftmost)) or has_employee_id
@@ -1398,6 +1418,8 @@ def extract_phase15_document(
         extraction = _schema_output(document_type, {})
     elif document_type == "CV":
         extraction = parse_cv(canonical)
+    elif document_type == "TIMESHEET":
+        extraction = parse_timesheet(canonical)
     elif family == "ADMINISTRATIVE_REQUEST":
         extraction = parse_administrative_request(canonical, document_type)
     elif family == "CONTRACT_DECISION":
@@ -1408,9 +1430,61 @@ def extract_phase15_document(
         extraction = parse_employee_form_table(canonical, document_type)
     else:
         extraction = _schema_output(document_type, {})
+    fields = _enforce_sensitive_review_policy(extraction.get("fields", {}))
     return {
         **extraction,
+        "fields": fields,
+        "summary": _field_summary(fields),
         "parserVersion": IDP_PARSER_VERSION,
+    }
+
+
+_TRUSTED_SENSITIVE_SOURCES = {
+    "human_review",
+    "pdf_text_layer",
+    "docx_text",
+    "docx_table",
+    "xlsx_cells",
+}
+
+
+def _enforce_sensitive_review_policy(
+    fields: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Prevent OCR-only sensitive values from being falsely auto-accepted."""
+    protected: dict[str, dict[str, Any]] = {}
+    for name, field in fields.items():
+        updated = dict(field)
+        evidence = updated.get("evidence") or {}
+        source_kind = str(evidence.get("sourceKind") or "")
+        if (
+            name in SENSITIVE_FIELDS
+            and updated.get("value") is not None
+            and updated.get("status") == "accepted"
+            and source_kind not in _TRUSTED_SENSITIVE_SOURCES
+        ):
+            updated["status"] = "needs_review"
+            updated["reviewReason"] = "sensitive_ocr_requires_human_review"
+        protected[name] = updated
+    return protected
+
+
+def _field_summary(
+    fields: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    statuses = [str(field.get("status") or "") for field in fields.values()]
+    present = sum(field.get("value") is not None for field in fields.values())
+    accepted = statuses.count("accepted")
+    expected = len(fields)
+    return {
+        "expectedFieldCount": expected,
+        "presentFieldCount": present,
+        "acceptedFieldCount": accepted,
+        "needsReviewFieldCount": statuses.count("needs_review"),
+        "notFoundFieldCount": statuses.count("not_found"),
+        "documentCompleteness": round(present / max(1, expected), 6),
+        "acceptedCoverage": round(accepted / max(1, expected), 6),
+        "readyForAutomaticUse": expected > 0 and accepted == expected,
     }
 
 

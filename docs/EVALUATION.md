@@ -397,7 +397,7 @@ thực và lộ lỗi dấu của recognizer; riêng bằng cấp/chứng chỉ 
 quả này chứng minh parser phục hồi coverage/CER, không chứng minh recognizer đã
 đạt gate. Trạng thái tiếp tục là development-only và `SHADOW_REVIEW_ONLY`.
 
-### Phase 16 held-out thật — prediction đã niêm phong, chưa chạy evaluation
+### Phase 16 held-out thật — đã tiêu thụ
 
 Vùng intake private `paddleocr-hr-heldout-v1` đã được tạo cho năm họ tài liệu.
 Protocol yêu cầu tối thiểu 15 tài liệu chưa từng chạy prediction: 2 CV, 2 đơn
@@ -416,6 +416,22 @@ Manifest hiện khóa 18 tài liệu hợp lệ: 5 CV, 2 đơn hành chính, 4 h
 kiểm tra quyền xử lý, trùng lặp và SHA-256. Paddle tạo 771 crop dòng; hai VietOCR
 model bất đồng 261 dòng và các dòng này tiếp tục mang `needs_review`.
 
-Prediction đã được niêm phong và giữ ẩn khỏi queue Ground Truth. Ground Truth
-chưa được xác nhận nên chưa có metric held-out thật hoặc quyết định promotion
-mới; số dòng đồng thuận không được diễn giải là accuracy.
+Ground Truth được xác nhận 18/18 khi prediction còn ẩn. `evaluate-once` đã chạy đúng
+một lần: classification accuracy 77,78%, Field Exact Match 13,00%, field completeness
+28,00% và sensitive-field false acceptance bằng 2. Quyết định là `NOT_PROMOTED`.
+Prediction TIMESHEET đã khóa không chứa `tables`, nên 1.146 ô Ground Truth đều không có
+candidate. Đây là lỗi contract của pipeline, không được diễn giải là lỗi recognition
+thuần túy. Phase 16 đã tiêu thụ và không được dùng để retune hoặc chạy lại.
+
+### Phase 17 — TIMESHEET contract và safety lock
+
+Parser `phase17-structured-hr-parser/2.0.0` tách `TIMESHEET` khỏi form nhân viên đơn,
+giữ bảng trong prediction contract và đo Exact Match/Completeness ở cấp row/cell.
+Trường nhạy cảm chỉ có evidence OCR luôn mang `needs_review`; chỉ native source được
+tin cậy hoặc human review mới có thể `accepted`.
+
+`config/phase17_parser_lock.json` khóa SHA-256 của parser, prediction adapter, schema
+TIMESHEET, Ground Truth schema và RecognitionPolicy. Hidden prediction runner gọi
+`validate_phase17_parser_lock.py` trước khi chạy. Intake
+`paddleocr-hr-heldout-v2` là tập mới, không được trùng SHA-256 với Phase 16 và vẫn
+tuân thủ prediction ẩn → Ground Truth → evaluate-once.

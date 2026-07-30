@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import sys
 from argparse import Namespace
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,26 @@ from scripts.phase15_benchmark import (  # noqa: E402
     run_vietocr,
 )
 from scripts.phase16_heldout import write_new_json  # noqa: E402
+from scripts.validate_phase17_parser_lock import validate_lock  # noqa: E402
+
+
+def policy_prediction_document(
+    source: Mapping[str, Any],
+    classification: Mapping[str, Any],
+    extraction: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Keep fields and tables in the same locked prediction contract."""
+    return {
+        "documentId": source["documentId"],
+        "sourceSha256": source["sourceSha256"],
+        "documentFamily": classification["documentFamily"],
+        "documentType": classification["documentType"],
+        "classificationStatus": classification["status"],
+        "classificationConfidence": classification["confidence"],
+        "fields": extraction["fields"],
+        "tables": extraction.get("tables", []),
+        "summary": extraction["summary"],
+    }
 
 
 def parse_args() -> argparse.Namespace:
@@ -121,16 +142,11 @@ def prediction_payload(
         if extraction.get("parserVersion") != IDP_PARSER_VERSION:
             raise ValueError("Extraction did not use the locked Phase 16 parser")
         documents.append(
-            {
-                "documentId": document_id,
-                "sourceSha256": document["sourceSha256"],
-                "documentFamily": classification["documentFamily"],
-                "documentType": classification["documentType"],
-                "classificationStatus": classification["status"],
-                "classificationConfidence": classification["confidence"],
-                "fields": extraction["fields"],
-                "summary": extraction["summary"],
-            }
+            policy_prediction_document(
+                document,
+                classification,
+                extraction,
+            )
         )
     return {
         "schemaVersion": "phase16-heldout-policy-predictions/1.0.0",
@@ -144,6 +160,7 @@ def prediction_payload(
 
 
 def load_locked_manifest(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
+    validate_lock()
     dataset_root = args.dataset_root.resolve()
     manifest = load_json(dataset_root / "manifest_private.json")
     if manifest.get("recognitionPolicyDigest") != LOCKED_POLICY_DIGEST:

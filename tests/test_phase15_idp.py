@@ -104,8 +104,109 @@ class Phase15ClassificationTests(unittest.TestCase):
         self.assertEqual("OTHER_HR_DOCUMENT", result["documentFamily"])
         self.assertEqual("needs_review", result["status"])
 
-
 class Phase15ExtractionTests(unittest.TestCase):
+    def test_timesheet_uses_dedicated_fields_and_preserves_daily_cells(
+        self,
+    ) -> None:
+        canonical = canonical_document(
+            [
+                "BẢNG CHẤM CÔNG THÁNG 08/2099",
+                "CÔNG TY SYNTHETIC",
+            ],
+            source_format="XLSX",
+            source_kind="xlsx_cells",
+        )
+        columns = [
+            "TT",
+            "Mã NV",
+            "Họ và tên",
+            "Chức vụ/Bộ phận",
+            "1",
+            "2",
+            "Tổng cộng ngày công",
+        ]
+        canonical["tables"] = [
+            {
+                "tableIndex": 0,
+                "sourceKind": "xlsx_cells",
+                "columns": [
+                    {"columnIndex": index, "name": name}
+                    for index, name in enumerate(columns)
+                ],
+                "rows": [
+                    {
+                        "rowIndex": 1,
+                        "values": [
+                            1,
+                            "SYN001",
+                            "Nhân viên mẫu",
+                            "Phòng thử nghiệm",
+                            "X",
+                            "P",
+                            1.5,
+                        ],
+                        "cells": [
+                            {
+                                "status": "accepted",
+                                "evidence": {
+                                    "sheetName": "Synthetic",
+                                    "rowIndex": 1,
+                                    "columnIndex": index,
+                                },
+                            }
+                            for index in range(len(columns))
+                        ],
+                    }
+                ],
+            }
+        ]
+        classification = {
+            "documentType": "TIMESHEET",
+            "documentFamily": "EMPLOYEE_FORM_TABLE",
+        }
+
+        extraction = extract_phase15_document(canonical, classification)
+
+        self.assertEqual(
+            {"timesheetPeriod", "totalEmployees", "companyName"},
+            set(extraction["fields"]),
+        )
+        self.assertEqual(1, len(extraction["tables"]))
+        self.assertEqual(
+            "SYN001",
+            extraction["tables"][0]["rows"][0]["values"][0],
+        )
+        self.assertEqual(
+            "phase17-structured-hr-parser/2.0.0",
+            extraction["parserVersion"],
+        )
+
+    def test_ocr_sensitive_field_is_never_automatically_accepted(
+        self,
+    ) -> None:
+        canonical = canonical_document(
+            [
+                "PHIẾU THÔNG TIN NHÂN VIÊN",
+                "Họ và tên: NHÂN VIÊN SYNTHETIC",
+            ],
+            source_format="IMAGE",
+            source_kind="ocr",
+        )
+        classification = {
+            "documentType": "EMPLOYEE_INFORMATION_FORM",
+            "documentFamily": "EMPLOYEE_FORM_TABLE",
+        }
+
+        extraction = extract_phase15_document(canonical, classification)
+
+        field = extraction["fields"]["employeeName"]
+        self.assertEqual("needs_review", field["status"])
+        self.assertEqual(
+            "sensitive_ocr_requires_human_review",
+            field["reviewReason"],
+        )
+        self.assertFalse(extraction["summary"]["readyForAutomaticUse"])
+
     def test_cv_extracts_evidence_bearing_fields(self) -> None:
         canonical = canonical_document(
             [

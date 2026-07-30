@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Dashboard from "./Dashboard";
-import results from "./data/results.json";
 
 export const metadata: Metadata = {
   title: "HR Document Intelligence Lab | OCR tiếng Việt",
@@ -9,5 +8,41 @@ export const metadata: Metadata = {
 };
 
 export default function Home() {
-  return <Dashboard data={results} />;
+  return (
+    <Dashboard
+      data={{
+        phases: [],
+        nextSteps: [],
+        processing: {
+          engine: "Paddle detector + VietOCR verifier policy",
+          ocrVersion: "Phase 14.8 locked",
+          language: "vi",
+          device: "cpu",
+        },
+        summary: {
+          nativeJsonCount: 0,
+          ocrSuccessCount: 0,
+          groundTruthDocumentCount: 0,
+          matchedGroundTruthDocumentCount: 0,
+          evaluatedSampleCount: 0,
+          evaluatedFieldInstanceCount: 0,
+          cer: 0,
+          wer: 0,
+          exactMatchRate: 0,
+          fieldPresenceRate: 0,
+          durationMs: { total: 0, mean: 0, p50: 0, p95: 0 },
+        },
+        baselineSummary: {
+          nativeJsonCount: 0,
+          ocrSuccessCount: 0,
+          cer: 0,
+          wer: 0,
+          exactMatchRate: 0,
+          fieldPresenceRate: 0,
+          durationMs: { total: 0, mean: 0, p50: 0, p95: 0 },
+        },
+        samples: [],
+      }}
+    />
+  );
 }

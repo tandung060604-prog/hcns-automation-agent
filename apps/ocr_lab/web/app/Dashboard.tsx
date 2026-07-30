@@ -76,6 +76,130 @@ type DashboardData = {
   samples: Sample[];
 };
 
+type HeldoutMetric = {
+  documentCount: number;
+  classificationAccuracy: number;
+  evaluatedFieldCount: number;
+  fieldExactMatchCount: number;
+  fieldExactMatchRate: number;
+  fieldCompleteness: number;
+  acceptedFieldRate: number;
+  cer: number;
+  wer: number;
+  der: number;
+  expectedTableRowCount: number;
+  exactTableRowCount: number;
+  tableExactRowRate: number;
+  expectedTableCellCount: number;
+  exactTableCellCount: number;
+  tableExactCellRate: number;
+  tableCompleteness: number;
+};
+
+type HeldoutDocument = {
+  documentId: string;
+  documentFamily: string;
+  sourceFormat: string;
+  sizeBytes: number;
+  previewAvailable: boolean;
+  sourceAvailable: boolean;
+};
+
+type ReplayAudit = {
+  evaluationKind: string;
+  documentCount: number;
+  visualDocumentsReOcred?: number;
+  nativeDocumentsReparsed?: number;
+  visualDocumentCount?: number;
+  nativeDocumentCount?: number;
+  ocrPipeline?: string;
+  eligibleForPromotion: false;
+  baseline: {
+    overall: HeldoutMetric;
+    sensitiveFieldFalseAcceptanceCount: number;
+  };
+  latest: {
+    overall: HeldoutMetric;
+    sensitiveFieldFalseAcceptanceCount: number;
+  };
+  delta: Record<string, number>;
+  decision: {
+    status: string;
+    production: string;
+    reason: string;
+  };
+};
+
+type HeldoutSummary = {
+  schemaVersion: string;
+  datasetId: string;
+  datasetDigest: string;
+  containsRealPII: true;
+  localAccessAuthorized: true;
+  publicReleaseAuthorized: boolean;
+  predictionsVisibleDuringGroundTruthReview: false;
+  recognitionPolicyDigest: string;
+  parserVersion: string;
+  metricSpecVersion: string;
+  evaluatedAt: string;
+  evaluationRunCount: number;
+  thresholdRetuned: false;
+  predictionsWereHidden: true;
+  documentCount: number;
+  countsByFamily: Record<string, number>;
+  overall: HeldoutMetric;
+  byFamily: Record<string, HeldoutMetric>;
+  sensitiveFieldFalseAcceptanceCount: number;
+  decision: {
+    controlledPilot: string;
+    production: string;
+  };
+  latestReplay?: ReplayAudit | null;
+  latestLiveV5Replay?: ReplayAudit | null;
+  documents: HeldoutDocument[];
+};
+
+type LocalEvidenceDetail = {
+  schemaVersion: string;
+  documentId: string;
+  documentFamily: string;
+  documentType?: string;
+  schemaRef: string;
+  containsRealPII: true;
+  localOnly: true;
+  groundTruth: Record<string, unknown>;
+  prediction: Record<string, unknown>;
+  sealedPrediction?: Record<string, unknown>;
+  lockedReplayPrediction?: Record<string, unknown> | null;
+  liveV5Prediction?: Record<string, unknown> | null;
+  predictionLabel?: string;
+  predictionNotice?: string;
+  predictionProvenance?: {
+    defaultSource: "live_v5" | "locked_replay" | "sealed";
+    sealed: {
+      sealedAt?: string;
+      parserVersion?: string;
+      recognitionPolicyDigest?: string;
+      evaluationKind: string;
+    };
+    lockedReplay?: {
+      createdAt?: string;
+      parserVersion?: string;
+      recognitionPolicyDigest?: string;
+      evaluationKind?: string;
+      promotionEligible?: boolean;
+    } | null;
+    liveV5?: {
+      createdAt?: string;
+      parserVersion?: string;
+      recognitionPolicyDigest?: string;
+      evaluationKind?: string;
+      promotionEligible?: boolean;
+      ocrPipeline?: string;
+    } | null;
+  };
+};
+
 type Detail = {
   sampleId: string;
   documentId: string;
@@ -109,8 +233,12 @@ type Phase9Line = {
 
 type IdentityField = {
   value: string | null;
+  asciiValue?: string | null;
   confidence: number | null;
   status: "accepted" | "needs_review" | "not_found";
+  asciiStatus?: "verified_base_text" | "needs_review" | "not_found";
+  errorSignals?: string[];
+  selectionMode?: "exact_consensus" | "base_text_consensus" | "single_candidate";
   validation: {
     valid: boolean;
     rule: string;
@@ -118,11 +246,12 @@ type IdentityField = {
     labelMatchScore: number;
   };
   evidence: {
-    engine: string;
+    engine?: string;
     pageIndex: number;
-    lineIndices: number[];
+    lineIndices?: number[];
     bbox: number[][] | null;
-    texts: string[];
+    texts?: string[];
+    candidates?: Array<Record<string, unknown>>;
   } | null;
 };
 
@@ -320,6 +449,15 @@ type UserResult = {
     >;
     durationMs: number;
   };
+  phase11_5?: {
+    version: string;
+    status: "COMPLETE";
+    mode: "SHADOW_REVIEW_ONLY";
+    strategy: string;
+    recognizers: string[];
+    cropProfiles: string[];
+    durationMs: number;
+  };
   phase14_8?: {
     version: string;
     status: string;
@@ -354,6 +492,10 @@ type UserSessionSummary = {
   totalDurationMs: number;
   documentType?: string;
   qualityGate?: string | null;
+  processingProfile?: string | null;
+  ocrVersion?: string | null;
+  phase11Version?: string | null;
+  phase14_8Status?: string | null;
   reviewed?: boolean;
   phase15Reviewed?: boolean;
 };
@@ -719,30 +861,30 @@ const identityFieldLabels: Record<string, string> = {
   dateOfExpiry: "Có giá trị đến",
 };
 
-const phase13Steps = [
+const phase17Steps = [
   {
     order: 1,
-    title: "Chọn tài liệu thật có quyền xử lý",
+    title: "Lập error set từ held-out thật",
     description:
-      "Ưu tiên đơn nghỉ phép, hợp đồng và bảng chấm công; giữ toàn bộ file trong private-data.",
+      "Phân nhóm lỗi detection, crop, mất dấu, thay ký tự, reading order, classifier và parser theo từng family/field.",
   },
   {
     order: 2,
-    title: "Xác nhận ground truth",
+    title: "Cải thiện trên development-only",
     description:
-      "Đối chiếu trực tiếp với tài liệu gốc và xác nhận từng field/table trước khi đo.",
+      "Huấn luyện/fine-tune recognizer hoặc crop policy trên dữ liệu development riêng; tuyệt đối không chỉnh theo 18 tài liệu đã tiêu thụ.",
   },
   {
     order: 3,
-    title: "Đo lại theo từng loại",
+    title: "Gated fallback không phá dòng đúng",
     description:
-      "So sánh Field Exact, Table Cell Accuracy, Completeness và accepted precision với tập tổng hợp.",
+      "Chỉ cho phép switch khi có verifier agreement và regression chứng minh zero correct-line loss; còn lại needs_review.",
   },
   {
     order: 4,
-    title: "Chốt quality gate Camunda",
+    title: "Held-out v2 độc lập",
     description:
-      "Chỉ cho phép READY đi thẳng; mọi trường thiếu bằng chứng hoặc không chắc chắn phải vào human review.",
+      "Khóa policy/model mới rồi prediction ẩn → Ground Truth → evaluate-once trên tập mới để quyết định promote theo family.",
   },
 ];
 
@@ -758,8 +900,314 @@ function duration(ms: number) {
   return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
 }
 
+function signedPoints(value: number | null | undefined) {
+  if (value === null || value === undefined) return "—";
+  const points = value * 100;
+  return `${points >= 0 ? "+" : ""}${points.toFixed(2)} điểm %`;
+}
+
+function objectRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function evidenceValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "Không có";
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+  const record = objectRecord(value);
+  if ("normalizedValue" in record && record.normalizedValue != null) {
+    return String(record.normalizedValue);
+  }
+  if ("value" in record) return evidenceValue(record.value);
+  return JSON.stringify(value);
+}
+
+function evidenceBaseText(value: unknown): string {
+  return evidenceValue(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[Đ]/g, "D")
+    .replace(/[đ]/g, "d")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+function evidenceErrorClass(
+  groundTruth: unknown,
+  prediction: unknown,
+): string {
+  const expected = evidenceValue(groundTruth).trim();
+  const actual = evidenceValue(prediction).trim();
+  if (!actual || actual === "Không có") return "not_found";
+  if (expected.normalize("NFC") === actual.normalize("NFC")) return "exact";
+  const expectedBase = evidenceBaseText(expected);
+  const actualBase = evidenceBaseText(actual);
+  if (expectedBase === actualBase) return "diacritics_only";
+  const expectedCompact = expectedBase.replace(/\s+/g, "");
+  const actualCompact = actualBase.replace(/\s+/g, "");
+  if (expectedCompact === actualCompact) return "line_merge_or_split";
+  let cursor = 0;
+  for (const character of expectedCompact) {
+    if (character === actualCompact[cursor]) cursor += 1;
+  }
+  if (
+    cursor === actualCompact.length &&
+    actualCompact.length < expectedCompact.length
+  ) {
+    return "character_omission";
+  }
+  if (
+    actualCompact.length < expectedCompact.length * 0.55 ||
+    actualCompact.length > expectedCompact.length * 1.8
+  ) {
+    return "region_mismatch";
+  }
+  return "character_substitution";
+}
+
+function EvidenceInspector({
+  detail,
+  loading,
+  error,
+  view,
+  onViewChange,
+  downloads = [],
+}: {
+  detail: LocalEvidenceDetail | null;
+  loading: boolean;
+  error: string;
+  view: "fields" | "json";
+  onViewChange: (view: "fields" | "json") => void;
+  downloads?: Array<{ label: string; href: string }>;
+}) {
+  const hasReplayComparison = Boolean(
+    (detail?.liveV5Prediction || detail?.lockedReplayPrediction) &&
+      detail?.sealedPrediction,
+  );
+  const [predictionSource, setPredictionSource] =
+    useState<"live_v5" | "locked_replay" | "sealed">("live_v5");
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset selection for a new evidence document.
+    setPredictionSource(
+      detail?.predictionProvenance?.defaultSource ?? "sealed",
+    );
+  }, [detail?.documentId, detail?.predictionProvenance?.defaultSource]);
+  const selectedPrediction = (() => {
+    if (predictionSource === "sealed") {
+      return detail?.sealedPrediction ?? detail?.prediction;
+    }
+    if (predictionSource === "locked_replay") {
+      return detail?.lockedReplayPrediction ?? detail?.prediction;
+    }
+    return detail?.liveV5Prediction ?? detail?.prediction;
+  })();
+  const groundTruthFields = objectRecord(detail?.groundTruth.fields);
+  const predictionFields = objectRecord(selectedPrediction?.fields);
+  const fieldNames = Array.from(
+    new Set([
+      ...Object.keys(groundTruthFields),
+      ...Object.keys(predictionFields),
+    ]),
+  );
+
+  return (
+    <aside className="evidence-inspector" aria-live="polite">
+      <header>
+        <div>
+          <span>SCHEMA / JSON</span>
+          <strong>{detail?.documentType ?? detail?.documentFamily ?? "Đang tải"}</strong>
+        </div>
+        <small>{detail?.schemaRef ?? "Dữ liệu chỉ đọc trên localhost"}</small>
+      </header>
+      {hasReplayComparison ? (
+        <div className="evidence-prediction-source">
+          <span>NGUỒN PREDICTION</span>
+          {detail?.liveV5Prediction ? (
+            <button
+              className={predictionSource === "live_v5" ? "active" : ""}
+              onClick={() => setPredictionSource("live_v5")}
+            >
+              Live v5 mới nhất · parser 2.0
+            </button>
+          ) : null}
+          {detail?.lockedReplayPrediction ? (
+            <button
+              className={predictionSource === "locked_replay" ? "active" : ""}
+              onClick={() => setPredictionSource("locked_replay")}
+            >
+              Policy khóa v4 · parser 2.0
+            </button>
+          ) : null}
+          <button
+            className={predictionSource === "sealed" ? "active" : ""}
+            onClick={() => setPredictionSource("sealed")}
+          >
+            Sealed · parser 1.0
+          </button>
+          <small>
+            Live v5 và replay parser chạy sau khi Ground Truth đã mở — chỉ dùng
+            audit, không dùng promotion.
+          </small>
+        </div>
+      ) : detail?.predictionLabel ? (
+        <div className="evidence-prediction-source evidence-prediction-source-single">
+          <span>NGUỒN PREDICTION</span>
+          <strong>{detail.predictionLabel}</strong>
+          {detail.predictionNotice ? (
+            <small>{detail.predictionNotice}</small>
+          ) : null}
+        </div>
+      ) : null}
+      <div className="evidence-inspector-tabs" role="tablist">
+        <button
+          className={view === "fields" ? "active" : ""}
+          onClick={() => onViewChange("fields")}
+          role="tab"
+          aria-selected={view === "fields"}
+        >
+          Trường schema
+        </button>
+        <button
+          className={view === "json" ? "active" : ""}
+          onClick={() => onViewChange("json")}
+          role="tab"
+          aria-selected={view === "json"}
+        >
+          JSON
+        </button>
+      </div>
+      {loading ? (
+        <div className="evidence-inspector-state">Đang tải dữ liệu đối chiếu...</div>
+      ) : error ? (
+        <div className="evidence-inspector-state error">{error}</div>
+      ) : !detail ? (
+        <div className="evidence-inspector-state">Chọn một tài liệu để xem dữ liệu.</div>
+      ) : view === "fields" ? (
+        <div className="evidence-field-list">
+          <div className="evidence-field-heading">
+            <span>Trường</span>
+            <span>Ground Truth</span>
+            <span>Prediction tiếng Việt</span>
+            <span>Prediction không dấu</span>
+            <span>Error class</span>
+          </div>
+          {fieldNames.length ? (
+            fieldNames.map((name) => {
+              const prediction = objectRecord(predictionFields[name]);
+              const evidence = objectRecord(prediction.evidence);
+              const candidates = Array.isArray(evidence.candidates)
+                ? evidence.candidates
+                : [];
+              const errorSignals = Array.isArray(prediction.errorSignals)
+                ? prediction.errorSignals.map(String)
+                : [];
+              const computedErrorClass = evidenceErrorClass(
+                groundTruthFields[name],
+                predictionFields[name],
+              );
+              const displayedErrors = Array.from(
+                new Set([computedErrorClass, ...errorSignals]),
+              );
+              return (
+                <div className="evidence-field-row" key={name}>
+                  <strong>{name}</strong>
+                  <span>{evidenceValue(groundTruthFields[name])}</span>
+                  <span>
+                    {evidenceValue(predictionFields[name])}
+                    {prediction.status ? (
+                      <small data-status={String(prediction.status)}>
+                        {String(prediction.status)}
+                      </small>
+                    ) : null}
+                  </span>
+                  <span>
+                    {prediction.asciiValue
+                      ? String(prediction.asciiValue)
+                      : "—"}
+                    {prediction.asciiStatus ? (
+                      <small className="evidence-ascii-value">
+                        {String(prediction.asciiStatus)}
+                      </small>
+                    ) : null}
+                  </span>
+                  <span>
+                    {displayedErrors.join(", ")}
+                    {candidates.length ? (
+                      <details className="evidence-candidates">
+                        <summary>
+                          Crop &amp; {candidates.length} candidates
+                        </summary>
+                        <a
+                          href={`${API_BASE}/user/phase11-5-crop?id=${encodeURIComponent(
+                            detail.documentId,
+                          )}&field=${encodeURIComponent(
+                            name,
+                          )}&variant=balanced_padding`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Mở crop đối chiếu
+                        </a>
+                        <pre>{JSON.stringify(candidates, null, 2)}</pre>
+                      </details>
+                    ) : null}
+                  </span>
+                </div>
+              );
+            })
+          ) : (
+            <div className="evidence-inspector-state">
+              Schema hiện chưa có trường scalar cho tài liệu này.
+            </div>
+          )}
+          {"tables" in detail.groundTruth ? (
+            <div className="evidence-table-note">
+              Tài liệu có Ground Truth dạng bảng. Xem tab JSON để đối chiếu toàn bộ
+              hàng và ô.
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <pre className="evidence-json">
+          {JSON.stringify(
+            {
+              documentId: detail.documentId,
+              schemaRef: detail.schemaRef,
+              predictionSource,
+              groundTruth: detail.groundTruth,
+              prediction: selectedPrediction,
+              provenance: detail.predictionProvenance,
+            },
+            null,
+            2,
+          )}
+        </pre>
+      )}
+      {downloads.length ? (
+        <footer>
+          {downloads.map((download) => (
+            <a href={download.href} key={download.href}>
+              {download.label}
+            </a>
+          ))}
+        </footer>
+      ) : null}
+    </aside>
+  );
+}
+
 function phase11Label(result: UserResult) {
-  return result.phase11_4 ? "11.4" : result.phase11_3 ? "11.3" : "11.2";
+  return result.phase11_5
+    ? "11.5"
+    : result.phase11_4
+      ? "11.4"
+      : result.phase11_3
+        ? "11.3"
+        : "11.2";
 }
 
 export default function Dashboard({ data }: { data: DashboardData }) {
@@ -771,6 +1219,34 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [detailError, setDetailError] = useState("");
   const [apiOnline, setApiOnline] = useState(false);
+  const [heldout, setHeldout] = useState<HeldoutSummary | null>(null);
+  const [heldoutError, setHeldoutError] = useState("");
+  const replayAudit =
+    heldout?.latestLiveV5Replay ?? heldout?.latestReplay ?? null;
+  const replayIsLiveV5 = Boolean(heldout?.latestLiveV5Replay);
+  const [activeHeldoutId, setActiveHeldoutId] = useState("");
+  const [heldoutEvidence, setHeldoutEvidence] =
+    useState<LocalEvidenceDetail | null>(null);
+  const [heldoutEvidenceLoading, setHeldoutEvidenceLoading] = useState(false);
+  const [heldoutEvidenceError, setHeldoutEvidenceError] = useState("");
+  const [evidenceMode, setEvidenceMode] =
+    useState<"heldout" | "uploads" | "cccd">("heldout");
+  const [evidenceInspectorView, setEvidenceInspectorView] =
+    useState<"fields" | "json">("fields");
+  const [activeCccdSessionId, setActiveCccdSessionId] = useState("");
+  const [activeUploadSessionId, setActiveUploadSessionId] = useState("");
+  const [uploadEvidenceResult, setUploadEvidenceResult] =
+    useState<UserResult | null>(null);
+  const [uploadEvidenceReview, setUploadEvidenceReview] =
+    useState<Phase10Review | null>(null);
+  const [uploadEvidenceLoading, setUploadEvidenceLoading] = useState(false);
+  const [uploadEvidenceError, setUploadEvidenceError] = useState("");
+  const [cccdEvidenceResult, setCccdEvidenceResult] =
+    useState<UserResult | null>(null);
+  const [cccdEvidenceReview, setCccdEvidenceReview] =
+    useState<Phase10Review | null>(null);
+  const [cccdEvidenceLoading, setCccdEvidenceLoading] = useState(false);
+  const [cccdEvidenceError, setCccdEvidenceError] = useState("");
   const [viewProfile, setViewProfile] = useState<"phase7" | "baseline">("phase7");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -778,6 +1254,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [uploadError, setUploadError] = useState("");
   const [userResult, setUserResult] = useState<UserResult | null>(null);
   const [userSessions, setUserSessions] = useState<UserSessionSummary[]>([]);
+  const [showSessionHistory, setShowSessionHistory] = useState(false);
   const [activeUserPage, setActiveUserPage] = useState(0);
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [textView, setTextView] = useState<"corrected" | "raw">("corrected");
@@ -899,6 +1376,27 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         setApiOnline(true);
       })
       .catch(() => setApiOnline(false));
+    fetch(`${API_BASE}/heldout/summary`)
+      .then((response) => {
+        if (!response.ok) throw new Error("Real held-out unavailable");
+        return response.json();
+      })
+      .then((payload: HeldoutSummary) => {
+        setApiOnline(true);
+        setHeldout(payload);
+        setHeldoutError("");
+        setActiveHeldoutId(
+          payload.documents.find((item) => item.previewAvailable)?.documentId ??
+            payload.documents[0]?.documentId ??
+            "",
+        );
+      })
+      .catch(() => {
+        setHeldout(null);
+        setHeldoutError(
+          "Chưa kết nối được tập held-out thật đã xác nhận quyền xử lý.",
+        );
+      });
     refreshUserSessions();
     fetch(`${API_BASE}/phase14/benchmark`)
       .then((response) => {
@@ -920,6 +1418,41 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       })
       .catch(() => setPhase14(null));
   }, []);
+
+  useEffect(() => {
+    if (!activeHeldoutId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale evidence when the list becomes empty.
+      setHeldoutEvidence(null);
+      return;
+    }
+    let cancelled = false;
+    setHeldoutEvidenceLoading(true);
+    setHeldoutEvidenceError("");
+    fetch(
+      `${API_BASE}/heldout/evidence?id=${encodeURIComponent(activeHeldoutId)}`,
+    )
+      .then((response) => {
+        if (!response.ok) throw new Error("Không tải được schema held-out");
+        return response.json();
+      })
+      .then((payload: LocalEvidenceDetail) => {
+        if (!cancelled) setHeldoutEvidence(payload);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHeldoutEvidence(null);
+          setHeldoutEvidenceError(
+            "Không đọc được Ground Truth và prediction cục bộ.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setHeldoutEvidenceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeHeldoutId]);
 
   const selectPhase14Case = (index: number) => {
     if (
@@ -1117,6 +1650,11 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     }
   };
 
+  const openEvidenceSession = async (sessionId: string) => {
+    await loadUserSession(sessionId);
+    window.location.hash = "upload";
+  };
+
   const reprocessPhase9 = async () => {
     if (!userResult || isReprocessing) return;
     setIsReprocessing(true);
@@ -1305,6 +1843,238 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     data.samples.find((sample) => sample.sampleId === "cv__HR-CV-0001_page_0") ??
     data.samples[0];
   const latestPrivateSession = userSessions[0] ?? null;
+  const reviewedCccdSessions = useMemo(() => {
+    const seenFiles = new Set<string>();
+    return userSessions
+      .filter((session) => {
+        const fileKey = session.originalFileName
+          .trim()
+          .toLocaleLowerCase("vi");
+        if (
+          session.documentType !== "IDENTITY_DOCUMENT" ||
+          !session.reviewed ||
+          /synthetic|demo/i.test(fileKey) ||
+          seenFiles.has(fileKey)
+        ) {
+          return false;
+        }
+        seenFiles.add(fileKey);
+        return true;
+      })
+      .sort((left, right) =>
+        (right.phase11Version ?? "").localeCompare(
+          left.phase11Version ?? "",
+          undefined,
+          { numeric: true, sensitivity: "base" },
+        ),
+      );
+  }, [userSessions]);
+  const uploadedHrSessions = useMemo(() => {
+    const seenFiles = new Set<string>();
+    return userSessions.filter((session) => {
+      const fileKey = session.originalFileName.trim().toLocaleLowerCase("vi");
+      if (
+        !session.ocrSuccess ||
+        session.documentType === "IDENTITY_DOCUMENT" ||
+        /synthetic|demo/i.test(fileKey) ||
+        seenFiles.has(fileKey)
+      ) {
+        return false;
+      }
+      seenFiles.add(fileKey);
+      return true;
+    });
+  }, [userSessions]);
+  const activeUploadSession =
+    uploadedHrSessions.find(
+      (session) => session.sessionId === activeUploadSessionId,
+    ) ??
+    uploadedHrSessions[0] ??
+    null;
+  const activeUploadEvidenceId = activeUploadSession?.sessionId ?? "";
+  useEffect(() => {
+    if (!activeUploadEvidenceId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale evidence when the selected upload disappears.
+      setUploadEvidenceResult(null);
+      setUploadEvidenceReview(null);
+      return;
+    }
+    let cancelled = false;
+    setUploadEvidenceLoading(true);
+    setUploadEvidenceError("");
+    Promise.all([
+      fetch(
+        `${API_BASE}/user/session?id=${encodeURIComponent(
+          activeUploadEvidenceId,
+        )}`,
+      ),
+      fetch(
+        `${API_BASE}/user/review?id=${encodeURIComponent(
+          activeUploadEvidenceId,
+        )}`,
+      ),
+    ])
+      .then(async ([resultResponse, reviewResponse]) => {
+        if (!resultResponse.ok || !reviewResponse.ok) {
+          throw new Error("Uploaded evidence unavailable");
+        }
+        return Promise.all([
+          resultResponse.json() as Promise<UserResult>,
+          reviewResponse.json() as Promise<Phase10Review>,
+        ]);
+      })
+      .then(([result, review]) => {
+        if (cancelled) return;
+        setUploadEvidenceResult(result);
+        setUploadEvidenceReview(normalizePhase10Review(review));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setUploadEvidenceResult(null);
+        setUploadEvidenceReview(null);
+        setUploadEvidenceError(
+          "Không đọc được OCR, schema và JSON của session này.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setUploadEvidenceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeUploadEvidenceId]);
+  const activeUploadEvidence = useMemo<LocalEvidenceDetail | null>(() => {
+    if (!uploadEvidenceResult || !activeUploadSession) return null;
+    const phase15 = uploadEvidenceResult.phase15;
+    return {
+      schemaVersion: "ocr-lab-upload-evidence/1.0.0",
+      documentId: uploadEvidenceResult.sessionId,
+      documentFamily:
+        phase15?.classification.documentFamily ??
+        uploadEvidenceResult.document.documentType,
+      documentType:
+        phase15?.classification.documentType ??
+        uploadEvidenceResult.document.documentType,
+      schemaRef:
+        uploadEvidenceResult.phase11_5
+          ? "schemas/vietnam_identity_card_phase11_5.schema.json"
+          : phase15?.classification.schemaRef ??
+            "schemas/business_document.schema.json",
+      containsRealPII: true,
+      localOnly: true,
+      groundTruth: {
+        reviewStatus: uploadEvidenceReview?.reviewStatus ?? "DRAFT",
+        pages: uploadEvidenceReview?.groundTruth?.pages ?? [],
+        fields: uploadEvidenceReview?.groundTruth?.identityFields ?? {},
+      },
+      prediction: {
+        classification: phase15?.classification ?? null,
+        recognition: uploadEvidenceResult.phase14_8?.summary ?? null,
+        fields: phase15?.extraction.fields ?? {},
+        summary: phase15?.extraction.summary ?? null,
+      },
+      predictionLabel: `${uploadEvidenceResult.processing.ocrVersion} · Phase 14.8 · parser Phase 17`,
+      predictionNotice:
+        "Prediction của session upload local; Ground Truth do người dùng xác nhận và không bị ghi đè.",
+    };
+  }, [activeUploadSession, uploadEvidenceResult, uploadEvidenceReview]);
+  const activeCccdSession =
+    reviewedCccdSessions.find(
+      (session) => session.sessionId === activeCccdSessionId,
+    ) ??
+    reviewedCccdSessions[0] ??
+    null;
+  const activeCccdEvidenceId = activeCccdSession?.sessionId ?? "";
+  useEffect(() => {
+    if (!activeCccdEvidenceId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale CCCD evidence when the selected session disappears.
+      setCccdEvidenceResult(null);
+      setCccdEvidenceReview(null);
+      return;
+    }
+    let cancelled = false;
+    setCccdEvidenceLoading(true);
+    setCccdEvidenceError("");
+    Promise.all([
+      fetch(
+        `${API_BASE}/user/session?id=${encodeURIComponent(
+          activeCccdEvidenceId,
+        )}`,
+      ),
+      fetch(
+        `${API_BASE}/user/review?id=${encodeURIComponent(
+          activeCccdEvidenceId,
+        )}`,
+      ),
+    ])
+      .then(async ([resultResponse, reviewResponse]) => {
+        if (!resultResponse.ok || !reviewResponse.ok) {
+          throw new Error("CCCD evidence unavailable");
+        }
+        return Promise.all([
+          resultResponse.json() as Promise<UserResult>,
+          reviewResponse.json() as Promise<Phase10Review>,
+        ]);
+      })
+      .then(([result, review]) => {
+        if (cancelled) return;
+        setCccdEvidenceResult(result);
+        setCccdEvidenceReview(normalizePhase10Review(review));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCccdEvidenceResult(null);
+        setCccdEvidenceReview(null);
+        setCccdEvidenceError(
+          "Không đọc được Ground Truth và JSON của CCCD này.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setCccdEvidenceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCccdEvidenceId]);
+  const activeCccdEvidence = useMemo<LocalEvidenceDetail | null>(() => {
+    if (!cccdEvidenceResult || !activeCccdSession) return null;
+    const phase15 = cccdEvidenceResult.phase15;
+    const identityCard = cccdEvidenceResult.phase11?.identityCard;
+    return {
+      schemaVersion: "ocr-lab-session-evidence/1.0.0",
+      documentId: cccdEvidenceResult.sessionId,
+      documentFamily: "IDENTITY_DOCUMENT",
+      documentType:
+        phase15?.classification.documentType ??
+        cccdEvidenceResult.document.documentType,
+      schemaRef:
+        cccdEvidenceResult.phase11_5
+          ? "schemas/vietnam_identity_card_phase11_5.schema.json"
+          : phase15?.classification.schemaRef ??
+            "schemas/business_document.schema.json",
+      containsRealPII: true,
+      localOnly: true,
+      groundTruth: {
+        reviewStatus: cccdEvidenceReview?.reviewStatus ?? "DRAFT",
+        fields: cccdEvidenceReview?.groundTruth?.identityFields ?? {},
+      },
+      prediction: {
+        classification: phase15?.classification ?? null,
+        recognition: cccdEvidenceResult.phase14_8?.summary ?? null,
+        fields: identityCard?.fields ?? phase15?.extraction.fields ?? {},
+        summary: identityCard?.summary ?? phase15?.extraction.summary ?? null,
+      },
+      predictionLabel: `CCCD Phase ${phase11Label(
+        cccdEvidenceResult,
+      )} · ${cccdEvidenceResult.processing.ocrVersion}`,
+      predictionNotice:
+        "Prediction từ pipeline CCCD chuyên biệt; Ground Truth đã review được giữ nguyên.",
+    };
+  }, [activeCccdSession, cccdEvidenceResult, cccdEvidenceReview]);
+  const activeHeldoutDocument =
+    heldout?.documents.find(
+      (document) => document.documentId === activeHeldoutId,
+    ) ?? null;
   const unifiedIdp = userResult?.phase15 ?? userResult?.phase12;
 
   return (
@@ -1315,10 +2085,10 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           <span>OCR LAB</span>
         </a>
         <nav aria-label="Điều hướng chính">
-          <a href="#phases">Phase 1-15</a>
-          <a href="#metrics">Chất lượng</a>
+          <a href="#metrics">Held-out thật</a>
           <a href="#upload">OCR tài liệu thật</a>
-          <a href="#explorer">Khám phá mẫu</a>
+          <a href="#explorer">Tài liệu &amp; CCCD</a>
+          <a href="#phases">Policy</a>
           <a href="#next">Tiếp theo</a>
         </nav>
         <span className={`live ${apiOnline ? "online" : ""}`}>
@@ -1349,24 +2119,19 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         </div>
         <figure className="hero-product">
           <div className="hero-product-frame">
-            {latestPrivateSession ? (
+            {activeHeldoutDocument?.previewAvailable ? (
+              <img
+                src={`${API_BASE}/heldout/document?id=${encodeURIComponent(
+                  activeHeldoutDocument.documentId,
+                )}&mode=preview`}
+                alt={`Tài liệu held-out thật ${activeHeldoutDocument.documentId}`}
+              />
+            ) : latestPrivateSession ? (
               <img
                 src={`${API_BASE}/user/visualization?id=${encodeURIComponent(
                   latestPrivateSession.sessionId,
                 )}&page=0`}
                 alt="Visualization OCR của tài liệu PII thật được xử lý trên máy local"
-                onError={(event) => {
-                  event.currentTarget.onerror = null;
-                  event.currentTarget.src =
-                    "/assets/hr-document-intelligence-context.webp";
-                }}
-              />
-            ) : featuredSample ? (
-              <img
-                src={`${API_BASE}/visualization?id=${encodeURIComponent(
-                  featuredSample.sampleId,
-                )}&profile=phase7`}
-                alt="Visualization OCR thật với bounding box trên tài liệu HCNS synthetic"
                 onError={(event) => {
                   event.currentTarget.onerror = null;
                   event.currentTarget.src =
@@ -1381,40 +2146,53 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             )}
           </div>
           <figcaption>
-            {latestPrivateSession
+            {activeHeldoutDocument
+              ? `${activeHeldoutDocument.documentId} — tài liệu thật trong held-out đã Ground Truth; chỉ phục vụ từ vùng private local.`
+              : latestPrivateSession
               ? "Visualization từ tài liệu PII thật gần nhất. Chỉ hiển thị và xử lý trên máy local."
-              : "Chưa có session PII thật. Đang hiển thị sample synthetic từ pipeline local."}
+              : "Chưa kết nối được bằng chứng tài liệu thật trên máy local."}
           </figcaption>
         </figure>
       </section>
 
       <section className="proof-strip" aria-label="Bằng chứng vận hành">
         <div>
-          <span>Native JSON</span>
-          <strong>{data.summary.nativeJsonCount}</strong>
-        </div>
-        <div>
-          <span>OCR thành công</span>
-          <strong>{pct(successRate)}</strong>
-        </div>
-        <div>
-          <span>Ground Truth</span>
-          <strong>{data.summary.matchedGroundTruthDocumentCount}/38</strong>
-        </div>
-        <div>
-          <span>Runtime</span>
+          <span>Bằng chứng thật</span>
           <strong>
-            {data.processing.ocrVersion} / {data.processing.device.toUpperCase()}
+            {heldout?.documentCount ?? "—"} HR + {reviewedCccdSessions.length} CCCD
           </strong>
+        </div>
+        <div>
+          <span>Phạm vi</span>
+          <strong>
+            {heldout ? Object.keys(heldout.byFamily).length : "—"} HR + ID
+          </strong>
+        </div>
+        <div>
+          <span>Field Exact</span>
+          <strong>{pct(heldout?.overall.fieldExactMatchRate ?? null)}</strong>
+        </div>
+        <div>
+          <span>Quyết định</span>
+          <strong>{heldout?.decision.production ?? "Chưa có"}</strong>
         </div>
       </section>
 
       <section className="section product-section" id="product">
         <figure className="product-context">
-          <img
-            src="/assets/hr-document-intelligence-context.webp"
-            alt="Nhân sự kiểm tra tài liệu đã khử thông tin nhận diện trên giao diện OCR"
-          />
+          {activeHeldoutDocument?.previewAvailable ? (
+            <img
+              src={`${API_BASE}/heldout/document?id=${encodeURIComponent(
+                activeHeldoutDocument.documentId,
+              )}&mode=preview`}
+              alt={`Tài liệu held-out thật ${activeHeldoutDocument.documentId}`}
+            />
+          ) : (
+            <div className="native-heldout-file">
+              <strong>Chưa kết nối private-data</strong>
+              <p>Khởi động API local với tham số --heldout-root.</p>
+            </div>
+          )}
         </figure>
         <div className="product-story">
           <h2>Một luồng xử lý, bằng chứng đi cùng dữ liệu.</h2>
@@ -1454,7 +2232,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           </p>
         </div>
 
-        {phase14 && (
+        {false && phase14 && (
           <div className="phase10-review">
             <div className="phase10-title">
               <div>
@@ -1841,10 +2619,17 @@ export default function Dashboard({ data }: { data: DashboardData }) {
 
             <div className="session-history">
               <div>
-                <h3>Session đã lưu</h3>
-                <span>{userSessions.length} session private</span>
+                <h3>Lịch sử upload private</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowSessionHistory((current) => !current)}
+                >
+                  {showSessionHistory
+                    ? "Ẩn lịch sử"
+                    : `Mở ${userSessions.length} session`}
+                </button>
               </div>
-              {userSessions.length ? (
+              {showSessionHistory && userSessions.length ? (
                 <ul>
                   {userSessions.slice(0, 20).map((session) => (
                     <li key={session.sessionId}>
@@ -1863,9 +2648,9 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                     </li>
                   ))}
                 </ul>
-              ) : (
+              ) : showSessionHistory ? (
                 <p>Chưa có tài liệu thật nào được lưu.</p>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -2260,6 +3045,17 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                       download
                     >
                       Tải Phase 11.4 JSON
+                    </a>
+                  )}
+                  {userResult.phase11_5 && (
+                    <a
+                      className="secondary-download"
+                      href={`${API_BASE}/user/phase11-5-evidence?id=${encodeURIComponent(
+                        userResult.sessionId,
+                      )}`}
+                      download
+                    >
+                      Táº£i Phase 11.5 JSON
                     </a>
                   )}
                   {unifiedIdp && (
@@ -2848,66 +3644,63 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       <section className="section" id="phases">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">EXECUTION MAP</p>
-            <h2>Phase 1 → Phase 16</h2>
+            <p className="eyebrow">LOCKED RECOGNITION POLICY</p>
+            <h2>Phương pháp nào đang thực sự chạy?</h2>
           </div>
-          <p>Mỗi phase có một đầu ra kiểm chứng được và dừng đúng điểm kiểm soát.</p>
+          <p>
+            Pipeline scan hiện dùng policy đã khóa; “tối ưu” ở đây là cấu hình
+            tốt nhất trong tập ứng viên, chưa đồng nghĩa đạt chất lượng production.
+          </p>
         </div>
         <div className="phase-grid">
-          {data.phases.map((phase) => (
-            <article className="phase-card" key={phase.number}>
-              <div className="phase-top">
-                <span>{String(phase.number).padStart(2, "0")}</span>
-                <b>{phase.status === "complete" ? "Complete" : "Needs review"}</b>
-              </div>
-              <h3>{phase.name}</h3>
-              <p>{phase.summary}</p>
-              <small>{phase.result}</small>
-            </article>
-          ))}
           <article className="phase-card">
             <div className="phase-top">
-              <span>11</span>
-              <b>Complete</b>
+              <span>01</span>
+              <b>Geometry only</b>
             </div>
-            <h3>CCCD structured extraction</h3>
+            <h3>Paddle detector</h3>
             <p>
-              Chuẩn hóa hướng/phối cảnh, parser theo nhãn và tọa độ, crop riêng
-              cho họ tên và địa chỉ, acceptance gate bảo thủ.
+              PP-OCRv5 tìm vùng chữ và giữ bounding box làm bằng chứng. Text do
+              Paddle nhận dạng không còn đủ điều kiện tự động được chọn.
             </p>
-            <small>
-              Ground truth 001-029 đã được review; field không chắc chắn luôn
-              chuyển sang needs_review.
-            </small>
+            <small>selectionEligible=false</small>
           </article>
           <article className="phase-card">
             <div className="phase-top">
-              <span>12</span>
-              <b>Complete</b>
+              <span>02</span>
+              <b>Primary active</b>
             </div>
-            <h3>Multi-format HR IDP</h3>
+            <h3>VietOCR vgg_seq2seq</h3>
             <p>
-              Ingest PDF native/scan/hybrid, DOCX, XLSX; phân loại tám nhóm HCNS
-              và parser riêng cho biểu mẫu, văn bản và bảng.
+              Mỗi crop được nhận dạng lại bằng model có weight và SHA-256 đã
+              khóa. Kết quả này là primary đưa vào Canonical Document của scan.
             </p>
-            <small>
-              50/50 phân loại đúng; năm parser mục tiêu và 280/280 ô timesheet
-              đạt exact trên tập tổng hợp.
-            </small>
+            <small>primaryProfile=vietocr_vgg_seq2seq</small>
           </article>
           <article className="phase-card">
             <div className="phase-top">
-              <span>16</span>
-              <b>Development</b>
+              <span>03</span>
+              <b>Verifier active</b>
             </div>
-            <h3>Structured HR parser hardening</h3>
+            <h3>VietOCR vgg_transformer</h3>
             <p>
-              Tách nhãn–giá trị có biên, đọc block nhiều dòng và dùng cấu trúc văn
-              bằng/quyết định để phục hồi field có bằng chứng.
+              Transformer đọc cùng crop. Exact agreement được ghi nhận; bất đồng
+              giữ nguyên primary và bắt buộc human review.
+            </p>
+            <small>disagreementAction=preserve_primary_and_require_review</small>
+          </article>
+          <article className="phase-card">
+            <div className="phase-top">
+              <span>04</span>
+              <b>Safety lock</b>
+            </div>
+            <h3>Không auto-switch fallback</h3>
+            <p>
+              LODO từng tăng tổng Exact Match nhưng làm hỏng dòng primary vốn
+              đúng. Vì vậy automatic replacement vẫn tắt.
             </p>
             <small>
-              Synthetic Field EM 30,92% → 37,50%; completeness 51,39% → 65,67%.
-              Vẫn SHADOW_REVIEW_ONLY, chưa phải production gate.
+              mode=SHADOW_REVIEW_ONLY · autoReplaceSelectedText=false
             </small>
           </article>
         </div>
@@ -2916,70 +3709,198 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       <section className="section metrics-section" id="metrics">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">MEASURED, NOT GUESSED</p>
-            <h2>Chất lượng baseline</h2>
+            <p className="eyebrow">REAL HELD-OUT · EVALUATE ONCE</p>
+            <h2>Kết quả trên 18 tài liệu thật</h2>
           </div>
-          <p>Metric field-level trên 507 field instances; dấu tiếng Việt được giữ nguyên.</p>
+          <p>
+            Chỉ hiển thị tập đã xác nhận Ground Truth và có quyền xử lý local.
+            Không còn trộn số liệu Phase đầu, ảnh che PII hoặc synthetic vào đây.
+          </p>
         </div>
+        {heldoutError && <div className="api-warning">{heldoutError}</div>}
         <div className="metric-grid">
           <article className="metric-card accent">
-            <span>CER ↓</span>
-            <strong>{decimal(data.summary.cer)}</strong>
-            <p>Character Error Rate</p>
-            <small>Baseline {decimal(data.baselineSummary.cer)}</small>
+            <span>CLASSIFICATION ↑</span>
+            <strong>
+              {pct(heldout?.overall.classificationAccuracy ?? null)}
+            </strong>
+            <p>Đúng nhóm tài liệu</p>
+            <small>{heldout?.documentCount ?? 0} tài liệu / 5 nhóm HCNS</small>
           </article>
           <article className="metric-card">
-            <span>WER ↓</span>
-            <strong>{decimal(data.summary.wer)}</strong>
-            <p>Word Error Rate</p>
-            <small>Baseline {decimal(data.baselineSummary.wer)}</small>
+            <span>FIELD EXACT ↑</span>
+            <strong>
+              {pct(heldout?.overall.fieldExactMatchRate ?? null)}
+            </strong>
+            <p>Giá trị trường khớp tuyệt đối</p>
+            <small>
+              {heldout?.overall.fieldExactMatchCount ?? 0}/
+              {heldout?.overall.evaluatedFieldCount ?? 0} field
+            </small>
           </article>
           <article className="metric-card">
-            <span>EXACT MATCH ↑</span>
-            <strong>{pct(data.summary.exactMatchRate)}</strong>
-            <p>Field value xuất hiện nguyên vẹn</p>
-            <small>Baseline {pct(data.baselineSummary.exactMatchRate)}</small>
+            <span>COMPLETENESS ↑</span>
+            <strong>{pct(heldout?.overall.fieldCompleteness ?? null)}</strong>
+            <p>Trường có giá trị được trích xuất</p>
+            <small>
+              Accepted {pct(heldout?.overall.acceptedFieldRate ?? null)}
+            </small>
           </article>
           <article className="metric-card">
-            <span>FIELD PRESENCE ↑</span>
-            <strong>{pct(data.summary.fieldPresenceRate)}</strong>
-            <p>Exact hoặc CER ≤ 0.25</p>
-            <small>Baseline {pct(data.baselineSummary.fieldPresenceRate)}</small>
+            <span>CER / WER ↓</span>
+            <strong>{pct(heldout?.overall.cer ?? null, 2)}</strong>
+            <p>WER {pct(heldout?.overall.wer ?? null, 2)}</p>
+            <small>DER {pct(heldout?.overall.der ?? null, 2)}</small>
           </article>
           <article className="metric-card dark">
-            <span>MEAN DURATION</span>
-            <strong>{duration(data.summary.durationMs.mean)}</strong>
-            <p>P95 {duration(data.summary.durationMs.p95)} / CPU</p>
-            <small>Baseline {duration(data.baselineSummary.durationMs.mean)}</small>
+            <span>PRODUCTION DECISION</span>
+            <strong>
+              {heldout?.decision.production === "NOT_PRODUCTION_READY"
+                ? "Chưa sẵn sàng"
+                : heldout?.decision.production ?? "Chưa có"}
+            </strong>
+            <p>{heldout?.decision.controlledPilot ?? "Chưa đánh giá"}</p>
+            <small>
+              {heldout?.decision.production ?? "Prediction ẩn · không retune"}
+            </small>
           </article>
         </div>
+        {replayAudit ? (
+          <div className="latest-replay-panel">
+            <header>
+              <div>
+                <span>
+                  {replayIsLiveV5
+                    ? "LIVE PP-OCRV5 REPLAY · AUDIT ONLY"
+                    : "LOCKED V4 REPLAY · AUDIT ONLY"}
+                </span>
+                <strong>
+                  {replayAudit.visualDocumentCount ??
+                    replayAudit.visualDocumentsReOcred ??
+                    0}{" "}
+                  tài liệu OCR
+                  {" · "}
+                  {replayAudit.nativeDocumentCount ??
+                    replayAudit.nativeDocumentsReparsed ??
+                    0}{" "}
+                  tài liệu native
+                </strong>
+              </div>
+              <small>
+                {replayIsLiveV5
+                  ? "Đúng pipeline localhost mới nhất; Ground Truth đã tồn tại nên chỉ dùng để audit."
+                  : "Ground Truth đã tồn tại trước replay — không đủ điều kiện promotion."}
+              </small>
+            </header>
+            <div>
+              <article>
+                <span>Classification</span>
+                <strong>
+                  {pct(replayAudit.baseline.overall.classificationAccuracy)} →{" "}
+                  {pct(replayAudit.latest.overall.classificationAccuracy)}
+                </strong>
+                <small>
+                  {signedPoints(replayAudit.delta.classificationAccuracy)}
+                </small>
+              </article>
+              <article>
+                <span>Field Exact</span>
+                <strong>
+                  {pct(
+                    replayAudit.baseline.overall.fieldExactMatchRate,
+                  )}{" "}
+                  →{" "}
+                  {pct(
+                    replayAudit.latest.overall.fieldExactMatchRate,
+                  )}
+                </strong>
+                <small>
+                  {signedPoints(
+                    replayAudit.delta.fieldExactMatchRate,
+                  )}
+                </small>
+              </article>
+              <article>
+                <span>Completeness</span>
+                <strong>
+                  {pct(
+                    replayAudit.baseline.overall.fieldCompleteness,
+                  )}{" "}
+                  →{" "}
+                  {pct(
+                    replayAudit.latest.overall.fieldCompleteness,
+                  )}
+                </strong>
+                <small>
+                  {signedPoints(
+                    replayAudit.delta.fieldCompleteness,
+                  )}
+                </small>
+              </article>
+              <article>
+                <span>CER ↓</span>
+                <strong>
+                  {pct(replayAudit.baseline.overall.cer, 2)} →{" "}
+                  {pct(replayAudit.latest.overall.cer, 2)}
+                </strong>
+                <small>{signedPoints(replayAudit.delta.cer)}</small>
+              </article>
+              <article>
+                <span>Sensitive false acceptance</span>
+                <strong>
+                  {
+                    replayAudit.baseline
+                      .sensitiveFieldFalseAcceptanceCount
+                  }{" "}
+                  →{" "}
+                  {
+                    replayAudit.latest
+                      .sensitiveFieldFalseAcceptanceCount
+                  }
+                </strong>
+                <small>{replayAudit.decision.status}</small>
+              </article>
+            </div>
+          </div>
+        ) : null}
         <div className="performance-panel">
           <div className="panel-title">
             <div>
-              <h3>CER theo loại tài liệu</h3>
-              <p>Thấp hơn là tốt hơn</p>
+              <h3>Kết quả theo nhóm tài liệu thật</h3>
+              <p>Field Exact Match và completeness</p>
             </div>
-          <span>Phase 7 / 114 synthetic samples</span>
+            <span>{heldout?.datasetId ?? "Real held-out chưa kết nối"}</span>
           </div>
           <div className="bars">
-            {typePerformance.map((item) => (
-              <div className="bar-row" key={item.name}>
-                <span>{typeLabels[item.name] ?? item.name}</span>
+            {Object.entries(heldout?.byFamily ?? {}).map(([name, metric]) => (
+              <div className="bar-row" key={name}>
+                <span>{familyLabels[name] ?? name}</span>
                 <div className="bar-track">
-                  <i style={{ width: `${Math.min(item.cer / 0.25, 1) * 100}%` }} />
+                  <i
+                    style={{
+                      width: `${Math.max(metric.fieldExactMatchRate * 100, 1)}%`,
+                    }}
+                  />
                 </div>
-                <b>{item.cer.toFixed(4)}</b>
+                <b>{pct(metric.fieldExactMatchRate)}</b>
               </div>
             ))}
           </div>
           <aside>
-            <span>BEST</span>
-            <strong>Employment Contract</strong>
-            <b>CER 0.0713</b>
+            <span>TABLE CONTRACT</span>
+            <strong>
+              {heldout?.overall.exactTableCellCount ?? 0}/
+              {heldout?.overall.expectedTableCellCount ?? 0} ô exact
+            </strong>
+            <b>
+              Completeness {pct(heldout?.overall.tableCompleteness ?? null)}
+            </b>
             <hr />
-            <span>NEEDS WORK</span>
-            <strong>Generic PDF</strong>
-            <b>CER 0.2300</b>
+            <span>ĐÁNH GIÁ</span>
+            <strong>{heldout?.evaluationRunCount ?? 0} lần duy nhất</strong>
+            <b>
+              {heldout?.thresholdRetuned ? "Có retune" : "Không retune held-out"}
+            </b>
           </aside>
         </div>
       </section>
@@ -2987,90 +3908,319 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       <section className="section explorer-section" id="explorer">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">RESULT EXPLORER</p>
-            <h2>Khám phá từng mẫu</h2>
+            <p className="eyebrow">LOCAL REAL-DOCUMENT EVIDENCE</p>
+            <h2>Tài liệu HCNS và CCCD đã review</h2>
           </div>
-          <p>Chọn một hàng để xem Native OCR text và visualization trực tiếp từ private-data.</p>
+          <p>
+            Ảnh/file được phục vụ trực tiếp từ private-data trên loopback, không
+            được đóng gói vào website hoặc commit lên Git.
+          </p>
         </div>
-        <div className="filters">
-          <label className="search-box">
-            <span>⌕</span>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Tìm document hoặc sample ID…"
-            />
-          </label>
-          <label>
-            <span>Loại tài liệu</span>
-            <select value={type} onChange={(event) => setType(event.target.value)}>
-              <option value="ALL">Tất cả</option>
-              {types.map((name) => (
-                <option key={name} value={name}>
-                  {typeLabels[name] ?? name}
-                </option>
+        <div className="evidence-switch" role="tablist">
+          <button
+            className={evidenceMode === "heldout" ? "active" : ""}
+            onClick={() => setEvidenceMode("heldout")}
+            role="tab"
+            aria-selected={evidenceMode === "heldout"}
+          >
+            18 tài liệu HCNS held-out
+          </button>
+          <button
+            className={evidenceMode === "uploads" ? "active" : ""}
+            onClick={() => setEvidenceMode("uploads")}
+            role="tab"
+            aria-selected={evidenceMode === "uploads"}
+          >
+            {uploadedHrSessions.length} upload HCNS local
+          </button>
+          <button
+            className={evidenceMode === "cccd" ? "active" : ""}
+            onClick={() => setEvidenceMode("cccd")}
+            role="tab"
+            aria-selected={evidenceMode === "cccd"}
+          >
+            {reviewedCccdSessions.length} CCCD đã Ground Truth
+          </button>
+        </div>
+        {evidenceMode === "heldout" ? (
+          <div className="heldout-evidence-grid">
+            <div className="heldout-document-list" role="list">
+              {(heldout?.documents ?? []).map((document) => (
+                <button
+                  className={
+                    document.documentId === activeHeldoutId ? "active" : ""
+                  }
+                  key={document.documentId}
+                  onClick={() => setActiveHeldoutId(document.documentId)}
+                  role="listitem"
+                >
+                  <span>{document.documentId}</span>
+                  <strong>
+                    {familyLabels[document.documentFamily] ??
+                      document.documentFamily}
+                  </strong>
+                  <small>
+                    {document.sourceFormat} ·{" "}
+                    {document.previewAvailable ? "có preview" : "mở file gốc"}
+                  </small>
+                </button>
               ))}
-            </select>
-          </label>
-          <label>
-            <span>Biến thể</span>
-            <select value={variant} onChange={(event) => setVariant(event.target.value)}>
-              <option value="ALL">Tất cả</option>
-              {variants.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Trạng thái</span>
-            <select value={status} onChange={(event) => setStatus(event.target.value)}>
-              <option value="ALL">Tất cả</option>
-              <option value="SUCCESS">OCR success</option>
-              <option value="FAILED">Không nhận ra text</option>
-            </select>
-          </label>
-        </div>
-        <div className="table-meta">
-          <span>{filtered.length} / {data.samples.length} mẫu</span>
-          <span>Click một hàng để xem chi tiết</span>
-        </div>
-        <div className="results-table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Sample</th>
-                <th>Loại</th>
-                <th>Biến thể</th>
-                <th>Trạng thái</th>
-                <th>Confidence</th>
-                <th>CER</th>
-                <th>Exact</th>
-                <th>Duration</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((sample) => (
-                <tr key={sample.sampleId}>
-                  <td>
-                    <button onClick={() => setSelected(sample)}>{sample.sampleId}</button>
-                  </td>
-                  <td>{typeLabels[sample.documentType] ?? sample.documentType}</td>
-                  <td><code>{sample.variant}</code></td>
-                  <td>
-                    <span className={`status-pill ${sample.ocrSuccess ? "success" : "failed"}`}>
-                      {sample.ocrSuccess ? "Success" : "No text"}
+            </div>
+            <div className="heldout-preview">
+              {activeHeldoutDocument?.previewAvailable ? (
+                activeHeldoutDocument.sourceFormat === "PDF" ? (
+                  <iframe
+                    title={`Preview ${activeHeldoutDocument.documentId}`}
+                    src={`${API_BASE}/heldout/document?id=${encodeURIComponent(
+                      activeHeldoutDocument.documentId,
+                    )}&mode=preview`}
+                  />
+                ) : (
+                  <img
+                    src={`${API_BASE}/heldout/document?id=${encodeURIComponent(
+                      activeHeldoutDocument.documentId,
+                    )}&mode=preview`}
+                    alt={`Tài liệu thật ${activeHeldoutDocument.documentId}`}
+                  />
+                )
+              ) : (
+                <div className="native-heldout-file">
+                  <span>{activeHeldoutDocument?.sourceFormat ?? "—"}</span>
+                  <strong>Đối chiếu bằng ứng dụng local</strong>
+                  <p>
+                    DOCX/XLSX được đọc native nên không chuyển thành ảnh giả để
+                    trình bày.
+                  </p>
+                </div>
+              )}
+              {activeHeldoutDocument && (
+                <div className="heldout-preview-actions">
+                  <div>
+                    <strong>{activeHeldoutDocument.documentId}</strong>
+                    <span>
+                      {familyLabels[activeHeldoutDocument.documentFamily] ??
+                        activeHeldoutDocument.documentFamily}
                     </span>
-                  </td>
-                  <td>{pct(sample.avgConfidence)}</td>
-                  <td>{decimal(sample.cer)}</td>
-                  <td>{pct(sample.exactMatchRate)}</td>
-                  <td>{duration(sample.durationMs)}</td>
-                </tr>
+                  </div>
+                  <a
+                    href={`${API_BASE}/heldout/document?id=${encodeURIComponent(
+                      activeHeldoutDocument.documentId,
+                    )}&mode=source`}
+                  >
+                    Mở / tải file gốc
+                  </a>
+                </div>
+              )}
+            </div>
+            <EvidenceInspector
+              detail={heldoutEvidence}
+              loading={heldoutEvidenceLoading}
+              error={heldoutEvidenceError}
+              view={evidenceInspectorView}
+              onViewChange={setEvidenceInspectorView}
+            />
+          </div>
+        ) : evidenceMode === "uploads" ? (
+          <div className="heldout-evidence-grid">
+            <div className="heldout-document-list" role="list">
+              {uploadedHrSessions.map((session, index) => (
+                <button
+                  className={
+                    session.sessionId === activeUploadSession?.sessionId
+                      ? "active"
+                      : ""
+                  }
+                  key={session.sessionId}
+                  onClick={() => setActiveUploadSessionId(session.sessionId)}
+                  role="listitem"
+                >
+                  <span>UPLOAD-{String(index + 1).padStart(2, "0")}</span>
+                  <strong>{session.originalFileName}</strong>
+                  <small>
+                    {session.documentType ?? "OTHER_HR_DOCUMENT"} ·{" "}
+                    {session.recognizedTextLineCount} dòng ·{" "}
+                    {pct(session.avgConfidence)}
+                  </small>
+                </button>
               ))}
-            </tbody>
-          </table>
+            </div>
+            <div className="heldout-preview">
+              {activeUploadSession ? (
+                <img
+                  src={`${API_BASE}/user/source?id=${encodeURIComponent(
+                    activeUploadSession.sessionId,
+                  )}`}
+                  alt={`Tài liệu upload ${activeUploadSession.originalFileName}`}
+                />
+              ) : (
+                <div className="native-heldout-file">
+                  <strong>Chưa có session HCNS local phù hợp</strong>
+                </div>
+              )}
+              {activeUploadSession && (
+                <div className="heldout-preview-actions">
+                  <div>
+                    <strong>{activeUploadSession.originalFileName}</strong>
+                    <span>
+                      {activeUploadSession.documentType ??
+                        "OTHER_HR_DOCUMENT"}{" "}
+                      · confidence {pct(activeUploadSession.avgConfidence)}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() =>
+                      void openEvidenceSession(activeUploadSession.sessionId)
+                    }
+                  >
+                    Mở OCR, field và JSON
+                  </button>
+                </div>
+              )}
+            </div>
+            <EvidenceInspector
+              detail={activeUploadEvidence}
+              loading={uploadEvidenceLoading}
+              error={uploadEvidenceError}
+              view={evidenceInspectorView}
+              onViewChange={setEvidenceInspectorView}
+              downloads={
+                activeUploadSession
+                  ? [
+                      {
+                        label: "OCR JSON",
+                        href: `${API_BASE}/user/download?id=${encodeURIComponent(
+                          activeUploadSession.sessionId,
+                        )}`,
+                      },
+                      {
+                        label: "Business JSON",
+                        href: `${API_BASE}/user/phase15-business?id=${encodeURIComponent(
+                          activeUploadSession.sessionId,
+                        )}`,
+                      },
+                      ...(uploadEvidenceResult?.phase11_5
+                        ? [
+                            {
+                              label: "Phase 11.5 Evidence",
+                              href: `${API_BASE}/user/phase11-5-evidence?id=${encodeURIComponent(
+                                activeUploadSession.sessionId,
+                              )}`,
+                            },
+                          ]
+                        : []),
+                    ]
+                  : []
+              }
+            />
+          </div>
+        ) : (
+          <div className="heldout-evidence-grid">
+            <div className="heldout-document-list" role="list">
+              {reviewedCccdSessions.map((session, index) => (
+                <button
+                  className={
+                    session.sessionId === activeCccdSession?.sessionId
+                      ? "active"
+                      : ""
+                  }
+                  key={session.sessionId}
+                  onClick={() => setActiveCccdSessionId(session.sessionId)}
+                  role="listitem"
+                >
+                  <span>CCCD-{String(index + 1).padStart(2, "0")}</span>
+                  <strong>{session.originalFileName}</strong>
+                  <small>
+                    Ground Truth ✓ · Phase {session.phase11Version ?? "—"} ·{" "}
+                    {session.recognizedTextLineCount} dòng ·{" "}
+                    {pct(session.avgConfidence)}
+                  </small>
+                </button>
+              ))}
+            </div>
+            <div className="heldout-preview">
+              {activeCccdSession ? (
+                <img
+                  src={`${API_BASE}/user/source?id=${encodeURIComponent(
+                    activeCccdSession.sessionId,
+                  )}`}
+                  alt={`CCCD thật đã review ${activeCccdSession.originalFileName}`}
+                />
+              ) : (
+                <div className="native-heldout-file">
+                  <strong>Chưa có session CCCD đã Ground Truth</strong>
+                </div>
+              )}
+              {activeCccdSession && (
+                <div className="heldout-preview-actions">
+                  <div>
+                    <strong>{activeCccdSession.originalFileName}</strong>
+                    <span>
+                      CCCD · Ground Truth ✓ · Phase{" "}
+                      {activeCccdSession.phase11Version ?? "—"} · confidence{" "}
+                      {pct(activeCccdSession.avgConfidence)}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() =>
+                      void openEvidenceSession(activeCccdSession.sessionId)
+                    }
+                  >
+                    Mở OCR, field và JSON
+                  </button>
+                </div>
+              )}
+            </div>
+            <EvidenceInspector
+              detail={activeCccdEvidence}
+              loading={cccdEvidenceLoading}
+              error={cccdEvidenceError}
+              view={evidenceInspectorView}
+              onViewChange={setEvidenceInspectorView}
+              downloads={
+                activeCccdSession
+                  ? [
+                      {
+                        label: "OCR JSON",
+                        href: `${API_BASE}/user/download?id=${encodeURIComponent(
+                          activeCccdSession.sessionId,
+                        )}`,
+                      },
+                      ...(cccdEvidenceResult?.phase11_5
+                        ? [
+                            {
+                              label: "Phase 11.5 Evidence",
+                              href: `${API_BASE}/user/phase11-5-evidence?id=${encodeURIComponent(
+                                activeCccdSession.sessionId,
+                              )}`,
+                            },
+                          ]
+                        : []),
+                      {
+                        label: "Business JSON",
+                        href: cccdEvidenceResult?.phase11_5
+                          ? `${API_BASE}/user/phase11-5-business?id=${encodeURIComponent(
+                              activeCccdSession.sessionId,
+                            )}`
+                          : `${API_BASE}/user/phase15-business?id=${encodeURIComponent(
+                              activeCccdSession.sessionId,
+                            )}`,
+                      },
+                    ]
+                  : []
+              }
+            />
+          </div>
+        )}
+        <div className="privacy-boundary">
+          <strong>
+            Phạm vi quyền hiện tại: local-only · publicReleaseAuthorized=
+            {String(heldout?.publicReleaseAuthorized ?? false)}
+          </strong>
+          <p>
+            Báo cáo Git chỉ công khai số liệu aggregate không chứa PII. Muốn đưa
+            ảnh thô vào repository công khai phải bổ sung quyền phân phối công
+            khai và sự đồng ý của chủ thể cho từng document ID.
+          </p>
         </div>
       </section>
 
@@ -3078,15 +4228,16 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         <div className="section-heading">
           <div>
             <p className="eyebrow">RECOMMENDED NEXT</p>
-            <h2>Phase 13: pilot trên tài liệu thật</h2>
+            <h2>Giải quyết recognizer bằng bằng chứng thật</h2>
           </div>
           <p>
-            Phase 12 đã hoàn tất trên tập tổng hợp. Bước tiếp theo là đo lại cùng
-            quality gate trên tài liệu thật do bạn có quyền xử lý.
+            Kết quả 18 tài liệu thật đã cho thấy lỗi không chỉ ở dấu tiếng Việt:
+            classifier, reading order, field parser và table contract đều đang
+            kéo metric xuống. Cần sửa theo tầng, không thể chỉ đổi một model.
           </p>
         </div>
         <div className="next-grid">
-          {phase13Steps.map((step) => (
+          {phase17Steps.map((step) => (
             <article key={step.order}>
               <span>0{step.order}</span>
               <h3>{step.title}</h3>

@@ -26,6 +26,7 @@ Chỉ đọc các file cần cho tác vụ:
 | Schema | `schemas/`, `docs/DATA_SECURITY.md` |
 | Test/benchmark | `docs/EVALUATION.md`, `tests/AGENTS.md` |
 | Tài liệu | `docs/AGENTS.md` |
+| Báo cáo tiến độ mentor | `docs/MENTOR_4_DAY_PROGRESS_REPORT.md`, `docs/EVALUATION.md` |
 
 Không quét toàn repository, dataset, output OCR hoặc `node_modules`.
 

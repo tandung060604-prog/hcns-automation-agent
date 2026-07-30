@@ -194,6 +194,42 @@ hồi 44 lỗi nhưng làm mất hai dòng seq2seq vốn đúng. DER tăng từ 
 Vì vậy rule chỉ được chạy `SHADOW_REVIEW_ONLY`; không auto-accept và không thay
 primary production.
 
+## Phase 11.5 — CCCD Unicode và base-text evidence
+
+CCCD mặt trước dùng profile ROI tương đối cho tám trường. Nhãn Việt/Anh chỉ
+tinh chỉnh ROI trong biên dự kiến; nó không được phép trở thành giá trị field.
+Mỗi ROI lưu bounding box, crop và candidate làm provenance.
+
+Bốn recognizer chạy local trên bốn biến thể crop không phủ nhận dấu:
+
+1. PaddleOCR PP-OCRv5;
+2. EasyOCR `vi`;
+3. VietOCR `vgg_seq2seq`;
+4. VietOCR `vgg_transformer`.
+
+Chỉ `exact_consensus` của ít nhất hai recognizer độc lập và validation hợp lệ
+mới cho phép `value.status=accepted`. Nếu các model chỉ đồng thuận sau khi bỏ
+dấu, `value` vẫn `needs_review`; `asciiValue` mang
+`asciiStatus=verified_base_text`. `asciiValue` không bao giờ thay thế âm thầm
+giá trị Unicode pháp lý.
+
+Với họ tên, quốc tịch và hai trường địa chỉ, exact consensus chỉ gồm ký tự
+ASCII vẫn là `needs_review`: pipeline phải có bằng chứng Unicode trực tiếp mới
+được chấp nhận tự động. Chuẩn hóa enum không được tự sinh dấu còn thiếu.
+
+Policy, manifest development, ROI/crop profile và sáu artifact model được khóa
+SHA-256 trong `config/phase11_5_cccd_policy.json`. Tập 15 CCCD hiện tại là
+development/regression do đã được dùng tinh chỉnh. Promotion chỉ được đánh giá
+một lần trên tối thiểu 15 CCCD mới theo quy trình prediction ẩn rồi xác nhận
+Ground Truth.
+
+Kết quả development 15 CCCD sau khi khóa policy: Strict Field Exact Match
+60,00%, ASCII Exact Match 61,67%, CER 43,60%, Base CER 41,87%, DER 12,65%,
+Field Presence 95,83% và Accepted Precision 100%. So với Phase 11.4, lỗi mất
+ký tự giảm 82,35% và không còn sensitive-field false acceptance. Gate vẫn
+`SHADOW_REVIEW_ONLY`: full-name ASCII EM mới đạt 73,33%, address ASCII EM
+3,33%, còn 5 field regression và ROI/candidate oracle của địa chỉ quá thấp.
+
 ## MinerU challenger
 
 Phù hợp khi:
