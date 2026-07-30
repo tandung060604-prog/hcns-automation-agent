@@ -991,6 +991,7 @@ function EvidenceInspector({
   const [predictionSource, setPredictionSource] =
     useState<"live_v5" | "locked_replay" | "sealed">("live_v5");
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset selection for a new evidence document.
     setPredictionSource(
       detail?.predictionProvenance?.defaultSource ?? "sealed",
     );
@@ -1420,6 +1421,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
 
   useEffect(() => {
     if (!activeHeldoutId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale evidence when the list becomes empty.
       setHeldoutEvidence(null);
       return;
     }
@@ -1892,6 +1894,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const activeUploadEvidenceId = activeUploadSession?.sessionId ?? "";
   useEffect(() => {
     if (!activeUploadEvidenceId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale evidence when the selected upload disappears.
       setUploadEvidenceResult(null);
       setUploadEvidenceReview(null);
       return;
@@ -1984,6 +1987,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const activeCccdEvidenceId = activeCccdSession?.sessionId ?? "";
   useEffect(() => {
     if (!activeCccdEvidenceId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale CCCD evidence when the selected session disappears.
       setCccdEvidenceResult(null);
       setCccdEvidenceReview(null);
       return;
