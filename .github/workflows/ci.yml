@@ -27,7 +27,7 @@ jobs:
           apps/ocr_lab/api/local_server_security.py
           apps/ocr_lab/api/phase14_review_store.py
           apps/ocr_lab/api/upload_safety.py
-      - run: mypy src
+      - run: mypy --python-version ${{ matrix.python-version }} src
       - run: python -m compileall -q apps/ocr_lab/api
       - run: python scripts/check_repository.py
 
