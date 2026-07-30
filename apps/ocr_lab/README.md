@@ -73,6 +73,38 @@ Corpus hiện có `authorizedLocalDocumentsOnly=true`: tài liệu thật không
 đóng gói vào web build hoặc commit Git. Report công khai chỉ chứa aggregate
 không có PII.
 
+Endpoint `/heldout/evidence` chỉ chạy trên loopback và trả Ground Truth,
+prediction cùng `schemaRef` của đúng document cho panel đối chiếu field/JSON.
+Local Real-Document Evidence có ba nguồn tách biệt: held-out HCNS, session upload
+HCNS và CCCD đã Ground Truth; mỗi nguồn hiển thị ảnh/file bên trái, schema/field
+hoặc JSON bên phải và không nhúng artifact private vào web build.
+Định tuyến CCCD chỉ dùng orientation thực sự được chọn. Classifier cuối bác
+route CCCD cũ khi có nhiều marker CV độc lập; audit live-v5 mới nhất vẫn phát
+hiện ba ảnh bằng cấp/chứng chỉ bị route nhầm sang `IDENTITY_DOCUMENT`, nên vấn
+đề route ngoài CV chưa được coi là đã sửa xong.
+
+Local Evidence ưu tiên prediction từ replay 15 tài liệu bằng đúng pipeline
+localhost hiện hành: PP-OCRv5 detector, VietOCR Seq2Seq/Transformer và parser
+Phase 17. Hai nguồn tham chiếu cũ (policy v4 khóa và sealed parser 1.0) vẫn có
+nút chuyển riêng. Replay chạy sau khi Ground Truth đã mở nên chỉ là audit,
+không đủ điều kiện promotion.
+
+Riêng CCCD dùng pipeline chuyên biệt Phase 11.5 thay vì parser HCNS tổng quát.
+Tám ROI mặt trước chạy PaddleOCR PP-OCRv5, EasyOCR `vi`, VietOCR Seq2Seq và
+Transformer trên bốn crop profile. JSON giữ riêng `value` Unicode và
+`asciiValue`; chuỗi không dấu chỉ phục vụ tìm kiếm/review và không thay thế
+giá trị pháp lý. Chỉ đồng thuận chính xác từ ít nhất hai họ recognizer độc lập
+mới có thể `accepted`; các trường còn lại là `needs_review`. Local Evidence
+hiển thị Ground Truth, prediction Unicode, prediction không dấu, lớp lỗi,
+crop và toàn bộ candidate ngay tại từng field.
+Họ tên, quốc tịch và địa chỉ chỉ có exact consensus ASCII vẫn phải review;
+pipeline không tự thêm dấu để tạo giá trị pháp lý.
+
+Development 15 CCCD hiện đạt Field EM 60,00%, ASCII EM 61,67%, CER 43,60%,
+DER 12,65%, Field Presence 95,83% và Accepted Precision 100%. Full-name ASCII
+EM 73,33% và address ASCII EM 3,33% vẫn dưới gate, nên policy tiếp tục
+`SHADOW_REVIEW_ONLY`.
+
 ## Ground Truth và F5
 
 Review đã lưu được API trả về trong `lineReviews`. Giao diện tạo queue chỉ từ

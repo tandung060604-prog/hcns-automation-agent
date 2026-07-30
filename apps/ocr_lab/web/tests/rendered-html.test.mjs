@@ -70,6 +70,21 @@ test("keeps Phase 11.4 CCCD controls in the local upload flow", async () => {
   assert.match(layout, /HR Document Intelligence Lab/);
 });
 
+test("shows Phase 11.5 Unicode, ASCII and crop evidence controls", async () => {
+  const source = await readFile(
+    new URL("../app/Dashboard.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /phase11_5/);
+  assert.match(source, /asciiValue/);
+  assert.match(source, /phase11-5-crop/);
+  assert.match(source, /phase11-5-evidence/);
+  assert.match(source, /errorSignals/);
+  assert.match(source, /evidenceErrorClass/);
+  assert.match(source, /Prediction tiếng Việt/);
+  assert.match(source, /Prediction không dấu/);
+});
+
 test("exposes the Phase 15 multi-format IDP and field review flow", async () => {
   const [dashboard, css] = await Promise.all([
     readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
@@ -88,6 +103,14 @@ test("exposes the Phase 15 multi-format IDP and field review flow", async () => 
   assert.match(dashboard, /Tài liệu HCNS và CCCD đã review/);
   assert.match(dashboard, /CCCD đã Ground Truth/);
   assert.match(dashboard, /\/user\/source/);
+  assert.match(dashboard, /\/heldout\/evidence/);
+  assert.match(dashboard, /EvidenceInspector/);
+  assert.match(dashboard, /upload HCNS local/);
+  assert.match(dashboard, /Live v5 mới nhất · parser 2\.0/);
+  assert.match(dashboard, /CCCD Phase \$\{phase11Label/);
+  assert.match(dashboard, /NGUỒN PREDICTION/);
+  assert.match(dashboard, /LIVE PP-OCRV5 REPLAY · AUDIT ONLY/);
+  assert.match(dashboard, /Business JSON/);
   assert.doesNotMatch(dashboard, /Phase 7 \/ 114 synthetic samples/);
   assert.match(dashboard, /userResult\.phase15 \? "phase15" : "phase12"/);
   assert.match(dashboard, /\/user\/phase15-review/);
@@ -97,6 +120,9 @@ test("exposes the Phase 15 multi-format IDP and field review flow", async () => 
   assert.match(dashboard, /Tải Business JSON/);
   assert.match(css, /\.phase12-strip/);
   assert.match(css, /\.phase15-review/);
+  assert.match(css, /\.evidence-inspector/);
+  assert.match(css, /\.evidence-field-row/);
+  assert.match(css, /\.evidence-json/);
 });
 
 test("shows the reviewed Phase 14 recognizer decision", async () => {

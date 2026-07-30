@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "phase11.5-cccd-policy/1.0.0",
+  "phaseVersion": "11.5.0",
+  "status": "SHADOW_REVIEW_ONLY",
+  "documentScope": "VIETNAM_CITIZEN_ID_FRONT",
+  "developmentManifest": {
+    "documentCount": 15,
+    "sha256": "8f79a53ca40d705392064a739b927f3f383adab9c2519d617277eb4f7e8339f0"
+  },
+  "modelLocks": [
+    {
+      "profile": "paddle_ppocrv5_detector",
+      "artifact": "PP-OCRv5_mobile_det/inference.pdiparams",
+      "bytes": 4692937,
+      "sha256": "afa1820cb16c1fd0dad589d0f8b389139061c1ef6d68019685fd07be997dda5b"
+    },
+    {
+      "profile": "paddle_ppocrv5_recognizer",
+      "artifact": "latin_PP-OCRv5_mobile_rec/inference.pdiparams",
+      "bytes": 7965915,
+      "sha256": "53cdc8b481a7394bb108f96d0fb3432b0a8f392e22c7d18f06dbb2d42b8b25f9"
+    },
+    {
+      "profile": "easyocr_detector",
+      "artifact": "easyocr_models/craft_mlt_25k.pth",
+      "bytes": 83152330,
+      "sha256": "4a5efbfb48b4081100544e75e1e2b57f8de3d84f213004b14b85fd4b3748db17"
+    },
+    {
+      "profile": "easyocr_vi",
+      "artifact": "easyocr_models/latin_g2.pth",
+      "bytes": 15406141,
+      "sha256": "aaa95be1c4a9cb3496879bed7c520886ce1164f89e026f0c54488394e74e8c55"
+    },
+    {
+      "profile": "vietocr_vgg_seq2seq",
+      "artifact": "vietocr_models/vgg_seq2seq.pth",
+      "bytes": 89575371,
+      "sha256": "0921503a41375a0584268e23ef3d414ea478a8fe8777865c7745d38f2d0bc5db"
+    },
+    {
+      "profile": "vietocr_vgg_transformer",
+      "artifact": "vietocr_models/vgg_transformer.pth",
+      "bytes": 151815373,
+      "sha256": "380512193a8b6cbf6fad80deacdc9b6939d10d473d199892fc6408d13775ea59"
+    }
+  ],
+  "modelProfiles": [
+    "paddle_ppocrv5",
+    "easyocr_vi",
+    "vietocr_vgg_seq2seq",
+    "vietocr_vgg_transformer"
+  ],
+  "cropProfiles": [
+    "color_original",
+    "grayscale_clahe",
+    "lanczos_upscale",
+    "balanced_padding"
+  ],
+  "cropProfileSha256": "c4b0d2c92b8633bbe11c0cec945ede006be25c17d5fe6139932874dd9f6bbb2d",
+  "roiRefinement": {
+    "defaultTopPaddingLineRatio": 0.05,
+    "expiryTopPaddingLineRatio": 1.55,
+    "nextLabelBottomGapLineRatio": 0.05
+  },
+  "selection": {
+    "exactConsensusMinimumRecognizers": 2,
+    "baseConsensusMinimumRecognizers": 2,
+    "exactConsensusMinimumRecognizerFamilies": 2,
+    "baseConsensusMinimumRecognizerFamilies": 2,
+    "nationalityAcceptanceRequiresNoErrorSignals": true,
+    "unsafeEvidenceSignals": [
+      "label_contamination",
+      "region_or_line_merge"
+    ],
+    "groundTruthAvailableAtInference": false,
+    "dictionaryMayCreateValues": false,
+    "asciiMayReplaceUnicodeValue": false,
+    "consensusGroupRanking": [
+      "fieldValidationPass",
+      "recognizerProfileCount",
+      "supportingCropCount",
+      "recognizerFamilyCount",
+      "meanConfidence"
+    ],
+    "unicodeEvidenceRequiredForTextualLegalFields": [
+      "fullName",
+      "nationality",
+      "placeOfOrigin",
+      "placeOfResidence"
+    ]
+  },
+  "recognitionPolicySha256": "cacb0c96f5b3ed08c4c82f9c58b21551624643118753919a963199c5a9457476",
+  "implementationSha256": "3d995cb6286eab5c3b7a47448624ebe963e5c87fc194f38619678dcf72894dfa",
+  "schemaSha256": "b2ad2ea4ee02b4eb98c05d5a33689895ac333352fd957495cac2fc260bc61b8a",
+  "promotionGate": {
+    "acceptedPrecision": 1.0,
+    "fullNameAsciiExactMatch": 0.9,
+    "addressAsciiExactMatch": 0.85,
+    "characterOmissionReduction": 0.5,
+    "fieldPresence": 0.95,
+    "sensitiveFieldFalseAcceptanceCount": 0,
+    "noRegressionAgainstPhase11_4ExactFields": true
+  }
+}

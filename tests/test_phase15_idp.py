@@ -104,7 +104,6 @@ class Phase15ClassificationTests(unittest.TestCase):
         self.assertEqual("OTHER_HR_DOCUMENT", result["documentFamily"])
         self.assertEqual("needs_review", result["status"])
 
-
 class Phase15ExtractionTests(unittest.TestCase):
     def test_timesheet_uses_dedicated_fields_and_preserves_daily_cells(
         self,

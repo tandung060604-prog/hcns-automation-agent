@@ -9,6 +9,7 @@ import mimetypes
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -22,14 +23,30 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import cv2
-import pypdfium2 as pdfium
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+try:
+    import pypdfium2 as pdfium
+except ImportError:  # Evidence-only mode can run without PDF rendering.
+    pdfium = None
+from document_route_safety import (
+    safe_existing_document_route,
+    selected_orientations_are_identity,
+)
 from heldout_dashboard import (
     load_heldout_dashboard,
+    load_heldout_document_evidence,
     resolve_heldout_document,
     resolve_heldout_root,
 )
 from local_server_security import require_loopback_host
-from paddleocr import PaddleOCR
+
+try:
+    from paddleocr import PaddleOCR
+except ImportError:  # Evidence-only mode can run while OCR env is repaired.
+    PaddleOCR = None
 from phase9_pipeline import (
     classify_document,
     enrich_result,
@@ -96,6 +113,42 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def resolve_phase11_5_crop(
+    data_root: Path,
+    session_dir: Path,
+    field_name: str,
+    variant_name: str,
+) -> Path | None:
+    """Resolve a Phase 11.5 crop without allowing evidence paths outside private data."""
+    session_crop = (
+        session_dir / "phase11_5" / "crops" / f"{field_name}_{variant_name}.png"
+    )
+    if session_crop.is_file():
+        return session_crop
+
+    evidence_path = session_dir / "phase11_5" / "field_consensus.json"
+    if not evidence_path.is_file():
+        return None
+    try:
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        raw_path = (
+            evidence.get("crops", {})
+            .get(field_name, {})
+            .get(variant_name, {})
+            .get("path")
+        )
+    except (AttributeError, json.JSONDecodeError, OSError):
+        return None
+    if not raw_path:
+        return None
+
+    candidate_path = Path(str(raw_path)).resolve()
+    private_root = data_root.resolve()
+    if candidate_path.is_file() and private_root in candidate_path.parents:
+        return candidate_path
+    return None
+
+
 def deduplicate(values: list[str]) -> list[str]:
     seen: set[str] = set()
     output: list[str] = []
@@ -109,18 +162,12 @@ def deduplicate(values: list[str]) -> list[str]:
 
 def extract_candidates(text: str) -> dict[str, list[str]]:
     return {
-        "emails": deduplicate(
-            re.findall(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", text, re.I)
-        ),
+        "emails": deduplicate(re.findall(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", text, re.I)),
         "phoneNumbers": deduplicate(
             re.findall(r"(?<!\d)(?:\+?84|0)(?:[\s.\-]?\d){8,10}(?!\d)", text)
         ),
-        "dates": deduplicate(
-            re.findall(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b", text)
-        ),
-        "identityNumberCandidates": deduplicate(
-            re.findall(r"(?<!\d)\d{9,12}(?!\d)", text)
-        ),
+        "dates": deduplicate(re.findall(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b", text)),
+        "identityNumberCandidates": deduplicate(re.findall(r"(?<!\d)\d{9,12}(?!\d)", text)),
         "employeeCodeCandidates": deduplicate(
             re.findall(r"\b(?:NV|EMP|MSNV)[\s\-:]?[A-Z0-9]{3,12}\b", text, re.I)
         ),
@@ -149,6 +196,11 @@ class UserOCRService:
         return self._ocr is not None
 
     def get_ocr(self) -> PaddleOCR:
+        if PaddleOCR is None:
+            raise RuntimeError(
+                "PaddleOCR runtime is unavailable; evidence remains readable "
+                "but new OCR processing is disabled."
+            )
         if self._ocr is None:
             profile = PROFILES["v5_enhanced"]
             self._ocr = PaddleOCR(
@@ -176,6 +228,8 @@ class UserOCRService:
     def render_pages(self, input_path: Path, pages_dir: Path) -> list[Path]:
         pages_dir.mkdir(parents=True, exist_ok=True)
         if input_path.suffix.lower() == ".pdf":
+            if pdfium is None:
+                raise RuntimeError("PDF rendering is unavailable in evidence-only mode.")
             document = pdfium.PdfDocument(input_path)
             try:
                 if len(document) > MAX_PDF_PAGES:
@@ -253,9 +307,7 @@ class UserOCRService:
         raw_text = result.get("phase9", {}).get("rawOcr", {}).get("pages")
         if raw_text:
             classification_text = "\n".join(
-                text
-                for page in raw_text
-                for text in page.get("recognizedTexts", [])
+                text for page in raw_text for text in page.get("recognizedTexts", [])
             )
         else:
             classification_text = result["document"].get("rawRecognizedText") or result[
@@ -267,19 +319,14 @@ class UserOCRService:
         routed_pages: list[dict[str, Any]] = []
         route_metadata: list[dict[str, Any] | None] = []
         for page_index, page_path in enumerate(page_paths):
-            routed_path = (
-                session_dir / "phase9" / "pages" / f"page_{page_index:03d}.png"
-            )
+            routed_path = session_dir / "phase9" / "pages" / f"page_{page_index:03d}.png"
             metadata = prepare_routed_page(page_path, document_type, routed_path)
             route_metadata.append(metadata)
             if metadata is None:
                 continue
             page_result = self.predict_page(
                 routed_path,
-                session_dir
-                / "phase9"
-                / "visualization"
-                / f"page_{page_index:03d}.png",
+                session_dir / "phase9" / "visualization" / f"page_{page_index:03d}.png",
             )
             page_result["pageIndex"] = page_index
             routed_pages.append(page_result)
@@ -300,10 +347,9 @@ class UserOCRService:
         session_dir: Path,
     ) -> dict[str, Any]:
         phase_started = time.perf_counter()
-        raw_pages = (
-            result.get("phase9", {}).get("rawOcr", {}).get("pages")
-            or result.get("document", {}).get("pages", [])
-        )
+        raw_pages = result.get("phase9", {}).get("rawOcr", {}).get("pages") or result.get(
+            "document", {}
+        ).get("pages", [])
         candidate_root = session_dir / "phase11" / "orientation_candidates"
         oriented_root = session_dir / "phase11" / "oriented"
         candidate_root.mkdir(parents=True, exist_ok=True)
@@ -316,9 +362,7 @@ class UserOCRService:
             image = cv2.imread(str(page_path), cv2.IMREAD_COLOR)
             if image is None:
                 raise ValueError("Cannot read rendered page for Phase 11")
-            candidate_records: list[
-                tuple[dict[str, Any], dict[str, Any], Path]
-            ] = []
+            candidate_records: list[tuple[dict[str, Any], dict[str, Any], Path]] = []
             for rotation_degrees in (0, 90, 180, 270):
                 if rotation_degrees == 0:
                     candidate_path = page_path
@@ -330,8 +374,7 @@ class UserOCRService:
                 else:
                     candidate_image = rotate_image(image, rotation_degrees)
                     candidate_path = (
-                        candidate_root
-                        / f"page_{page_index:03d}_rot_{rotation_degrees:03d}.png"
+                        candidate_root / f"page_{page_index:03d}_rot_{rotation_degrees:03d}.png"
                     )
                     if not cv2.imwrite(str(candidate_path), candidate_image):
                         raise OSError("Cannot write Phase 11 orientation candidate")
@@ -343,9 +386,7 @@ class UserOCRService:
                     rotation_degrees,
                     (candidate_image.shape[1], candidate_image.shape[0]),
                 )
-                candidate_records.append(
-                    (candidate_page, diagnostic, candidate_path)
-                )
+                candidate_records.append((candidate_page, diagnostic, candidate_path))
 
             selected_page, selected_diagnostic = select_orientation(
                 [(page, diagnostic) for page, diagnostic, _ in candidate_records]
@@ -354,16 +395,11 @@ class UserOCRService:
             selected_record = next(
                 record
                 for record in candidate_records
-                if record[1]["rotationDegrees"]
-                == selected_diagnostic["rotationDegrees"]
+                if record[1]["rotationDegrees"] == selected_diagnostic["rotationDegrees"]
             )
-            if (
-                not is_identity_likely(selected_diagnostic)
-                or (
-                    selected_diagnostic["rotationDegrees"] != 0
-                    and float(selected_diagnostic["score"])
-                    < float(original_record[1]["score"]) + 0.35
-                )
+            if not is_identity_likely(selected_diagnostic) or (
+                selected_diagnostic["rotationDegrees"] != 0
+                and float(selected_diagnostic["score"]) < float(original_record[1]["score"]) + 0.35
             ):
                 selected_record = original_record
                 selected_page, selected_diagnostic, selected_path = selected_record
@@ -372,42 +408,34 @@ class UserOCRService:
 
             oriented_path = oriented_root / f"page_{page_index:03d}.png"
             selected_image = cv2.imread(str(selected_path), cv2.IMREAD_COLOR)
-            if selected_image is None or not cv2.imwrite(
-                str(oriented_path), selected_image
-            ):
+            if selected_image is None or not cv2.imwrite(str(oriented_path), selected_image):
                 raise OSError("Cannot write Phase 11 oriented page")
             provisional_pages.append(selected_page)
             oriented_paths.append(oriented_path)
             orientation_pages.append(
                 {
                     "pageIndex": page_index,
-                    "selectedRotationDegrees": int(
-                        selected_diagnostic["rotationDegrees"]
-                    ),
+                    "selectedRotationDegrees": int(selected_diagnostic["rotationDegrees"]),
                     "selectionScore": selected_diagnostic["score"],
                     "identityLikely": any(
-                        is_identity_likely(record[1])
-                        for record in candidate_records
+                        is_identity_likely(record[1]) for record in candidate_records
                     ),
-                    "selectedIdentityLikely": is_identity_likely(
-                        selected_diagnostic
-                    ),
+                    "selectedIdentityLikely": is_identity_likely(selected_diagnostic),
                     "candidates": [record[1] for record in candidate_records],
                 }
             )
 
         classification_text = "\n".join(
-            text
-            for page in provisional_pages
-            for text in page.get("recognizedTexts", [])
+            text for page in provisional_pages for text in page.get("recognizedTexts", [])
         )
         document_type, route_confidence, route_evidence = classify_document(
             classification_text,
             result.get("source", {}).get("format", ""),
         )
-        identity_likely = any(
-            page["identityLikely"] for page in orientation_pages
-        )
+        # Rejected 90/180/270-degree candidates can hallucinate a date label
+        # beside a long number on a CV. They remain useful diagnostics but must
+        # never route the selected document as an identity card.
+        identity_likely = selected_orientations_are_identity(orientation_pages)
         if identity_likely:
             document_type = "IDENTITY_DOCUMENT"
 
@@ -425,9 +453,7 @@ class UserOCRService:
                     "pages": orientation_pages,
                 },
                 "identityCard": None,
-                "durationMs": round(
-                    (time.perf_counter() - phase_started) * 1000
-                ),
+                "durationMs": round((time.perf_counter() - phase_started) * 1000),
             }
             return result
 
@@ -476,20 +502,14 @@ class UserOCRService:
                 )
             selected_page = canonical_page if use_canonical else oriented_page
             selected_source = canonical_path if use_canonical else oriented_path
-            selected_variant = (
-                "phase11_canonical" if use_canonical else "phase11_oriented"
-            )
+            selected_variant = "phase11_canonical" if use_canonical else "phase11_oriented"
             selected_variants.append(selected_variant)
             selected_path = selected_root / f"page_{page_index:03d}.png"
             selected_image = cv2.imread(str(selected_source), cv2.IMREAD_COLOR)
-            if selected_image is None or not cv2.imwrite(
-                str(selected_path), selected_image
-            ):
+            if selected_image is None or not cv2.imwrite(str(selected_path), selected_image):
                 raise OSError("Cannot write selected Phase 11 page")
             selected_boxes = selected_page.get("recognizedBoxes", [])
-            visualization_path = (
-                visualization_root / f"page_{page_index:03d}.png"
-            )
+            visualization_path = visualization_root / f"page_{page_index:03d}.png"
             if selected_boxes:
                 draw_ocr_boxes(selected_path, selected_boxes, visualization_path)
             selected_page["visualizationAvailable"] = bool(selected_boxes)
@@ -507,16 +527,13 @@ class UserOCRService:
                 line["correctionMethod"] = None
                 line["warning"] = (
                     "LOW_CONFIDENCE"
-                    if line.get("confidence") is not None
-                    and float(line["confidence"]) < 0.80
+                    if line.get("confidence") is not None and float(line["confidence"]) < 0.80
                     else None
                 )
                 line.pop("centerX", None)
                 line.pop("centerY", None)
             page_scores = [
-                float(line["confidence"])
-                for line in ordered
-                if line.get("confidence") is not None
+                float(line["confidence"]) for line in ordered if line.get("confidence") is not None
             ]
             all_scores.extend(page_scores)
             phase11_pages.append(
@@ -524,19 +541,11 @@ class UserOCRService:
                     "pageIndex": page_index,
                     "selectedVariant": selected_variant,
                     "readingOrderStrategy": strategy,
-                    "recognizedTexts": [
-                        line["rawText"] for line in ordered
-                    ],
-                    "recognitionScores": [
-                        line.get("confidence") for line in ordered
-                    ],
-                    "recognizedBoxes": [
-                        line.get("box", []) for line in ordered
-                    ],
+                    "recognizedTexts": [line["rawText"] for line in ordered],
+                    "recognitionScores": [line.get("confidence") for line in ordered],
+                    "recognizedBoxes": [line.get("box", []) for line in ordered],
                     "lines": ordered,
-                    "rawText": "\n".join(
-                        line["rawText"] for line in ordered
-                    ),
+                    "rawText": "\n".join(line["rawText"] for line in ordered),
                 }
             )
             canonicalization.append(
@@ -555,24 +564,18 @@ class UserOCRService:
         )
         result["schemaVersion"] = "3.0.0"
         result["document"]["documentType"] = "IDENTITY_DOCUMENT"
-        result["document"]["recognizedText"] = "\n".join(
-            page["rawText"] for page in phase11_pages
-        )
+        result["document"]["recognizedText"] = "\n".join(page["rawText"] for page in phase11_pages)
         result["document"]["recognizedTextLineCount"] = sum(
             len(page["lines"]) for page in phase11_pages
         )
         result["document"]["avgConfidence"] = (
-            round(sum(all_scores) / len(all_scores), 6)
-            if all_scores
-            else None
+            round(sum(all_scores) / len(all_scores), 6) if all_scores else None
         )
         result["document"]["structuredFields"] = identity_card["fields"]
         result["phase11"] = {
             "version": "1.2.0",
             "status": (
-                "PASS"
-                if identity_card["summary"]["readyForAutomaticUse"]
-                else "NEEDS_REVIEW"
+                "PASS" if identity_card["summary"]["readyForAutomaticUse"] else "NEEDS_REVIEW"
             ),
             "documentRoute": {
                 "type": "IDENTITY_DOCUMENT",
@@ -587,9 +590,7 @@ class UserOCRService:
             "selectedVariants": selected_variants,
             "pages": phase11_pages,
             "identityCard": identity_card,
-            "durationMs": round(
-                (time.perf_counter() - phase_started) * 1000
-            ),
+            "durationMs": round((time.perf_counter() - phase_started) * 1000),
         }
         result["processing"]["phase11DurationMs"] = result["phase11"]["durationMs"]
         identity_output = {
@@ -615,16 +616,17 @@ class UserOCRService:
     ) -> dict[str, Any]:
         phase_started = time.perf_counter()
         if canonical_document is None:
-            ocr_pages = (
-                result.get("phase9", {})
-                .get("rawOcr", {})
-                .get("pages")
-                or result.get("document", {}).get("pages", [])
-            )
+            ocr_pages = result.get("phase9", {}).get("rawOcr", {}).get("pages") or result.get(
+                "document", {}
+            ).get("pages", [])
             canonical_document = ingest_document(input_path, ocr_pages)
+        existing_route = safe_existing_document_route(
+            result.get("document", {}).get("documentType"),
+            str(canonical_document.get("plainText") or ""),
+        )
         classification = classify_phase15_document(
             canonical_document,
-            result.get("document", {}).get("documentType"),
+            existing_route,
         )
         extraction = extract_phase15_document(
             canonical_document,
@@ -685,8 +687,7 @@ class UserOCRService:
         result["document"]["documentFamily"] = classification["documentFamily"]
         result["document"]["recognizedText"] = canonical_document["plainText"]
         result["document"]["recognizedTextLineCount"] = sum(
-            len(page.get("blocks", []))
-            for page in canonical_document.get("pages", [])
+            len(page.get("blocks", [])) for page in canonical_document.get("pages", [])
         )
         result["document"]["structuredFields"] = extraction["fields"]
         result["document"]["structuredTables"] = extraction["tables"]
@@ -720,16 +721,8 @@ class UserOCRService:
             json.dumps(result, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        runtime_python = (
-            self.data_root
-            / "runtime"
-            / "easyocr_venv"
-            / "Scripts"
-            / "python.exe"
-        )
-        script_path = Path(__file__).with_name(
-            "run_phase14_8_session.py"
-        )
+        runtime_python = self.data_root / "runtime" / "easyocr_venv" / "Scripts" / "python.exe"
+        script_path = Path(__file__).with_name("run_phase14_8_session.py")
         started = time.perf_counter()
         failure_type: str | None = None
         if runtime_python.is_file():
@@ -751,11 +744,7 @@ class UserOCRService:
                     check=True,
                 )
                 payload = json.loads(
-                    (
-                        session_dir
-                        / "phase14_8"
-                        / "recognition.json"
-                    ).read_text(encoding="utf-8")
+                    (session_dir / "phase14_8" / "recognition.json").read_text(encoding="utf-8")
                 )
                 canonical = ingest_document(
                     input_path,
@@ -769,18 +758,12 @@ class UserOCRService:
                     "durationMs": payload["durationMs"],
                     "download": "phase14_8/recognition.json",
                 }
-                result["processing"]["engine"] = (
-                    "Paddle detector + VietOCR Seq2Seq/Transformer"
-                )
-                result["processing"]["profile"] = (
-                    "phase14.8-seq2seq-transformer-verifier"
-                )
+                result["processing"]["engine"] = "Paddle detector + VietOCR Seq2Seq/Transformer"
+                result["processing"]["profile"] = "phase14.8-seq2seq-transformer-verifier"
                 result["processing"]["models"] = {
                     "textDetection": "PP-OCRv5_mobile_det",
                     "textRecognitionPrimary": "VietOCR/vgg_seq2seq",
-                    "textRecognitionVerifier": (
-                        "VietOCR/vgg_transformer"
-                    ),
+                    "textRecognitionVerifier": ("VietOCR/vgg_transformer"),
                     "paddleSelectionEligible": False,
                 }
                 result["processing"]["phase14_8DurationMs"] = round(
@@ -799,9 +782,7 @@ class UserOCRService:
             review_pages.append(
                 {
                     **page,
-                    "recognitionScores": [
-                        0.0 for _ in page.get("recognizedTexts", [])
-                    ],
+                    "recognitionScores": [0.0 for _ in page.get("recognizedTexts", [])],
                 }
             )
         canonical = ingest_document(input_path, review_pages)
@@ -812,29 +793,19 @@ class UserOCRService:
                 "primaryProfile": "vietocr_vgg_seq2seq",
                 "verifierProfile": "vietocr_vgg_transformer",
                 "paddleSelectionEligible": False,
-                "fallbackAction": (
-                    "Paddle evidence retained at zero acceptance confidence"
-                ),
+                "fallbackAction": ("Paddle evidence retained at zero acceptance confidence"),
             },
             "summary": {
                 "pageCount": len(review_pages),
-                "lineCount": sum(
-                    len(page.get("recognizedTexts", []))
-                    for page in review_pages
-                ),
+                "lineCount": sum(len(page.get("recognizedTexts", [])) for page in review_pages),
                 "verifiedLineCount": 0,
                 "needsReviewLineCount": sum(
-                    len(page.get("recognizedTexts", []))
-                    for page in review_pages
+                    len(page.get("recognizedTexts", [])) for page in review_pages
                 ),
             },
-            "durationMs": round(
-                (time.perf_counter() - started) * 1000
-            ),
+            "durationMs": round((time.perf_counter() - started) * 1000),
         }
-        result["processing"]["phase14_8DurationMs"] = result[
-            "phase14_8"
-        ]["durationMs"]
+        result["processing"]["phase14_8DurationMs"] = result["phase14_8"]["durationMs"]
         return result, canonical
 
     def reprocess_session(self, session_id: str) -> dict[str, Any]:
@@ -844,12 +815,15 @@ class UserOCRService:
                 raise FileNotFoundError("Session not found")
             result_path = session_dir / "result.json"
             result = json.loads(result_path.read_text(encoding="utf-8"))
+            locked_phase11_5_identity = (
+                result.get("phase11", {}).get("identityCard")
+                if result.get("phase11_5", {}).get("status") == "COMPLETE"
+                else None
+            )
             page_paths = sorted((session_dir / "pages").glob("page_*.png"))
             if not page_paths:
                 raise FileNotFoundError("Rendered pages not found")
-            input_paths = sorted(
-                (session_dir / "input").glob("document.*")
-            )
+            input_paths = sorted((session_dir / "input").glob("document.*"))
             if not input_paths:
                 raise FileNotFoundError("Original input not found")
             input_path = input_paths[0]
@@ -880,6 +854,19 @@ class UserOCRService:
                     page_paths,
                     session_dir,
                 )
+                if locked_phase11_5_identity:
+                    enriched["phase11"]["version"] = "1.5.0"
+                    enriched["phase11"]["status"] = "NEEDS_REVIEW"
+                    enriched["phase11"]["identityCard"] = locked_phase11_5_identity
+                    enriched["document"]["structuredFields"] = locked_phase11_5_identity["fields"]
+                    (session_dir / "phase11" / "identity_card.json").write_text(
+                        json.dumps(
+                            locked_phase11_5_identity,
+                            ensure_ascii=False,
+                            indent=2,
+                        ),
+                        encoding="utf-8",
+                    )
             else:
                 enriched.pop("phase11", None)
                 enriched.get("processing", {}).pop(
@@ -889,12 +876,10 @@ class UserOCRService:
             enriched.pop("phase11_3", None)
             enriched.pop("phase11_4", None)
             if canonical_document is None:
-                enriched, canonical_document = (
-                    self.apply_phase14_8_recognition(
-                        enriched,
-                        input_path,
-                        session_dir,
-                    )
+                enriched, canonical_document = self.apply_phase14_8_recognition(
+                    enriched,
+                    input_path,
+                    session_dir,
                 )
             else:
                 enriched["phase14_8"] = {
@@ -951,9 +936,7 @@ class UserOCRService:
             elif extension == ".pdf":
                 pdf_preflight = ingest_document(input_path)
                 if int(pdf_preflight.get("pageCount", 0)) > MAX_PDF_PAGES:
-                    raise ValueError(
-                        f"PDF exceeds the {MAX_PDF_PAGES}-page limit"
-                    )
+                    raise ValueError(f"PDF exceeds the {MAX_PDF_PAGES}-page limit")
                 if pdf_preflight.get("ingestionMode") == "NATIVE":
                     canonical_document = pdf_preflight
                     page_paths, page_results = render_native_previews(
@@ -1007,24 +990,12 @@ class UserOCRService:
                 },
                 "processing": {
                     "engine": (
-                        (
-                            "NativeOOXML"
-                            if extension in {".docx", ".xlsx"}
-                            else "NativePDF"
-                        )
+                        ("NativeOOXML" if extension in {".docx", ".xlsx"} else "NativePDF")
                         if canonical_document is not None
                         else "PaddleOCR"
                     ),
-                    "profile": (
-                        "phase12_native"
-                        if canonical_document
-                        else "v5_enhanced"
-                    ),
-                    "ocrVersion": (
-                        "not_required"
-                        if canonical_document
-                        else "PP-OCRv5"
-                    ),
+                    "profile": ("phase12_native" if canonical_document else "v5_enhanced"),
+                    "ocrVersion": ("not_required" if canonical_document else "PP-OCRv5"),
                     "language": "vi",
                     "device": "cpu",
                     "models": {
@@ -1040,9 +1011,7 @@ class UserOCRService:
                     "recognizedText": recognized_text,
                     "recognizedTextLineCount": len(all_texts),
                     "avgConfidence": (
-                        round(sum(all_scores) / len(all_scores), 6)
-                        if all_scores
-                        else None
+                        round(sum(all_scores) / len(all_scores), 6) if all_scores else None
                     ),
                     "extractedCandidates": extract_candidates(recognized_text),
                     "pages": page_results,
@@ -1062,12 +1031,10 @@ class UserOCRService:
                     page_paths,
                     session_dir,
                 )
-                result, canonical_document = (
-                    self.apply_phase14_8_recognition(
-                        result,
-                        input_path,
-                        session_dir,
-                    )
+                result, canonical_document = self.apply_phase14_8_recognition(
+                    result,
+                    input_path,
+                    session_dir,
                 )
             else:
                 result["phase14_8"] = {
@@ -1103,22 +1070,18 @@ class UserOCRService:
         for result_path in self.sessions_root.glob("*/result.json"):
             try:
                 result = json.loads(result_path.read_text(encoding="utf-8"))
-                ground_truth_path = (
-                    result_path.parent / "phase10" / "ground_truth.json"
-                )
+                ground_truth_path = result_path.parent / "phase10" / "ground_truth.json"
                 reviewed = False
                 if ground_truth_path.is_file():
-                    ground_truth = json.loads(
-                        ground_truth_path.read_text(encoding="utf-8")
-                    )
+                    ground_truth = json.loads(ground_truth_path.read_text(encoding="utf-8"))
                     assertions = ground_truth.get("verificationAssertions", {})
                     reviewed = bool(
-                        assertions.get("comparedWithImage")
-                        and assertions.get("allTextChecked")
+                        assertions.get("comparedWithImage") and assertions.get("allTextChecked")
                     )
-                phase15_reviewed = (
-                    result_path.parent / "phase15" / "review.json"
-                ).is_file()
+                phase15_reviewed = (result_path.parent / "phase15" / "review.json").is_file()
+                processing = result.get("processing", {})
+                phase11 = result.get("phase11", {})
+                phase14_8 = result.get("phase14_8", {})
                 sessions.append(
                     {
                         "sessionId": result["sessionId"],
@@ -1127,17 +1090,17 @@ class UserOCRService:
                         "format": result["source"]["format"],
                         "pageCount": result["source"]["pageCount"],
                         "ocrSuccess": result["document"]["ocrSuccess"],
-                        "recognizedTextLineCount": result["document"][
-                            "recognizedTextLineCount"
-                        ],
+                        "recognizedTextLineCount": result["document"]["recognizedTextLineCount"],
                         "avgConfidence": result["document"]["avgConfidence"],
                         "totalDurationMs": result["processing"]["totalDurationMs"],
-                        "documentType": result["document"].get(
-                            "documentType", "USER_UPLOAD"
-                        ),
+                        "documentType": result["document"].get("documentType", "USER_UPLOAD"),
                         "qualityGate": result.get("phase9", {})
                         .get("qualityGate", {})
                         .get("status"),
+                        "processingProfile": processing.get("profile"),
+                        "ocrVersion": processing.get("ocrVersion"),
+                        "phase11Version": phase11.get("version"),
+                        "phase14_8Status": phase14_8.get("status"),
                         "reviewed": reviewed,
                         "phase15Reviewed": phase15_reviewed,
                     }
@@ -1178,14 +1141,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
         content_type: str,
         download_name: str | None = None,
     ) -> None:
-        body = path.read_bytes()
+        self.send_bytes(path.read_bytes(), content_type, download_name)
+
+    def send_bytes(
+        self,
+        body: bytes,
+        content_type: str,
+        download_name: str | None = None,
+    ) -> None:
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         if download_name:
-            self.send_header(
-                "Content-Disposition", f'attachment; filename="{download_name}"'
-            )
+            self.send_header("Content-Disposition", f'attachment; filename="{download_name}"')
         self.cors_headers()
         self.end_headers()
         self.wfile.write(body)
@@ -1209,9 +1177,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
                 return
             try:
-                payload = json.loads(
-                    self.rfile.read(content_length).decode("utf-8")
-                )
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
                 case_id = str(payload.get("caseId", ""))
                 ground_truth = str(payload.get("groundTruth", "")).strip()
                 compared = payload.get("comparedWithCrop") is True
@@ -1227,23 +1193,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 review_root = phase14_root
                 expansion_root = self.data_root / "output" / "phase14_4"
                 expansion_path = expansion_root / "review_queue_private.json"
-                benchmark = json.loads(
-                    benchmark_path.read_text(encoding="utf-8")
-                )
+                benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
                 if expansion_path.is_file():
-                    expansion = json.loads(
-                        expansion_path.read_text(encoding="utf-8")
-                    )
-                    if any(
-                        case.get("caseId") == case_id
-                        for case in expansion.get("cases", [])
-                    ):
+                    expansion = json.loads(expansion_path.read_text(encoding="utf-8"))
+                    if any(case.get("caseId") == case_id for case in expansion.get("cases", [])):
                         benchmark = expansion
                         review_root = expansion_root
-                if not any(
-                    case.get("caseId") == case_id
-                    for case in benchmark.get("cases", [])
-                ):
+                if not any(case.get("caseId") == case_id for case in benchmark.get("cases", [])):
                     raise ValueError("Phase 14 case not found")
                 reviews_path = review_root / "line_reviews.json"
                 reviews = save_line_review(
@@ -1279,9 +1235,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
                 return
             try:
-                payload = json.loads(
-                    self.rfile.read(content_length).decode("utf-8")
-                )
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
                 fields = payload.get("fields")
                 assertions = payload.get("assertions")
                 if not isinstance(fields, dict):
@@ -1304,9 +1258,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     reviewed_at=reviewed_at,
                 )
                 canonical = json.loads(
-                    (
-                        session_dir / "phase15" / "canonical_document.json"
-                    ).read_text(encoding="utf-8")
+                    (session_dir / "phase15" / "canonical_document.json").read_text(
+                        encoding="utf-8"
+                    )
                 )
                 classification = dict(phase15["classification"])
                 business = build_phase15_business_json(
@@ -1391,9 +1345,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
                 return
             try:
-                payload = json.loads(
-                    self.rfile.read(content_length).decode("utf-8")
-                )
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
                 pages = payload.get("pages")
                 assertions = payload.get("assertions")
                 identity_fields = payload.get("identityFields")
@@ -1401,9 +1353,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     raise ValueError("pages must be an array")
                 if not isinstance(assertions, dict):
                     raise ValueError("verification assertions are required")
-                result = json.loads(
-                    (session_dir / "result.json").read_text(encoding="utf-8")
-                )
+                result = json.loads((session_dir / "result.json").read_text(encoding="utf-8"))
                 self.send_json(
                     save_review(
                         session_dir,
@@ -1414,9 +1364,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     )
                 )
             except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
-                self.send_json(
-                    {"error": str(exc)}, HTTPStatus.BAD_REQUEST
-                )
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
         if parsed.path == "/user/easyocr":
             session_id = parse_qs(parsed.query).get("id", [""])[0]
@@ -1424,9 +1372,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if session_dir is None:
                 self.send_json({"error": "Session not found"}, HTTPStatus.NOT_FOUND)
                 return
-            easy_python = (
-                self.data_root / "runtime" / "easyocr_venv" / "Scripts" / "python.exe"
-            )
+            easy_python = self.data_root / "runtime" / "easyocr_venv" / "Scripts" / "python.exe"
             script_path = Path(__file__).with_name("run_easyocr_phase10.py")
             if not easy_python.is_file():
                 self.send_json(
@@ -1451,9 +1397,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     timeout=600,
                     check=True,
                 )
-                result = json.loads(
-                    (session_dir / "result.json").read_text(encoding="utf-8")
-                )
+                result = json.loads((session_dir / "result.json").read_text(encoding="utf-8"))
                 self.send_json(review_payload(session_dir, result))
             except subprocess.TimeoutExpired:
                 self.send_json(
@@ -1472,12 +1416,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if session_dir is None:
                 self.send_json({"error": "Session not found"}, HTTPStatus.NOT_FOUND)
                 return
-            pilot_python = (
-                self.data_root / "runtime" / "easyocr_venv" / "Scripts" / "python.exe"
-            )
-            script_path = Path(__file__).with_name(
-                "run_controlled_pilot_phase14_2.py"
-            )
+            pilot_python = self.data_root / "runtime" / "easyocr_venv" / "Scripts" / "python.exe"
+            script_path = Path(__file__).with_name("run_controlled_pilot_phase14_2.py")
             if not pilot_python.is_file():
                 self.send_json(
                     {"error": "VietOCR runtime is not installed"},
@@ -1501,9 +1441,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     timeout=1200,
                     check=True,
                 )
-                result = json.loads(
-                    (session_dir / "result.json").read_text(encoding="utf-8")
-                )
+                result = json.loads((session_dir / "result.json").read_text(encoding="utf-8"))
                 self.send_json(review_payload(session_dir, result))
             except subprocess.TimeoutExpired:
                 self.send_json(
@@ -1522,9 +1460,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if session_dir is None:
                 self.send_json({"error": "Session not found"}, HTTPStatus.NOT_FOUND)
                 return
-            hybrid_python = (
-                self.data_root / "runtime" / "easyocr_venv" / "Scripts" / "python.exe"
-            )
+            hybrid_python = self.data_root / "runtime" / "easyocr_venv" / "Scripts" / "python.exe"
             script_path = Path(__file__).with_name("run_hybrid_phase13_3.py")
             if not hybrid_python.is_file():
                 self.send_json(
@@ -1549,9 +1485,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     timeout=1200,
                     check=True,
                 )
-                result = json.loads(
-                    (session_dir / "result.json").read_text(encoding="utf-8")
-                )
+                result = json.loads((session_dir / "result.json").read_text(encoding="utf-8"))
                 self.send_json(review_payload(session_dir, result))
             except subprocess.TimeoutExpired:
                 self.send_json(
@@ -1599,17 +1533,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         body = self.rfile.read(content_length)
         message = BytesParser(policy=policy.default).parsebytes(
-            f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode(
-                "ascii"
-            )
-            + body
+            f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("ascii") + body
         )
         file_part = next(
             (
                 part
                 for part in message.iter_parts()
-                if part.get_content_disposition() == "form-data"
-                and part.get_filename()
+                if part.get_content_disposition() == "form-data" and part.get_filename()
             ),
             None,
         )
@@ -1621,12 +1551,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         extension = Path(original_filename).suffix.lower()
         if extension not in ALLOWED_EXTENSIONS:
             self.send_json(
-                {
-                    "error": (
-                        "Supported formats: PNG, JPG, JPEG, PDF, "
-                        "DOCX, XLSX"
-                    )
-                },
+                {"error": ("Supported formats: PNG, JPG, JPEG, PDF, DOCX, XLSX")},
                 HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
             )
             return
@@ -1651,9 +1576,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         session_id = str(uuid.uuid4())
         try:
-            result = self.user_ocr.process_upload(
-                session_id, original_filename, extension, content
-            )
+            result = self.user_ocr.process_upload(session_id, original_filename, extension, content)
             self.send_json(result, HTTPStatus.CREATED)
         except Exception as exc:
             failure_dir = self.user_ocr.sessions_root / session_id
@@ -1689,6 +1612,20 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_json({"deleted": True})
 
     def do_GET(self) -> None:
+        try:
+            self._do_GET()
+        except (BrokenPipeError, ConnectionResetError):
+            return
+        except Exception as exc:
+            self.send_json(
+                {
+                    "error": "Local dashboard request failed",
+                    "errorType": type(exc).__name__,
+                },
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    def _do_GET(self) -> None:
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
 
@@ -1743,16 +1680,37 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     HTTPStatus.NOT_FOUND,
                 )
                 return
-            content_type = (
-                mimetypes.guess_type(document_path.name)[0]
-                or "application/octet-stream"
-            )
+            content_type = mimetypes.guess_type(document_path.name)[0] or "application/octet-stream"
             download_name = (
-                f"{document_id}{document_path.suffix.lower()}"
-                if mode == "source"
-                else None
+                f"{document_id}{document_path.suffix.lower()}" if mode == "source" else None
             )
             self.send_file(document_path, content_type, download_name)
+            return
+
+        if parsed.path == "/heldout/evidence":
+            if self.heldout_root is None:
+                self.send_json(
+                    {"error": "Real held-out corpus is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            document_id = query.get("id", [""])[0]
+            try:
+                self.send_json(
+                    load_heldout_document_evidence(
+                        self.heldout_root,
+                        document_id,
+                    )
+                )
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except (OSError, FileNotFoundError, KeyError, json.JSONDecodeError):
+                self.send_json(
+                    {"error": "Held-out evidence is unavailable"},
+                    HTTPStatus.NOT_FOUND,
+                )
             return
 
         if parsed.path == "/phase14/benchmark":
@@ -1767,9 +1725,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
             reviews_path = phase14_root / "line_reviews.json"
             reviews = (
-                json.loads(reviews_path.read_text(encoding="utf-8")).get(
-                    "reviews", {}
-                )
+                json.loads(reviews_path.read_text(encoding="utf-8")).get("reviews", {})
                 if reviews_path.is_file()
                 else {}
             )
@@ -1792,72 +1748,46 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 ):
                     if key in reviewed_selection:
                         selection[key] = reviewed_selection[key]
-                recommended_agreement = reviewed_selection.get(
-                    "recommendedPrimaryAgreement", {}
+                recommended_agreement = reviewed_selection.get("recommendedPrimaryAgreement", {})
+                selection["recommendedPrimaryAgreementCount"] = recommended_agreement.get(
+                    "count", 0
                 )
-                selection["recommendedPrimaryAgreementCount"] = (
-                    recommended_agreement.get("count", 0)
+                selection["recommendedPrimaryAgreementCoverage"] = recommended_agreement.get(
+                    "coverage", 0.0
                 )
-                selection["recommendedPrimaryAgreementCoverage"] = (
-                    recommended_agreement.get("coverage", 0.0)
-                )
-                selection["recommendedPrimaryAgreementPrecision"] = (
-                    recommended_agreement.get("precision", 0.0)
+                selection["recommendedPrimaryAgreementPrecision"] = recommended_agreement.get(
+                    "precision", 0.0
                 )
                 benchmark["alignmentStatus"] = reviewed.get(
                     "groundTruthStatus", benchmark.get("alignmentStatus")
                 )
-                benchmark["reviewedLineCount"] = reviewed.get(
-                    "reviewedLineCount", len(reviews)
-                )
-                benchmark["profiles"] = reviewed.get(
-                    "profiles", benchmark.get("profiles", {})
-                )
+                benchmark["reviewedLineCount"] = reviewed.get("reviewedLineCount", len(reviews))
+                benchmark["profiles"] = reviewed.get("profiles", benchmark.get("profiles", {}))
                 benchmark["selection"] = selection
-                benchmark["recommendedConfiguration"] = reviewed.get(
-                    "recommendedConfiguration", {}
-                )
+                benchmark["recommendedConfiguration"] = reviewed.get("recommendedConfiguration", {})
             pilot_summary_path = (
-                self.data_root
-                / "output"
-                / "phase14_2"
-                / "CONTROLLED_PILOT_SUMMARY.json"
+                self.data_root / "output" / "phase14_2" / "CONTROLLED_PILOT_SUMMARY.json"
             )
             if pilot_summary_path.is_file():
                 benchmark["controlledPilot"] = json.loads(
                     pilot_summary_path.read_text(encoding="utf-8")
                 )
-            phase14_3_path = (
-                self.data_root
-                / "output"
-                / "phase14_3"
-                / "PHASE14_3_EVALUATION.json"
-            )
+            phase14_3_path = self.data_root / "output" / "phase14_3" / "PHASE14_3_EVALUATION.json"
             if phase14_3_path.is_file():
-                phase14_3 = json.loads(
-                    phase14_3_path.read_text(encoding="utf-8")
-                )
+                phase14_3 = json.loads(phase14_3_path.read_text(encoding="utf-8"))
                 benchmark["phase14_3"] = phase14_3
                 benchmark["profiles"].update(phase14_3.get("profiles", {}))
                 selected = phase14_3.get("selected", {})
                 benchmark["selection"].update(
                     {
-                        "recommendedPrimary": selected.get(
-                            "selectedPrimaryProfile"
-                        ),
+                        "recommendedPrimary": selected.get("selectedPrimaryProfile"),
                         "bestCropProfile": selected.get(
                             "selectedCropProfile",
                             benchmark["selection"].get("bestCropProfile"),
                         ),
-                        "fallbackRecognizer": selected.get(
-                            "fallbackRecognizer"
-                        ),
-                        "autoAcceptVerifier": selected.get(
-                            "autoAcceptVerifier"
-                        ),
-                        "productionDecision": selected.get(
-                            "productionDecision"
-                        ),
+                        "fallbackRecognizer": selected.get("fallbackRecognizer"),
+                        "autoAcceptVerifier": selected.get("autoAcceptVerifier"),
+                        "productionDecision": selected.get("productionDecision"),
                         "verifierPolicy": "EASY_EXACT_AGREEMENT_ONLY",
                     }
                 )
@@ -1865,25 +1795,17 @@ class DashboardHandler(BaseHTTPRequestHandler):
             expansion_path = expansion_root / "review_queue_private.json"
             expansion_reviews_path = expansion_root / "line_reviews.json"
             if expansion_path.is_file():
-                expansion = json.loads(
-                    expansion_path.read_text(encoding="utf-8")
-                )
+                expansion = json.loads(expansion_path.read_text(encoding="utf-8"))
                 expansion_reviews = (
-                    json.loads(
-                        expansion_reviews_path.read_text(encoding="utf-8")
-                    ).get("reviews", {})
+                    json.loads(expansion_reviews_path.read_text(encoding="utf-8")).get(
+                        "reviews", {}
+                    )
                     if expansion_reviews_path.is_file()
                     else {}
                 )
-                benchmark["evaluationDocumentCount"] = benchmark.get(
-                    "documentCount", 0
-                )
-                benchmark["evaluationLineCount"] = benchmark.get(
-                    "lineCount", 0
-                )
-                benchmark["documentCount"] = expansion.get(
-                    "documentCount", 0
-                )
+                benchmark["evaluationDocumentCount"] = benchmark.get("documentCount", 0)
+                benchmark["evaluationLineCount"] = benchmark.get("lineCount", 0)
+                benchmark["documentCount"] = expansion.get("documentCount", 0)
                 benchmark["lineCount"] = expansion.get("lineCount", 0)
                 benchmark["cases"] = expansion.get("cases", [])
                 benchmark["lineReviews"] = expansion_reviews
@@ -1895,44 +1817,32 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     "reviewedLineCount": len(expansion_reviews),
                     "pendingReviewLineCount": max(
                         0,
-                        int(expansion.get("lineCount", 0))
-                        - len(expansion_reviews),
+                        int(expansion.get("lineCount", 0)) - len(expansion_reviews),
                     ),
                     "cropProfile": expansion.get("cropProfile"),
                     "queueDigest": expansion.get("queueDigest"),
                 }
                 transformer_weight = (
-                    self.data_root
-                    / "runtime"
-                    / "vietocr_models"
-                    / "vgg_transformer.pth"
+                    self.data_root / "runtime" / "vietocr_models" / "vgg_transformer.pth"
                 )
                 benchmark["secondRecognizer"] = {
                     "config": "vgg_transformer",
                     "weightAvailable": transformer_weight.is_file(),
                     "weightBytes": (
-                        transformer_weight.stat().st_size
-                        if transformer_weight.is_file()
-                        else 0
+                        transformer_weight.stat().st_size if transformer_weight.is_file() else 0
                     ),
                     "benchmarkReady": (
                         transformer_weight.is_file()
-                        and len(expansion_reviews)
-                        == int(expansion.get("lineCount", 0))
+                        and len(expansion_reviews) == int(expansion.get("lineCount", 0))
                     ),
                     "blockedByPendingReviewCount": max(
                         0,
-                        int(expansion.get("lineCount", 0))
-                        - len(expansion_reviews),
+                        int(expansion.get("lineCount", 0)) - len(expansion_reviews),
                     ),
                 }
-                blinded_status_path = (
-                    expansion_root / "BLINDED_PRECOMPUTE_STATUS.json"
-                )
+                blinded_status_path = expansion_root / "BLINDED_PRECOMPUTE_STATUS.json"
                 if blinded_status_path.is_file():
-                    blinded_status = json.loads(
-                        blinded_status_path.read_text(encoding="utf-8")
-                    )
+                    blinded_status = json.loads(blinded_status_path.read_text(encoding="utf-8"))
                     benchmark["blindedPrecompute"] = {
                         "status": blinded_status.get("status"),
                         "lineCount": blinded_status.get("lineCount", 0),
@@ -1940,38 +1850,29 @@ class DashboardHandler(BaseHTTPRequestHandler):
                             "predictionsHiddenDuringReview", False
                         ),
                         "queueDigestMatches": (
-                            blinded_status.get("queueDigest")
-                            == expansion.get("queueDigest")
+                            blinded_status.get("queueDigest") == expansion.get("queueDigest")
                         ),
-                        "privateArtifactSha256": blinded_status.get(
-                            "privateArtifactSha256"
-                        ),
+                        "privateArtifactSha256": blinded_status.get("privateArtifactSha256"),
                         "runtime": blinded_status.get("runtime", {}),
-                        "totalDurationMs": blinded_status.get(
-                            "totalDurationMs", 0.0
-                        ),
+                        "totalDurationMs": blinded_status.get("totalDurationMs", 0.0),
                     }
                 second_benchmark_path = (
-                    expansion_root
-                    / "benchmark"
-                    / "SECOND_RECOGNIZER_EVALUATION.json"
+                    expansion_root / "benchmark" / "SECOND_RECOGNIZER_EVALUATION.json"
                 )
                 if second_benchmark_path.is_file():
-                    second_benchmark = json.loads(
-                        second_benchmark_path.read_text(encoding="utf-8")
-                    )
+                    second_benchmark = json.loads(second_benchmark_path.read_text(encoding="utf-8"))
                     benchmark["secondRecognizerBenchmark"] = second_benchmark
                     benchmark["selection"].update(
                         {
-                            "recommendedPrimary": second_benchmark.get(
-                                "decision", {}
-                            ).get("selectedPrimary"),
-                            "promotionDecision": second_benchmark.get(
-                                "decision", {}
-                            ).get("challengerDecision"),
-                            "productionDecision": second_benchmark.get(
-                                "decision", {}
-                            ).get("productionDecision"),
+                            "recommendedPrimary": second_benchmark.get("decision", {}).get(
+                                "selectedPrimary"
+                            ),
+                            "promotionDecision": second_benchmark.get("decision", {}).get(
+                                "challengerDecision"
+                            ),
+                            "productionDecision": second_benchmark.get("decision", {}).get(
+                                "productionDecision"
+                            ),
                         }
                     )
             self.send_json(benchmark)
@@ -1981,8 +1882,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             case_id = query.get("caseId", [""])[0]
             profile = query.get("profile", [""])[0]
             if not (
-                PHASE14_CASE_ID_RE.fullmatch(case_id)
-                and PHASE14_PROFILE_RE.fullmatch(profile)
+                PHASE14_CASE_ID_RE.fullmatch(case_id) and PHASE14_PROFILE_RE.fullmatch(profile)
             ):
                 self.send_json(
                     {"error": "Invalid Phase 14 crop request"},
@@ -2002,19 +1902,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
             sources = [
                 (
                     self.data_root / "output" / "phase14_4",
-                    self.data_root
-                    / "output"
-                    / "phase14_4"
-                    / "review_queue_private.json",
+                    self.data_root / "output" / "phase14_4" / "review_queue_private.json",
                 ),
                 (phase14_root, benchmark_path),
             ]
             for candidate_root, candidate_manifest in sources:
                 if not candidate_manifest.is_file():
                     continue
-                candidate_payload = json.loads(
-                    candidate_manifest.read_text(encoding="utf-8")
-                )
+                candidate_payload = json.loads(candidate_manifest.read_text(encoding="utf-8"))
                 case = next(
                     (
                         item
@@ -2054,9 +1949,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_json(
                 {
                     "status": "ok",
-                    "profiles": {
-                        name: len(index) for name, index in self.native_indexes.items()
-                    },
+                    "profiles": {name: len(index) for name, index in self.native_indexes.items()},
                     "userUpload": {
                         "enabled": True,
                         "phase9Enabled": True,
@@ -2068,9 +1961,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         "phase13_3HybridEnabled": True,
                         "phase14_8VerifierEnabled": True,
                         "phase14LineReviewEnabled": True,
-                        "realHeldoutEvidenceEnabled": (
-                            self.heldout_root is not None
-                        ),
+                        "realHeldoutEvidenceEnabled": (self.heldout_root is not None),
                         "modelLoaded": self.user_ocr.model_loaded,
                         "sessionCount": len(self.user_ocr.list_sessions()),
                         "formats": sorted(ALLOWED_EXTENSIONS),
@@ -2109,9 +2000,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
                 return
             if parsed.path == "/user/source":
-                source_paths = sorted(
-                    (session_dir / "input").glob("document.*")
-                )
+                source_paths = sorted((session_dir / "input").glob("document.*"))
                 if not source_paths:
                     self.send_json(
                         {"error": "Original session source not available"},
@@ -2120,10 +2009,65 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     return
                 source_path = source_paths[0]
                 content_type = (
-                    mimetypes.guess_type(source_path.name)[0]
-                    or "application/octet-stream"
+                    mimetypes.guess_type(source_path.name)[0] or "application/octet-stream"
                 )
                 self.send_file(source_path, content_type)
+                return
+            if parsed.path == "/user/phase11-5-crop":
+                field_name = query.get("field", [""])[0]
+                variant_name = query.get("variant", [""])[0]
+                allowed_fields = {
+                    "identityNumber",
+                    "fullName",
+                    "dateOfBirth",
+                    "sex",
+                    "nationality",
+                    "placeOfOrigin",
+                    "placeOfResidence",
+                    "dateOfExpiry",
+                }
+                allowed_variants = {
+                    "color_original",
+                    "grayscale_clahe",
+                    "lanczos_upscale",
+                    "balanced_padding",
+                }
+                if field_name not in allowed_fields or variant_name not in allowed_variants:
+                    self.send_json(
+                        {"error": "Invalid Phase 11.5 crop selector"},
+                        HTTPStatus.BAD_REQUEST,
+                    )
+                    return
+                try:
+                    crop_path = resolve_phase11_5_crop(
+                        self.data_root,
+                        session_dir,
+                        field_name,
+                        variant_name,
+                    )
+                    crop_body = crop_path.read_bytes() if crop_path is not None else None
+                except (OSError, ValueError) as exc:
+                    self.send_json(
+                        {
+                            "error": "Phase 11.5 crop could not be read",
+                            "errorType": type(exc).__name__,
+                        },
+                        HTTPStatus.INTERNAL_SERVER_ERROR,
+                    )
+                    return
+                if crop_path is None:
+                    self.send_json(
+                        {"error": "Phase 11.5 crop not available"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                if crop_body is None:
+                    self.send_json(
+                        {"error": "Phase 11.5 crop not available"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                self.send_bytes(crop_body, "image/png")
                 return
             phase10_downloads = {
                 "/user/ground-truth": (
@@ -2184,9 +2128,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 ),
             }
             if parsed.path == "/user/phase13-3-result":
-                download_path = (
-                    session_dir / "phase13_3" / "hybrid_ocr.json"
-                )
+                download_path = session_dir / "phase13_3" / "hybrid_ocr.json"
                 if not download_path.is_file():
                     self.send_json(
                         {"error": "Phase 13.3 hybrid result not available"},
@@ -2200,9 +2142,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
                 return
             if parsed.path == "/user/phase14-2-result":
-                download_path = (
-                    session_dir / "phase14_2" / "controlled_pilot.json"
-                )
+                download_path = session_dir / "phase14_2" / "controlled_pilot.json"
                 if not download_path.is_file():
                     self.send_json(
                         {"error": "Phase 14.2 pilot result not available"},
@@ -2244,9 +2184,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
                 return
             if parsed.path == "/user/phase11-3-evidence":
-                download_path = (
-                    session_dir / "phase11_3" / "paddle_recognition.json"
-                )
+                download_path = session_dir / "phase11_3" / "paddle_recognition.json"
                 if not download_path.is_file():
                     self.send_json(
                         {"error": "Phase 11.3 evidence JSON not available"},
@@ -2260,9 +2198,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
                 return
             if parsed.path == "/user/phase11-4-evidence":
-                download_path = (
-                    session_dir / "phase11_4" / "field_consensus.json"
-                )
+                download_path = session_dir / "phase11_4" / "field_consensus.json"
                 if not download_path.is_file():
                     self.send_json(
                         {"error": "Phase 11.4 evidence JSON not available"},
@@ -2273,6 +2209,34 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     download_path,
                     "application/json; charset=utf-8",
                     f"phase11-4-evidence-{session_id}.json",
+                )
+                return
+            if parsed.path == "/user/phase11-5-evidence":
+                download_path = session_dir / "phase11_5" / "field_consensus.json"
+                if not download_path.is_file():
+                    self.send_json(
+                        {"error": "Phase 11.5 evidence JSON not available"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                self.send_file(
+                    download_path,
+                    "application/json; charset=utf-8",
+                    f"phase11-5-evidence-{session_id}.json",
+                )
+                return
+            if parsed.path == "/user/phase11-5-business":
+                download_path = session_dir / "phase11_5" / "business.json"
+                if not download_path.is_file():
+                    self.send_json(
+                        {"error": "Phase 11.5 business JSON not available"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                self.send_file(
+                    download_path,
+                    "application/json; charset=utf-8",
+                    f"phase11-5-business-{session_id}.json",
                 )
                 return
             if parsed.path in phase12_downloads:
@@ -2328,29 +2292,16 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     "NEEDS_REVIEW",
                 }:
                     visualization = (
-                        session_dir
-                        / "phase11"
-                        / "visualization"
-                        / f"page_{page_index:03d}.png"
+                        session_dir / "phase11" / "visualization" / f"page_{page_index:03d}.png"
                     )
-                elif (
-                    result.get("phase9", {}).get("selectedVariant")
-                    == "phase9_routed"
-                ):
+                elif result.get("phase9", {}).get("selectedVariant") == "phase9_routed":
                     visualization = (
-                        session_dir
-                        / "phase9"
-                        / "visualization"
-                        / f"page_{page_index:03d}.png"
+                        session_dir / "phase9" / "visualization" / f"page_{page_index:03d}.png"
                     )
                 else:
-                    visualization = (
-                        session_dir / "visualization" / f"page_{page_index:03d}.png"
-                    )
+                    visualization = session_dir / "visualization" / f"page_{page_index:03d}.png"
                 if not visualization.is_file():
-                    self.send_json(
-                        {"error": "Visualization not available"}, HTTPStatus.NOT_FOUND
-                    )
+                    self.send_json({"error": "Visualization not available"}, HTTPStatus.NOT_FOUND)
                     return
                 self.send_file(visualization, "image/png")
                 return
@@ -2394,17 +2345,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             native = json.loads(native_path.read_text(encoding="utf-8"))
             relative = Path(native["sourceRelativePath"])
             visualization = (
-                (
-                    self.data_root / "output" / "visualization"
-                    if profile == "baseline"
-                    else self.data_root
-                    / "output"
-                    / "phase7"
-                    / "v5_enhanced"
-                    / "visualization"
-                )
-                / relative.with_name(f"{relative.stem}_vis.png")
-            )
+                self.data_root / "output" / "visualization"
+                if profile == "baseline"
+                else self.data_root / "output" / "phase7" / "v5_enhanced" / "visualization"
+            ) / relative.with_name(f"{relative.stem}_vis.png")
             if not visualization.is_file():
                 self.send_json({"error": "Visualization not available"}, HTTPStatus.NOT_FOUND)
                 return
@@ -2441,9 +2385,7 @@ def main() -> int:
         raise SystemExit(str(exc)) from exc
     indexes = {
         "baseline": build_index(args.data_root / "output" / "native_json"),
-        "phase7": build_index(
-            args.data_root / "output" / "phase7" / "v5_enhanced" / "native_json"
-        ),
+        "phase7": build_index(args.data_root / "output" / "phase7" / "v5_enhanced" / "native_json"),
     }
     if not indexes["baseline"]:
         raise SystemExit("No Native OCR JSON available")

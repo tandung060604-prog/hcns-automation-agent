@@ -9,11 +9,13 @@ import json
 import math
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
-from paddleocr import PaddleOCR
+
+if TYPE_CHECKING:
+    from paddleocr import PaddleOCR
 
 from run_paddleocr_baseline import (
     draw_ocr_boxes,
@@ -70,7 +72,7 @@ def load_selection(path: Path | None) -> set[str] | None:
 
 
 def run_file(
-    ocr: PaddleOCR,
+    ocr: "PaddleOCR",
     image_path: Path,
     data_root: Path,
     profile: str,
@@ -174,6 +176,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    from paddleocr import PaddleOCR
+
     args = parse_args()
     profile_config = PROFILES[args.profile]
     selection = load_selection(args.selection_file)

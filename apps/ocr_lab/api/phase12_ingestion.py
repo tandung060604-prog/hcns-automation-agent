@@ -11,7 +11,10 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 from xml.etree import ElementTree as ET
 
-import pypdfium2 as pdfium
+try:
+    import pypdfium2 as pdfium
+except ImportError:  # Image/DOCX/XLSX evidence does not require PDFium.
+    pdfium = None
 from PIL import Image, ImageDraw, ImageFont
 
 WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -204,6 +207,8 @@ def ingest_pdf(
     path: Path,
     ocr_pages: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    if pdfium is None:
+        raise RuntimeError("PDF ingestion requires pypdfium2")
     document = pdfium.PdfDocument(path)
     pages: list[dict[str, Any]] = []
     native_char_count = 0

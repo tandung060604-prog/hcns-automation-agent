@@ -12,15 +12,15 @@ Completed:
 - Recognition-only contracts and Vietnamese NFC audit with 134 characters
 - Phase 14.8: Seq2Seq primary, Transformer verifier, Paddle detector-only evidence
 - Strict disagreement policy preserves Seq2Seq and always sets `needs_review`
-- Authorized real-scan pilot: 15 reviewed CCCD, 671 detected line crops
-- Real-scan agreement: 18/671 lines (2.68%); decision `NOT_PROMOTED`
+- CCCD Phase 11.5 dev (15): EM 60.00%, ASCII EM 61.67%, CER 43.60%, DER 12.65%; SHADOW
+- Accepted precision 56.96%→94.74%; coverage 65.83%→31.67%; `NOT_PROMOTED`
 - Phase 14.8 dev corpus keeps fallback disabled; LODO recovered 30 errors but lost one correct line
 - Separate diagnostic analysis covers 149 locked Ground Truth lines without raw text
 - Canonical metric spec `vi-ocr-metrics/1.0.0` shared across Phase 14 adapters
 - Versioned recognition policies never auto-replace text in shadow mode
 - Phase 14.6 lock pins policy, crop and SHA-256 for three local model artifacts
 - Held-out runner seals predictions, rejects Ground Truth leakage and evaluates once
-- OCR Lab supports upload → classify → extract → review → JSON; reviewed state resumes on F5
+- OCR Lab resumes on F5 and shows local source beside Ground Truth/prediction JSON
 - Camunda 7 REST client covers fetch/complete/failure/BPMN error/lock extension
 - BPMN parses content before classification; DMN blocks unsafe auto-continue
 - Process-variable schema/whitelist and nine-topic shadow handler registry
@@ -35,7 +35,7 @@ Completed:
 - Phase 16 evaluate-once: classification 77.78%, Field EM 13.00%,
   completeness 28.00%, false acceptance 2; `NOT_PROMOTED`
 - Native PDF text, DOCX and XLSX bypass OCR and preserve native structures
-- Phase 17 TIMESHEET contract, sensitive review policy and SHA-256 lock validated
+- Phase 17 live-v5 audit: 15 docs; Field EM 14.63%, completeness 24.39%, classification 73.33%
 
 Architecture:
 - IDP reads/understands; Agent analyzes/proposes; Camunda orchestrates
@@ -57,7 +57,7 @@ Known limits:
 - PPTX remains text-by-slide; legacy DOC/XLS require safe conversion
 - Phase 15 classification tuning used synthetic data and is not held-out evidence
 - Locked Phase 16 TIMESHEET predictions had legacy scalar output and no tables
-- Phase 14.5 fallback still regresses DER and one held-out baseline-correct line
+- Live-v5 audit still misroutes three credential scans as identity documents
 - Historical Phase 14 DER is not comparable with metric spec 1.0.0
 - Verifier agreement is not calibrated as correctness evidence on real scans
 - No Camunda deployment, bound stage operations or real HRIS side effect

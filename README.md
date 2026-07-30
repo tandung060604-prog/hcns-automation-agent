@@ -1,5 +1,47 @@
 # HCNS Automation Agent
 
+## Tóm tắt nhanh
+
+Nền tảng local-first để đọc, chuẩn hóa và kiểm duyệt tài liệu hành chính nhân sự
+tiếng Việt. Hệ thống tách rõ **native parsing**, **OCR**, **trích xuất theo loại tài
+liệu**, **quality gate** và **human review**; Camunda chỉ nhận trạng thái và tham
+chiếu kết quả, không nhận raw file hay PII đầy đủ.
+
+| Nội dung | Trạng thái hiện tại |
+|---|---|
+| Định dạng | Ảnh/PDF scan qua OCR; PDF text, DOCX, XLSX, PPTX qua native parsing |
+| Nhóm tài liệu | CCCD, CV, hợp đồng/quyết định, đơn/biểu mẫu, bằng cấp/chứng chỉ, bảng biểu HR |
+| OCR CCCD | Phase 11.5 dùng ROI mặt trước, 4 recognizer và provenance theo field |
+| Chất lượng | `SHADOW_REVIEW_ONLY` — chưa đủ điều kiện production hoặc tự động fallback |
+| Camunda | BPMN/DMN và External Task worker ở mức shadow/dry-run; HRIS là mock adapter |
+| Dữ liệu | Tài liệu thật, Ground Truth, OCR output và model weights ở local/private, không commit Git |
+
+### Kết quả OCR cần hiểu đúng
+
+Trên tập development 15 CCCD đã review, Phase 11.5 đạt **Field Exact Match 60,00%**,
+**ASCII Exact Match 61,67%**, **CER 43,60%**, **DER 12,65%**, **Field Presence 95,83%**
+và **Accepted Precision 100%**. Tuy vậy, `fullName` ASCII Exact Match mới 73,33% và
+địa chỉ mới 3,33%; vì thế mọi field không đủ bằng chứng vẫn là `needs_review`. Phase
+11.6 đang tiếp tục cải thiện ROI/ghép hai dòng địa chỉ và selection họ tên, **chưa có
+kết quả held-out và chưa được promote**.
+
+### Chạy OCR Lab trên máy local
+
+```powershell
+git clone https://github.com/tandung060604-prog/hcns-automation-agent.git
+cd hcns-automation-agent
+python -m pip install -e ".[dev]"
+Set-Location apps\ocr_lab\web
+npm ci
+Set-Location ..\..\..
+.\apps\ocr_lab\api\start_dashboard.ps1 `
+  -DataRoot "C:\Camunda\private-data\paddleocr-hr-baseline" `
+  -HeldoutRoot "C:\Camunda\private-data\paddleocr-hr-heldout-v1"
+```
+
+Mở `http://localhost:3000`. API chỉ bind loopback tại `http://127.0.0.1:8765`; xem
+hướng dẫn đầy đủ ở [OCR Lab](apps/ocr_lab/README.md).
+
 Nền tảng xử lý tài liệu hành chính nhân sự tiếng Việt theo hướng **Intelligent
 Document Processing (IDP)**, kết hợp quy trình kiểm duyệt của con người và khả
 năng điều phối bằng Camunda.

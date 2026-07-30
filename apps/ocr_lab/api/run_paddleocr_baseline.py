@@ -8,10 +8,12 @@ import argparse
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from PIL import Image, ImageDraw
-from paddleocr import PaddleOCR
+
+if TYPE_CHECKING:
+    from paddleocr import PaddleOCR
 
 
 def jsonable(value: Any) -> Any:
@@ -57,7 +59,7 @@ def draw_ocr_boxes(image_path: Path, boxes: list[Any], output_path: Path) -> Non
 
 
 def run_ocr_file(
-    ocr: PaddleOCR,
+    ocr: "PaddleOCR",
     image_path: Path,
     data_root: Path,
     ground_truth_ids: list[str],
@@ -151,6 +153,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    from paddleocr import PaddleOCR
+
     args = parse_args()
     input_dir = args.data_root / "input"
     if not input_dir.is_dir():
