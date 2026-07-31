@@ -1,0 +1,88 @@
+{
+  "status": "SUCCESS",
+  "documentType": "OVERTIME_REQUEST",
+  "templateId": "overtime-request-v1",
+  "templateVersion": "1.0",
+  "detection": {
+    "templateId": "overtime-request-v1",
+    "documentType": "OVERTIME_REQUEST",
+    "matchedAnchors": [
+      "ĐƠN XIN TĂNG CA",
+      "Thời gian đề nghị",
+      "Nội dung công việc",
+      "tăng thêm"
+    ],
+    "detectionConfidence": 1.0
+  },
+  "data": {
+    "documentType": "OVERTIME_REQUEST",
+    "templateId": "overtime-request-v1",
+    "templateVersion": "1.0",
+    "documentTitle": "ĐƠN XIN TĂNG CA",
+    "formNumber": null,
+    "organization": null,
+    "employeeName": null,
+    "employeeId": null,
+    "jobTitle": null,
+    "department": null,
+    "requestDate": "2026-08-14",
+    "laborContractNumber": null,
+    "laborContractDate": null,
+    "standardWorkSchedule": null,
+    "reason": null,
+    "startDate": "2026-08-17",
+    "endDate": "2026-08-19",
+    "overtimeHoursPerDay": 2,
+    "overtimeStartTime": "18:00",
+    "overtimeEndTime": "20:00",
+    "totalOvertimeHours": 6,
+    "workContent": null,
+    "sourceFile": "OT-001_DON_XIN_TANG_CA_CAMERA_HARD.png",
+    "missingFields": [
+      "department",
+      "employeeId",
+      "employeeName",
+      "formNumber",
+      "jobTitle",
+      "laborContractDate",
+      "laborContractNumber",
+      "organization",
+      "reason",
+      "standardWorkSchedule",
+      "workContent"
+    ],
+    "validationErrors": [
+      "OCR_REVIEW_REQUIRED"
+    ],
+    "confidence": 0.9621,
+    "recommendedAction": "MANUAL_REVIEW"
+  },
+  "quality": {
+    "missingFields": [
+      "department",
+      "employeeId",
+      "employeeName",
+      "formNumber",
+      "jobTitle",
+      "laborContractDate",
+      "laborContractNumber",
+      "organization",
+      "reason",
+      "standardWorkSchedule",
+      "workContent"
+    ],
+    "validationErrors": [
+      "OCR_REVIEW_REQUIRED"
+    ],
+    "confidence": 0.9621,
+    "recommendedAction": "MANUAL_REVIEW"
+  },
+  "processing": {
+    "sourceFormat": "IMAGE",
+    "parserName": "image/ocr",
+    "parserVersion": "1.0.0",
+    "usesOcr": true,
+    "ocrEngine": "paddleocr/pp-ocrv5-vi",
+    "ocrConfidence": 0.9621
+  }
+}

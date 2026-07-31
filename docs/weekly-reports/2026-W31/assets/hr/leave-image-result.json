@@ -1,0 +1,97 @@
+{
+  "status": "SUCCESS",
+  "documentType": "LEAVE_REQUEST",
+  "templateId": "leave-request-v1",
+  "templateVersion": "1.0",
+  "detection": {
+    "templateId": "leave-request-v1",
+    "documentType": "LEAVE_REQUEST",
+    "matchedAnchors": [
+      "ĐƠN XIN NGHỈ PHÉP",
+      "Lý do xin nghỉ phép",
+      "Tôi đã bàn giao công việc cho"
+    ],
+    "detectionConfidence": 1.0
+  },
+  "data": {
+    "documentType": "LEAVE_REQUEST",
+    "templateId": "leave-request-v1",
+    "templateVersion": "1.0",
+    "documentTitle": "ĐƠN XIN NGHỈ PHÉP",
+    "formNumber": null,
+    "organization": null,
+    "employeeName": null,
+    "employeeId": null,
+    "jobTitle": null,
+    "department": null,
+    "address": null,
+    "phone": null,
+    "requestDate": null,
+    "leaveDays": null,
+    "startDate": "2026-10-08",
+    "endDate": "2026-10-08",
+    "reason": null,
+    "expectedReturnDate": null,
+    "handoverTo": null,
+    "handoverDepartment": null,
+    "handoverTasks": null,
+    "approverName": null,
+    "sourceFile": "SYN-LRQ-0001_page_0.png",
+    "missingFields": [
+      "address",
+      "approverName",
+      "department",
+      "employeeId",
+      "employeeName",
+      "expectedReturnDate",
+      "formNumber",
+      "handoverDepartment",
+      "handoverTasks",
+      "handoverTo",
+      "jobTitle",
+      "leaveDays",
+      "organization",
+      "phone",
+      "reason",
+      "requestDate"
+    ],
+    "validationErrors": [
+      "OCR_REVIEW_REQUIRED"
+    ],
+    "confidence": 0.9595,
+    "recommendedAction": "MANUAL_REVIEW"
+  },
+  "quality": {
+    "missingFields": [
+      "address",
+      "approverName",
+      "department",
+      "employeeId",
+      "employeeName",
+      "expectedReturnDate",
+      "formNumber",
+      "handoverDepartment",
+      "handoverTasks",
+      "handoverTo",
+      "jobTitle",
+      "leaveDays",
+      "organization",
+      "phone",
+      "reason",
+      "requestDate"
+    ],
+    "validationErrors": [
+      "OCR_REVIEW_REQUIRED"
+    ],
+    "confidence": 0.9595,
+    "recommendedAction": "MANUAL_REVIEW"
+  },
+  "processing": {
+    "sourceFormat": "IMAGE",
+    "parserName": "image/ocr",
+    "parserVersion": "1.0.0",
+    "usesOcr": true,
+    "ocrEngine": "paddleocr/pp-ocrv5-vi",
+    "ocrConfidence": 0.9595
+  }
+}

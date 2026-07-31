@@ -11,48 +11,48 @@
       "kind": "synthetic-source"
     },
     {
-      "path": "hr/leave-docx-result-synthetic.png",
-      "kind": "synthetic-result"
+      "path": "hr/leave-docx-result.json",
+      "kind": "synthetic-result-json"
     },
     {
       "path": "hr/leave-pdf-source-synthetic.png",
       "kind": "synthetic-source"
     },
     {
-      "path": "hr/leave-pdf-result-synthetic.png",
-      "kind": "synthetic-result"
+      "path": "hr/leave-pdf-result.json",
+      "kind": "synthetic-result-json"
     },
     {
       "path": "hr/leave-image-source-synthetic.png",
       "kind": "synthetic-source"
     },
     {
-      "path": "hr/leave-image-result-synthetic.png",
-      "kind": "synthetic-result"
+      "path": "hr/leave-image-result.json",
+      "kind": "synthetic-result-json"
     },
     {
       "path": "hr/overtime-docx-source-synthetic.png",
       "kind": "synthetic-source"
     },
     {
-      "path": "hr/overtime-docx-result-synthetic.png",
-      "kind": "synthetic-result"
+      "path": "hr/overtime-docx-result.json",
+      "kind": "synthetic-result-json"
     },
     {
       "path": "hr/overtime-pdf-source-synthetic.png",
       "kind": "synthetic-source"
     },
     {
-      "path": "hr/overtime-pdf-result-synthetic.png",
-      "kind": "synthetic-result"
+      "path": "hr/overtime-pdf-result.json",
+      "kind": "synthetic-result-json"
     },
     {
       "path": "hr/overtime-image-source-synthetic.png",
       "kind": "synthetic-source"
     },
     {
-      "path": "hr/overtime-image-result-synthetic.png",
-      "kind": "synthetic-result"
+      "path": "hr/overtime-image-result.json",
+      "kind": "synthetic-result-json"
     },
     {
       "path": "hr/local-evidence-leave-pdf.png",

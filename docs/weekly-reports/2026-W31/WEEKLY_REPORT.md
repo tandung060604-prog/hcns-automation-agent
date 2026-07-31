@@ -34,17 +34,17 @@ Sáu mẫu HCNS dưới đây là dữ liệu tổng hợp do AI tạo và khôn
 
 | Định dạng | Đầu vào tổng hợp | Kết quả trích xuất |
 |---|---|---|
-| DOCX | ![Đơn nghỉ phép DOCX tổng hợp](assets/hr/leave-docx-source-synthetic.png) | ![Kết quả DOCX](assets/hr/leave-docx-result-synthetic.png) |
-| PDF | ![Đơn nghỉ phép PDF tổng hợp](assets/hr/leave-pdf-source-synthetic.png) | ![Kết quả PDF](assets/hr/leave-pdf-result-synthetic.png) |
-| Ảnh scan | ![Đơn nghỉ phép ảnh tổng hợp](assets/hr/leave-image-source-synthetic.png) | ![Kết quả ảnh](assets/hr/leave-image-result-synthetic.png) |
+| DOCX | ![Đơn nghỉ phép DOCX tổng hợp](assets/hr/leave-docx-source-synthetic.png) | [Xem JSON kết quả](assets/hr/leave-docx-result.json) |
+| PDF | ![Đơn nghỉ phép PDF tổng hợp](assets/hr/leave-pdf-source-synthetic.png) | [Xem JSON kết quả](assets/hr/leave-pdf-result.json) |
+| Ảnh scan | ![Đơn nghỉ phép ảnh tổng hợp](assets/hr/leave-image-source-synthetic.png) | [Xem JSON kết quả](assets/hr/leave-image-result.json) |
 
 ### Đơn tăng ca: đầu vào và kết quả engine
 
 | Định dạng | Đầu vào tổng hợp | Kết quả trích xuất |
 |---|---|---|
-| DOCX | ![Đơn tăng ca DOCX tổng hợp](assets/hr/overtime-docx-source-synthetic.png) | ![Kết quả DOCX](assets/hr/overtime-docx-result-synthetic.png) |
-| PDF | ![Đơn tăng ca PDF tổng hợp](assets/hr/overtime-pdf-source-synthetic.png) | ![Kết quả PDF](assets/hr/overtime-pdf-result-synthetic.png) |
-| Ảnh scan | ![Đơn tăng ca ảnh tổng hợp](assets/hr/overtime-image-source-synthetic.png) | ![Kết quả ảnh](assets/hr/overtime-image-result-synthetic.png) |
+| DOCX | ![Đơn tăng ca DOCX tổng hợp](assets/hr/overtime-docx-source-synthetic.png) | [Xem JSON kết quả](assets/hr/overtime-docx-result.json) |
+| PDF | ![Đơn tăng ca PDF tổng hợp](assets/hr/overtime-pdf-source-synthetic.png) | [Xem JSON kết quả](assets/hr/overtime-pdf-result.json) |
+| Ảnh scan | ![Đơn tăng ca ảnh tổng hợp](assets/hr/overtime-image-source-synthetic.png) | [Xem JSON kết quả](assets/hr/overtime-image-result.json) |
 
 ### Ảnh chụp trực tiếp từ LOCAL REAL-DOCUMENT EVIDENCE
 

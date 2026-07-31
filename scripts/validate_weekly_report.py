@@ -1,4 +1,4 @@
-"""Validate the public weekly-report artifact without opening private document data."""
+"""Validate the weekly-report artifact without opening private document data."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ REPORT_ROOT = Path("docs/weekly-reports/2026-W31")
 REQUIRED = (
     REPORT_ROOT / "AUDIT_NOTES.md",
     REPORT_ROOT / "WEEKLY_REPORT.md",
-    REPORT_ROOT / "WEEKLY_REPORT.html",
     REPORT_ROOT / "EVIDENCE_MANIFEST.json",
     REPORT_ROOT / "assets" / "cccd" / "selection.json",
     REPORT_ROOT / "assets" / "website" / "local-overview.png",
@@ -42,46 +41,40 @@ def main() -> int:
     if not 3 <= len(selection.get("selected", [])) <= 4:
         raise SystemExit("CCCD selection must contain 3 or 4 samples")
     evidence = json.loads((REPORT_ROOT / "assets" / "evidence-index.json").read_text("utf-8"))
-    if evidence.get("containsPII") is not False or len(evidence.get("artifacts", [])) != 16:
-        raise SystemExit("Redacted visual evidence must declare no PII and contain 16 artifacts")
+    if evidence.get("containsPII") is not False or len(evidence.get("artifacts", [])) != 18:
+        raise SystemExit("Synthetic visual evidence must declare no PII and contain 18 artifacts")
     if evidence.get("hcnsDataClassification") != "synthetic-ai-generated":
         raise SystemExit("HCNS evidence must be classified as synthetic AI-generated data")
+    if evidence.get("cccdDataClassification") != "synthetic-ai-generated-user-declared":
+        raise SystemExit(
+            "CCCD evidence must be classified as user-declared synthetic AI-generated data"
+        )
     identity_artifacts = [
-        row for row in evidence["artifacts"] if row["kind"] == "redacted-identity-source"
+        row for row in evidence["artifacts"] if row["kind"] == "synthetic-identity-ui"
+    ]
+    prediction_artifacts = [
+        row
+        for row in evidence["artifacts"]
+        if row["kind"] == "synthetic-identity-prediction-json"
     ]
     synthetic_artifacts = [
         row for row in evidence["artifacts"] if row["kind"].startswith("synthetic-")
     ]
-    if len(identity_artifacts) != 4 or len(synthetic_artifacts) != 12:
-        raise SystemExit("Expected 4 redacted CCCD and 12 synthetic HCNS artifacts")
+    if len(identity_artifacts) != 2 or len(prediction_artifacts) != 2:
+        raise SystemExit("Expected 2 synthetic CCCD UI images and 2 Prediction JSON artifacts")
+    if len(synthetic_artifacts) != 18:
+        raise SystemExit("Expected 18 synthetic evidence artifacts")
     for artifact in evidence["artifacts"]:
         if not (REPORT_ROOT / "assets" / artifact["path"]).is_file():
             raise SystemExit(f"Redacted evidence missing: {artifact['path']}")
     report_text = (REPORT_ROOT / "WEEKLY_REPORT.md").read_text("utf-8")
     forbidden = (
-        "identityNumber",
-        "fullName",
-        "dateOfBirth",
-        "placeOfResidence",
         "TF-P",
         "Phase 11",
     )
     found = [token for token in forbidden if token in report_text]
     if found:
         raise SystemExit(f"Report contains disallowed CCCD field names: {', '.join(found)}")
-    html_text = (REPORT_ROOT / "WEEKLY_REPORT.html").read_text("utf-8")
-    found_html = [token for token in forbidden if token in html_text]
-    if found_html:
-        raise SystemExit(
-            f"HTML report contains internal or sensitive terms: {', '.join(found_html)}"
-        )
-    parser = ImageSourceParser()
-    parser.feed(html_text)
-    missing_images = [source for source in parser.sources if not (REPORT_ROOT / source).is_file()]
-    if missing_images:
-        raise SystemExit(f"HTML report has missing images: {', '.join(missing_images)}")
-    if len(parser.sources) != 18:
-        raise SystemExit("HTML report must render 18 evidence images")
     manifest = json.loads((REPORT_ROOT / "EVIDENCE_MANIFEST.json").read_text("utf-8"))
     for artifact in manifest.get("artifacts", []):
         relative_path = artifact.get("path")

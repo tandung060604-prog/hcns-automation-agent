@@ -1,0 +1,57 @@
+{
+  "status": "SUCCESS",
+  "documentType": "LEAVE_REQUEST",
+  "templateId": "leave-request-v1",
+  "templateVersion": "1.0",
+  "detection": {
+    "templateId": "leave-request-v1",
+    "documentType": "LEAVE_REQUEST",
+    "matchedAnchors": [
+      "ĐƠN XIN NGHỈ PHÉP",
+      "Lý do xin nghỉ phép",
+      "Tôi đã bàn giao công việc cho"
+    ],
+    "detectionConfidence": 1.0
+  },
+  "data": {
+    "documentType": "LEAVE_REQUEST",
+    "templateId": "leave-request-v1",
+    "templateVersion": "1.0",
+    "documentTitle": "ĐƠN XIN NGHỈ PHÉP",
+    "formNumber": null,
+    "organization": "Công ty Cổ phần Công nghệ Minh Việt",
+    "employeeName": "Nguyễn Minh Anh",
+    "employeeId": null,
+    "jobTitle": "Chuyên viên Phân tích dữ liệu",
+    "department": "Phòng Công nghệ và Chuyển đổi số",
+    "address": "Số 28, ngõ 90 Nguyễn Tuân, phường Thanh Xuân, Hà Nội",
+    "phone": "0900 000 101",
+    "requestDate": "2026-08-10",
+    "leaveDays": 2,
+    "startDate": "2026-08-12",
+    "endDate": "2026-08-13",
+    "reason": "Giải quyết công việc gia đình và đưa người thân đi khám theo lịch hẹn",
+    "expectedReturnDate": "2026-08-14",
+    "handoverTo": "Trần Quốc Huy",
+    "handoverDepartment": "Phòng Công nghệ và Chuyển đổi số",
+    "handoverTasks": "Theo dõi tiến độ kiểm thử OCR; cập nhật báo cáo benchmark; tiếp nhận phản hồi của Python Worker và Camunda; lưu trữ tài liệu kiểm thử đúng thư mục dự án",
+    "approverName": "Lê Hoàng Nam",
+    "sourceFile": "01_DON_XIN_NGHI_PHEP_DA_DIEN.docx",
+    "missingFields": [
+      "employeeId",
+      "formNumber"
+    ],
+    "validationErrors": [],
+    "confidence": 1.0,
+    "recommendedAction": "AUTO_CONTINUE"
+  },
+  "quality": {
+    "missingFields": [
+      "employeeId",
+      "formNumber"
+    ],
+    "validationErrors": [],
+    "confidence": 1.0,
+    "recommendedAction": "AUTO_CONTINUE"
+  }
+}

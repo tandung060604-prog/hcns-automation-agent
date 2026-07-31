@@ -1,0 +1,60 @@
+{
+  "status": "SUCCESS",
+  "documentType": "OVERTIME_REQUEST",
+  "templateId": "overtime-request-v1",
+  "templateVersion": "1.0",
+  "detection": {
+    "templateId": "overtime-request-v1",
+    "documentType": "OVERTIME_REQUEST",
+    "matchedAnchors": [
+      "ĐƠN XIN TĂNG CA",
+      "Thời gian đề nghị",
+      "Nội dung công việc",
+      "tăng thêm"
+    ],
+    "detectionConfidence": 1.0
+  },
+  "data": {
+    "documentType": "OVERTIME_REQUEST",
+    "templateId": "overtime-request-v1",
+    "templateVersion": "1.0",
+    "documentTitle": "ĐƠN XIN TĂNG CA",
+    "formNumber": null,
+    "organization": "Công ty TNHH Giải pháp Số An Việt",
+    "employeeName": "Phạm Quốc Bảo",
+    "employeeId": null,
+    "jobTitle": "Kỹ sư Backend",
+    "department": null,
+    "requestDate": "2026-08-14",
+    "laborContractNumber": "HĐLĐ-2026-063",
+    "laborContractDate": "2026-03-01",
+    "standardWorkSchedule": "từ 08 giờ 00 phút đến 17 giờ 00 phút, từ thứ Hai đến thứ Sáu",
+    "reason": "phiên bản API tích hợp cần hoàn thiện kiểm thử, sửa lỗi và đóng gói trước lịch phát hành nội bộ",
+    "startDate": "2026-08-17",
+    "endDate": "2026-08-19",
+    "overtimeHoursPerDay": 3,
+    "overtimeStartTime": "18:00",
+    "overtimeEndTime": "21:00",
+    "totalOvertimeHours": 9,
+    "workContent": "Khắc phục lỗi API; bổ sung kiểm tra dữ liệu đầu vào; cập nhật tài liệu OpenAPI; triển khai bản staging và theo dõi log sau phát hành",
+    "sourceFile": "H16-OT-002.pdf",
+    "missingFields": [
+      "department",
+      "employeeId",
+      "formNumber"
+    ],
+    "validationErrors": [],
+    "confidence": 1.0,
+    "recommendedAction": "AUTO_CONTINUE"
+  },
+  "quality": {
+    "missingFields": [
+      "department",
+      "employeeId",
+      "formNumber"
+    ],
+    "validationErrors": [],
+    "confidence": 1.0,
+    "recommendedAction": "AUTO_CONTINUE"
+  }
+}
