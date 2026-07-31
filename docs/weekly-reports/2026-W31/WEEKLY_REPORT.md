@@ -1,4 +1,4 @@
-# Weekly Product Report - 2026-W31
+# Weekly Product Report 
 
 ## Tóm tắt điều hành
 
