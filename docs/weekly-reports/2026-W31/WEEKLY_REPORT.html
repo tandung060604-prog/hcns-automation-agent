@@ -75,16 +75,26 @@
           <div class="evidence-pair"><strong>PDF</strong><figure><img src="assets/hr/overtime-pdf-source-synthetic.png" alt="Đơn tăng ca PDF tổng hợp" /><figcaption>Đầu vào PDF tổng hợp.</figcaption></figure><figure><img src="assets/hr/overtime-pdf-result-synthetic.png" alt="Kết quả engine cho PDF tăng ca" /><figcaption>Kết quả trích xuất từ engine.</figcaption></figure></div>
           <div class="evidence-pair"><strong>Ảnh scan</strong><figure><img src="assets/hr/overtime-image-source-synthetic.png" alt="Đơn tăng ca dạng ảnh tổng hợp" /><figcaption>Đầu vào ảnh tổng hợp.</figcaption></figure><figure><img src="assets/hr/overtime-image-result-synthetic.png" alt="Kết quả engine cho ảnh tăng ca" /><figcaption>Kết quả OCR, cần người kiểm tra.</figcaption></figure></div>
         </div>
+        <div class="evidence-group">
+          <h3>Ảnh chụp trực tiếp từ LOCAL REAL-DOCUMENT EVIDENCE</h3>
+          <p>PDF được render thành ảnh trang đầu, ảnh scan hiển thị trực tiếp và inspector schema/JSON bên phải vẫn giữ nguyên.</p>
+          <div class="shots">
+            <figure><img src="assets/hr/local-evidence-leave-pdf.png" alt="Evidence localhost PDF nghỉ phép" /><figcaption>Preview PDF native trên localhost.</figcaption></figure>
+            <figure><img src="assets/hr/local-evidence-overtime-image.png" alt="Evidence localhost ảnh tăng ca" /><figcaption>Preview ảnh OCR trên localhost.</figcaption></figure>
+          </div>
+        </div>
       </section>
       <section>
-        <h2>CCCD đã che dữ liệu cá nhân</h2>
-        <p>Bốn ảnh được chọn từ 30 phiên đã đối chiếu. Tên, số định danh, ngày sinh, địa chỉ, khuôn mặt và toàn bộ nội dung nguồn đều đã được làm mờ trước khi đưa vào Git.</p>
+        <h2>CCCD tổng hợp và Prediction JSON</h2>
+        <p>Hai ảnh dưới đây do người dùng cung cấp và được xác nhận là dữ liệu AI-generated. JSON là Prediction của engine local; Ground Truth không được dùng làm output.</p>
         <div class="identity-grid">
-          <figure><img src="assets/cccd/cccd-ev-01358e57d2-source-redacted.png" alt="CCCD mẫu 1 đã che dữ liệu" /><figcaption>Mẫu CCCD 1, chỉ giữ bằng chứng bố cục.</figcaption></figure>
-          <figure><img src="assets/cccd/cccd-ev-efd73fc886-source-redacted.png" alt="CCCD mẫu 2 đã che dữ liệu" /><figcaption>Mẫu CCCD 2, chỉ giữ bằng chứng bố cục.</figcaption></figure>
-          <figure><img src="assets/cccd/cccd-ev-b3420b4361-source-redacted.png" alt="CCCD mẫu 3 đã che dữ liệu" /><figcaption>Mẫu CCCD 3, chỉ giữ bằng chứng bố cục.</figcaption></figure>
-          <figure><img src="assets/cccd/cccd-ev-493ab309b2-source-redacted.png" alt="CCCD mẫu 4 đã che dữ liệu" /><figcaption>Mẫu CCCD 4, chỉ giữ bằng chứng bố cục.</figcaption></figure>
+          <figure><img src="assets/cccd/cccd-pilot-012-ui-synthetic.png" alt="CCCD-01 evidence từ localhost" /><figcaption>CCCD-01 · <code>cccd_pilot_012.jpg</code> · <a href="assets/cccd/cccd-pilot-012-prediction.json">Prediction JSON</a></figcaption></figure>
+          <figure><img src="assets/cccd/cccd-pilot-008-ui-synthetic.png" alt="CCCD-02 evidence từ localhost" /><figcaption>CCCD-02 · <code>cccd_pilot_008.jpg</code> · <a href="assets/cccd/cccd-pilot-008-prediction.json">Prediction JSON</a></figcaption></figure>
         </div>
+        <details><summary>Xem Prediction JSON tóm tắt</summary><pre>{
+  "cccd_pilot_012.jpg": {"identityNumber": {"value": "001055000660", "confidence": 0.402644, "status": "accepted"}, "fullName": {"value": "LÊ ĐĂNG TÔN", "confidence": 0.866262, "status": "needs_review"}, "dateOfBirth": {"value": "07/07/1955", "confidence": 0.58525, "status": "needs_review"}, "dateOfExpiry": {"value": null, "confidence": 0.0, "status": "not_found"}},
+  "cccd_pilot_008.jpg": {"identityNumber": {"value": "079206032383", "confidence": 0.448701, "status": "accepted"}, "fullName": {"value": "NGUYỄN QUỐC VIỆT", "confidence": 0.731844, "status": "needs_review"}, "dateOfBirth": {"value": "26/08/2006", "confidence": 0.77347, "status": "needs_review"}, "dateOfExpiry": {"value": "26/08/2031", "confidence": 0.486915, "status": "accepted"}}
+}</pre></details>
       </section>
       <section>
         <h2>Bằng chứng sản phẩm local</h2>
@@ -95,7 +105,7 @@
       </section>
       <section class="panel">
         <h2>Quy tắc dữ liệu trong báo cáo</h2>
-        <p>CCCD thật luôn được che toàn bộ nội dung. Hai loại biểu mẫu HCNS được hiển thị vì là dữ liệu tổng hợp do AI tạo và không gắn với người thật. Report không chứa Ground Truth hay OCR raw của CCCD.</p>
+        <p>Hai ảnh CCCD trong report được phân loại là AI-generated theo xác nhận của người dùng. Prediction JSON được tách khỏi Ground Truth và các trường chưa chắc chắn vẫn giữ trạng thái cần người kiểm tra.</p>
         <p>Danh sách bằng chứng có thể kiểm tra trong <code>assets/evidence-index.json</code>. Kiểm tra an toàn chạy bằng <code>python scripts/validate_weekly_report.py</code>.</p>
       </section>
       <section>

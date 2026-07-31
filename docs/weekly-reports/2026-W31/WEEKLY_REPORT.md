@@ -46,22 +46,78 @@ Sáu mẫu HCNS dưới đây là dữ liệu tổng hợp do AI tạo và khôn
 | PDF | ![Đơn tăng ca PDF tổng hợp](assets/hr/overtime-pdf-source-synthetic.png) | ![Kết quả PDF](assets/hr/overtime-pdf-result-synthetic.png) |
 | Ảnh scan | ![Đơn tăng ca ảnh tổng hợp](assets/hr/overtime-image-source-synthetic.png) | ![Kết quả ảnh](assets/hr/overtime-image-result-synthetic.png) |
 
-## CCCD: mẫu evidence đã khử định danh
+### Ảnh chụp trực tiếp từ LOCAL REAL-DOCUMENT EVIDENCE
 
-Hệ thống chọn 4 mẫu trong 30 phiên đã được người dùng đối chiếu. Cách xếp hạng ưu tiên phiên đã kiểm tra đầy đủ, OCR chạy thành công, có kết quả trích xuất, độ tin cậy tốt và thời gian xử lý hợp lý. ID mẫu là mã băm một chiều; report không lưu tên file hoặc nội dung CCCD.
+Hai ảnh dưới đây được chụp từ localhost sau khi sửa preview: PDF được render thành ảnh trang đầu, còn ảnh scan hiển thị trực tiếp. Inspector schema/JSON bên phải vẫn giữ nguyên.
 
-Xem [selection.json](assets/cccd/selection.json) để kiểm tra ranking và privacy declaration.
-
-| Mẫu đã ẩn dữ liệu | Ảnh minh chứng |
+| Định dạng | Evidence từ localhost |
 |---|---|
-| Mẫu 1 | ![CCCD mẫu 1 đã che dữ liệu](assets/cccd/cccd-ev-01358e57d2-source-redacted.png) |
-| Mẫu 2 | ![CCCD mẫu 2 đã che dữ liệu](assets/cccd/cccd-ev-efd73fc886-source-redacted.png) |
-| Mẫu 3 | ![CCCD mẫu 3 đã che dữ liệu](assets/cccd/cccd-ev-b3420b4361-source-redacted.png) |
-| Mẫu 4 | ![CCCD mẫu 4 đã che dữ liệu](assets/cccd/cccd-ev-493ab309b2-source-redacted.png) |
+| PDF nghỉ phép | ![Evidence localhost PDF nghỉ phép](assets/hr/local-evidence-leave-pdf.png) |
+| Ảnh tăng ca | ![Evidence localhost ảnh tăng ca](assets/hr/local-evidence-overtime-image.png) |
+
+## CCCD: evidence tổng hợp và Prediction JSON
+
+Hai ảnh dưới đây do người dùng cung cấp và được xác nhận là dữ liệu AI-generated. Phần JSON là kết quả Prediction của engine local; Ground Truth không được dùng làm output. Các trường `needs_review` vẫn phải được người kiểm tra xác nhận.
+
+### CCCD-01 · `cccd_pilot_012.jpg`
+
+![CCCD-01 evidence từ localhost](assets/cccd/cccd-pilot-012-ui-synthetic.png)
+
+Prediction JSON: [cccd-pilot-012-prediction.json](assets/cccd/cccd-pilot-012-prediction.json)
+
+<details>
+<summary>Xem Prediction JSON CCCD-01</summary>
+
+```json
+{
+  "sourceFile": "cccd_pilot_012.jpg",
+  "predictionOrigin": "locked-local-cccd-engine",
+  "groundTruthUsedAsOutput": false,
+  "fields": {
+    "identityNumber": {"value": "001055000660", "confidence": 0.402644, "status": "accepted"},
+    "fullName": {"value": "LÊ ĐĂNG TÔN", "confidence": 0.866262, "status": "needs_review"},
+    "dateOfBirth": {"value": "07/07/1955", "confidence": 0.58525, "status": "needs_review"},
+    "sex": {"value": "Nam", "confidence": 0.801353, "status": "needs_review"},
+    "nationality": {"value": "Việt Nam", "confidence": 0.657507, "status": "needs_review"},
+    "placeOfOrigin": {"value": "Định Công, Hoàng Mai, Hà Nội", "confidence": 0.79335, "status": "needs_review"},
+    "placeOfResidence": {"value": "71 H Hàng là Bạc Hàng Bạc, Hoàn Kiểm, Hà Nội", "confidence": 0.711428, "status": "needs_review"},
+    "dateOfExpiry": {"value": null, "confidence": 0.0, "status": "not_found"}
+  }
+}
+```
+</details>
+
+### CCCD-02 · `cccd_pilot_008.jpg`
+
+![CCCD-02 evidence từ localhost](assets/cccd/cccd-pilot-008-ui-synthetic.png)
+
+Prediction JSON: [cccd-pilot-008-prediction.json](assets/cccd/cccd-pilot-008-prediction.json)
+
+<details>
+<summary>Xem Prediction JSON CCCD-02</summary>
+
+```json
+{
+  "sourceFile": "cccd_pilot_008.jpg",
+  "predictionOrigin": "locked-local-cccd-engine",
+  "groundTruthUsedAsOutput": false,
+  "fields": {
+    "identityNumber": {"value": "079206032383", "confidence": 0.448701, "status": "accepted"},
+    "fullName": {"value": "NGUYỄN QUỐC VIỆT", "confidence": 0.731844, "status": "needs_review"},
+    "dateOfBirth": {"value": "26/08/2006", "confidence": 0.77347, "status": "needs_review"},
+    "sex": {"value": "Nam", "confidence": 0.552332, "status": "needs_review"},
+    "nationality": {"value": "Việt Nam", "confidence": 0.45523, "status": "needs_review"},
+    "placeOfOrigin": {"value": ", Thừa Thiên Huế Vạng Vinh Thanh, Phú Nơi thường trú", "confidence": 0.770964, "status": "needs_review"},
+    "placeOfResidence": {"value": "65/6 Tân Kỳ Tân", "confidence": 0.785389, "status": "needs_review"},
+    "dateOfExpiry": {"value": "26/08/2031", "confidence": 0.486915, "status": "accepted"}
+  }
+}
+```
+</details>
 
 ## Trạng thái sản phẩm và UX
 
-Hai screenshot an toàn thể hiện website local không chứa tài liệu hay dữ liệu cá nhân:
+Hai screenshot thể hiện website local có một điểm upload, preview tài liệu và inspector schema/JSON cạnh nhau:
 
 ![Local product overview](assets/website/local-product.png)
 
@@ -75,7 +131,7 @@ Giao diện hiện có một điểm upload mặc định, hiển thị bản xe
 |---|---|---|
 | Mất dấu tiếng Việt, bố cục khó trên scan | Bắt buộc người kiểm tra, không tự điền trường thiếu | Phân loại lỗi theo từng trường và đọc lại vùng dữ liệu liên quan trên bộ phát triển |
 | Overfit theo held-out | Evaluate-once và policy lock | Tạo held-out v2 độc lập sau khi khóa candidate mới |
-| Lộ dữ liệu nhạy cảm | Local-only, private-data, report aggregate | Duy trì redaction validation trước mỗi report |
+| Dữ liệu CCCD tổng hợp bị hiểu nhầm là output chuẩn | Gắn nhãn synthetic, Prediction JSON tách khỏi Ground Truth | Giữ `needs_review` và không truyền sang workflow production |
 | Drift manifest multi-format | Đã ghi nhận mismatch 30 khai báo/26 file | Sửa manifest và stale reference trong task riêng |
 | Sai phạm vi triển khai | API bind loopback, chưa có HRIS write | Railway deployment và external integration cần smoke-test/phê duyệt riêng |
 

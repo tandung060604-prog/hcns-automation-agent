@@ -1,8 +1,10 @@
 {
-  "schemaVersion": "weekly-report-redacted-evidence/1.0",
-  "redaction": "CCCD: full-frame blur and darkening; HCNS: unredacted AI-generated data",
+  "schemaVersion": "weekly-report-synthetic-evidence/2.0",
+  "dataPolicy": "User-declared synthetic AI-generated HCNS and CCCD evidence; no real-person data is intended.",
   "containsPII": false,
   "hcnsDataClassification": "synthetic-ai-generated",
+  "cccdDataClassification": "synthetic-ai-generated-user-declared",
+  "predictionPolicy": "Engine Prediction is reported separately; Ground Truth is never copied into output.",
   "artifacts": [
     {
       "path": "hr/leave-docx-source-synthetic.png",
@@ -53,20 +55,28 @@
       "kind": "synthetic-result"
     },
     {
-      "path": "cccd/cccd-ev-01358e57d2-source-redacted.png",
-      "kind": "redacted-identity-source"
+      "path": "hr/local-evidence-leave-pdf.png",
+      "kind": "synthetic-local-ui"
     },
     {
-      "path": "cccd/cccd-ev-493ab309b2-source-redacted.png",
-      "kind": "redacted-identity-source"
+      "path": "hr/local-evidence-overtime-image.png",
+      "kind": "synthetic-local-ui"
     },
     {
-      "path": "cccd/cccd-ev-b3420b4361-source-redacted.png",
-      "kind": "redacted-identity-source"
+      "path": "cccd/cccd-pilot-012-ui-synthetic.png",
+      "kind": "synthetic-identity-ui"
     },
     {
-      "path": "cccd/cccd-ev-efd73fc886-source-redacted.png",
-      "kind": "redacted-identity-source"
+      "path": "cccd/cccd-pilot-008-ui-synthetic.png",
+      "kind": "synthetic-identity-ui"
+    },
+    {
+      "path": "cccd/cccd-pilot-012-prediction.json",
+      "kind": "synthetic-identity-prediction-json"
+    },
+    {
+      "path": "cccd/cccd-pilot-008-prediction.json",
+      "kind": "synthetic-identity-prediction-json"
     }
   ]
 }

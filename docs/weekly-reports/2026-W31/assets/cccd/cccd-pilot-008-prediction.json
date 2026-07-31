@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "mentor-cccd-prediction-evidence/1.0",
+  "sourceFile": "cccd_pilot_008.jpg",
+  "dataClassification": "synthetic-ai-generated",
+  "predictionOrigin": "locked-local-cccd-engine",
+  "groundTruthUsedAsOutput": false,
+  "policyMode": "SHADOW_REVIEW_ONLY",
+  "fields": {
+    "identityNumber": {
+      "value": "079206032383",
+      "confidence": 0.448701,
+      "status": "accepted"
+    },
+    "fullName": {
+      "value": "NGUYỄN QUỐC VIỆT",
+      "confidence": 0.731844,
+      "status": "needs_review"
+    },
+    "dateOfBirth": {
+      "value": "26/08/2006",
+      "confidence": 0.77347,
+      "status": "needs_review"
+    },
+    "sex": {
+      "value": "Nam",
+      "confidence": 0.552332,
+      "status": "needs_review"
+    },
+    "nationality": {
+      "value": "Việt Nam",
+      "confidence": 0.45523,
+      "status": "needs_review"
+    },
+    "placeOfOrigin": {
+      "value": ", Thừa Thiên Huế Vạng Vinh Thanh, Phú Nơi thường trú",
+      "confidence": 0.770964,
+      "status": "needs_review"
+    },
+    "placeOfResidence": {
+      "value": "65/6 Tân Kỳ Tân",
+      "confidence": 0.785389,
+      "status": "needs_review"
+    },
+    "dateOfExpiry": {
+      "value": "26/08/2031",
+      "confidence": 0.486915,
+      "status": "accepted"
+    }
+  }
+}
