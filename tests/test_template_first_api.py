@@ -7,9 +7,17 @@ import threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
+from synthetic_fixtures import administrative_image_bytes
 from test_template_first import docx_bytes, leave_lines
 
-from hcns_agent.templates.service import build_default_template_processing_service
+from hcns_agent.adapters.mock_ocr import DeterministicMockOcrEngine
+from hcns_agent.bootstrap import build_default_intake
+from hcns_agent.templates.registry import build_default_template_registry
+from hcns_agent.templates.service import (
+    TemplateProcessingService,
+    TemplateTechnicalError,
+    build_default_template_processing_service,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "apps" / "ocr_lab" / "api"))
@@ -20,12 +28,17 @@ from apps.ocr_lab.api.serve_dashboard_api import (  # noqa: E402
 )
 
 
-def configure_handler(data_root: Path) -> None:
+def configure_handler(
+    data_root: Path,
+    processor: TemplateProcessingService | None = None,
+) -> None:
     DashboardHandler.data_root = data_root
     DashboardHandler.heldout_root = None
     DashboardHandler.native_indexes = {}
     DashboardHandler.user_ocr = UserOCRService(data_root)
-    DashboardHandler.template_processor = build_default_template_processing_service()
+    DashboardHandler.template_processor = (
+        processor or build_default_template_processing_service()
+    )
 
 
 def test_template_endpoints_process_docx_without_ocr(tmp_path: Path) -> None:
@@ -90,6 +103,9 @@ def test_template_endpoints_process_docx_without_ocr(tmp_path: Path) -> None:
                 "status": "SUCCESS",
                 "recommendedAction": "AUTO_CONTINUE",
                 "confidence": 1.0,
+                "sourceFormat": "DOCX",
+                "usesOcr": False,
+                "parserName": "docx/ooxml-native",
             }
         ]
 
@@ -135,7 +151,9 @@ def test_api_root_redirects_to_local_dashboard(tmp_path: Path) -> None:
         thread.join(timeout=5)
 
 
-def test_template_endpoint_rejects_non_docx_separately(tmp_path: Path) -> None:
+def test_template_endpoint_rejects_unsupported_extension_separately(
+    tmp_path: Path,
+) -> None:
     configure_handler(tmp_path)
     server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -143,7 +161,7 @@ def test_template_endpoint_rejects_non_docx_separately(tmp_path: Path) -> None:
     connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
     try:
         boundary = "synthetic-template-boundary"
-        payload = _multipart_payload(boundary, "unsupported.pdf", b"%PDF-synthetic")
+        payload = _multipart_payload(boundary, "unsupported.txt", b"synthetic")
         connection.request(
             "POST",
             "/api/documents/process",
@@ -157,6 +175,101 @@ def test_template_endpoint_rejects_non_docx_separately(tmp_path: Path) -> None:
         result = json.loads(response.read().decode("utf-8"))
         assert response.status == 415
         assert result["status"] == "REJECT_UNSUPPORTED"
+        assert result["errorCode"] == "SUPPORTED_TEMPLATE_FORMAT_REQUIRED"
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_template_endpoint_processes_image_with_injected_ocr(
+    tmp_path: Path,
+) -> None:
+    ocr = DeterministicMockOcrEngine(
+        text="\n".join(leave_lines()),
+        confidence=0.91,
+    )
+    processor = TemplateProcessingService(
+        intake=build_default_intake(ocr),
+        registry=build_default_template_registry(),
+        ocr_engine=ocr,
+    )
+    configure_handler(tmp_path, processor)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+    try:
+        boundary = "synthetic-template-boundary"
+        payload = _multipart_payload(
+            boundary,
+            "synthetic-camera.png",
+            administrative_image_bytes(),
+        )
+        connection.request(
+            "POST",
+            "/api/documents/process",
+            body=payload,
+            headers={
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "Content-Length": str(len(payload)),
+            },
+        )
+        response = connection.getresponse()
+        result = json.loads(response.read().decode("utf-8"))
+        assert response.status == 200
+        assert result["documentType"] == "LEAVE_REQUEST"
+        assert result["processing"]["sourceFormat"] == "IMAGE"
+        assert result["processing"]["usesOcr"] is True
+        assert result["quality"]["recommendedAction"] == "MANUAL_REVIEW"
+        assert "OCR_REVIEW_REQUIRED" in result["quality"]["validationErrors"]
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_template_endpoint_reports_unavailable_ocr_as_service_unavailable(
+    tmp_path: Path,
+) -> None:
+    configure_handler(tmp_path)
+
+    class UnavailableOcrProcessor:
+        def process(
+            self,
+            source: object,
+            *,
+            result_reference: str | None = None,
+        ) -> object:
+            raise TemplateTechnicalError("OCR_RUNTIME_UNAVAILABLE")
+
+    DashboardHandler.template_processor = UnavailableOcrProcessor()  # type: ignore[assignment]
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+    try:
+        boundary = "synthetic-template-boundary"
+        payload = _multipart_payload(
+            boundary,
+            "synthetic-camera.png",
+            administrative_image_bytes(),
+        )
+        connection.request(
+            "POST",
+            "/api/documents/process",
+            body=payload,
+            headers={
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "Content-Length": str(len(payload)),
+            },
+        )
+        response = connection.getresponse()
+        result = json.loads(response.read().decode("utf-8"))
+        assert response.status == 503
+        assert result["errorCode"] == "OCR_RUNTIME_UNAVAILABLE"
     finally:
         connection.close()
         server.shutdown()

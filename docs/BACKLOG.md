@@ -15,7 +15,8 @@
 | TF-P1-007 | DONE | Thiết kế lại product showcase bên phải hero | TF-P1-006 | P1 |
 | TF-P1-008 | DONE | Redesign landing theo tham chiếu, dùng trạng thái sản phẩm thật | TF-P1-007 | P1 |
 | TF-P2-001 | PLANNED | Pilot Human Review qua Camunda User Task | TF-P1-001 | P1 |
-| TF-P2-002 | PLANNED | Xem xét PDF/ảnh cùng template | TF-P1-001 và dữ liệu được phê duyệt | P2 |
+| TF-P2-002 | IN_PROGRESS | DOCX/PDF/ảnh/scan cho hai template; native pass, OCR text gate mở | TF-P1-001 và dữ liệu được phê duyệt | P0 |
+| TF-P2-003 | BLOCKED | UAT và quản trị phiên bản hai biểu mẫu | TF-P2-002 đạt gate | P1 |
 | M4-CAM-001 | PLANNED | Dry-run Camunda 7.13 với External Task workers | OCR quality gate, mock HRIS | P1 |
 
 ## OCR-HO-V2-001 acceptance criteria
@@ -82,3 +83,17 @@
 - Landing hero giới thiệu HCNS Automation Agent, Template-first, Camunda và Human-in-the-Loop.
 - Showcase dùng số template/session/CCCD thật, không thêm taskbar hoặc số liệu giả.
 - Web build/tests pass; lint không có error.
+
+## TF-P2-002 acceptance checkpoint
+
+- API/UI nhận `.docx`, `.pdf`, `.png`, `.jpg`, `.jpeg`; panel metadata bên phải được giữ.
+- DOCX: 10/10 classification, 90/90 required-field exact match, 0 schema error.
+- Native PDF: 10/10 classification, 90/90 required-field exact match, 0 schema error.
+- Ảnh camera và PDF scan: 6/6 xử lý, 6/6 classification, 0 schema error,
+  6/6 `MANUAL_REVIEW`, 0 false `AUTO_CONTINUE`.
+- OCR required-field exact match hiện 31/54 (57.41%), chưa đạt gate đã duyệt là 80%.
+- Không dùng Ground Truth/native counterpart để bù giá trị OCR; report chỉ chứa aggregate.
+- Manifest nguồn khai báo 30 file nhưng thực có 26; 10 tham chiếu `files.image` bị stale.
+- Live HTTP smoke ảnh camera trả đúng `LEAVE_REQUEST`, dùng PaddleOCR và bắt buộc
+  `MANUAL_REVIEW`; session smoke đã xóa.
+- Python 225 tests; web 9 tests/build; Ruff, mypy, hygiene và diff check pass.

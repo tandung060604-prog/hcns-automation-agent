@@ -1,20 +1,29 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from html import escape
 from pathlib import Path
 
 import pytest
 from jsonschema import validate
-from synthetic_fixtures import make_ooxml_zip
+from synthetic_fixtures import (
+    administrative_image_bytes,
+    make_ooxml_zip,
+    scanned_pdf_bytes,
+)
 
 from hcns_agent.adapters.camunda7.contract import (
     CamundaWorkflowDocumentType,
     map_document_type,
 )
+from hcns_agent.adapters.mock_ocr import DeterministicMockOcrEngine
+from hcns_agent.bootstrap import build_default_intake
 from hcns_agent.domain.documents import DocumentType
 from hcns_agent.ports.document_parser import DocumentSource
+from hcns_agent.templates.registry import build_default_template_registry
 from hcns_agent.templates.service import (
+    TemplateProcessingService,
     TemplateTechnicalError,
     TemplateUnsupportedError,
     build_default_template_processing_service,
@@ -113,6 +122,11 @@ def test_registry_lists_only_two_approved_templates() -> None:
         "leave-request-v1",
         "overtime-request-v1",
     ]
+    assert all(
+        template["supportedFileTypes"]
+        == ["docx", "pdf", "png", "jpg", "jpeg"]
+        for template in templates
+    )
 
 
 def test_leave_template_is_filename_independent_and_schema_valid() -> None:
@@ -157,6 +171,28 @@ def test_overtime_template_parses_and_normalizes_time() -> None:
     validate(data, schema)
 
 
+def test_overtime_parser_normalizes_wrapped_reason_and_work_content() -> None:
+    lines = [
+        line.replace(
+            "Do hoàn thiện kiểm thử synthetic",
+            "Do hoàn thiện\nkiểm thử synthetic",
+        ).replace(
+            "Nội dung công việc: Hoàn thiện kiểm thử synthetic.",
+            (
+                "Nội dung công việc: Hoàn thiện kiểm thử\nsynthetic. "
+                "Tôi cam kết tuân thủ quy định."
+            ),
+        )
+        for line in overtime_lines()
+    ]
+    response = process(lines)
+    data = response["data"]
+    assert isinstance(data, dict)
+
+    assert data["reason"] == "hoàn thiện kiểm thử synthetic"
+    assert data["workContent"] == "Hoàn thiện kiểm thử synthetic"
+
+
 def test_missing_required_field_routes_to_manual_review_without_inference() -> None:
     lines = [line for line in leave_lines() if not line.startswith("Chức vụ:")]
     response = process(lines)
@@ -188,6 +224,89 @@ def test_partial_anchor_match_is_review_only() -> None:
     assert isinstance(data, dict)
 
     assert "TEMPLATE_ANCHOR_PARTIAL" in data["validationErrors"]
+    assert data["recommendedAction"] == "MANUAL_REVIEW"
+
+
+@pytest.mark.parametrize(
+    ("filename", "content_factory"),
+    [
+        ("synthetic-camera.png", administrative_image_bytes),
+        ("synthetic-scan.pdf", scanned_pdf_bytes),
+    ],
+)
+def test_ocr_sources_extract_fields_but_require_manual_review(
+    filename: str,
+    content_factory: Callable[[], bytes],
+) -> None:
+    ocr = DeterministicMockOcrEngine(
+        text="\n".join(leave_lines()),
+        confidence=0.93,
+    )
+    service = TemplateProcessingService(
+        intake=build_default_intake(ocr),
+        registry=build_default_template_registry(),
+        ocr_engine=ocr,
+    )
+
+    response = service.process(
+        DocumentSource(
+            document_id="SYNTHETIC-OCR",
+            filename=filename,
+            content=content_factory(),
+            source_reference="object://synthetic/ocr",
+        )
+    ).public_dict()
+    data = response["data"]
+    processing = response["processing"]
+    assert isinstance(data, dict)
+    assert isinstance(processing, dict)
+
+    assert response["documentType"] == "LEAVE_REQUEST"
+    assert data["employeeName"] == "NHÂN VIÊN SYNTHETIC"
+    assert data["recommendedAction"] == "MANUAL_REVIEW"
+    assert "OCR_REVIEW_REQUIRED" in data["validationErrors"]
+    assert processing["usesOcr"] is True
+    assert processing["ocrEngine"] == "mock/deterministic-v1"
+    assert processing["ocrConfidence"] == 0.93
+
+
+def test_degraded_overtime_ocr_keeps_structure_and_numeric_fields() -> None:
+    text = "\n".join(
+        [
+            "Hà Nội, ngày 31 tháng 05 năm 2026",
+            "ĐON XIN TĂNG CA",
+            "Căn cú Hp đông lao dng sõ HD-01 ký ngày 01/01/2026",
+            "Tôi là: Nguyn Hi Yn - Chc v: K sư D liu",
+            "Thi gian đ ngh: T ngày 01/06/2026 đn ht ngày 03/06/2026, "
+            "tăng thêm 2 gi mi ngày, t 18 gi 00 phút đn 20 gi 00 phút; "
+            "tng thi gian d kin là 6 gi.",
+            "Ni dung công vic: Chy pipeline OCR.",
+            "Tôi cam kt tuân th quy đnh.",
+        ]
+    )
+    ocr = DeterministicMockOcrEngine(text=text, confidence=0.91)
+    service = TemplateProcessingService(
+        intake=build_default_intake(ocr),
+        registry=build_default_template_registry(),
+        ocr_engine=ocr,
+    )
+
+    response = service.process(
+        DocumentSource(
+            document_id="SYNTHETIC-DEGRADED-OCR",
+            filename="camera-hard.png",
+            content=administrative_image_bytes(),
+        )
+    ).public_dict()
+    data = response["data"]
+    assert isinstance(data, dict)
+
+    assert response["documentType"] == "OVERTIME_REQUEST"
+    assert data["startDate"] == "2026-06-01"
+    assert data["endDate"] == "2026-06-03"
+    assert data["overtimeStartTime"] == "18:00"
+    assert data["overtimeEndTime"] == "20:00"
+    assert data["totalOvertimeHours"] == 6
     assert data["recommendedAction"] == "MANUAL_REVIEW"
 
 

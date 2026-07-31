@@ -46,7 +46,7 @@ type Phase = {
 type DashboardData = {
   phases: Phase[];
   nextSteps: Array<{ order: number; title: string; description: string }>;
-  processing: {
+  processing?: {
     engine: string;
     ocrVersion: string;
     language: string;
@@ -510,6 +510,14 @@ type TemplateProcessingResult = {
     confidence: number;
     recommendedAction: string;
   };
+  processing: {
+    sourceFormat: "DOCX" | "PDF_TEXT" | "PDF_SCAN" | "IMAGE";
+    parserName: string;
+    parserVersion: string;
+    usesOcr: boolean;
+    ocrEngine: string | null;
+    ocrConfidence: number | null;
+  };
   camundaVariables: Record<string, unknown>;
 };
 
@@ -523,6 +531,9 @@ type TemplateSessionSummary = {
   status: string;
   recommendedAction: string | null;
   confidence: number | null;
+  sourceFormat: "DOCX" | "PDF_TEXT" | "PDF_SCAN" | "IMAGE";
+  usesOcr: boolean;
+  parserName: string;
 };
 
 type UserSessionSummary = {
@@ -1307,8 +1318,12 @@ function TemplateEvidenceInspector({
       {result ? (
         <div className="evidence-prediction-source evidence-prediction-source-single">
           <span>NGUỒN DỮ LIỆU</span>
-          <strong>Native DOCX / Template-first parser</strong>
+          <strong>
+            {result.processing?.sourceFormat ?? "DOCX"} /{" "}
+            {result.processing?.usesOcr ? "PaddleOCR local" : "Native parser"}
+          </strong>
           <small>
+            {result.processing?.parserName ?? "docx/ooxml"} ·{" "}
             {result.quality.recommendedAction} / confidence{" "}
             {pct(result.quality.confidence)}
           </small>
@@ -1947,9 +1962,9 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     if (!uploadFile || isUploading) return;
     if (
       processingMode === "template" &&
-      !uploadFile.name.toLocaleLowerCase("vi").endsWith(".docx")
+      !/\.(docx|pdf|png|jpe?g)$/i.test(uploadFile.name)
     ) {
-      setUploadError("Template-first hiện chỉ hỗ trợ file DOCX có text.");
+      setUploadError("Mẫu chuẩn hỗ trợ DOCX, PDF, PNG, JPG và JPEG.");
       return;
     }
     setIsUploading(true);
@@ -1978,7 +1993,9 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               : "LOCAL_PROCESSING_FAILED";
         throw new Error(
           processingMode === "template"
-            ? `Không xử lý được biểu mẫu: ${errorCode}`
+            ? errorCode === "OCR_RUNTIME_UNAVAILABLE"
+              ? "OCR local chưa sẵn sàng. Hãy cài runtime PaddleOCR rồi thử lại."
+              : `Không xử lý được biểu mẫu: ${errorCode}`
             : `OCR local thất bại: ${errorCode}`,
         );
       }
@@ -2473,12 +2490,12 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               <article>
                 <span>LEAVE_REQUEST</span>
                 <strong>Đơn xin nghỉ phép</strong>
-                <small>Native DOCX · validation theo mẫu</small>
+                <small>DOCX/PDF native · ảnh/scan qua OCR</small>
               </article>
               <article>
                 <span>OVERTIME_REQUEST</span>
                 <strong>Đơn xin tăng ca</strong>
-                <small>Native DOCX · quality routing</small>
+                <small>Template-first · Human Review cho OCR</small>
               </article>
             </div>
             <div className="product-showcase-footer">
@@ -2982,7 +2999,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                   data-testid="local-document-input"
                   accept={
                     processingMode === "template"
-                      ? ".docx"
+                      ? ".docx,.pdf,.png,.jpg,.jpeg"
                       : ".png,.jpg,.jpeg,.pdf,.docx,.xlsx"
                   }
                   onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
@@ -2995,7 +3012,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                   {uploadFile
                     ? `${(uploadFile.size / 1024 / 1024).toFixed(2)} MB`
                     : processingMode === "template"
-                      ? "DOCX có text · đơn nghỉ phép hoặc đơn tăng ca"
+                      ? "DOCX, PDF, PNG, JPG · nghỉ phép hoặc tăng ca"
                       : "PNG, JPG, JPEG, PDF, DOCX, XLSX, tối đa 50 MB / 50 trang"}
                 </p>
               </label>
@@ -4481,13 +4498,16 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             <div className="heldout-preview">
               {activeTemplateSession ? (
                 <div className="native-heldout-file template-native-preview">
-                  <span>DOCX</span>
+                  <span>{activeTemplateSession.sourceFormat}</span>
                   <strong>{activeTemplateSession.originalFileName}</strong>
                   <p>
                     {activeTemplateSession.documentType === "LEAVE_REQUEST"
                       ? "Đơn xin nghỉ phép"
                       : "Đơn xin tăng ca"}
-                    . Dữ liệu được đọc trực tiếp từ OOXML, không dùng OCR.
+                    .{" "}
+                    {activeTemplateSession.usesOcr
+                      ? "Dữ liệu được nhận diện bằng PaddleOCR local và bắt buộc Human Review."
+                      : "Dữ liệu được đọc trực tiếp bằng native parser, không dùng OCR."}
                   </p>
                 </div>
               ) : (

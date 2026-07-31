@@ -174,7 +174,12 @@ test("exposes Template-first upload and structured result inspection", async () 
   assert.match(dashboard, /Không có trong tài liệu/);
   assert.match(dashboard, /TemplateResultPanel/);
   assert.match(dashboard, /TemplateEvidenceInspector/);
-  assert.match(dashboard, /Native DOCX \/ Template-first parser/);
+  assert.match(dashboard, /PaddleOCR local/);
+  assert.match(
+    dashboard,
+    /Dữ liệu được đọc trực tiếp bằng native parser, không dùng OCR/,
+  );
+  assert.match(dashboard, /\.docx,.pdf,.png,.jpg,.jpeg/);
   assert.match(dashboard, /data-testid="local-document-input"/);
   assert.match(dashboard, /data-testid="template-result-panel"/);
   assert.match(css, /\.upload-mode-switch/);

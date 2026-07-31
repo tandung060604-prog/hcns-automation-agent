@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from hcns_agent.domain.canonical import CanonicalDocument, Table
+from hcns_agent.domain.documents import SourceFormat
 from hcns_agent.templates.common import (
     document_text,
     extract_unique,
@@ -53,6 +54,20 @@ class LeaveRequestParser:
             text,
             flags=re.IGNORECASE,
         )
+        if document.source_format in {SourceFormat.IMAGE, SourceFormat.PDF_SCAN}:
+            leave_period = leave_period or re.search(
+                r"gian\s+(\d+(?:[.,]\d+)?)\s+ngày.*?"
+                r"(\d{1,2}/\d{1,2}/\d{4}).*?"
+                r"(\d{1,2}/\d{1,2}/\d{4})",
+                text,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+            reason_return = reason_return or re.search(
+                r"Lý\s+do\s+xin\s+nghi\s+phép\s*:\s*(.+?)\.\s*"
+                r"Tôi\s+d\s+ki.n.*?ngày\s+(\d{1,2}/\d{1,2}/\d{4})",
+                text,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
 
         data: dict[str, object] = {
             "documentId": document.document_id,
@@ -98,6 +113,14 @@ class LeaveRequestParser:
                 "reason",
                 r"Lý\s+do\s+xin\s+nghỉ\s+phép\s*:\s*([^\n]+)",
             )
+        if document.source_format in {SourceFormat.IMAGE, SourceFormat.PDF_SCAN}:
+            _fill_ocr_line_fields(data, text)
+            slash_dates = re.findall(r"\d{1,2}/\d{1,2}/\d{4}", text)
+            if data["startDate"] is None and len(slash_dates) >= 2:
+                data["startDate"] = iso_date(slash_dates[0])
+                data["endDate"] = iso_date(slash_dates[1])
+            if data["expectedReturnDate"] is None and len(slash_dates) >= 3:
+                data["expectedReturnDate"] = iso_date(slash_dates[2])
         return ParsedTemplate(data=data, conflicting_fields=tuple(sorted(conflicts)))
 
 
@@ -115,3 +138,18 @@ def _approver_name(document: CanonicalDocument) -> str | None:
         if value and "ký" not in normalize_for_match(value):
             return value
     return None
+
+
+def _fill_ocr_line_fields(data: dict[str, object], text: str) -> None:
+    label_patterns = {
+        "employeeName": r"^Tôi\s+tên\s+là\s*:?\s*(.+)$",
+        "jobTitle": r"^Ch.c\s+v.\s*:?\s*(.+)$",
+        "department": r"^B.\s+ph.n\s*:?\s*(.+)$",
+    }
+    for line in text.splitlines():
+        for field_name, pattern in label_patterns.items():
+            if data.get(field_name) is not None:
+                continue
+            match = re.match(pattern, line.strip(), flags=re.IGNORECASE)
+            if match:
+                data[field_name] = strip_terminal(match.group(1))
