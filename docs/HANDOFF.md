@@ -128,6 +128,14 @@
 2. Trình người dùng bằng chứng và xin duyệt hướng cải thiện recognizer riêng.
 3. Chỉ mở TF-P2-003 sau khi TF-P2-002 đạt gate hoặc acceptance được phê duyệt lại.
 
+### WEEKLY-REPORT-2026-W31 — completed
+
+- Report artifacts live under `docs/weekly-reports/2026-W31/`.
+- `assets/cccd/selection.json` has four opaque sample IDs from 30 review-complete sessions;
+  it contains no file name, raw OCR text, field value or source image.
+- Safe website screenshots were captured with no document selected. Run
+  `python scripts/validate_weekly_report.py` before changing the report.
+
 ## First command after resume
 
 ```powershell
