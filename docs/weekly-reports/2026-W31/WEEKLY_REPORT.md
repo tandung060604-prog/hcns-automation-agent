@@ -48,13 +48,11 @@ Sáu mẫu HCNS dưới đây là dữ liệu tổng hợp do AI tạo và khôn
 
 ### Ảnh chụp trực tiếp từ LOCAL REAL-DOCUMENT EVIDENCE
 
-Hai ảnh dưới đây được chụp từ localhost sau khi sửa preview: PDF được render thành ảnh trang đầu, còn ảnh scan hiển thị trực tiếp. Inspector schema/JSON bên phải vẫn giữ nguyên.
+Ảnh dưới đây được chụp từ localhost sau khi sửa preview: PDF được render thành ảnh trang đầu, còn ảnh scan hiển thị trực tiếp. Inspector schema/JSON bên phải vẫn giữ nguyên.
 
 | Định dạng | Evidence từ localhost |
 |---|---|
 | PDF nghỉ phép | ![Evidence localhost PDF nghỉ phép](assets/hr/local-evidence-leave-pdf.png) |
-| Ảnh tăng ca | ![Evidence localhost ảnh tăng ca](assets/hr/local-evidence-overtime-image.png) |
-
 ## CCCD: evidence tổng hợp và Prediction JSON
 
 Hai ảnh dưới đây do người dùng cung cấp và được xác nhận là dữ liệu AI-generated. Phần JSON là kết quả Prediction của engine local; Ground Truth không được dùng làm output. Các trường `needs_review` vẫn phải được người kiểm tra xác nhận.
@@ -142,6 +140,7 @@ Giao diện hiện có một điểm upload mặc định, hiển thị bản xe
 3. Chạy lại gate multi-format. Chỉ xem xét promotion khi OCR field exact-match đạt ít nhất 44/54 và không làm mất trường đúng.
 4. Bổ sung thêm các loại tài liệu bằng cấp, chứng chỉ, bản chấm công,...
 5. Tích hợp với hệ thống Camunda đã dựng sẵn dưới dạng External Worker
+6. Tích hợp sử dụng với Camera điện thoại với tài liệu thật. Deploy local lên server.
 
 
 Audit chi tiết: [AUDIT_NOTES.md](AUDIT_NOTES.md). Danh mục artifact: [EVIDENCE_MANIFEST.json](EVIDENCE_MANIFEST.json).
