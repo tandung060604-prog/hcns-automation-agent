@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "weekly-report-redacted-evidence/1.0",
+  "redaction": "CCCD: full-frame blur and darkening; HCNS: unredacted AI-generated data",
+  "containsPII": false,
+  "hcnsDataClassification": "synthetic-ai-generated",
+  "artifacts": [
+    {
+      "path": "hr/leave-docx-source-synthetic.png",
+      "kind": "synthetic-source"
+    },
+    {
+      "path": "hr/leave-docx-result-synthetic.png",
+      "kind": "synthetic-result"
+    },
+    {
+      "path": "hr/leave-pdf-source-synthetic.png",
+      "kind": "synthetic-source"
+    },
+    {
+      "path": "hr/leave-pdf-result-synthetic.png",
+      "kind": "synthetic-result"
+    },
+    {
+      "path": "hr/leave-image-source-synthetic.png",
+      "kind": "synthetic-source"
+    },
+    {
+      "path": "hr/leave-image-result-synthetic.png",
+      "kind": "synthetic-result"
+    },
+    {
+      "path": "hr/overtime-docx-source-synthetic.png",
+      "kind": "synthetic-source"
+    },
+    {
+      "path": "hr/overtime-docx-result-synthetic.png",
+      "kind": "synthetic-result"
+    },
+    {
+      "path": "hr/overtime-pdf-source-synthetic.png",
+      "kind": "synthetic-source"
+    },
+    {
+      "path": "hr/overtime-pdf-result-synthetic.png",
+      "kind": "synthetic-result"
+    },
+    {
+      "path": "hr/overtime-image-source-synthetic.png",
+      "kind": "synthetic-source"
+    },
+    {
+      "path": "hr/overtime-image-result-synthetic.png",
+      "kind": "synthetic-result"
+    },
+    {
+      "path": "cccd/cccd-ev-01358e57d2-source-redacted.png",
+      "kind": "redacted-identity-source"
+    },
+    {
+      "path": "cccd/cccd-ev-493ab309b2-source-redacted.png",
+      "kind": "redacted-identity-source"
+    },
+    {
+      "path": "cccd/cccd-ev-b3420b4361-source-redacted.png",
+      "kind": "redacted-identity-source"
+    },
+    {
+      "path": "cccd/cccd-ev-efd73fc886-source-redacted.png",
+      "kind": "redacted-identity-source"
+    }
+  ]
+}

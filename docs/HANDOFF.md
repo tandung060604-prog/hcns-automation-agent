@@ -132,7 +132,10 @@
 
 - Report artifacts live under `docs/weekly-reports/2026-W31/`.
 - `assets/cccd/selection.json` has four opaque sample IDs from 30 review-complete sessions;
-  it contains no file name, raw OCR text, field value or source image.
+  their four report images are fully blurred and contain no readable PII.
+- The report has six unredacted input/result pairs for leave/overtime DOCX, PDF and image
+  sources. These sources are AI-generated synthetic data; result cards come from actual
+  engine output, not Ground Truth.
 - Safe website screenshots were captured with no document selected. Run
   `python scripts/validate_weekly_report.py` before changing the report.
 

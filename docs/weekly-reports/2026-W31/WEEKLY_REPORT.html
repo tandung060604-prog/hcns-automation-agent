@@ -26,9 +26,18 @@
       .shots { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
       .shots figure { margin:0; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:#fff; }
       .shots img { width:100%; display:block; } figcaption { padding:10px 14px; color:var(--muted); font-size:13px; }
+      .evidence-group { margin-top:24px; }
+      .evidence-group h3 { margin:0 0 12px; font-size:18px; }
+      .evidence-pair { display:grid; grid-template-columns:120px repeat(2,minmax(0,1fr)); gap:12px; align-items:start; margin-bottom:14px; }
+      .evidence-pair strong { padding-top:14px; color:var(--accent); }
+      .evidence-pair figure { margin:0; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:#fff; }
+      .evidence-pair img { display:block; width:100%; }
+      .identity-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+      .identity-grid figure { margin:0; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:#fff; }
+      .identity-grid img { display:block; width:100%; }
       code { background:var(--soft); padding:2px 5px; border-radius:4px; color:var(--ink); }
       footer { margin-top:48px; padding-top:18px; border-top:1px solid var(--line); color:var(--muted); font-size:13px; }
-      @media (max-width:700px) { main { padding:36px 18px 54px; } .status, .shots { grid-template-columns:1fr; } table { font-size:14px; } th, td { padding:10px; } }
+      @media (max-width:700px) { main { padding:36px 18px 54px; } .status, .shots, .identity-grid { grid-template-columns:1fr; } .evidence-pair { grid-template-columns:1fr; } table { font-size:14px; } th, td { padding:10px; } }
     </style>
   </head>
   <body>
@@ -36,20 +45,46 @@
       <header>
         <div class="eyebrow">HCNS Automation Agent</div>
         <h1>Weekly Product Report<br />2026-W31</h1>
-        <p>Template-first local document intelligence cho đơn nghỉ phép và tăng ca. Native document path đã sẵn sàng local. OCR ảnh và scan vẫn được quản lý bằng human review.</p>
+        <p>Hệ thống đọc đơn nghỉ phép và tăng ca từ DOCX, PDF hoặc ảnh. File có lớp chữ được đọc trực tiếp; ảnh và bản scan dùng OCR local rồi chuyển cho người kiểm tra khi chưa đủ chắc chắn.</p>
         <section class="status" aria-label="Tóm tắt trạng thái">
-          <div><strong>90/90</strong><span>Required fields native DOCX</span></div>
-          <div><strong>90/90</strong><span>Required fields native PDF</span></div>
-          <div><strong>31/54</strong><span>Required fields ảnh và PDF scan</span></div>
+          <div><strong>90/90</strong><span>Trường bắt buộc từ DOCX</span></div>
+          <div><strong>90/90</strong><span>Trường bắt buộc từ PDF có lớp chữ</span></div>
+          <div><strong>31/54</strong><span>Trường bắt buộc từ ảnh và PDF scan</span></div>
         </section>
       </header>
       <section>
         <h2>Quyết định hiện tại</h2>
         <table><thead><tr><th>Hạng mục</th><th>Trạng thái</th><th>Bằng chứng</th></tr></thead><tbody>
-          <tr><td>Native template parsing</td><td class="ready">Sẵn sàng local</td><td>Hai template, DOCX và PDF đạt required-field exact-match đầy đủ trong regression native.</td></tr>
-          <tr><td>Ảnh camera và scan PDF</td><td class="review">Manual review</td><td>6/6 xử lý và phân loại. Chất lượng field chưa đạt gate promotion.</td></tr>
-          <tr><td>Workflow production</td><td class="review">Chưa triển khai</td><td>API local bind loopback. Chưa có bằng chứng HRIS write hoặc process instance production.</td></tr>
+          <tr><td>Đọc trực tiếp DOCX/PDF</td><td class="ready">Sẵn sàng local</td><td>Hai biểu mẫu đạt đầy đủ trường bắt buộc trong bộ kiểm thử đã phê duyệt.</td></tr>
+          <tr><td>Ảnh camera và PDF scan</td><td class="review">Cần người kiểm tra</td><td>6/6 tài liệu được xử lý và phân loại, nhưng chất lượng trường chưa đạt ngưỡng tự động.</td></tr>
+          <tr><td>Luồng nghiệp vụ production</td><td class="review">Chưa triển khai</td><td>API hiện chỉ chạy trên máy local. Chưa có thao tác ghi sang HRIS hoặc quy trình production.</td></tr>
         </tbody></table>
+      </section>
+      <section>
+        <h2>Hai biểu mẫu HCNS bằng dữ liệu tổng hợp</h2>
+        <p>Các tài liệu dưới đây do AI tạo, không đại diện cho người thật. Cột kết quả là output thật của engine khi xử lý chính file bên cạnh, không phải đáp án chuẩn được chép sang.</p>
+        <div class="evidence-group">
+          <h3>Đơn nghỉ phép</h3>
+          <div class="evidence-pair"><strong>DOCX</strong><figure><img src="assets/hr/leave-docx-source-synthetic.png" alt="Đơn nghỉ phép DOCX tổng hợp" /><figcaption>Đầu vào DOCX tổng hợp.</figcaption></figure><figure><img src="assets/hr/leave-docx-result-synthetic.png" alt="Kết quả engine cho DOCX nghỉ phép" /><figcaption>Kết quả trích xuất từ engine.</figcaption></figure></div>
+          <div class="evidence-pair"><strong>PDF</strong><figure><img src="assets/hr/leave-pdf-source-synthetic.png" alt="Đơn nghỉ phép PDF tổng hợp" /><figcaption>Đầu vào PDF tổng hợp.</figcaption></figure><figure><img src="assets/hr/leave-pdf-result-synthetic.png" alt="Kết quả engine cho PDF nghỉ phép" /><figcaption>Kết quả trích xuất từ engine.</figcaption></figure></div>
+          <div class="evidence-pair"><strong>Ảnh scan</strong><figure><img src="assets/hr/leave-image-source-synthetic.png" alt="Đơn nghỉ phép dạng ảnh tổng hợp" /><figcaption>Đầu vào ảnh tổng hợp.</figcaption></figure><figure><img src="assets/hr/leave-image-result-synthetic.png" alt="Kết quả engine cho ảnh nghỉ phép" /><figcaption>Kết quả OCR, cần người kiểm tra.</figcaption></figure></div>
+        </div>
+        <div class="evidence-group">
+          <h3>Đơn tăng ca</h3>
+          <div class="evidence-pair"><strong>DOCX</strong><figure><img src="assets/hr/overtime-docx-source-synthetic.png" alt="Đơn tăng ca DOCX tổng hợp" /><figcaption>Đầu vào DOCX tổng hợp.</figcaption></figure><figure><img src="assets/hr/overtime-docx-result-synthetic.png" alt="Kết quả engine cho DOCX tăng ca" /><figcaption>Kết quả trích xuất từ engine.</figcaption></figure></div>
+          <div class="evidence-pair"><strong>PDF</strong><figure><img src="assets/hr/overtime-pdf-source-synthetic.png" alt="Đơn tăng ca PDF tổng hợp" /><figcaption>Đầu vào PDF tổng hợp.</figcaption></figure><figure><img src="assets/hr/overtime-pdf-result-synthetic.png" alt="Kết quả engine cho PDF tăng ca" /><figcaption>Kết quả trích xuất từ engine.</figcaption></figure></div>
+          <div class="evidence-pair"><strong>Ảnh scan</strong><figure><img src="assets/hr/overtime-image-source-synthetic.png" alt="Đơn tăng ca dạng ảnh tổng hợp" /><figcaption>Đầu vào ảnh tổng hợp.</figcaption></figure><figure><img src="assets/hr/overtime-image-result-synthetic.png" alt="Kết quả engine cho ảnh tăng ca" /><figcaption>Kết quả OCR, cần người kiểm tra.</figcaption></figure></div>
+        </div>
+      </section>
+      <section>
+        <h2>CCCD đã che dữ liệu cá nhân</h2>
+        <p>Bốn ảnh được chọn từ 30 phiên đã đối chiếu. Tên, số định danh, ngày sinh, địa chỉ, khuôn mặt và toàn bộ nội dung nguồn đều đã được làm mờ trước khi đưa vào Git.</p>
+        <div class="identity-grid">
+          <figure><img src="assets/cccd/cccd-ev-01358e57d2-source-redacted.png" alt="CCCD mẫu 1 đã che dữ liệu" /><figcaption>Mẫu CCCD 1, chỉ giữ bằng chứng bố cục.</figcaption></figure>
+          <figure><img src="assets/cccd/cccd-ev-efd73fc886-source-redacted.png" alt="CCCD mẫu 2 đã che dữ liệu" /><figcaption>Mẫu CCCD 2, chỉ giữ bằng chứng bố cục.</figcaption></figure>
+          <figure><img src="assets/cccd/cccd-ev-b3420b4361-source-redacted.png" alt="CCCD mẫu 3 đã che dữ liệu" /><figcaption>Mẫu CCCD 3, chỉ giữ bằng chứng bố cục.</figcaption></figure>
+          <figure><img src="assets/cccd/cccd-ev-493ab309b2-source-redacted.png" alt="CCCD mẫu 4 đã che dữ liệu" /><figcaption>Mẫu CCCD 4, chỉ giữ bằng chứng bố cục.</figcaption></figure>
+        </div>
       </section>
       <section>
         <h2>Bằng chứng sản phẩm local</h2>
@@ -59,13 +94,13 @@
         </div>
       </section>
       <section class="panel">
-        <h2>Privacy và evidence</h2>
-        <p>Report chỉ lưu metric tổng hợp, screenshot an toàn và selection CCCD có định danh băm. Không có tài liệu nguồn, filename gốc, OCR text, Ground Truth hoặc dữ liệu cá nhân trong artifact public.</p>
-        <p>Selection có thể tái tạo bằng <code>scripts/build_weekly_report_cccd_selection.py</code>. Validation chạy bằng <code>python scripts/validate_weekly_report.py</code>.</p>
+        <h2>Quy tắc dữ liệu trong báo cáo</h2>
+        <p>CCCD thật luôn được che toàn bộ nội dung. Hai loại biểu mẫu HCNS được hiển thị vì là dữ liệu tổng hợp do AI tạo và không gắn với người thật. Report không chứa Ground Truth hay OCR raw của CCCD.</p>
+        <p>Danh sách bằng chứng có thể kiểm tra trong <code>assets/evidence-index.json</code>. Kiểm tra an toàn chạy bằng <code>python scripts/validate_weekly_report.py</code>.</p>
       </section>
       <section>
         <h2>Ưu tiên tiếp theo</h2>
-        <p>Tiếp tục TF-P2-002A với field-level error classification và ROI recovery trên development-only. Giữ `MANUAL_REVIEW` đến khi gate OCR đạt 44/54 required fields hoặc cao hơn mà không làm mất trường đúng.</p>
+        <p>Tiếp tục phân loại lỗi theo từng trường và đọc lại vùng dữ liệu liên quan trên bộ phát triển. Ảnh và scan vẫn cần người kiểm tra đến khi đạt ít nhất 44/54 trường bắt buộc mà không làm mất các trường vốn đã đúng.</p>
       </section>
       <footer>Evidence manifest và audit notes nằm cùng thư mục report. Trạng thái này chỉ áp dụng cho local-only runtime.</footer>
     </main>
