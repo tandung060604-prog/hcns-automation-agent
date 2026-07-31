@@ -513,6 +513,18 @@ type TemplateProcessingResult = {
   camundaVariables: Record<string, unknown>;
 };
 
+type TemplateSessionSummary = {
+  documentId: string;
+  createdAt: string;
+  originalFileName: string;
+  documentType: "LEAVE_REQUEST" | "OVERTIME_REQUEST";
+  templateId: string;
+  templateVersion: string;
+  status: string;
+  recommendedAction: string | null;
+  confidence: number | null;
+};
+
 type UserSessionSummary = {
   sessionId: string;
   createdAt: string;
@@ -1260,6 +1272,101 @@ function EvidenceInspector({
   );
 }
 
+function TemplateEvidenceInspector({
+  result,
+  loading,
+  error,
+  view,
+  onViewChange,
+}: {
+  result: TemplateProcessingResult | null;
+  loading: boolean;
+  error: string;
+  view: "fields" | "json";
+  onViewChange: (view: "fields" | "json") => void;
+}) {
+  const fields = result
+    ? Object.entries(result.data).filter(
+        ([name]) => !TEMPLATE_RESULT_META_FIELDS.has(name),
+      )
+    : [];
+
+  return (
+    <aside className="evidence-inspector" aria-live="polite">
+      <header>
+        <div>
+          <span>SCHEMA / JSON</span>
+          <strong>{result?.documentType ?? "TEMPLATE-FIRST"}</strong>
+        </div>
+        <small>
+          {result
+            ? `${result.templateId} / phiên bản ${result.templateVersion}`
+            : "Kết quả biểu mẫu chỉ đọc trên localhost"}
+        </small>
+      </header>
+      {result ? (
+        <div className="evidence-prediction-source evidence-prediction-source-single">
+          <span>NGUỒN DỮ LIỆU</span>
+          <strong>Native DOCX / Template-first parser</strong>
+          <small>
+            {result.quality.recommendedAction} / confidence{" "}
+            {pct(result.quality.confidence)}
+          </small>
+        </div>
+      ) : null}
+      <div className="evidence-inspector-tabs" role="tablist">
+        <button
+          className={view === "fields" ? "active" : ""}
+          onClick={() => onViewChange("fields")}
+          role="tab"
+          aria-selected={view === "fields"}
+        >
+          Trường schema
+        </button>
+        <button
+          className={view === "json" ? "active" : ""}
+          onClick={() => onViewChange("json")}
+          role="tab"
+          aria-selected={view === "json"}
+        >
+          JSON
+        </button>
+      </div>
+      {loading ? (
+        <div className="evidence-inspector-state">Đang tải kết quả Template-first...</div>
+      ) : error ? (
+        <div className="evidence-inspector-state error">{error}</div>
+      ) : !result ? (
+        <div className="evidence-inspector-state">
+          Chọn đơn nghỉ phép hoặc tăng ca để xem metadata và JSON.
+        </div>
+      ) : view === "fields" ? (
+        <div className="evidence-field-list">
+          <div className="template-evidence-field-heading">
+            <span>Trường schema</span>
+            <span>Giá trị trích xuất</span>
+            <span>Trạng thái</span>
+          </div>
+          {fields.map(([name, value]) => {
+            const isMissing = result.quality.missingFields.includes(name);
+            return (
+              <div className="template-evidence-field-row" key={name}>
+                <strong>{name}</strong>
+                <span>{formatTemplateValue(value)}</span>
+                <small data-status={isMissing ? "not_found" : "accepted"}>
+                  {isMissing ? "missing" : "extracted"}
+                </small>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <pre className="evidence-json">{JSON.stringify(result, null, 2)}</pre>
+      )}
+    </aside>
+  );
+}
+
 function phase11Label(result: UserResult) {
   return result.phase11_5
     ? "11.5"
@@ -1421,19 +1528,19 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [heldoutEvidenceLoading, setHeldoutEvidenceLoading] = useState(false);
   const [heldoutEvidenceError, setHeldoutEvidenceError] = useState("");
   const [evidenceMode, setEvidenceMode] =
-    useState<"heldout" | "uploads" | "cccd">(
-      SHOW_HELDOUT ? "heldout" : "uploads",
+    useState<"heldout" | "templates" | "cccd">(
+      SHOW_HELDOUT ? "heldout" : "templates",
     );
   const [evidenceInspectorView, setEvidenceInspectorView] =
     useState<"fields" | "json">("fields");
   const [activeCccdSessionId, setActiveCccdSessionId] = useState("");
-  const [activeUploadSessionId, setActiveUploadSessionId] = useState("");
-  const [uploadEvidenceResult, setUploadEvidenceResult] =
-    useState<UserResult | null>(null);
-  const [uploadEvidenceReview, setUploadEvidenceReview] =
-    useState<Phase10Review | null>(null);
-  const [uploadEvidenceLoading, setUploadEvidenceLoading] = useState(false);
-  const [uploadEvidenceError, setUploadEvidenceError] = useState("");
+  const [templateSessions, setTemplateSessions] =
+    useState<TemplateSessionSummary[]>([]);
+  const [activeTemplateSessionId, setActiveTemplateSessionId] = useState("");
+  const [templateEvidenceResult, setTemplateEvidenceResult] =
+    useState<TemplateProcessingResult | null>(null);
+  const [templateEvidenceLoading, setTemplateEvidenceLoading] = useState(false);
+  const [templateEvidenceError, setTemplateEvidenceError] = useState("");
   const [cccdEvidenceResult, setCccdEvidenceResult] =
     useState<UserResult | null>(null);
   const [cccdEvidenceReview, setCccdEvidenceReview] =
@@ -1568,6 +1675,26 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       .catch(() => setUserSessions([]));
   };
 
+  const refreshTemplateSessions = () => {
+    fetch(`${API_BASE}/api/documents/sessions`)
+      .then((response) => {
+        if (!response.ok) throw new Error("Template sessions unavailable");
+        return response.json();
+      })
+      .then((payload: { sessions: TemplateSessionSummary[] }) => {
+        setTemplateSessions(payload.sessions);
+        setActiveTemplateSessionId((current) =>
+          payload.sessions.some((session) => session.documentId === current)
+            ? current
+            : payload.sessions[0]?.documentId ?? "",
+        );
+      })
+      .catch(() => {
+        setTemplateSessions([]);
+        setActiveTemplateSessionId("");
+      });
+  };
+
   useEffect(() => {
     fetch(`${API_BASE}/health`)
       .then((response) => {
@@ -1608,6 +1735,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         });
     }
     refreshUserSessions();
+    refreshTemplateSessions();
     fetch(`${API_BASE}/phase14/benchmark`)
       .then((response) => {
         if (!response.ok) throw new Error("Phase 14 unavailable");
@@ -1855,7 +1983,10 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         );
       }
       if (processingMode === "template") {
-        setTemplateResult(payload as TemplateProcessingResult);
+        const result = payload as TemplateProcessingResult;
+        setTemplateResult(result);
+        setActiveTemplateSessionId(result.data.documentId);
+        refreshTemplateSessions();
       } else {
         const userPayload = payload as UserResult;
         setLoadedUserResult(userPayload);
@@ -2059,6 +2190,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       setTemplateResult(null);
       setUploadFile(null);
       setDeleteArmed(false);
+      refreshTemplateSessions();
     } catch (error) {
       setUploadError(
         error instanceof Error
@@ -2106,7 +2238,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const featuredSample =
     data.samples.find((sample) => sample.sampleId === "cv__HR-CV-0001_page_0") ??
     data.samples[0];
-  const latestPrivateSession = userSessions[0] ?? null;
   const reviewedCccdSessions = useMemo(() => {
     const seenFiles = new Set<string>();
     return userSessions
@@ -2133,115 +2264,48 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         ),
       );
   }, [userSessions]);
-  const uploadedHrSessions = useMemo(() => {
-    const seenFiles = new Set<string>();
-    return userSessions.filter((session) => {
-      const fileKey = session.originalFileName.trim().toLocaleLowerCase("vi");
-      if (
-        !session.ocrSuccess ||
-        session.documentType === "IDENTITY_DOCUMENT" ||
-        /synthetic|demo/i.test(fileKey) ||
-        seenFiles.has(fileKey)
-      ) {
-        return false;
-      }
-      seenFiles.add(fileKey);
-      return true;
-    });
-  }, [userSessions]);
-  const activeUploadSession =
-    uploadedHrSessions.find(
-      (session) => session.sessionId === activeUploadSessionId,
+  const activeTemplateSession =
+    templateSessions.find(
+      (session) => session.documentId === activeTemplateSessionId,
     ) ??
-    uploadedHrSessions[0] ??
+    templateSessions[0] ??
     null;
-  const activeUploadEvidenceId = activeUploadSession?.sessionId ?? "";
+  const activeTemplateEvidenceId = activeTemplateSession?.documentId ?? "";
   useEffect(() => {
-    if (!activeUploadEvidenceId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale evidence when the selected upload disappears.
-      setUploadEvidenceResult(null);
-      setUploadEvidenceReview(null);
+    if (!activeTemplateEvidenceId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale evidence when the selected template result disappears.
+      setTemplateEvidenceResult(null);
       return;
     }
     let cancelled = false;
-    setUploadEvidenceLoading(true);
-    setUploadEvidenceError("");
-    Promise.all([
-      fetch(
-        `${API_BASE}/user/session?id=${encodeURIComponent(
-          activeUploadEvidenceId,
-        )}`,
-      ),
-      fetch(
-        `${API_BASE}/user/review?id=${encodeURIComponent(
-          activeUploadEvidenceId,
-        )}`,
-      ),
-    ])
-      .then(async ([resultResponse, reviewResponse]) => {
-        if (!resultResponse.ok || !reviewResponse.ok) {
-          throw new Error("Uploaded evidence unavailable");
-        }
-        return Promise.all([
-          resultResponse.json() as Promise<UserResult>,
-          reviewResponse.json() as Promise<Phase10Review>,
-        ]);
+    setTemplateEvidenceLoading(true);
+    setTemplateEvidenceError("");
+    fetch(
+      `${API_BASE}/api/documents/result?id=${encodeURIComponent(
+        activeTemplateEvidenceId,
+      )}`,
+    )
+      .then((response) => {
+        if (!response.ok) throw new Error("Template evidence unavailable");
+        return response.json() as Promise<TemplateProcessingResult>;
       })
-      .then(([result, review]) => {
-        if (cancelled) return;
-        setUploadEvidenceResult(result);
-        setUploadEvidenceReview(normalizePhase10Review(review));
+      .then((result) => {
+        if (!cancelled) setTemplateEvidenceResult(result);
       })
       .catch(() => {
         if (cancelled) return;
-        setUploadEvidenceResult(null);
-        setUploadEvidenceReview(null);
-        setUploadEvidenceError(
-          "Không đọc được OCR, schema và JSON của session này.",
+        setTemplateEvidenceResult(null);
+        setTemplateEvidenceError(
+          "Không đọc được metadata và JSON của biểu mẫu này.",
         );
       })
       .finally(() => {
-        if (!cancelled) setUploadEvidenceLoading(false);
+        if (!cancelled) setTemplateEvidenceLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [activeUploadEvidenceId]);
-  const activeUploadEvidence = useMemo<LocalEvidenceDetail | null>(() => {
-    if (!uploadEvidenceResult || !activeUploadSession) return null;
-    const phase15 = uploadEvidenceResult.phase15;
-    return {
-      schemaVersion: "ocr-lab-upload-evidence/1.0.0",
-      documentId: uploadEvidenceResult.sessionId,
-      documentFamily:
-        phase15?.classification.documentFamily ??
-        uploadEvidenceResult.document.documentType,
-      documentType:
-        phase15?.classification.documentType ??
-        uploadEvidenceResult.document.documentType,
-      schemaRef:
-        uploadEvidenceResult.phase11_5
-          ? "schemas/vietnam_identity_card_phase11_5.schema.json"
-          : phase15?.classification.schemaRef ??
-            "schemas/business_document.schema.json",
-      containsRealPII: true,
-      localOnly: true,
-      groundTruth: {
-        reviewStatus: uploadEvidenceReview?.reviewStatus ?? "DRAFT",
-        pages: uploadEvidenceReview?.groundTruth?.pages ?? [],
-        fields: uploadEvidenceReview?.groundTruth?.identityFields ?? {},
-      },
-      prediction: {
-        classification: phase15?.classification ?? null,
-        recognition: uploadEvidenceResult.phase14_8?.summary ?? null,
-        fields: phase15?.extraction.fields ?? {},
-        summary: phase15?.extraction.summary ?? null,
-      },
-      predictionLabel: `${uploadEvidenceResult.processing.ocrVersion} · Phase 14.8 · parser Phase 17`,
-      predictionNotice:
-        "Prediction của session upload local; Ground Truth do người dùng xác nhận và không bị ghi đè.",
-    };
-  }, [activeUploadSession, uploadEvidenceResult, uploadEvidenceReview]);
+  }, [activeTemplateEvidenceId]);
   const activeCccdSession =
     reviewedCccdSessions.find(
       (session) => session.sessionId === activeCccdSessionId,
@@ -2383,42 +2447,37 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             </a>
           </div>
         </div>
-        <figure className="hero-product">
-          <div className="hero-product-frame">
-            {activeHeldoutDocument?.previewAvailable ? (
-              <img
-                src={`${API_BASE}/heldout/document?id=${encodeURIComponent(
-                  activeHeldoutDocument.documentId,
-                )}&mode=preview`}
-                alt={`Tài liệu held-out thật ${activeHeldoutDocument.documentId}`}
-              />
-            ) : latestPrivateSession ? (
-              <img
-                src={`${API_BASE}/user/visualization?id=${encodeURIComponent(
-                  latestPrivateSession.sessionId,
-                )}&page=0`}
-                alt="Visualization OCR của tài liệu PII thật được xử lý trên máy local"
-                onError={(event) => {
-                  event.currentTarget.onerror = null;
-                  event.currentTarget.src =
-                    "/assets/hr-document-intelligence-context.webp";
-                }}
-              />
-            ) : (
-              <img
-                src="/assets/hr-document-intelligence-context.webp"
-                alt="Bối cảnh kiểm duyệt tài liệu HCNS trên máy local"
-              />
-            )}
+        <aside className="hero-product" aria-label="Khả năng xử lý biểu mẫu HCNS">
+          <div className="hero-product-frame product-showcase" data-testid="product-showcase">
+            <header>
+              <div>
+                <span>ĐANG SẴN SÀNG</span>
+                <strong>Biểu mẫu HCNS chuẩn</strong>
+              </div>
+              <b>LOCAL</b>
+            </header>
+            <div className="product-flow" aria-label="Luồng xử lý Template-first">
+              <span>DOCX</span><i>→</i><span>Template</span><i>→</i><span>JSON</span>
+            </div>
+            <div className="product-template-list">
+              <article>
+                <span>LEAVE_REQUEST</span>
+                <strong>Đơn xin nghỉ phép</strong>
+                <small>Native DOCX · validation theo mẫu</small>
+              </article>
+              <article>
+                <span>OVERTIME_REQUEST</span>
+                <strong>Đơn xin tăng ca</strong>
+                <small>Native DOCX · quality routing</small>
+              </article>
+            </div>
+            <div className="product-showcase-footer">
+              <span>Không tự suy đoán field thiếu</span>
+              <strong>AUTO_CONTINUE / MANUAL_REVIEW</strong>
+            </div>
           </div>
-          <figcaption>
-            {activeHeldoutDocument
-              ? `${activeHeldoutDocument.documentId} — tài liệu thật trong held-out đã Ground Truth; chỉ phục vụ từ vùng private local.`
-              : latestPrivateSession
-              ? "Visualization từ tài liệu PII thật gần nhất. Chỉ hiển thị và xử lý trên máy local."
-              : "Chưa kết nối được bằng chứng tài liệu thật trên máy local."}
-          </figcaption>
-        </figure>
+          <p>Đầu vào có format sẵn, kết quả có schema và JSON để kiểm tra.</p>
+        </aside>
       </section>
 
       {SHOW_HELDOUT ? (
@@ -4266,11 +4325,11 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         <div className="section-heading">
           <div>
             <p className="eyebrow">LOCAL REAL-DOCUMENT EVIDENCE</p>
-            <h2>Tài liệu HCNS và CCCD đã review</h2>
+            <h2>Biểu mẫu HCNS chuẩn và CCCD</h2>
           </div>
           <p>
-            Ảnh/file được phục vụ trực tiếp từ private-data trên loopback, không
-            được đóng gói vào website hoặc commit lên Git.
+            Chỉ hiển thị đơn nghỉ phép, tăng ca theo template registry và CCCD
+            đã review. Các upload HCNS generic cũ vẫn được giữ local.
           </p>
         </div>
         <div className="evidence-switch" role="tablist">
@@ -4285,12 +4344,12 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             </button>
           ) : null}
           <button
-            className={evidenceMode === "uploads" ? "active" : ""}
-            onClick={() => setEvidenceMode("uploads")}
+            className={evidenceMode === "templates" ? "active" : ""}
+            onClick={() => setEvidenceMode("templates")}
             role="tab"
-            aria-selected={evidenceMode === "uploads"}
+            aria-selected={evidenceMode === "templates"}
           >
-            {uploadedHrSessions.length} upload HCNS local
+            {templateSessions.length} đơn nghỉ phép &amp; tăng ca
           </button>
           <button
             className={evidenceMode === "cccd" ? "active" : ""}
@@ -4379,97 +4438,76 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               onViewChange={setEvidenceInspectorView}
             />
           </div>
-        ) : evidenceMode === "uploads" ? (
+        ) : evidenceMode === "templates" ? (
           <div className="heldout-evidence-grid">
             <div className="heldout-document-list" role="list">
-              {uploadedHrSessions.map((session, index) => (
+              {templateSessions.map((session, index) => (
                 <button
                   className={
-                    session.sessionId === activeUploadSession?.sessionId
+                    session.documentId === activeTemplateSession?.documentId
                       ? "active"
                       : ""
                   }
-                  key={session.sessionId}
-                  onClick={() => setActiveUploadSessionId(session.sessionId)}
+                  key={session.documentId}
+                  onClick={() =>
+                    setActiveTemplateSessionId(session.documentId)
+                  }
                   role="listitem"
                 >
-                  <span>UPLOAD-{String(index + 1).padStart(2, "0")}</span>
+                  <span>
+                    {session.documentType === "LEAVE_REQUEST"
+                      ? "NGHỈ PHÉP"
+                      : "TĂNG CA"}
+                    -{String(index + 1).padStart(2, "0")}
+                  </span>
                   <strong>{session.originalFileName}</strong>
                   <small>
-                    {session.documentType ?? "OTHER_HR_DOCUMENT"} ·{" "}
-                    {session.recognizedTextLineCount} dòng ·{" "}
-                    {pct(session.avgConfidence)}
+                    {session.templateId} · {session.recommendedAction} ·{" "}
+                    {pct(session.confidence)}
                   </small>
                 </button>
               ))}
             </div>
             <div className="heldout-preview">
-              {activeUploadSession ? (
-                <img
-                  src={`${API_BASE}/user/source?id=${encodeURIComponent(
-                    activeUploadSession.sessionId,
-                  )}`}
-                  alt={`Tài liệu upload ${activeUploadSession.originalFileName}`}
-                />
+              {activeTemplateSession ? (
+                <div className="native-heldout-file template-native-preview">
+                  <span>DOCX</span>
+                  <strong>{activeTemplateSession.originalFileName}</strong>
+                  <p>
+                    {activeTemplateSession.documentType === "LEAVE_REQUEST"
+                      ? "Đơn xin nghỉ phép"
+                      : "Đơn xin tăng ca"}
+                    . Dữ liệu được đọc trực tiếp từ OOXML, không dùng OCR.
+                  </p>
+                </div>
               ) : (
                 <div className="native-heldout-file">
-                  <strong>Chưa có session HCNS local phù hợp</strong>
+                  <strong>Chưa có đơn theo mẫu chuẩn</strong>
+                  <p>
+                    Upload đơn nghỉ phép hoặc tăng ca ở khu vực Mẫu chuẩn để xem
+                    metadata và JSON tại đây.
+                  </p>
                 </div>
               )}
-              {activeUploadSession && (
+              {activeTemplateSession && (
                 <div className="heldout-preview-actions">
                   <div>
-                    <strong>{activeUploadSession.originalFileName}</strong>
+                    <strong>{activeTemplateSession.originalFileName}</strong>
                     <span>
-                      {activeUploadSession.documentType ??
-                        "OTHER_HR_DOCUMENT"}{" "}
-                      · confidence {pct(activeUploadSession.avgConfidence)}
+                      {activeTemplateSession.templateId} / phiên bản{" "}
+                      {activeTemplateSession.templateVersion} · confidence{" "}
+                      {pct(activeTemplateSession.confidence)}
                     </span>
                   </div>
-                  <button
-                    onClick={() =>
-                      void openEvidenceSession(activeUploadSession.sessionId)
-                    }
-                  >
-                    Mở OCR, field và JSON
-                  </button>
                 </div>
               )}
             </div>
-            <EvidenceInspector
-              detail={activeUploadEvidence}
-              loading={uploadEvidenceLoading}
-              error={uploadEvidenceError}
+            <TemplateEvidenceInspector
+              result={templateEvidenceResult}
+              loading={templateEvidenceLoading}
+              error={templateEvidenceError}
               view={evidenceInspectorView}
               onViewChange={setEvidenceInspectorView}
-              downloads={
-                activeUploadSession
-                  ? [
-                      {
-                        label: "OCR JSON",
-                        href: `${API_BASE}/user/download?id=${encodeURIComponent(
-                          activeUploadSession.sessionId,
-                        )}`,
-                      },
-                      {
-                        label: "Business JSON",
-                        href: `${API_BASE}/user/phase15-business?id=${encodeURIComponent(
-                          activeUploadSession.sessionId,
-                        )}`,
-                      },
-                      ...(uploadEvidenceResult?.phase11_5
-                        ? [
-                            {
-                              label: "Phase 11.5 Evidence",
-                              href: `${API_BASE}/user/phase11-5-evidence?id=${encodeURIComponent(
-                                activeUploadSession.sessionId,
-                              )}`,
-                            },
-                          ]
-                        : []),
-                    ]
-                  : []
-              }
             />
           </div>
         ) : (

@@ -38,7 +38,10 @@ test("server-renders the Vietnamese OCR dashboard", async () => {
   assert.match(html, /Đọc tài liệu/);
   assert.match(html, /Giữ bằng chứng/);
   assert.match(html, /Một luồng xử lý, bằng chứng đi cùng dữ liệu/);
-  assert.match(html, /hr-document-intelligence-context\.webp/);
+  assert.match(html, /Biểu mẫu HCNS chuẩn/);
+  assert.match(html, /Đơn xin nghỉ phép/);
+  assert.match(html, /Đơn xin tăng ca/);
+  assert.doesNotMatch(html, /hr-document-intelligence-context\.webp/);
   assert.match(html, /Đưa tài liệu thật vào/);
   assert.match(html, /Không upload cloud/);
   assert.doesNotMatch(html, /Your site is taking shape|Building your site/);
@@ -100,12 +103,13 @@ test("exposes the Phase 15 multi-format IDP and field review flow", async () => 
   assert.match(dashboard, /Phương pháp nào đang thực sự chạy/);
   assert.match(dashboard, /primaryProfile=vietocr_vgg_seq2seq/);
   assert.match(dashboard, /Không auto-switch fallback/);
-  assert.match(dashboard, /Tài liệu HCNS và CCCD đã review/);
+  assert.match(dashboard, /Biểu mẫu HCNS chuẩn và CCCD/);
   assert.match(dashboard, /CCCD đã Ground Truth/);
   assert.match(dashboard, /\/user\/source/);
   assert.match(dashboard, /\/heldout\/evidence/);
   assert.match(dashboard, /EvidenceInspector/);
-  assert.match(dashboard, /upload HCNS local/);
+  assert.doesNotMatch(dashboard, /upload HCNS local/);
+  assert.match(dashboard, /đơn nghỉ phép &amp; tăng ca/);
   assert.match(dashboard, /Live v5 mới nhất · parser 2\.0/);
   assert.match(dashboard, /CCCD Phase \$\{phase11Label/);
   assert.match(dashboard, /NGUỒN PREDICTION/);
@@ -137,7 +141,7 @@ test("hides held-out evidence by default behind a private local flag", async () 
   );
   assert.match(
     dashboard,
-    /SHOW_HELDOUT \? "heldout" : "uploads"/,
+    /SHOW_HELDOUT \? "heldout" : "templates"/,
   );
   assert.match(
     dashboard,
@@ -159,6 +163,8 @@ test("exposes Template-first upload and structured result inspection", async () 
 
   assert.match(dashboard, /\/api\/templates/);
   assert.match(dashboard, /\/api\/documents\/process/);
+  assert.match(dashboard, /\/api\/documents\/sessions/);
+  assert.match(dashboard, /\/api\/documents\/result\?id=/);
   assert.match(dashboard, /useState<"template" \| "legacy">\("template"\)/);
   assert.match(dashboard, /Mẫu chuẩn/);
   assert.match(dashboard, /DOCX · không OCR/);
@@ -166,11 +172,16 @@ test("exposes Template-first upload and structured result inspection", async () 
   assert.match(dashboard, /Xem JSON đầy đủ/);
   assert.match(dashboard, /Không có trong tài liệu/);
   assert.match(dashboard, /TemplateResultPanel/);
+  assert.match(dashboard, /TemplateEvidenceInspector/);
+  assert.match(dashboard, /Native DOCX \/ Template-first parser/);
   assert.match(dashboard, /data-testid="local-document-input"/);
   assert.match(dashboard, /data-testid="template-result-panel"/);
   assert.match(css, /\.upload-mode-switch/);
   assert.match(css, /\.template-field-grid/);
   assert.match(css, /\.template-json/);
+  assert.match(css, /\.template-evidence-field-row/);
+  assert.match(dashboard, /data-testid="product-showcase"/);
+  assert.match(css, /\.product-showcase/);
 });
 
 test("shows the reviewed Phase 14 recognizer decision", async () => {

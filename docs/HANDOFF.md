@@ -65,6 +65,24 @@
 - Browser smoke xác nhận không còn “REAL HELD-OUT · EVALUATE ONCE”, nav hoặc tab held-out.
 - Một lần chạy hai build song song gặp `EBUSY` ở `dist`; chạy tuần tự sau đó đều pass.
 
+### TF-P1-006 — Template-first evidence và CCCD
+
+- API có `GET /api/documents/sessions` và `GET /api/documents/result?id=...`, chỉ đọc
+  `template_first/result.json` của `LEAVE_REQUEST` và `OVERTIME_REQUEST`.
+- Evidence ẩn danh sách upload HCNS generic cũ nhưng không xóa session hoặc chức năng legacy.
+- Tab Template-first hiển thị danh sách, metadata DOCX native và field/JSON ở panel bên phải.
+- Tab CCCD và panel Schema/JSON cũ được giữ nguyên.
+- Browser smoke mặc định thấy một Template-first session và 30 CCCD, không thấy held-out/generic.
+- API restart bằng `.venv`, PID quan sát tại checkpoint là `31572`; health trả `ok`.
+- Lần start bằng Python hệ thống thiếu `cv2`; không thay đổi dữ liệu và đã sửa bằng `.venv`.
+
+### TF-P1-007 — Product showcase không PII
+
+- Khối hero bên phải thay ảnh tài liệu bằng showcase hai biểu mẫu nghỉ phép và tăng ca.
+- Showcase thể hiện luồng DOCX → Template → JSON, native parsing, validation và quality routing.
+- Không dùng ảnh tài liệu thật hoặc PII trong hero; kiểm tra trực quan localhost đã pass.
+- Web build/tests 9/9, API tests 4/4, lint 0 error và 15 warning có sẵn.
+
 ## Verified evidence
 
 - Repository hygiene đã pass ở checkpoint gần nhất.
