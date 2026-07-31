@@ -7,11 +7,127 @@
 ![Camunda](https://img.shields.io/badge/Workflow-Camunda%207.13-FF5A00)
 ![Architecture](https://img.shields.io/badge/Architecture-Local--first-16745A)
 ![Privacy](https://img.shields.io/badge/PII-Private%20by%20default-6B46C1)
+![Current MVP](https://img.shields.io/badge/Current%20MVP-Template--first%20Phase%201-16745A)
 ![Status](https://img.shields.io/badge/Status-Shadow%20review%20only-B7791F)
 
 > Nền tảng Intelligent Document Processing (IDP) cho tài liệu hành chính nhân sự
 > tiếng Việt, kết hợp native parsing, OCR có provenance, human review và Camunda
 > orchestration.
+
+## MVP Template-first (Phase 1)
+
+MVP mặc định hiện dùng **closed-set document processing** để giảm biến số và tăng khả
+năng kiểm chứng. Mỗi nghiệp vụ chỉ được mở khi đã có template, schema, parser,
+validator và regression test riêng. Pipeline generic trước đây vẫn được giữ để tương
+thích, nhưng không tự ép tài liệu lạ vào một loại đã biết.
+
+### Cập nhật mới nhất: các mẫu hành chính nhân sự chuẩn
+
+Luồng mặc định hiện tập trung vào biểu mẫu chuẩn do doanh nghiệp cung cấp: nhân viên
+tải mẫu, điền thông tin và gửi lại; hệ thống nhận diện đúng phiên bản template rồi
+trích xuất theo schema, parser và validator tương ứng. Cách tiếp cận này không xóa
+pipeline IDP/OCR cũ, mà đặt nó thành luồng tương thích riêng trong thời gian MVP
+Template-first được hoàn thiện.
+
+Hai loại biểu mẫu DOCX đang được hỗ trợ:
+
+| Biểu mẫu HCNS | Template | Document type | Định dạng | Cách đọc |
+|---|---|---|---|---|
+| Đơn xin nghỉ phép | `leave-request-v1` | `LEAVE_REQUEST` | DOCX | Native OOXML |
+| Đơn xin tăng ca | `overtime-request-v1` | `OVERTIME_REQUEST` | DOCX | Native OOXML |
+
+> Bộ regression hiện có **14 hồ sơ synthetic** gồm 7 đơn nghỉ phép và 7 đơn tăng
+> ca. Đây là 14 file dữ liệu thuộc 2 loại biểu mẫu, không phải 14 loại đơn khác nhau.
+
+Kết quả kiểm chứng Phase 1:
+
+| Hạng mục | Kết quả |
+|---|---:|
+| Nhận diện đúng template | 14/14 |
+| Required-field exact match | 126/126 |
+| JSON Schema error | 0 |
+| Test Python toàn repository tại checkpoint TF-P1-003 | 219 passed |
+| Test web dashboard | 8 passed |
+
+Phạm vi dữ liệu, cách tính metric và các field required/optional được ghi tại
+[báo cáo Template-first Phase 1](docs/TEMPLATE_FIRST_PHASE1_REPORT.md).
+
+### Thử một file mới trên dashboard
+
+Khởi động OCR Lab theo hướng dẫn bên dưới, sau đó mở
+[`http://localhost:3000`](http://localhost:3000). Chế độ **Mẫu chuẩn** là chế độ mặc
+định:
+
+1. Chọn file DOCX được điền từ mẫu nghỉ phép hoặc tăng ca đang hỗ trợ.
+2. Nhấn **Trích xuất theo mẫu chuẩn**.
+3. Kiểm tra loại tài liệu, template/version, confidence và quality action.
+4. Xem từng field, `missingFields`, `validationErrors` hoặc full JSON.
+5. Xóa phiên local khi không còn cần kết quả.
+
+Dashboard dùng `GET /api/templates` để hiển thị registry và
+`POST /api/documents/process` để xử lý upload. Luồng **OCR/IDP cũ** vẫn có trên giao
+diện dưới dạng một chế độ riêng.
+
+Khởi động API local:
+
+```powershell
+$env:PYTHONPATH = "src"
+.\.venv\Scripts\python.exe apps\ocr_lab\api\serve_dashboard_api.py `
+  --data-root "C:\Camunda\private-data\paddleocr-hr-baseline"
+```
+
+Liệt kê template và xử lý một file:
+
+```powershell
+curl.exe http://127.0.0.1:8765/api/templates
+curl.exe -F "file=@C:\path\to\request.docx" `
+  http://127.0.0.1:8765/api/documents/process
+```
+
+Response rút gọn:
+
+```json
+{
+  "status": "SUCCESS",
+  "documentType": "LEAVE_REQUEST",
+  "templateId": "leave-request-v1",
+  "data": {
+    "employeeName": "...",
+    "startDate": "2026-06-01",
+    "missingFields": [],
+    "validationErrors": [],
+    "recommendedAction": "AUTO_CONTINUE"
+  },
+  "quality": {
+    "recommendedAction": "AUTO_CONTINUE"
+  }
+}
+```
+
+Field không xuất hiện trong tài liệu luôn là `null`. Thiếu required field, mâu thuẫn
+hoặc template chỉ khớp một phần sẽ trả `MANUAL_REVIEW`. Tài liệu không thuộc hai
+template trả `REJECT_UNSUPPORTED`; file hỏng trả `TECHNICAL_ERROR`. Raw DOCX và full
+PII không được đưa vào Camunda variables.
+
+Kết quả được lưu trong private data root theo `documentId` và có thể xóa bằng:
+
+```powershell
+curl.exe -X DELETE "http://127.0.0.1:8765/user/session?id=<documentId>"
+```
+
+Để thêm template thứ ba: tạo parser/validator dưới `src/hcns_agent/templates/`, thêm
+schema dưới `schemas/templates/`, đăng ký definition versioned trong
+`templates/registry.py`, rồi bổ sung unit test và regression Ground Truth ngoài Git.
+
+Giới hạn hiện tại: chỉ DOCX có native text; chưa hỗ trợ PDF/ảnh scan, OCR fallback,
+template tự do hoặc quyết định HR tự động.
+
+### Những năng lực cũ vẫn được giữ
+
+Các thành phần Universal Intake, native/OCR routing, Canonical Document, OCR CCCD,
+generic classifier/extractor, quality gate, Camunda BPMN/DMN và External Task worker
+vẫn còn trong repository. Chúng phục vụ khả năng tương thích, benchmark và lộ trình
+mở rộng; không được dùng để tự động ép một tài liệu lạ vào hai template Phase 1.
 
 ## Tóm tắt nhanh
 
@@ -22,8 +138,9 @@ chiếu kết quả, không nhận raw file hay PII đầy đủ.
 
 | Nội dung | Trạng thái hiện tại |
 |---|---|
+| Luồng MVP mặc định | Template-first cho đơn nghỉ phép và đơn tăng ca DOCX |
 | Định dạng | Ảnh/PDF scan qua OCR; PDF text, DOCX, XLSX, PPTX qua native parsing |
-| Nhóm tài liệu | CCCD, CV, hợp đồng/quyết định, đơn/biểu mẫu, bằng cấp/chứng chỉ, bảng biểu HR |
+| Khả năng nền tảng/legacy | CCCD, CV, hợp đồng/quyết định, đơn/biểu mẫu, bằng cấp/chứng chỉ, bảng biểu HR |
 | OCR CCCD | Phase 11.5 dùng ROI mặt trước, 4 recognizer và provenance theo field |
 | Chất lượng | `SHADOW_REVIEW_ONLY` — chưa đủ điều kiện production hoặc tự động fallback |
 | Camunda | BPMN/DMN và External Task worker ở mức shadow/dry-run; HRIS là mock adapter |
@@ -34,9 +151,10 @@ chiếu kết quả, không nhận raw file hay PII đầy đủ.
 Trên tập development 15 CCCD đã review, Phase 11.5 đạt **Field Exact Match 60,00%**,
 **ASCII Exact Match 61,67%**, **CER 43,60%**, **DER 12,65%**, **Field Presence 95,83%**
 và **Accepted Precision 100%**. Tuy vậy, `fullName` ASCII Exact Match mới 73,33% và
-địa chỉ mới 3,33%; vì thế mọi field không đủ bằng chứng vẫn là `needs_review`. Phase
-11.6 đang tiếp tục cải thiện ROI/ghép hai dòng địa chỉ và selection họ tên, **chưa có
-kết quả held-out và chưa được promote**.
+địa chỉ mới 3,33%; vì thế mọi field không đủ bằng chứng vẫn là `needs_review`.
+Protected replay Phase 11.6 không làm giảm baseline, nhưng held-out v1 mới có 9 tài
+liệu không trùng lặp, chưa đạt cổng tối thiểu 15 tài liệu và vẫn là
+`SHADOW_REVIEW_ONLY`.
 
 ### Chạy OCR Lab trên máy local
 
@@ -416,8 +534,14 @@ liệu thật.
 
 ## Trạng thái dự án
 
-Dự án hiện ở giai đoạn benchmark có thể kiểm chứng:
+Dự án hiện ưu tiên **Template-first Phase 1** cho các mẫu hành chính nhân sự chuẩn,
+đồng thời giữ lại nền tảng IDP/OCR cũ:
 
+- Registry đã có `leave-request-v1` và `overtime-request-v1`.
+- Dashboard local mặc định xử lý DOCX theo template, hiển thị field, quality và JSON.
+- API local có `GET /api/templates` và `POST /api/documents/process`.
+- Regression Template-first đạt 14/14 classification, 126/126 required fields và
+  không có JSON Schema error.
 - Universal Document Intake và native/OCR routing đã có.
 - Canonical model, classifier, extractor và quality gate đã có.
 - Benchmark baseline/challenger và promotion gate đã có.
