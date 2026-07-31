@@ -57,7 +57,6 @@
 - README phân biệt 14 hồ sơ regression thuộc 2 loại biểu mẫu, dẫn tới báo cáo metric.
 - Universal Intake, OCR/CCCD, generic IDP và Camunda cũ vẫn được giữ và gắn phạm vi rõ ràng.
 - `git diff --check`, repository hygiene và 4 API tests pass.
-
 ## TF-P1-005 acceptance evidence
 
 - Mentor view mặc định không render nav, metrics, tab hoặc tài liệu held-out.
