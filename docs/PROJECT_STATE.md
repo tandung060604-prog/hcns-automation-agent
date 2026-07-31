@@ -13,6 +13,7 @@ Completed:
 - Native DOCX parsing only; OCR is forbidden in template-first Phase 1
 - Per-template extraction, normalization, validation, JSON Schema and quality routing
 - Local `GET /api/templates` and `POST /api/documents/process`
+- README foregrounds the two standard HCNS forms and preserves legacy IDP/OCR documentation
 - Result JSON stored under private data root; Camunda receives only scalar metadata/reference
 - Local synthetic regression: 14/14 classification, 126/126 required fields, 0 schema errors
 - All labeled fields: 301/308 exact; 7 overtime `department` labels contradict source content

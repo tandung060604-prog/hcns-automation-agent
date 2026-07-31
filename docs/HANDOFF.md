@@ -47,6 +47,15 @@
 - PID quan sát tại checkpoint: API `27752`, web `28852`; cả hai chỉ bind local.
 - `tsc --noEmit` vẫn có lỗi baseline ở Phase 14/worker; build chính thức và lint không có error.
 
+### TF-P1-004 — README cho các mẫu HCNS chuẩn
+
+- README đưa Template-first Phase 1 và hai mẫu nghỉ phép/tăng ca lên thành luồng MVP mặc định.
+- Làm rõ bộ regression gồm 14 hồ sơ synthetic thuộc 2 loại biểu mẫu, không phải 14 loại đơn.
+- Thêm hướng dẫn thử DOCX mới trên `localhost:3000` và dẫn tới báo cáo metric chi tiết.
+- Không xóa tài liệu cũ; Universal Intake, OCR/CCCD, generic IDP và Camunda vẫn được giữ.
+- Lần chạy API test đầu thiếu `PYTHONPATH=src` nên lỗi collection; chạy lại đúng môi trường
+  đạt 4/4. Repository hygiene và `git diff --check` đều pass.
+
 ## Verified evidence
 
 - Repository hygiene đã pass ở checkpoint gần nhất.
