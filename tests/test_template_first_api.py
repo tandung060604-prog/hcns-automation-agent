@@ -58,10 +58,11 @@ def test_template_endpoints_process_docx_without_ocr(tmp_path: Path) -> None:
         ]
 
         boundary = "synthetic-template-boundary"
+        document_content = docx_bytes(leave_lines())
         payload = _multipart_payload(
             boundary,
             "opaque.docx",
-            docx_bytes(leave_lines()),
+            document_content,
         )
         connection.request(
             "POST",
@@ -114,6 +115,16 @@ def test_template_endpoints_process_docx_without_ocr(tmp_path: Path) -> None:
         stored_result = json.loads(response.read().decode("utf-8"))
         assert response.status == 200
         assert stored_result == result
+
+        connection.request("GET", f"/api/documents/source?id={document_id}")
+        response = connection.getresponse()
+        stored_source = response.read()
+        assert response.status == 200
+        assert response.getheader("Content-Type") == (
+            "application/vnd.openxmlformats-officedocument."
+            "wordprocessingml.document"
+        )
+        assert stored_source == document_content
 
         connection.request("DELETE", f"/user/session?id={document_id}")
         response = connection.getresponse()
@@ -224,6 +235,12 @@ def test_template_endpoint_processes_image_with_injected_ocr(
         assert result["processing"]["usesOcr"] is True
         assert result["quality"]["recommendedAction"] == "MANUAL_REVIEW"
         assert "OCR_REVIEW_REQUIRED" in result["quality"]["validationErrors"]
+        document_id = result["data"]["documentId"]
+        connection.request("GET", f"/api/documents/source?id={document_id}")
+        response = connection.getresponse()
+        assert response.status == 200
+        assert response.getheader("Content-Type") == "image/png"
+        assert response.read() == administrative_image_bytes()
     finally:
         connection.close()
         server.shutdown()

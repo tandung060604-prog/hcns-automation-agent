@@ -12,6 +12,8 @@ Completed:
 - DOCX/native PDF parse without OCR; image/PDF scan use local PaddleOCR
 - Per-template extraction, validation, JSON Schema and quality routing
 - Multi-format `GET /api/templates` and `POST /api/documents/process`
+- One default upload surface with image/PDF preview beside structured fields/JSON
+- Session-scoped source retention and loopback-only `GET /api/documents/source`
 - Private result JSON; Camunda receives only scalar metadata/reference
 - README foregrounds the two forms while preserving legacy OCR/IDP documentation
 
@@ -45,12 +47,16 @@ Architecture:
 
 Local runtime checkpoint:
 - UI: `http://localhost:3000`; API: `http://127.0.0.1:8765`
-- API PID `35432`; web PID `28852`; health reports OCR model loaded after smoke
+- API PID `36764`; web PID `28852`; health reports OCR model loaded after smoke
 - Live camera upload returned `LEAVE_REQUEST` / `MANUAL_REVIEW`; smoke session deleted
+- UX smoke trên desktop xác nhận một vùng upload, ảnh preview sticky cạnh metadata/JSON;
+  PDF/PNG source round-trip khớp SHA-256 và các session smoke đã xóa
 - Loopback development runtime only; no production deployment or HRIS side effect
-- Template-first is default; legacy OCR/IDP remains a separate mode
+- Template-first is the only default upload surface; legacy OCR/IDP is preserved
+  behind `VITE_SHOW_LEGACY_UPLOAD=true`
 - Mentor view hides held-out unless `VITE_SHOW_HELDOUT=true`
 - Evidence retains Template-first/CCCD and the right metadata/JSON panel
+- Hero uses the approved local workflow infographic; no remote asset is loaded
 
 Security:
 - No dataset, Ground Truth, upload, model weight, secret or raw PII added to Git
@@ -70,7 +76,9 @@ Key commands:
 - `python -m mypy src`
 - `python scripts/check_repository.py`
 - `python scripts/evaluate_template_multiformat.py --data-root <local-root>`
-- Verified: Python 225 passed; web 9 passed/build; lint 0 errors/15 existing warnings
+- Current UX/API target: API preview 6 passed; web 9 passed/build; ESLint 0 error,
+  17 warning hiện hữu
+- Previous full checkpoint: Python 225 passed; lint 0 errors/15 existing warnings
 
 Next:
 - Keep TF-P2-002 as the only active Template-first task; do not start TF-P2-003

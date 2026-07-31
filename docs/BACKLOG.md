@@ -87,6 +87,10 @@
 ## TF-P2-002 acceptance checkpoint
 
 - API/UI nhận `.docx`, `.pdf`, `.png`, `.jpg`, `.jpeg`; panel metadata bên phải được giữ.
+- UX mặc định chỉ có một vùng upload; ảnh/PDF hiển thị cạnh field/JSON. Luồng
+  OCR/IDP cũ được giữ sau cờ `VITE_SHOW_LEGACY_UPLOAD`.
+- File nguồn Template-first được lưu theo session và chỉ phục vụ lại qua endpoint
+  loopback `/api/documents/source`.
 - DOCX: 10/10 classification, 90/90 required-field exact match, 0 schema error.
 - Native PDF: 10/10 classification, 90/90 required-field exact match, 0 schema error.
 - Ảnh camera và PDF scan: 6/6 xử lý, 6/6 classification, 0 schema error,
@@ -96,4 +100,5 @@
 - Manifest nguồn khai báo 30 file nhưng thực có 26; 10 tham chiếu `files.image` bị stale.
 - Live HTTP smoke ảnh camera trả đúng `LEAVE_REQUEST`, dùng PaddleOCR và bắt buộc
   `MANUAL_REVIEW`; session smoke đã xóa.
-- Python 225 tests; web 9 tests/build; Ruff, mypy, hygiene và diff check pass.
+- API preview 6 tests và web 9 tests/build pass; full-suite checkpoint trước đó:
+  Python 225 tests, Ruff, mypy, hygiene và diff check pass.

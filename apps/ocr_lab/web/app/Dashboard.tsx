@@ -7,6 +7,8 @@ import {
 } from "./review-queue.mjs";
 
 const SHOW_HELDOUT = import.meta.env.VITE_SHOW_HELDOUT === "true";
+const SHOW_LEGACY_UPLOAD =
+  import.meta.env.VITE_SHOW_LEGACY_UPLOAD === "true";
 
 type Sample = {
   sampleId: string;
@@ -1405,6 +1407,69 @@ function formatTemplateValue(value: unknown): string {
   return String(value);
 }
 
+function TemplateDocumentPreview({
+  filename,
+  previewUrl,
+  result,
+}: {
+  filename: string;
+  previewUrl: string;
+  result: TemplateProcessingResult | null;
+}) {
+  const extension = filename.split(".").pop()?.toLocaleLowerCase() ?? "";
+  const sourceFormat = result?.processing.sourceFormat;
+  const isImage =
+    ["png", "jpg", "jpeg"].includes(extension) || sourceFormat === "IMAGE";
+  const isPdf =
+    extension === "pdf" ||
+    sourceFormat === "PDF_TEXT" ||
+    sourceFormat === "PDF_SCAN";
+
+  return (
+    <section
+      className="template-document-preview"
+      aria-label="Bản xem trước tài liệu"
+      data-testid="template-document-preview"
+    >
+      <header>
+        <div>
+          <span>TÀI LIỆU ĐẦU VÀO</span>
+          <strong>{filename || "Chưa chọn tài liệu"}</strong>
+        </div>
+        {filename ? <small>{extension.toUpperCase() || sourceFormat}</small> : null}
+      </header>
+      <div className="template-document-canvas">
+        {!previewUrl ? (
+          <div className="template-preview-empty">
+            <span>01</span>
+            <strong>Chọn tài liệu để xem trước</strong>
+            <p>Ảnh và PDF sẽ hiển thị tại đây trước khi trích xuất.</p>
+          </div>
+        ) : isImage ? (
+          <img src={previewUrl} alt={`Bản xem trước ${filename}`} />
+        ) : isPdf ? (
+          <iframe src={previewUrl} title={`Bản xem trước ${filename}`} />
+        ) : (
+          <div className="template-preview-file">
+            <span>DOCX</span>
+            <strong>{filename}</strong>
+            <p>
+              DOCX sẽ được đọc trực tiếp bằng native parser. Nội dung trích xuất
+              xuất hiện ở khung kết quả bên cạnh.
+            </p>
+          </div>
+        )}
+      </div>
+      {result ? (
+        <footer>
+          <span>{result.processing.parserName}</span>
+          <strong>{result.quality.recommendedAction}</strong>
+        </footer>
+      ) : null}
+    </section>
+  );
+}
+
 function TemplateResultPanel({
   result,
   filename,
@@ -1570,6 +1635,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [templateResult, setTemplateResult] =
     useState<TemplateProcessingResult | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadPreviewUrl, setUploadPreviewUrl] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -1616,6 +1682,13 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     acceptUnchangedDraft: false,
   });
 
+  useEffect(
+    () => () => {
+      if (uploadPreviewUrl) URL.revokeObjectURL(uploadPreviewUrl);
+    },
+    [uploadPreviewUrl],
+  );
+
   const setLoadedUserResult = (result: UserResult | null) => {
     setUserResult(result);
     const phase = result?.phase15;
@@ -1644,6 +1717,15 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       comparedWithSource: alreadyReviewed,
       allFieldsChecked: alreadyReviewed,
     });
+  };
+
+  const selectUploadFile = (file: File | null) => {
+    setUploadFile(file);
+    setUploadPreviewUrl(file ? URL.createObjectURL(file) : "");
+    setUploadError("");
+    setTemplateResult(null);
+    setLoadedUserResult(null);
+    setDeleteArmed(false);
   };
 
   const loadPhase10Review = async (sessionId: string) => {
@@ -2204,8 +2286,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         { method: "DELETE" },
       );
       if (!response.ok) throw new Error("Không xóa được kết quả Template-first");
-      setTemplateResult(null);
-      setUploadFile(null);
+      selectUploadFile(null);
       setDeleteArmed(false);
       refreshTemplateSessions();
     } catch (error) {
@@ -2230,7 +2311,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       );
       if (!response.ok) throw new Error("Không xóa được session");
       setLoadedUserResult(null);
-      setUploadFile(null);
+      selectUploadFile(null);
       setDeleteArmed(false);
       setPhase10Review(null);
       setReviewDraft([]);
@@ -2423,6 +2504,17 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         ) ?? null
       : null;
   const unifiedIdp = userResult?.phase15 ?? userResult?.phase12;
+  const templateSourceUrl = templateResult
+    ? `${API_BASE}/api/documents/source?id=${encodeURIComponent(
+        templateResult.data.documentId,
+      )}`
+    : "";
+  const documentPreviewUrl = uploadPreviewUrl || templateSourceUrl;
+  const documentPreviewFilename =
+    uploadFile?.name ??
+    (typeof templateResult?.data.sourceFile === "string"
+      ? templateResult.data.sourceFile
+      : "");
 
   return (
     <main>
@@ -2469,42 +2561,21 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             </a>
           </div>
         </div>
-        <aside className="hero-product" aria-label="Khả năng xử lý biểu mẫu HCNS">
-          <div className="hero-product-frame product-showcase landing-showcase" data-testid="product-showcase">
-            <header>
-              <div>
-                <span>ĐANG SẴN SÀNG</span>
-                <strong>Trung tâm xử lý biểu mẫu</strong>
-              </div>
-              <b>LOCAL</b>
-            </header>
-            <div className="landing-metrics" aria-label="Tổng quan xử lý local">
-              <article><span>MẪU CHUẨN</span><strong>{supportedTemplates.length}</strong></article>
-              <article><span>HỒ SƠ TEMPLATE</span><strong>{templateSessions.length}</strong></article>
-              <article><span>CCCD ĐÃ REVIEW</span><strong>{reviewedCccdSessions.length}</strong></article>
-            </div>
-            <div className="product-flow" aria-label="Luồng xử lý Template-first">
-              <span>DOCX</span><i>→</i><span>Template</span><i>→</i><span>JSON</span>
-            </div>
-            <div className="product-template-list">
-              <article>
-                <span>LEAVE_REQUEST</span>
-                <strong>Đơn xin nghỉ phép</strong>
-                <small>DOCX/PDF native · ảnh/scan qua OCR</small>
-              </article>
-              <article>
-                <span>OVERTIME_REQUEST</span>
-                <strong>Đơn xin tăng ca</strong>
-                <small>Template-first · Human Review cho OCR</small>
-              </article>
-            </div>
-            <div className="product-showcase-footer">
-              <span>Không tự suy đoán field thiếu</span>
-              <strong>AUTO_CONTINUE / MANUAL_REVIEW</strong>
-            </div>
+        <figure className="hero-product" aria-label="Khả năng xử lý biểu mẫu HCNS">
+          <div
+            className="hero-product-frame hero-workflow-visual"
+            data-testid="product-showcase"
+          >
+            <img
+              alt="Luồng xử lý biểu mẫu HCNS local từ DOCX, PDF và ảnh scan tới JSON và Human Review"
+              src="/assets/template-first-local-workflow.png"
+            />
           </div>
-          <p>Đầu vào có format sẵn, kết quả có schema và JSON để kiểm tra.</p>
-        </aside>
+          <figcaption>
+            Từ tài liệu có format sẵn đến JSON kiểm tra được, hoàn toàn trên máy
+            local.
+          </figcaption>
+        </figure>
       </section>
 
       {SHOW_HELDOUT ? (
@@ -2925,57 +2996,54 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         <div className="upload-layout">
           <div>
             <form onSubmit={submitUpload} className="upload-form">
-              <div className="upload-mode-switch" role="tablist" aria-label="Chế độ xử lý">
-                <button
-                  aria-selected={processingMode === "template"}
-                  className={processingMode === "template" ? "active" : ""}
-                  onClick={() => {
-                    setProcessingMode("template");
-                    setUploadFile(null);
-                    setUploadError("");
-                    setLoadedUserResult(null);
-                    setDeleteArmed(false);
-                  }}
-                  role="tab"
-                  type="button"
+              {SHOW_LEGACY_UPLOAD ? (
+                <div
+                  className="upload-mode-switch"
+                  role="tablist"
+                  aria-label="Chế độ xử lý"
                 >
-                  <strong>Mẫu chuẩn</strong>
-                  <span>DOCX · không OCR</span>
-                </button>
-                <button
-                  aria-selected={processingMode === "legacy"}
-                  className={processingMode === "legacy" ? "active" : ""}
-                  onClick={() => {
-                    setProcessingMode("legacy");
-                    setUploadFile(null);
-                    setUploadError("");
-                    setTemplateResult(null);
-                    setDeleteArmed(false);
-                  }}
-                  role="tab"
-                  type="button"
-                >
-                  <strong>OCR / IDP cũ</strong>
-                  <span>Ảnh, PDF, Office</span>
-                </button>
-              </div>
-
-              {processingMode === "template" && (
-                <div className="template-registry">
-                  <span>TEMPLATE-FIRST · CLOSED SET</span>
-                  <p>
-                    Hệ thống đọc trực tiếp DOCX và chỉ nhận hai biểu mẫu đã được
-                    kiểm thử.
-                  </p>
-                  <div>
-                    {supportedTemplates.map((template) => (
-                      <small key={template.templateId}>
-                        {template.templateId}
-                      </small>
-                    ))}
-                  </div>
+                  <button
+                    aria-selected={processingMode === "template"}
+                    className={processingMode === "template" ? "active" : ""}
+                    onClick={() => {
+                      setProcessingMode("template");
+                      selectUploadFile(null);
+                      setLoadedUserResult(null);
+                      setDeleteArmed(false);
+                    }}
+                    role="tab"
+                    type="button"
+                  >
+                    <strong>Biểu mẫu HCNS</strong>
+                    <span>DOCX, PDF, ảnh scan</span>
+                  </button>
+                  <button
+                    aria-selected={processingMode === "legacy"}
+                    className={processingMode === "legacy" ? "active" : ""}
+                    onClick={() => {
+                      setProcessingMode("legacy");
+                      selectUploadFile(null);
+                      setTemplateResult(null);
+                      setDeleteArmed(false);
+                    }}
+                    role="tab"
+                    type="button"
+                  >
+                    <strong>OCR / IDP cũ</strong>
+                    <span>Chỉ dùng khi chẩn đoán</span>
+                  </button>
                 </div>
-              )}
+              ) : null}
+
+              <div className="upload-intro">
+                <span>MỘT ĐẦU VÀO · TỰ ĐỘNG CHỌN PIPELINE</span>
+                <h3>Tải tài liệu HCNS</h3>
+                <p>
+                  Chọn đơn nghỉ phép hoặc tăng ca. Hệ thống sẽ tự đọc DOCX,
+                  PDF hoặc ảnh scan và trả lại dữ liệu có cấu trúc.
+                </p>
+                <small>{supportedTemplates.length || 2} biểu mẫu đang hỗ trợ</small>
+              </div>
 
               <label
                 className={`drop-zone ${isDragging ? "dragging" : ""} ${
@@ -2991,7 +3059,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                   event.preventDefault();
                   setIsDragging(false);
                   const file = event.dataTransfer.files[0];
-                  if (file) setUploadFile(file);
+                  if (file) selectUploadFile(file);
                 }}
               >
                 <input
@@ -3002,7 +3070,9 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                       ? ".docx,.pdf,.png,.jpg,.jpeg"
                       : ".png,.jpg,.jpeg,.pdf,.docx,.xlsx"
                   }
-                  onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+                  onChange={(event) =>
+                    selectUploadFile(event.target.files?.[0] ?? null)
+                  }
                 />
                 <span className="upload-icon">＋</span>
                 <strong>
@@ -3012,7 +3082,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                   {uploadFile
                     ? `${(uploadFile.size / 1024 / 1024).toFixed(2)} MB`
                     : processingMode === "template"
-                      ? "DOCX, PDF, PNG, JPG · nghỉ phép hoặc tăng ca"
+                      ? "DOCX, PDF, PNG, JPG/JPEG · nghỉ phép hoặc tăng ca"
                       : "PNG, JPG, JPEG, PDF, DOCX, XLSX, tối đa 50 MB / 50 trang"}
                 </p>
               </label>
@@ -3030,16 +3100,16 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               >
                 {isUploading
                   ? processingMode === "template"
-                    ? "Đang đọc biểu mẫu local…"
+                    ? "Đang đọc và nhận diện tài liệu…"
                     : "Đang OCR local… có thể mất vài phút"
                   : processingMode === "template"
-                    ? "Trích xuất theo mẫu chuẩn"
+                    ? "Trích xuất tài liệu"
                     : "Phân tích bằng OCR / IDP"}
               </button>
               {uploadError && <div className="upload-error">{uploadError}</div>}
             </form>
 
-            {processingMode === "legacy" && (
+            {SHOW_LEGACY_UPLOAD && processingMode === "legacy" && (
               <div className="session-history">
                 <div>
                   <h3>Lịch sử upload private</h3>
@@ -3078,41 +3148,46 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             )}
           </div>
 
-          <div className="upload-result">
-            {!userResult && !templateResult && !isUploading && (
-              <div className="result-placeholder">
-                <span>JSON</span>
-                <h3>Kết quả sẽ xuất hiện tại đây</h3>
-                <p>
-                  {processingMode === "template"
-                    ? "Các trường trong biểu mẫu, dữ liệu thiếu, validation và JSON chuẩn sẽ hiển thị tại đây."
-                    : "Bao gồm raw OCR text, confidence, bounding boxes, field candidates, visualization và processing metadata."}
-                </p>
-              </div>
-            )}
-            {isUploading && (
-              <div className="result-placeholder processing">
-                <i />
-                <h3>
-                  {processingMode === "template"
-                    ? "Đang đọc trực tiếp nội dung DOCX"
-                    : "Đang nạp model và đọc tài liệu"}
-                </h3>
-                <p>
-                  {processingMode === "template"
-                    ? "Không sử dụng OCR hoặc dịch vụ cloud."
-                    : "Lần đầu có thể chậm hơn. Không đóng localhost trong khi xử lý."}
-                </p>
-              </div>
-            )}
-            {templateResult && (
-              <TemplateResultPanel
-                deleteArmed={deleteArmed}
-                filename={uploadFile?.name ?? "Tài liệu DOCX"}
-                onDelete={deleteTemplateSession}
-                result={templateResult}
-              />
-            )}
+          <div className="upload-workspace">
+            <TemplateDocumentPreview
+              filename={documentPreviewFilename}
+              previewUrl={documentPreviewUrl}
+              result={templateResult}
+            />
+            <div className="template-output-pane">
+              {!userResult && !templateResult && !isUploading && (
+                <div className="result-placeholder">
+                  <span>JSON</span>
+                  <h3>Kết quả sẽ xuất hiện tại đây</h3>
+                  <p>
+                    Trường dữ liệu, cảnh báo validation và JSON chuẩn sẽ hiển
+                    thị cạnh bản xem trước của tài liệu.
+                  </p>
+                </div>
+              )}
+              {isUploading && (
+                <div className="result-placeholder processing">
+                  <i />
+                  <h3>
+                    {processingMode === "template"
+                      ? "Đang nhận diện và cấu trúc hóa tài liệu"
+                      : "Đang nạp model và đọc tài liệu"}
+                  </h3>
+                  <p>
+                    {processingMode === "template"
+                      ? "DOCX/PDF native được đọc trực tiếp; ảnh scan được chuyển qua OCR local."
+                      : "Lần đầu có thể chậm hơn. Không đóng localhost trong khi xử lý."}
+                  </p>
+                </div>
+              )}
+              {templateResult && (
+                <TemplateResultPanel
+                  deleteArmed={deleteArmed}
+                  filename={documentPreviewFilename || "Tài liệu HCNS"}
+                  onDelete={deleteTemplateSession}
+                  result={templateResult}
+                />
+              )}
             {userResult && (
               <div className="user-result-panel">
                 <div className="user-result-head">
@@ -4080,6 +4155,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             )}
           </div>
         </div>
+        </div>
       </section>
 
       <section className="section" id="phases">
@@ -4514,7 +4590,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                 <div className="native-heldout-file">
                   <strong>Chưa có đơn theo mẫu chuẩn</strong>
                   <p>
-                    Upload đơn nghỉ phép hoặc tăng ca ở khu vực Mẫu chuẩn để xem
+                    Upload đơn nghỉ phép hoặc tăng ca ở khu vực tải tài liệu để xem
                     metadata và JSON tại đây.
                   </p>
                 </div>

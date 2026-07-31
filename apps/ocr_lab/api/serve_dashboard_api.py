@@ -1135,6 +1135,17 @@ class UserOCRService:
             return None
         return payload
 
+    def template_source(self, session_id: str) -> Path | None:
+        if self.template_result(session_id) is None:
+            return None
+        session_dir = self.session_dir(session_id)
+        if session_dir is None:
+            return None
+        source_paths = sorted((session_dir / "input").glob("document.*"))
+        if len(source_paths) != 1 or not source_paths[0].is_file():
+            return None
+        return source_paths[0]
+
     def list_template_sessions(self) -> list[dict[str, Any]]:
         sessions: list[dict[str, Any]] = []
         for result_path in self.sessions_root.glob("*/template_first/result.json"):
@@ -1248,10 +1259,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     result_reference=result_reference,
                 )
                 payload = result.public_dict()
-                result_dir = (
-                    self.user_ocr.sessions_root / document_id / "template_first"
-                )
+                session_dir = self.user_ocr.sessions_root / document_id
+                result_dir = session_dir / "template_first"
+                input_dir = session_dir / "input"
                 result_dir.mkdir(parents=True, exist_ok=True)
+                input_dir.mkdir(parents=True, exist_ok=True)
+                extension = Path(filename).suffix.casefold()
+                (input_dir / f"document{extension}").write_bytes(content)
                 result_path = result_dir / "result.json"
                 result_path.write_text(
                     json.dumps(payload, ensure_ascii=False, indent=2),
@@ -1282,6 +1296,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     status,
                 )
             except OSError:
+                shutil.rmtree(
+                    self.user_ocr.sessions_root / document_id,
+                    ignore_errors=True,
+                )
                 self.send_json(
                     {
                         "status": "TECHNICAL_ERROR",
@@ -1861,6 +1879,22 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
                 return
             self.send_json(result)
+            return
+
+        if parsed.path == "/api/documents/source":
+            document_id = query.get("id", [""])[0]
+            source_path = self.user_ocr.template_source(document_id)
+            if source_path is None:
+                self.send_json(
+                    {"error": "Template-first source not found"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            content_type = (
+                mimetypes.guess_type(source_path.name)[0]
+                or "application/octet-stream"
+            )
+            self.send_file(source_path, content_type)
             return
 
         if parsed.path == "/heldout/summary":

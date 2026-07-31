@@ -94,6 +94,11 @@
 - Đang là task Template-first duy nhất `IN_PROGRESS`; chưa mở TF-P2-003.
 - DOCX và PDF native đi parser riêng, không gọi OCR; ảnh/PDF scan dùng PaddleOCR local.
 - API/UI nhận năm extension và giữ panel metadata/JSON, bổ sung source/parser/OCR metadata.
+- Mặc định chỉ còn một vùng upload cho DOCX/PDF/PNG/JPG/JPEG; ảnh/PDF được xem
+  cạnh kết quả field/JSON. Luồng OCR/IDP cũ không bị xóa và có thể bật riêng bằng
+  `VITE_SHOW_LEGACY_UPLOAD=true`.
+- File nguồn Template-first nằm trong session private và được phục vụ lại qua
+  `/api/documents/source` trên loopback.
 - DOCX và PDF native đều đạt 10/10 classification, 90/90 required fields, 0 schema error.
 - Sáu ảnh camera và sáu PDF scan đều xử lý/phân loại 6/6, schema sạch và bắt buộc review.
 - OCR exact match đạt 31/54 (57.41%), thấp hơn gate 80%; sai số còn lại ở tên, chức vụ,
@@ -102,9 +107,12 @@
   vì làm metric giảm.
 - Dataset local có 26 file thực so với 30 file khai báo và 10 tham chiếu image cũ bị stale.
 - Báo cáo evaluator aggregate không chứa raw field value; raw probe tạm đã xóa.
-- Python 225 tests, web 9 tests/build, Ruff, mypy, hygiene và diff check pass.
-- API PID `35432`, web PID `28852`; health `ok`, OCR model đã load sau smoke.
+- API preview 6 tests và web 9 tests/build pass; full checkpoint trước đó giữ
+  Python 225 tests, Ruff, mypy, hygiene và diff check pass.
+- API PID `36764`, web PID `28852`; health `ok`, OCR model đã load sau smoke.
 - Live HTTP smoke ảnh camera trả đúng `LEAVE_REQUEST` / `MANUAL_REVIEW`; session đã xóa.
+- UX smoke desktop xác nhận preview ảnh sticky nằm cạnh panel metadata/JSON; source
+  PDF/PNG tải lại khớp SHA-256 và mọi session smoke đã xóa.
 
 ## Verified evidence
 
