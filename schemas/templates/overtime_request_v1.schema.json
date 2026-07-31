@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hcns.local/schemas/templates/overtime_request_v1.schema.json",
+  "title": "Template-first Overtime Request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "documentId",
+    "documentType",
+    "templateId",
+    "templateVersion",
+    "documentTitle",
+    "formNumber",
+    "organization",
+    "employeeName",
+    "employeeId",
+    "jobTitle",
+    "department",
+    "requestDate",
+    "laborContractNumber",
+    "laborContractDate",
+    "standardWorkSchedule",
+    "reason",
+    "startDate",
+    "endDate",
+    "overtimeHoursPerDay",
+    "overtimeStartTime",
+    "overtimeEndTime",
+    "totalOvertimeHours",
+    "workContent",
+    "missingFields",
+    "validationErrors",
+    "confidence",
+    "recommendedAction",
+    "sourceFile"
+  ],
+  "properties": {
+    "documentId": {"type": "string", "minLength": 1},
+    "documentType": {"const": "OVERTIME_REQUEST"},
+    "templateId": {"const": "overtime-request-v1"},
+    "templateVersion": {"const": "1.0"},
+    "documentTitle": {"const": "ĐƠN XIN TĂNG CA"},
+    "formNumber": {"type": ["string", "null"]},
+    "organization": {"type": ["string", "null"]},
+    "employeeName": {"type": ["string", "null"]},
+    "employeeId": {"type": ["string", "null"]},
+    "jobTitle": {"type": ["string", "null"]},
+    "department": {"type": ["string", "null"]},
+    "requestDate": {"type": ["string", "null"], "format": "date"},
+    "laborContractNumber": {"type": ["string", "null"]},
+    "laborContractDate": {"type": ["string", "null"], "format": "date"},
+    "standardWorkSchedule": {"type": ["string", "null"]},
+    "reason": {"type": ["string", "null"]},
+    "startDate": {"type": ["string", "null"], "format": "date"},
+    "endDate": {"type": ["string", "null"], "format": "date"},
+    "overtimeHoursPerDay": {
+      "type": ["integer", "number", "null"],
+      "exclusiveMinimum": 0
+    },
+    "overtimeStartTime": {
+      "type": ["string", "null"],
+      "pattern": "^\\d{2}:\\d{2}$"
+    },
+    "overtimeEndTime": {
+      "type": ["string", "null"],
+      "pattern": "^\\d{2}:\\d{2}$"
+    },
+    "totalOvertimeHours": {
+      "type": ["integer", "number", "null"],
+      "exclusiveMinimum": 0
+    },
+    "workContent": {"type": ["string", "null"]},
+    "missingFields": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "validationErrors": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "recommendedAction": {
+      "enum": ["AUTO_CONTINUE", "MANUAL_REVIEW", "REJECT_UNSUPPORTED", "TECHNICAL_ERROR"]
+    },
+    "sourceFile": {"type": ["string", "null"]}
+  }
+}
