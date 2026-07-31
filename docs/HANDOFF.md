@@ -36,12 +36,24 @@
   `OVERTIME_REQUEST`, cùng `AUTO_CONTINUE` và không có validation error.
 - Hai session smoke-test đã xóa; không lưu raw PII trong tài liệu tracked hoặc log báo cáo.
 
+### TF-P1-003 — OCR Lab Template-first UI
+
+- Giao diện tổng chạy tại `http://localhost:3000`; API root `127.0.0.1:8765` redirect về đó.
+- Chế độ mặc định “Mẫu chuẩn” gọi `/api/documents/process`, nhận DOCX và hiển thị field,
+  missing fields, validation, confidence, recommended action cùng JSON đầy đủ.
+- Luồng `/user/upload` cũ vẫn có trong chế độ “OCR / IDP cũ”.
+- Browser smoke đơn nghỉ phép trả `SUCCESS` / `AUTO_CONTINUE`, 19 field cards,
+  confidence và anchor match 100%; kết quả local được giữ mở cho người dùng.
+- PID quan sát tại checkpoint: API `27752`, web `28852`; cả hai chỉ bind local.
+- `tsc --noEmit` vẫn có lỗi baseline ở Phase 14/worker; build chính thức và lint không có error.
+
 ## Verified evidence
 
 - Repository hygiene đã pass ở checkpoint gần nhất.
 - README có workflow Mermaid end-to-end và badge profile.
 - Ground Truth, prediction, source và model weights vẫn ở local/private.
-- Template-first full suite đạt 218 tests; Ruff, mypy, compileall và hygiene đều pass.
+- Template-first full suite đạt 219 tests; Ruff, mypy, compileall và hygiene đều pass.
+- OCR Lab build và 8 web tests pass; lint giữ nguyên 19 warning có sẵn, không có error.
 
 ## Next action
 

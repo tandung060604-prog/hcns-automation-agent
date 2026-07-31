@@ -1781,6 +1781,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
 
+        if parsed.path == "/":
+            self.send_response(HTTPStatus.TEMPORARY_REDIRECT)
+            self.send_header("Location", "http://localhost:3000")
+            self.cors_headers()
+            self.end_headers()
+            return
+
         if parsed.path == "/heldout/summary":
             if self.heldout_root is None:
                 self.send_json(

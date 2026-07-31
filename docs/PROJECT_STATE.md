@@ -44,6 +44,16 @@ Runtime checkpoint (2026-07-31):
   validation errors; smoke sessions were deleted after aggregate-only verification
 - This is a loopback development runtime, not a production deployment
 
+Local UI checkpoint (2026-07-31):
+- OCR Lab at `http://localhost:3000` now defaults to Template-first DOCX processing
+- The UI lists both registered templates, shows extracted fields, quality routing and full JSON
+- Legacy OCR/IDP upload remains available as a separate mode
+- API root redirects to the main local UI; API PID `27752`, web PID `28852` at checkpoint
+- Browser smoke processed an original leave-request DOCX as `SUCCESS` / `AUTO_CONTINUE`,
+  rendered 19 field cards and kept the local result visible for user inspection
+- Python suite: 219 passed; web build/tests: 8 passed; lint: 0 errors, 19 existing warnings
+- Standalone `tsc --noEmit` remains non-gating because of pre-existing Phase 14/worker errors
+
 Security:
 - No dataset, Ground Truth, upload, model weight, secret or raw PII added to Git
 - Regression reads the explicitly supplied local synthetic dataset and logs aggregates only

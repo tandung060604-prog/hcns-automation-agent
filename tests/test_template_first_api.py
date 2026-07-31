@@ -81,6 +81,25 @@ def test_template_endpoints_process_docx_without_ocr(tmp_path: Path) -> None:
         thread.join(timeout=5)
 
 
+def test_api_root_redirects_to_local_dashboard(tmp_path: Path) -> None:
+    configure_handler(tmp_path)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+    try:
+        connection.request("GET", "/")
+        response = connection.getresponse()
+        response.read()
+        assert response.status == 307
+        assert response.getheader("Location") == "http://localhost:3000"
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_template_endpoint_rejects_non_docx_separately(tmp_path: Path) -> None:
     configure_handler(tmp_path)
     server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
