@@ -13,6 +13,7 @@
 | TF-P1-005 | DONE | Ẩn held-out khỏi localhost dành cho mentor, giữ private feature flag | TF-P1-003 | P0 |
 | TF-P1-006 | DONE | Evidence chỉ hiển thị đơn nghỉ phép/tăng ca và CCCD, giữ panel metadata | TF-P1-005 | P0 |
 | TF-P1-007 | DONE | Thiết kế lại product showcase bên phải hero | TF-P1-006 | P1 |
+| TF-P1-008 | DONE | Redesign landing theo tham chiếu, dùng trạng thái sản phẩm thật | TF-P1-007 | P1 |
 | TF-P2-001 | PLANNED | Pilot Human Review qua Camunda User Task | TF-P1-001 | P1 |
 | TF-P2-002 | PLANNED | Xem xét PDF/ảnh cùng template | TF-P1-001 và dữ liệu được phê duyệt | P2 |
 | M4-CAM-001 | PLANNED | Dry-run Camunda 7.13 với External Task workers | OCR quality gate, mock HRIS | P1 |
@@ -76,3 +77,9 @@
 - Hero dùng product showcase cho hai biểu mẫu chuẩn thay vì ảnh/visualization PII.
 - Showcase mô tả chính xác DOCX → Template → JSON, validation và quality routing.
 - Browser smoke xác nhận cả hai biểu mẫu và toàn bộ quality footer hiển thị rõ.
+
+## TF-P1-008 acceptance evidence
+
+- Landing hero giới thiệu HCNS Automation Agent, Template-first, Camunda và Human-in-the-Loop.
+- Showcase dùng số template/session/CCCD thật, không thêm taskbar hoặc số liệu giả.
+- Web build/tests pass; lint không có error.

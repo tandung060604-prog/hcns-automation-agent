@@ -35,8 +35,9 @@ test("server-renders the Vietnamese OCR dashboard", async () => {
   const html = await response.text();
   assert.match(html, /<title>HR Document Intelligence Lab \| OCR tiếng Việt<\/title>/i);
   assert.match(html, /LOCAL PRIVATE OCR/);
-  assert.match(html, /Đọc tài liệu/);
-  assert.match(html, /Giữ bằng chứng/);
+  assert.match(html, /HCNS/);
+  assert.match(html, /Automation Agent/);
+  assert.match(html, /Template-first cho biểu mẫu chuẩn/);
   assert.match(html, /Một luồng xử lý, bằng chứng đi cùng dữ liệu/);
   assert.match(html, /Biểu mẫu HCNS chuẩn/);
   assert.match(html, /Đơn xin nghỉ phép/);

@@ -2429,15 +2429,20 @@ export default function Dashboard({ data }: { data: DashboardData }) {
 
       <section className="hero" id="overview">
         <div className="hero-copy">
-          <p className="eyebrow">HR DOCUMENT INTELLIGENCE LAB</p>
+          <p className="eyebrow">XỬ LÝ NỘI BỘ · AN TOÀN · LOCAL-ONLY</p>
           <h1>
-            Đọc tài liệu.
-            <span> Giữ bằng chứng.</span>
+            HCNS
+            <span> Automation Agent</span>
           </h1>
           <p className="hero-lead">
-            OCR tiếng Việt, bằng chứng từng trường và human review, chạy hoàn toàn
-            trên máy của bạn.
+            Tự động hóa biểu mẫu hành chính nhân sự với native DOCX, quality routing
+            và Human-in-the-Loop.
           </p>
+          <div className="hero-feature-list">
+            <span>Template-first cho biểu mẫu chuẩn</span>
+            <span>Workflow sẵn sàng tích hợp Camunda</span>
+            <span>Xác nhận thủ công khi cần</span>
+          </div>
           <div className="hero-actions">
             <a className="primary-button" href="#upload">
               Thử tài liệu thật
@@ -2448,14 +2453,19 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           </div>
         </div>
         <aside className="hero-product" aria-label="Khả năng xử lý biểu mẫu HCNS">
-          <div className="hero-product-frame product-showcase" data-testid="product-showcase">
+          <div className="hero-product-frame product-showcase landing-showcase" data-testid="product-showcase">
             <header>
               <div>
                 <span>ĐANG SẴN SÀNG</span>
-                <strong>Biểu mẫu HCNS chuẩn</strong>
+                <strong>Trung tâm xử lý biểu mẫu</strong>
               </div>
               <b>LOCAL</b>
             </header>
+            <div className="landing-metrics" aria-label="Tổng quan xử lý local">
+              <article><span>MẪU CHUẨN</span><strong>{supportedTemplates.length}</strong></article>
+              <article><span>HỒ SƠ TEMPLATE</span><strong>{templateSessions.length}</strong></article>
+              <article><span>CCCD ĐÃ REVIEW</span><strong>{reviewedCccdSessions.length}</strong></article>
+            </div>
             <div className="product-flow" aria-label="Luồng xử lý Template-first">
               <span>DOCX</span><i>→</i><span>Template</span><i>→</i><span>JSON</span>
             </div>

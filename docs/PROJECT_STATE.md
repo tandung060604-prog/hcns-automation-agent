@@ -47,7 +47,7 @@ Runtime checkpoint (2026-07-31):
 
 Local UI checkpoint (2026-07-31):
 - OCR Lab defaults to Template-first; mentor view hides held-out unless `VITE_SHOW_HELDOUT=true`
-- Evidence shows Template-first/CCCD; hero now showcases standard forms without PII imagery
+- Evidence and landing showcase Template-first/CCCD without PII imagery or synthetic metrics
 - Legacy OCR/IDP upload remains available as a separate mode
 - API root redirects to the main local UI; API PID `27752`, web PID `28852` at checkpoint
 - Browser smoke processed an original leave-request DOCX as `SUCCESS` / `AUTO_CONTINUE`,

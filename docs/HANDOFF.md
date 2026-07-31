@@ -83,6 +83,12 @@
 - Không dùng ảnh tài liệu thật hoặc PII trong hero; kiểm tra trực quan localhost đã pass.
 - Web build/tests 9/9, API tests 4/4, lint 0 error và 15 warning có sẵn.
 
+### TF-P1-008 — Landing page HCNS
+
+- Hero được tái cấu trúc theo landing tham chiếu, giữ CTA và navigation hiện có.
+- Phần dashboard minh họa lấy số template, session Template-first và CCCD đã review từ trạng thái runtime.
+- Không thêm taskbar, user menu, số liệu giả hoặc PII.
+
 ## Verified evidence
 
 - Repository hygiene đã pass ở checkpoint gần nhất.
