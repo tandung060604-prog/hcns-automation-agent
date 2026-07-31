@@ -22,10 +22,12 @@ Chỉ đọc các file cần cho tác vụ:
 | Classification/extraction | ADR-0003, `schemas/`, `docs/EVALUATION.md` |
 | Workflow/HITL | `docs/WORKFLOWS.md`, `docs/HUMAN_IN_THE_LOOP.md` |
 | Camunda 7 integration | `docs/CAMUNDA_MVP_V2_INTEGRATION_PLAN.md`, ADR-0002 |
+| Template-first MVP | `docs/TEMPLATE_FIRST_PHASE1_PLAN.md`, `docs/TEMPLATE_FIRST_PHASE1_REPORT.md` |
 | Kiến trúc | `docs/ARCHITECTURE.md`, ADR liên quan |
 | Schema | `schemas/`, `docs/DATA_SECURITY.md` |
 | Test/benchmark | `docs/EVALUATION.md`, `tests/AGENTS.md` |
 | Tài liệu | `docs/AGENTS.md` |
+| Trạng thái và handoff | `docs/README.md`, `docs/PROJECT_STATE.md`, `docs/BACKLOG.md`, `docs/HANDOFF.md` |
 | Báo cáo tiến độ mentor | `docs/MENTOR_4_DAY_PROGRESS_REPORT.md`, `docs/EVALUATION.md` |
 
 Không quét toàn repository, dataset, output OCR hoặc `node_modules`.
