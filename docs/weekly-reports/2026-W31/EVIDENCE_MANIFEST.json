@@ -9,7 +9,8 @@
       "aggregate metrics",
       "opaque sample identifiers",
       "safe local UI screenshots",
-      "synthetic AI-generated HCNS inputs and engine outputs"
+      "synthetic AI-generated HCNS inputs and engine outputs",
+      "synthetic AI-generated CCCD screenshots and Prediction JSON"
     ]
   },
   "repository": {
@@ -31,14 +32,50 @@
     },
     {
       "path": "assets/cccd/selection.json",
-      "kind": "redacted-selection",
+      "kind": "legacy-selection-metadata",
       "source": "authorized local session metadata only",
       "ranking": "cccd-evidence-ranking/1.0"
     },
     {
       "path": "assets/evidence-index.json",
       "kind": "visual-evidence-index",
-      "scope": "4 redacted CCCD images and 12 unredacted synthetic HCNS images"
+      "scope": "14 synthetic HCNS/local UI images, 2 synthetic CCCD UI images and 2 Prediction JSON files"
+    },
+    {
+      "path": "assets/hr/local-evidence-leave-pdf.png",
+      "kind": "synthetic-local-ui-screenshot",
+      "sha256": "83b201ed1af344f03876dcb6d747723fd1cc58a77b16dfedd29eb8d7888f114d",
+      "capture": "localhost Local Real-Document Evidence, leave-request PDF with schema inspector"
+    },
+    {
+      "path": "assets/hr/local-evidence-overtime-image.png",
+      "kind": "synthetic-local-ui-screenshot",
+      "sha256": "8f81a3ab9f059ed357aa9ca58841f50c8ae3cb1f6216de3022d9242ec4ec989c",
+      "capture": "localhost Local Real-Document Evidence, overtime image with schema inspector"
+    },
+    {
+      "path": "assets/cccd/cccd-pilot-012-ui-synthetic.png",
+      "kind": "synthetic-identity-ui-screenshot",
+      "sha256": "346953286103cbedde52a454826d640f627a9d299e8e28ec0ec0a59bc234eac5",
+      "capture": "user-provided localhost CCCD evidence, synthetic data declared by user"
+    },
+    {
+      "path": "assets/cccd/cccd-pilot-008-ui-synthetic.png",
+      "kind": "synthetic-identity-ui-screenshot",
+      "sha256": "2608ee958a11ec9b6ef42ae40fb8874cdfa25142ffd0447db230c2fcf1c3886d",
+      "capture": "user-provided localhost CCCD evidence, synthetic data declared by user"
+    },
+    {
+      "path": "assets/cccd/cccd-pilot-012-prediction.json",
+      "kind": "synthetic-identity-prediction-json",
+      "sha256": "01583336555aef236b54a0cc2f007a1d1776633734d790786e3d77f25e2599f8",
+      "capture": "engine Prediction fields only; Ground Truth excluded"
+    },
+    {
+      "path": "assets/cccd/cccd-pilot-008-prediction.json",
+      "kind": "synthetic-identity-prediction-json",
+      "sha256": "eb7fe50b8734c90304de637b6e63b65870c53e571825918c2ad9afb87aeb8907",
+      "capture": "engine Prediction fields only; Ground Truth excluded"
     },
     {
       "path": "AUDIT_NOTES.md",

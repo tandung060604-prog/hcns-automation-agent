@@ -26,8 +26,12 @@ Audit ngày 2026-07-31 trên repository local và dịch vụ loopback. Phân lo
 
 - Evidence hai biểu mẫu: DOCX 90/90 trường bắt buộc và PDF có lớp chữ 90/90. Sáu ảnh camera và sáu PDF scan có 31/54 trường bắt buộc, tương đương 57.41%, nên vẫn cần người kiểm tra.
 - CCCD development có 30 session đã review. Selection trong `assets/cccd/selection.json` chỉ chứa ID băm, metadata thao tác và ranking score.
-- Không đưa file nguồn, OCR text, filename gốc, Ground Truth hay ảnh CCCD chưa che vào report.
-  Hình ảnh HCNS được phép hiển thị vì tập này là dữ liệu tổng hợp do AI tạo.
+- Không đưa file nguồn, OCR text hay Ground Truth vào report. Hai screenshot CCCD
+  `cccd_pilot_012.jpg` và `cccd_pilot_008.jpg` là evidence do người dùng cung cấp
+  và xác nhận là dữ liệu AI-generated; Prediction JSON được lưu tách riêng, không
+  trộn Ground Truth vào output.
+- Hình ảnh HCNS và hai screenshot CCCD được phép hiển thị theo phân loại tổng hợp
+  nêu trên. Các trường chưa chắc chắn vẫn giữ `needs_review`.
 
 ## Khoảng trống cần xử lý
 

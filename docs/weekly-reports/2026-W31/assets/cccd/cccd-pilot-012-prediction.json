@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "mentor-cccd-prediction-evidence/1.0",
+  "sourceFile": "cccd_pilot_012.jpg",
+  "dataClassification": "synthetic-ai-generated",
+  "predictionOrigin": "locked-local-cccd-engine",
+  "groundTruthUsedAsOutput": false,
+  "policyMode": "SHADOW_REVIEW_ONLY",
+  "fields": {
+    "identityNumber": {
+      "value": "001055000660",
+      "confidence": 0.402644,
+      "status": "accepted"
+    },
+    "fullName": {
+      "value": "LÊ ĐĂNG TÔN",
+      "confidence": 0.866262,
+      "status": "needs_review"
+    },
+    "dateOfBirth": {
+      "value": "07/07/1955",
+      "confidence": 0.58525,
+      "status": "needs_review"
+    },
+    "sex": {
+      "value": "Nam",
+      "confidence": 0.801353,
+      "status": "needs_review"
+    },
+    "nationality": {
+      "value": "Việt Nam",
+      "confidence": 0.657507,
+      "status": "needs_review"
+    },
+    "placeOfOrigin": {
+      "value": "Định Công, Hoàng Mai, Hà Nội",
+      "confidence": 0.79335,
+      "status": "needs_review"
+    },
+    "placeOfResidence": {
+      "value": "71 H Hàng là Bạc Hàng Bạc, Hoàn Kiểm, Hà Nội",
+      "confidence": 0.711428,
+      "status": "needs_review"
+    },
+    "dateOfExpiry": {
+      "value": null,
+      "confidence": 0.0,
+      "status": "not_found"
+    }
+  }
+}
