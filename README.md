@@ -81,6 +81,75 @@ Tài liệu hoặc document reference
   → Camunda Service Task / User Task
 ```
 
+### Workflow kỹ thuật end-to-end
+
+Sơ đồ dưới đây mô tả đường đi của một hồ sơ từ lúc tiếp nhận đến khi Camunda
+định tuyến và con người hoàn tất review. Raw file, OCR text và PII đầy đủ được
+giữ trong storage local/private; Camunda chỉ nhận trạng thái, ID và
+`resultReference`.
+
+```mermaid
+flowchart TD
+    A[Submit document or reference] --> B[Validate upload safety]
+    B -->|Invalid, unsafe or corrupted| X[Reject input\nDOCUMENT_INPUT_INVALID]
+    B -->|Valid| C{Detect source format}
+
+    C -->|PDF text, DOCX, XLSX, PPTX| D[Native parser]
+    C -->|Image or PDF scan| E[OCR pipeline]
+
+    E --> E1[Normalize orientation and perspective]
+    E1 --> E2[Detect text regions and create crops]
+    E2 --> E3[Recognize text with locked local models]
+    E3 --> E4[Attach bbox, crop, model and hash provenance]
+
+    D --> F[Canonical Document Model]
+    E4 --> F
+    F --> G[Classify DocumentType and workflow type]
+    G -->|Unknown or mismatch| H[Confirm document type]
+    H -->|Rejected or unresolved| R[User review or re-upload]
+    H -->|Confirmed| I[Extract fields and table rows]
+    G -->|Confident| I
+
+    I --> J[Normalize and validate fields]
+    J --> K[Build Business JSON and resultReference]
+    K --> L[DMN quality routing]
+
+    L -->|Missing critical field or low confidence| R
+    L -->|Sensitive field or inconsistency| M[HR Review]
+    L -->|Medium confidence| N[User Review]
+    L -->|PASS and policy gate satisfied| O[Auto Continue disabled by default]
+
+    R --> P{Correction or re-upload?}
+    P -->|Correction| J
+    P -->|Re-upload| B
+    M --> Q[Approve, correct or reject]
+    N --> Q
+    Q -->|Correction| J
+    Q -->|Approved| S[Camunda complete task]
+    O --> S
+
+    S --> T[Mock HRIS update and notification]
+    T --> U[Audit trail, status and resultReference]
+
+    classDef storage fill:#eef7f3,stroke:#16745a,color:#123;
+    classDef review fill:#fff6df,stroke:#b7791f,color:#352400;
+    classDef error fill:#fff0f0,stroke:#b42318,color:#3b0b0b;
+    class D,E1,E2,E3,E4,F,K,U storage;
+    class H,M,N,Q,R review;
+    class X error;
+```
+
+Các nguyên tắc bất biến trong workflow:
+
+- Native parsing được ưu tiên khi tài liệu đã có lớp văn bản; OCR chỉ là nhánh
+  cho ảnh hoặc PDF scan.
+- Mọi trường không đủ bằng chứng giữ trạng thái `needs_review`; recognizer
+  fallback chưa được tự động thay thế primary.
+- Camunda điều phối task, retry, timer và review; IDP không tự xây workflow
+  engine cạnh tranh với Camunda.
+- `AUTO_CONTINUE` chỉ có thể được mở theo promotion policy riêng; hiện mặc
+  định tắt trong shadow pilot.
+
 Ba khái niệm được tách biệt:
 
 - `SourceFormat` quyết định cách đọc tệp.
