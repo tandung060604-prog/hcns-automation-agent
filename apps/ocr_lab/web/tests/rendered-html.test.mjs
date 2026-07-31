@@ -91,7 +91,7 @@ test("exposes the Phase 15 multi-format IDP and field review flow", async () => 
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(dashboard, /accept="\.png,\.jpg,\.jpeg,\.pdf,\.docx,\.xlsx"/);
+  assert.match(dashboard, /\.png,\.jpg,\.jpeg,\.pdf,\.docx,\.xlsx/);
   assert.match(dashboard, /PNG, JPG, JPEG, PDF, DOCX, XLSX/);
   assert.match(dashboard, /phase12\?:/);
   assert.match(dashboard, /phase15\?:/);
@@ -123,6 +123,28 @@ test("exposes the Phase 15 multi-format IDP and field review flow", async () => 
   assert.match(css, /\.evidence-inspector/);
   assert.match(css, /\.evidence-field-row/);
   assert.match(css, /\.evidence-json/);
+});
+
+test("exposes Template-first upload and structured result inspection", async () => {
+  const [dashboard, css] = await Promise.all([
+    readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(dashboard, /\/api\/templates/);
+  assert.match(dashboard, /\/api\/documents\/process/);
+  assert.match(dashboard, /useState<"template" \| "legacy">\("template"\)/);
+  assert.match(dashboard, /Mẫu chuẩn/);
+  assert.match(dashboard, /DOCX · không OCR/);
+  assert.match(dashboard, /Thông tin trích xuất từ biểu mẫu chuẩn/);
+  assert.match(dashboard, /Xem JSON đầy đủ/);
+  assert.match(dashboard, /Không có trong tài liệu/);
+  assert.match(dashboard, /TemplateResultPanel/);
+  assert.match(dashboard, /data-testid="local-document-input"/);
+  assert.match(dashboard, /data-testid="template-result-panel"/);
+  assert.match(css, /\.upload-mode-switch/);
+  assert.match(css, /\.template-field-grid/);
+  assert.match(css, /\.template-json/);
 });
 
 test("shows the reviewed Phase 14 recognizer decision", async () => {

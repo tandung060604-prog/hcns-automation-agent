@@ -60,6 +60,24 @@ PPTX được thêm bằng một parser mới, không sửa domain hoặc use ca
 
 ## Document understanding
 
+### Template-first MVP boundary
+
+MVP Phase 1 đặt một closed-set layer sau native DOCX parsing. `TemplateRegistry`
+nhận diện bằng anchor trong `CanonicalDocument`, sau đó gọi parser và validator
+versioned của đúng template. Filename không tham gia phân loại.
+
+```text
+DOCX -> safety -> native OOXML -> CanonicalDocument
+     -> TemplateRegistry -> template parser -> validator
+     -> AUTO_CONTINUE | MANUAL_REVIEW | REJECT_UNSUPPORTED
+```
+
+Registry mặc định chỉ chứa `leave-request-v1` và `overtime-request-v1`. Pipeline
+classifier/extractor generic vẫn tồn tại để tương thích, nhưng endpoint
+`/api/documents/process` không dùng nó làm fallback cho tài liệu ngoài closed set.
+Quyết định này được ghi tại
+[ADR-0004](adr/0004-template-first-closed-set-mvp.md).
+
 `DocumentClassifier` chỉ đọc canonical content; nó không nhìn extension để chọn
 business type và không thay đổi parser. Baseline local deterministic trả
 candidate, confidence, rule version và source-location evidence. Accuracy

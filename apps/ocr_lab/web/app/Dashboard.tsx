@@ -480,6 +480,37 @@ type UserResult = {
   phase15?: UnifiedIdpResult;
 };
 
+type SupportedTemplate = {
+  templateId: string;
+  documentType: string;
+  version: string;
+  supportedFileTypes: string[];
+  requiredFields: string[];
+  optionalFields: string[];
+};
+
+type TemplateProcessingResult = {
+  status: "SUCCESS";
+  documentType: string;
+  templateId: string;
+  templateVersion: string;
+  detection: {
+    matchedAnchors: string[];
+    detectionConfidence: number;
+  };
+  data: Record<string, unknown> & {
+    documentId: string;
+    recommendedAction: string;
+  };
+  quality: {
+    missingFields: string[];
+    validationErrors: string[];
+    confidence: number;
+    recommendedAction: string;
+  };
+  camundaVariables: Record<string, unknown>;
+};
+
 type UserSessionSummary = {
   sessionId: string;
   createdAt: string;
@@ -759,6 +790,17 @@ type Phase14Benchmark = {
 };
 
 const API_BASE = "http://127.0.0.1:8765";
+const TEMPLATE_RESULT_META_FIELDS = new Set([
+  "documentId",
+  "documentType",
+  "templateId",
+  "templateVersion",
+  "missingFields",
+  "validationErrors",
+  "confidence",
+  "recommendedAction",
+  "sourceFile",
+]);
 
 function normalizePhase10Review(payload: Phase10Review): Phase10Review {
   return {
@@ -818,6 +860,7 @@ const businessFieldLabels: Record<string, string> = {
   headline: "Vị trí / tiêu đề nghề nghiệp",
   email: "Email",
   phoneNumber: "Số điện thoại",
+  phone: "Số điện thoại",
   address: "Địa chỉ",
   education: "Học vấn",
   experience: "Kinh nghiệm",
@@ -848,6 +891,21 @@ const businessFieldLabels: Record<string, string> = {
   gender: "Giới tính",
   organization: "Đơn vị",
   joinDate: "Ngày vào làm",
+  requestDate: "Ngày làm đơn",
+  leaveDays: "Số ngày nghỉ",
+  expectedReturnDate: "Ngày dự kiến trở lại",
+  handoverTo: "Người nhận bàn giao",
+  handoverDepartment: "Bộ phận nhận bàn giao",
+  handoverTasks: "Công việc bàn giao",
+  approverName: "Người phê duyệt",
+  laborContractNumber: "Số hợp đồng lao động",
+  laborContractDate: "Ngày ký hợp đồng",
+  standardWorkSchedule: "Lịch làm việc tiêu chuẩn",
+  overtimeHoursPerDay: "Số giờ tăng ca mỗi ngày",
+  overtimeStartTime: "Giờ bắt đầu tăng ca",
+  overtimeEndTime: "Giờ kết thúc tăng ca",
+  totalOvertimeHours: "Tổng số giờ tăng ca",
+  workContent: "Nội dung công việc",
 };
 
 const identityFieldLabels: Record<string, string> = {
@@ -1210,6 +1268,137 @@ function phase11Label(result: UserResult) {
         : "11.2";
 }
 
+function formatTemplateValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") {
+    return "Không có trong tài liệu";
+  }
+  if (Array.isArray(value)) {
+    return value.length ? value.map(String).join(", ") : "Không có";
+  }
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+function TemplateResultPanel({
+  result,
+  filename,
+  deleteArmed,
+  onDelete,
+}: {
+  result: TemplateProcessingResult;
+  filename: string;
+  deleteArmed: boolean;
+  onDelete: () => void;
+}) {
+  const fields = Object.entries(result.data).filter(
+    ([name]) => !TEMPLATE_RESULT_META_FIELDS.has(name),
+  );
+  const isAutoContinue =
+    result.quality.recommendedAction === "AUTO_CONTINUE";
+
+  return (
+    <div
+      className="user-result-panel template-result-panel"
+      data-testid="template-result-panel"
+    >
+      <div className="user-result-head">
+        <div>
+          <p className="eyebrow">TEMPLATE-FIRST RESULT</p>
+          <h3>{filename}</h3>
+          <span>
+            {result.templateId} / phiên bản {result.templateVersion}
+          </span>
+        </div>
+        <span
+          className={`status-pill ${isAutoContinue ? "success" : "review"}`}
+        >
+          {result.quality.recommendedAction}
+        </span>
+      </div>
+
+      <div className="template-summary-grid">
+        <div>
+          <span>LOẠI TÀI LIỆU</span>
+          <strong>{result.documentType}</strong>
+        </div>
+        <div>
+          <span>TRẠNG THÁI</span>
+          <strong>{result.status}</strong>
+        </div>
+        <div>
+          <span>CONFIDENCE</span>
+          <strong>{pct(result.quality.confidence)}</strong>
+        </div>
+        <div>
+          <span>ANCHOR MATCH</span>
+          <strong>{pct(result.detection.detectionConfidence)}</strong>
+        </div>
+      </div>
+
+      {(result.quality.missingFields.length > 0 ||
+        result.quality.validationErrors.length > 0) && (
+        <div className="template-quality-notices">
+          {result.quality.missingFields.length > 0 && (
+            <div>
+              <span>TRƯỜNG KHÔNG XUẤT HIỆN</span>
+              <p>{result.quality.missingFields.join(", ")}</p>
+            </div>
+          )}
+          {result.quality.validationErrors.length > 0 && (
+            <div className="error">
+              <span>VALIDATION ERRORS</span>
+              <p>{result.quality.validationErrors.join(", ")}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      <section className="template-fields" aria-label="Kết quả trích xuất Template-first">
+        <div className="phase15-fields-head">
+          <div>
+            <span>STRUCTURED TEMPLATE FIELDS</span>
+            <h4>Thông tin trích xuất từ biểu mẫu chuẩn</h4>
+          </div>
+          <small>Giá trị trống được giữ null, không tự suy luận</small>
+        </div>
+        <div className="template-field-grid">
+          {fields.map(([name, value]) => (
+            <article
+              className={`template-field ${
+                value === null || value === "" ? "missing" : ""
+              }`}
+              key={name}
+            >
+              <span>{businessFieldLabels[name] ?? name}</span>
+              <strong>{formatTemplateValue(value)}</strong>
+              <small>{name}</small>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <details className="template-json">
+        <summary>Xem JSON đầy đủ</summary>
+        <pre>{JSON.stringify(result, null, 2)}</pre>
+      </details>
+
+      <div className="result-actions template-result-actions">
+        <button
+          className={deleteArmed ? "armed" : ""}
+          onClick={onDelete}
+          type="button"
+        >
+          {deleteArmed
+            ? "Bấm lần nữa để xóa session local"
+            : "Xóa kết quả local"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard({ data }: { data: DashboardData }) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("ALL");
@@ -1248,6 +1437,12 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [cccdEvidenceLoading, setCccdEvidenceLoading] = useState(false);
   const [cccdEvidenceError, setCccdEvidenceError] = useState("");
   const [viewProfile, setViewProfile] = useState<"phase7" | "baseline">("phase7");
+  const [processingMode, setProcessingMode] =
+    useState<"template" | "legacy">("template");
+  const [supportedTemplates, setSupportedTemplates] =
+    useState<SupportedTemplate[]>([]);
+  const [templateResult, setTemplateResult] =
+    useState<TemplateProcessingResult | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -1376,6 +1571,15 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         setApiOnline(true);
       })
       .catch(() => setApiOnline(false));
+    fetch(`${API_BASE}/api/templates`)
+      .then((response) => {
+        if (!response.ok) throw new Error("Template registry unavailable");
+        return response.json();
+      })
+      .then((payload: { templates: SupportedTemplate[] }) =>
+        setSupportedTemplates(payload.templates),
+      )
+      .catch(() => setSupportedTemplates([]));
     fetch(`${API_BASE}/heldout/summary`)
       .then((response) => {
         if (!response.ok) throw new Error("Real held-out unavailable");
@@ -1607,24 +1811,53 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const submitUpload = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!uploadFile || isUploading) return;
+    if (
+      processingMode === "template" &&
+      !uploadFile.name.toLocaleLowerCase("vi").endsWith(".docx")
+    ) {
+      setUploadError("Template-first hiện chỉ hỗ trợ file DOCX có text.");
+      return;
+    }
     setIsUploading(true);
     setUploadError("");
     setLoadedUserResult(null);
+    setTemplateResult(null);
     setDeleteArmed(false);
     const formData = new FormData();
     formData.append("file", uploadFile);
     try {
-      const response = await fetch(`${API_BASE}/user/upload`, {
+      const endpoint =
+        processingMode === "template"
+          ? "/api/documents/process"
+          : "/user/upload";
+      const response = await fetch(`${API_BASE}${endpoint}`, {
         method: "POST",
         body: formData,
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "OCR local thất bại");
-      setLoadedUserResult(payload as UserResult);
-      setActiveUserPage(0);
-      setTextView("corrected");
-      loadPhase10Review((payload as UserResult).sessionId);
-      refreshUserSessions();
+      const payload = (await response.json()) as Record<string, unknown>;
+      if (!response.ok) {
+        const errorCode =
+          typeof payload.errorCode === "string"
+            ? payload.errorCode
+            : typeof payload.error === "string"
+              ? payload.error
+              : "LOCAL_PROCESSING_FAILED";
+        throw new Error(
+          processingMode === "template"
+            ? `Không xử lý được biểu mẫu: ${errorCode}`
+            : `OCR local thất bại: ${errorCode}`,
+        );
+      }
+      if (processingMode === "template") {
+        setTemplateResult(payload as TemplateProcessingResult);
+      } else {
+        const userPayload = payload as UserResult;
+        setLoadedUserResult(userPayload);
+        setActiveUserPage(0);
+        setTextView("corrected");
+        loadPhase10Review(userPayload.sessionId);
+        refreshUserSessions();
+      }
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "Không thể xử lý file");
     } finally {
@@ -1801,6 +2034,31 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       );
     } finally {
       setIsRunningHybrid(false);
+    }
+  };
+
+  const deleteTemplateSession = async () => {
+    const documentId = templateResult?.data.documentId;
+    if (!documentId) return;
+    if (!deleteArmed) {
+      setDeleteArmed(true);
+      return;
+    }
+    try {
+      const response = await fetch(
+        `${API_BASE}/user/session?id=${encodeURIComponent(documentId)}`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) throw new Error("Không xóa được kết quả Template-first");
+      setTemplateResult(null);
+      setUploadFile(null);
+      setDeleteArmed(false);
+    } catch (error) {
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "Không xóa được kết quả Template-first",
+      );
     }
   };
 
@@ -2570,6 +2828,58 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         <div className="upload-layout">
           <div>
             <form onSubmit={submitUpload} className="upload-form">
+              <div className="upload-mode-switch" role="tablist" aria-label="Chế độ xử lý">
+                <button
+                  aria-selected={processingMode === "template"}
+                  className={processingMode === "template" ? "active" : ""}
+                  onClick={() => {
+                    setProcessingMode("template");
+                    setUploadFile(null);
+                    setUploadError("");
+                    setLoadedUserResult(null);
+                    setDeleteArmed(false);
+                  }}
+                  role="tab"
+                  type="button"
+                >
+                  <strong>Mẫu chuẩn</strong>
+                  <span>DOCX · không OCR</span>
+                </button>
+                <button
+                  aria-selected={processingMode === "legacy"}
+                  className={processingMode === "legacy" ? "active" : ""}
+                  onClick={() => {
+                    setProcessingMode("legacy");
+                    setUploadFile(null);
+                    setUploadError("");
+                    setTemplateResult(null);
+                    setDeleteArmed(false);
+                  }}
+                  role="tab"
+                  type="button"
+                >
+                  <strong>OCR / IDP cũ</strong>
+                  <span>Ảnh, PDF, Office</span>
+                </button>
+              </div>
+
+              {processingMode === "template" && (
+                <div className="template-registry">
+                  <span>TEMPLATE-FIRST · CLOSED SET</span>
+                  <p>
+                    Hệ thống đọc trực tiếp DOCX và chỉ nhận hai biểu mẫu đã được
+                    kiểm thử.
+                  </p>
+                  <div>
+                    {supportedTemplates.map((template) => (
+                      <small key={template.templateId}>
+                        {template.templateId}
+                      </small>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <label
                 className={`drop-zone ${isDragging ? "dragging" : ""} ${
                   uploadFile ? "has-file" : ""
@@ -2589,7 +2899,12 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               >
                 <input
                   type="file"
-                  accept=".png,.jpg,.jpeg,.pdf,.docx,.xlsx"
+                  data-testid="local-document-input"
+                  accept={
+                    processingMode === "template"
+                      ? ".docx"
+                      : ".png,.jpg,.jpeg,.pdf,.docx,.xlsx"
+                  }
                   onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
                 />
                 <span className="upload-icon">＋</span>
@@ -2599,7 +2914,9 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                 <p>
                   {uploadFile
                     ? `${(uploadFile.size / 1024 / 1024).toFixed(2)} MB`
-                    : "PNG, JPG, JPEG, PDF, DOCX, XLSX, tối đa 50 MB / 50 trang"}
+                    : processingMode === "template"
+                      ? "DOCX có text · đơn nghỉ phép hoặc đơn tăng ca"
+                      : "PNG, JPG, JPEG, PDF, DOCX, XLSX, tối đa 50 MB / 50 trang"}
                 </p>
               </label>
               <div className="upload-consent">
@@ -2609,68 +2926,95 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                   private-data cho đến khi bạn bấm xóa.
                 </p>
               </div>
-              <button className="process-button" disabled={!uploadFile || isUploading}>
+              <button
+                className="process-button"
+                data-testid="process-document-button"
+                disabled={!uploadFile || isUploading}
+              >
                 {isUploading
-                  ? "Đang OCR local… có thể mất vài phút"
-                  : "Phân tích tài liệu"}
+                  ? processingMode === "template"
+                    ? "Đang đọc biểu mẫu local…"
+                    : "Đang OCR local… có thể mất vài phút"
+                  : processingMode === "template"
+                    ? "Trích xuất theo mẫu chuẩn"
+                    : "Phân tích bằng OCR / IDP"}
               </button>
               {uploadError && <div className="upload-error">{uploadError}</div>}
             </form>
 
-            <div className="session-history">
-              <div>
-                <h3>Lịch sử upload private</h3>
-                <button
-                  type="button"
-                  onClick={() => setShowSessionHistory((current) => !current)}
-                >
-                  {showSessionHistory
-                    ? "Ẩn lịch sử"
-                    : `Mở ${userSessions.length} session`}
-                </button>
+            {processingMode === "legacy" && (
+              <div className="session-history">
+                <div>
+                  <h3>Lịch sử upload private</h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowSessionHistory((current) => !current)}
+                  >
+                    {showSessionHistory
+                      ? "Ẩn lịch sử"
+                      : `Mở ${userSessions.length} session`}
+                  </button>
+                </div>
+                {showSessionHistory && userSessions.length ? (
+                  <ul>
+                    {userSessions.slice(0, 20).map((session) => (
+                      <li key={session.sessionId}>
+                        <button onClick={() => loadUserSession(session.sessionId)}>
+                          <span>
+                            <strong>{session.originalFileName}</strong>
+                            <small>
+                              {session.format} / {session.pageCount} trang /{" "}
+                              {session.recognizedTextLineCount} dòng
+                              {session.reviewed ? " / Ground truth ✓" : ""}
+                              {session.phase15Reviewed ? " / Field review ✓" : ""}
+                            </small>
+                          </span>
+                          <b>{pct(session.avgConfidence)}</b>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : showSessionHistory ? (
+                  <p>Chưa có tài liệu thật nào được lưu.</p>
+                ) : null}
               </div>
-              {showSessionHistory && userSessions.length ? (
-                <ul>
-                  {userSessions.slice(0, 20).map((session) => (
-                    <li key={session.sessionId}>
-                      <button onClick={() => loadUserSession(session.sessionId)}>
-                        <span>
-                          <strong>{session.originalFileName}</strong>
-                          <small>
-                            {session.format} / {session.pageCount} trang /{" "}
-                            {session.recognizedTextLineCount} dòng
-                            {session.reviewed ? " / Ground truth ✓" : ""}
-                            {session.phase15Reviewed ? " / Field review ✓" : ""}
-                          </small>
-                        </span>
-                        <b>{pct(session.avgConfidence)}</b>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : showSessionHistory ? (
-                <p>Chưa có tài liệu thật nào được lưu.</p>
-              ) : null}
-            </div>
+            )}
           </div>
 
           <div className="upload-result">
-            {!userResult && !isUploading && (
+            {!userResult && !templateResult && !isUploading && (
               <div className="result-placeholder">
                 <span>JSON</span>
                 <h3>Kết quả sẽ xuất hiện tại đây</h3>
                 <p>
-                  Bao gồm raw OCR text, confidence, bounding boxes, field candidates,
-                  visualization và processing metadata.
+                  {processingMode === "template"
+                    ? "Các trường trong biểu mẫu, dữ liệu thiếu, validation và JSON chuẩn sẽ hiển thị tại đây."
+                    : "Bao gồm raw OCR text, confidence, bounding boxes, field candidates, visualization và processing metadata."}
                 </p>
               </div>
             )}
             {isUploading && (
               <div className="result-placeholder processing">
                 <i />
-                <h3>Đang nạp model và đọc tài liệu</h3>
-                <p>Lần đầu có thể chậm hơn. Không đóng localhost trong khi xử lý.</p>
+                <h3>
+                  {processingMode === "template"
+                    ? "Đang đọc trực tiếp nội dung DOCX"
+                    : "Đang nạp model và đọc tài liệu"}
+                </h3>
+                <p>
+                  {processingMode === "template"
+                    ? "Không sử dụng OCR hoặc dịch vụ cloud."
+                    : "Lần đầu có thể chậm hơn. Không đóng localhost trong khi xử lý."}
+                </p>
               </div>
+            )}
+            {templateResult && (
+              <TemplateResultPanel
+                deleteArmed={deleteArmed}
+                filename={uploadFile?.name ?? "Tài liệu DOCX"}
+                onDelete={deleteTemplateSession}
+                result={templateResult}
+              />
             )}
             {userResult && (
               <div className="user-result-panel">

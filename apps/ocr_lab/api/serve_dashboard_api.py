@@ -79,6 +79,13 @@ from run_paddleocr_phase7 import PROFILES, prepare_image
 from upload_safety import validate_local_upload
 
 from hcns_agent.domain.errors import DocumentIntakeError
+from hcns_agent.ports.document_parser import DocumentSource
+from hcns_agent.templates.service import (
+    TemplateProcessingService,
+    TemplateTechnicalError,
+    TemplateUnsupportedError,
+    build_default_template_processing_service,
+)
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 MAX_REVIEW_BYTES = 2 * 1024 * 1024
@@ -1115,6 +1122,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
     heldout_root: Path | None
     native_indexes: dict[str, dict[str, Path]]
     user_ocr: UserOCRService
+    template_processor: TemplateProcessingService
 
     def log_message(self, format: str, *args: object) -> None:
         # Never log session IDs, filenames, paths, or raw OCR text.
@@ -1165,6 +1173,74 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/api/documents/process":
+            upload = self._read_template_upload()
+            if upload is None:
+                return
+            filename, media_type, content = upload
+            document_id = str(uuid.uuid4())
+            result_reference = (
+                f"user_uploads/sessions/{document_id}/template_first/result.json"
+            )
+            try:
+                result = self.template_processor.process(
+                    DocumentSource(
+                        document_id=document_id,
+                        filename=filename,
+                        content=content,
+                        declared_media_type=media_type,
+                        source_reference=document_id,
+                    ),
+                    result_reference=result_reference,
+                )
+                payload = result.public_dict()
+                result_dir = (
+                    self.user_ocr.sessions_root / document_id / "template_first"
+                )
+                result_dir.mkdir(parents=True, exist_ok=True)
+                result_path = result_dir / "result.json"
+                result_path.write_text(
+                    json.dumps(payload, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                self.send_json(payload)
+            except TemplateUnsupportedError:
+                self.send_json(
+                    {
+                        "status": "REJECT_UNSUPPORTED",
+                        "recommendedAction": "REJECT_UNSUPPORTED",
+                        "errorCode": "UNSUPPORTED_TEMPLATE",
+                    },
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
+                )
+            except TemplateTechnicalError as exc:
+                self.send_json(
+                    {
+                        "status": "TECHNICAL_ERROR",
+                        "recommendedAction": "TECHNICAL_ERROR",
+                        "errorCode": exc.code,
+                    },
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
+                )
+            except OSError:
+                self.send_json(
+                    {
+                        "status": "TECHNICAL_ERROR",
+                        "recommendedAction": "TECHNICAL_ERROR",
+                        "errorCode": "RESULT_STORAGE_FAILED",
+                    },
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
+            except Exception:
+                self.send_json(
+                    {
+                        "status": "TECHNICAL_ERROR",
+                        "recommendedAction": "TECHNICAL_ERROR",
+                        "errorCode": "TEMPLATE_PROCESSING_FAILED",
+                    },
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
+            return
         if parsed.path == "/phase14/review":
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
@@ -1598,6 +1674,82 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
+    def _read_template_upload(self) -> tuple[str, str | None, bytes] | None:
+        try:
+            content_length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            content_length = 0
+        if content_length <= 0 or content_length > MAX_UPLOAD_BYTES:
+            self.send_json(
+                {
+                    "status": "TECHNICAL_ERROR",
+                    "recommendedAction": "TECHNICAL_ERROR",
+                    "errorCode": "INVALID_UPLOAD_SIZE",
+                },
+                HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+            )
+            return None
+        content_type = self.headers.get("Content-Type", "")
+        if not content_type.startswith("multipart/form-data"):
+            self.send_json(
+                {
+                    "status": "TECHNICAL_ERROR",
+                    "recommendedAction": "TECHNICAL_ERROR",
+                    "errorCode": "MULTIPART_REQUIRED",
+                },
+                HTTPStatus.BAD_REQUEST,
+            )
+            return None
+        body = self.rfile.read(content_length)
+        message = BytesParser(policy=policy.default).parsebytes(
+            f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("ascii")
+            + body
+        )
+        file_part = next(
+            (
+                part
+                for part in message.iter_parts()
+                if part.get_content_disposition() == "form-data"
+                and part.get_param("name", header="content-disposition") == "file"
+                and part.get_filename()
+            ),
+            None,
+        )
+        if file_part is None:
+            self.send_json(
+                {
+                    "status": "TECHNICAL_ERROR",
+                    "recommendedAction": "TECHNICAL_ERROR",
+                    "errorCode": "FILE_PART_REQUIRED",
+                },
+                HTTPStatus.BAD_REQUEST,
+            )
+            return None
+        submitted_filename = str(file_part.get_filename())
+        filename = Path(submitted_filename).name
+        if Path(filename).suffix.casefold() != ".docx":
+            self.send_json(
+                {
+                    "status": "REJECT_UNSUPPORTED",
+                    "recommendedAction": "REJECT_UNSUPPORTED",
+                    "errorCode": "DOCX_REQUIRED",
+                },
+                HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+            )
+            return None
+        content = file_part.get_payload(decode=True) or b""
+        if not content:
+            self.send_json(
+                {
+                    "status": "TECHNICAL_ERROR",
+                    "recommendedAction": "TECHNICAL_ERROR",
+                    "errorCode": "EMPTY_FILE",
+                },
+                HTTPStatus.BAD_REQUEST,
+            )
+            return None
+        return filename, file_part.get_content_type(), content
+
     def do_DELETE(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path != "/user/session":
@@ -1628,6 +1780,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def _do_GET(self) -> None:
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
+
+        if parsed.path == "/":
+            self.send_response(HTTPStatus.TEMPORARY_REDIRECT)
+            self.send_header("Location", "http://localhost:3000")
+            self.cors_headers()
+            self.end_headers()
+            return
 
         if parsed.path == "/heldout/summary":
             if self.heldout_root is None:
@@ -1945,6 +2104,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_file(crop_path, "image/png")
             return
 
+        if parsed.path == "/api/templates":
+            self.send_json({"templates": list(self.template_processor.list_templates())})
+            return
+
         if parsed.path == "/health":
             self.send_json(
                 {
@@ -1952,6 +2115,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     "profiles": {name: len(index) for name, index in self.native_indexes.items()},
                     "userUpload": {
                         "enabled": True,
+                        "templateFirstEnabled": True,
                         "phase9Enabled": True,
                         "phase10ReviewEnabled": True,
                         "phase11CccdEnabled": True,
@@ -2387,8 +2551,6 @@ def main() -> int:
         "baseline": build_index(args.data_root / "output" / "native_json"),
         "phase7": build_index(args.data_root / "output" / "phase7" / "v5_enhanced" / "native_json"),
     }
-    if not indexes["baseline"]:
-        raise SystemExit("No Native OCR JSON available")
     DashboardHandler.data_root = args.data_root
     DashboardHandler.heldout_root = resolve_heldout_root(
         args.data_root,
@@ -2396,6 +2558,7 @@ def main() -> int:
     )
     DashboardHandler.native_indexes = indexes
     DashboardHandler.user_ocr = UserOCRService(args.data_root)
+    DashboardHandler.template_processor = build_default_template_processing_service()
     server = ThreadingHTTPServer((args.host, args.port), DashboardHandler)
     print(
         f"Local dashboard API ready: http://{args.host}:{args.port} "

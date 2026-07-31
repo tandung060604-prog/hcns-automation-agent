@@ -5,6 +5,7 @@
   "type": "object",
   "properties": {
     "applicationId": {"$ref": "#/$defs/reference"},
+    "documentType": {"type": "string", "minLength": 1, "maxLength": 128},
     "documentReference": {"$ref": "#/$defs/reference"},
     "declaredDocumentType": {"$ref": "#/$defs/workflowDocumentType"},
     "confirmedDocumentType": {"$ref": "#/$defs/workflowDocumentType"},
@@ -19,7 +20,9 @@
     "reviewRequired": {"type": "boolean"},
     "sensitiveFieldNeedsReview": {"type": "boolean"},
     "missingCriticalField": {"type": "boolean"},
+    "missingFields": {"type": "string", "maxLength": 4096},
     "businessInconsistency": {"type": "boolean"},
+    "validationErrors": {"type": "string", "maxLength": 4096},
     "requiredFieldsComplete": {"type": "boolean"},
     "overallConfidence": {"$ref": "#/$defs/confidence"},
     "resultReference": {"$ref": "#/$defs/reference"},
@@ -35,7 +38,21 @@
     "maxReuploadAttempts": {"type": "integer", "minimum": 1},
     "finalHrDecision": {"enum": ["APPROVED", "REJECTED"]},
     "finalHrNoteReference": {"$ref": "#/$defs/reference"},
-    "recommendedAction": {"enum": ["AUTO_CONTINUE", "USER_REVIEW", "HR_REVIEW", "REQUEST_REUPLOAD"]},
+    "recommendedAction": {
+      "enum": [
+        "AUTO_CONTINUE",
+        "MANUAL_REVIEW",
+        "REJECT_UNSUPPORTED",
+        "TECHNICAL_ERROR",
+        "USER_REVIEW",
+        "HR_REVIEW",
+        "REQUEST_REUPLOAD"
+      ]
+    },
+    "templateId": {"type": "string", "minLength": 1, "maxLength": 128},
+    "templateVersion": {"type": "string", "minLength": 1, "maxLength": 64},
+    "extractionStatus": {"enum": ["SUCCESS", "MANUAL_REVIEW", "REJECT_UNSUPPORTED", "TECHNICAL_ERROR"]},
+    "extractedDataReference": {"$ref": "#/$defs/reference"},
     "autoContinueEnabled": {"type": "boolean"},
     "hrisUpdateStatus": {"enum": ["SIMULATED", "COMPLETED", "FAILED"]},
     "notificationStatus": {"enum": ["SIMULATED", "COMPLETED", "FAILED"]},
@@ -62,6 +79,7 @@
         "EMPLOYMENT_CONTRACT",
         "HR_DECISION",
         "LEAVE_REQUEST",
+        "OVERTIME_REQUEST",
         "HANDOVER_RECORD",
         "TIMESHEET",
         "OTHER_HR_DOCUMENT"

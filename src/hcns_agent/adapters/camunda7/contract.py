@@ -23,6 +23,7 @@ class CamundaWorkflowDocumentType(str, Enum):
     EMPLOYMENT_CONTRACT = "EMPLOYMENT_CONTRACT"
     HR_DECISION = "HR_DECISION"
     LEAVE_REQUEST = "LEAVE_REQUEST"
+    OVERTIME_REQUEST = "OVERTIME_REQUEST"
     HANDOVER_RECORD = "HANDOVER_RECORD"
     TIMESHEET = "TIMESHEET"
     OTHER_HR_DOCUMENT = "OTHER_HR_DOCUMENT"
@@ -64,6 +65,7 @@ M4_SHADOW_POLICY = CamundaRolloutPolicy(
 PROCESS_VARIABLE_WHITELIST = frozenset(
     {
         "applicationId",
+        "documentType",
         "documentReference",
         "declaredDocumentType",
         "confirmedDocumentType",
@@ -78,7 +80,9 @@ PROCESS_VARIABLE_WHITELIST = frozenset(
         "reviewRequired",
         "sensitiveFieldNeedsReview",
         "missingCriticalField",
+        "missingFields",
         "businessInconsistency",
+        "validationErrors",
         "requiredFieldsComplete",
         "overallConfidence",
         "resultReference",
@@ -95,6 +99,10 @@ PROCESS_VARIABLE_WHITELIST = frozenset(
         "finalHrDecision",
         "finalHrNoteReference",
         "recommendedAction",
+        "templateId",
+        "templateVersion",
+        "extractionStatus",
+        "extractedDataReference",
         "autoContinueEnabled",
         "hrisUpdateStatus",
         "notificationStatus",
@@ -142,6 +150,7 @@ def map_document_type(document_type: DocumentType) -> CamundaWorkflowDocumentTyp
         DocumentType.CONTRACT_APPENDIX: CamundaWorkflowDocumentType.EMPLOYMENT_CONTRACT,
         DocumentType.HR_DECISION: CamundaWorkflowDocumentType.HR_DECISION,
         DocumentType.LEAVE_REQUEST: CamundaWorkflowDocumentType.LEAVE_REQUEST,
+        DocumentType.OVERTIME_REQUEST: CamundaWorkflowDocumentType.OVERTIME_REQUEST,
         DocumentType.TIMESHEET: CamundaWorkflowDocumentType.TIMESHEET,
     }
     return mapping.get(document_type, CamundaWorkflowDocumentType.OTHER_HR_DOCUMENT)
