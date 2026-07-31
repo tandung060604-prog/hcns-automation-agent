@@ -125,6 +125,32 @@ test("exposes the Phase 15 multi-format IDP and field review flow", async () => 
   assert.match(css, /\.evidence-json/);
 });
 
+test("hides held-out evidence by default behind a private local flag", async () => {
+  const [dashboard, envExample] = await Promise.all([
+    readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(
+    dashboard,
+    /const SHOW_HELDOUT = import\.meta\.env\.VITE_SHOW_HELDOUT === "true"/,
+  );
+  assert.match(
+    dashboard,
+    /SHOW_HELDOUT \? "heldout" : "uploads"/,
+  );
+  assert.match(
+    dashboard,
+    /if \(SHOW_HELDOUT\) \{\s+fetch\(`\$\{API_BASE\}\/heldout\/summary`\)/,
+  );
+  assert.match(
+    dashboard,
+    /SHOW_HELDOUT \? <a href="#metrics">Held-out thật<\/a> : null/,
+  );
+  assert.match(dashboard, /SHOW_HELDOUT && evidenceMode === "heldout"/);
+  assert.match(envExample, /^VITE_SHOW_HELDOUT=false$/m);
+});
+
 test("exposes Template-first upload and structured result inspection", async () => {
   const [dashboard, css] = await Promise.all([
     readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),

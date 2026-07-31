@@ -10,6 +10,7 @@
 | TF-P1-002 | DONE | Commit/push Template-first, chạy API local và live smoke hai DOCX gốc | TF-P1-001 | P0 |
 | TF-P1-003 | DONE | Tích hợp Template-first vào OCR Lab localhost và hiển thị kết quả trích xuất | TF-P1-002 | P0 |
 | TF-P1-004 | DONE | Cập nhật README theo các mẫu HCNS chuẩn, giữ nguyên tài liệu năng lực cũ | TF-P1-003 | P0 |
+| TF-P1-005 | DONE | Ẩn held-out khỏi localhost dành cho mentor, giữ private feature flag | TF-P1-003 | P0 |
 | TF-P2-001 | PLANNED | Pilot Human Review qua Camunda User Task | TF-P1-001 | P1 |
 | TF-P2-002 | PLANNED | Xem xét PDF/ảnh cùng template | TF-P1-001 và dữ liệu được phê duyệt | P2 |
 | M4-CAM-001 | PLANNED | Dry-run Camunda 7.13 với External Task workers | OCR quality gate, mock HRIS | P1 |
@@ -53,3 +54,10 @@
 - README phân biệt 14 hồ sơ regression thuộc 2 loại biểu mẫu, dẫn tới báo cáo metric.
 - Universal Intake, OCR/CCCD, generic IDP và Camunda cũ vẫn được giữ và gắn phạm vi rõ ràng.
 - `git diff --check`, repository hygiene và 4 API tests pass.
+
+## TF-P1-005 acceptance evidence
+
+- Mentor view mặc định không render nav, metrics, tab hoặc tài liệu held-out.
+- Frontend không gọi held-out summary/evidence khi feature flag tắt.
+- `VITE_SHOW_HELDOUT=true` giữ nguyên chế độ quan sát riêng và build thành công.
+- Browser smoke trên localhost không tìm thấy nhãn/nav/tab held-out; 9 web tests pass.

@@ -56,6 +56,15 @@
 - Lần chạy API test đầu thiếu `PYTHONPATH=src` nên lỗi collection; chạy lại đúng môi trường
   đạt 4/4. Repository hygiene và `git diff --check` đều pass.
 
+### TF-P1-005 — Mentor-safe localhost
+
+- Held-out nav, metrics, proof strip, evidence tab và private authorization note bị ẩn mặc định.
+- Held-out summary/evidence không được fetch trong mentor view.
+- Đặt `VITE_SHOW_HELDOUT=true` trước khi chạy web để bật lại chế độ quan sát riêng.
+- Default build và private build đều pass; web 9/9 tests, lint 0 error/19 warning cũ.
+- Browser smoke xác nhận không còn “REAL HELD-OUT · EVALUATE ONCE”, nav hoặc tab held-out.
+- Một lần chạy hai build song song gặp `EBUSY` ở `dist`; chạy tuần tự sau đó đều pass.
+
 ## Verified evidence
 
 - Repository hygiene đã pass ở checkpoint gần nhất.

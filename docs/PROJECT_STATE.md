@@ -46,7 +46,7 @@ Runtime checkpoint (2026-07-31):
 - This is a loopback development runtime, not a production deployment
 
 Local UI checkpoint (2026-07-31):
-- OCR Lab at `http://localhost:3000` now defaults to Template-first DOCX processing
+- OCR Lab defaults to Template-first; mentor view hides held-out unless `VITE_SHOW_HELDOUT=true`
 - The UI lists both registered templates, shows extracted fields, quality routing and full JSON
 - Legacy OCR/IDP upload remains available as a separate mode
 - API root redirects to the main local UI; API PID `27752`, web PID `28852` at checkpoint

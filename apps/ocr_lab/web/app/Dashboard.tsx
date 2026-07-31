@@ -6,6 +6,8 @@ import {
   resumePendingReview,
 } from "./review-queue.mjs";
 
+const SHOW_HELDOUT = import.meta.env.VITE_SHOW_HELDOUT === "true";
+
 type Sample = {
   sampleId: string;
   documentId: string;
@@ -1419,7 +1421,9 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [heldoutEvidenceLoading, setHeldoutEvidenceLoading] = useState(false);
   const [heldoutEvidenceError, setHeldoutEvidenceError] = useState("");
   const [evidenceMode, setEvidenceMode] =
-    useState<"heldout" | "uploads" | "cccd">("heldout");
+    useState<"heldout" | "uploads" | "cccd">(
+      SHOW_HELDOUT ? "heldout" : "uploads",
+    );
   const [evidenceInspectorView, setEvidenceInspectorView] =
     useState<"fields" | "json">("fields");
   const [activeCccdSessionId, setActiveCccdSessionId] = useState("");
@@ -1580,27 +1584,29 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         setSupportedTemplates(payload.templates),
       )
       .catch(() => setSupportedTemplates([]));
-    fetch(`${API_BASE}/heldout/summary`)
-      .then((response) => {
-        if (!response.ok) throw new Error("Real held-out unavailable");
-        return response.json();
-      })
-      .then((payload: HeldoutSummary) => {
-        setApiOnline(true);
-        setHeldout(payload);
-        setHeldoutError("");
-        setActiveHeldoutId(
-          payload.documents.find((item) => item.previewAvailable)?.documentId ??
-            payload.documents[0]?.documentId ??
-            "",
-        );
-      })
-      .catch(() => {
-        setHeldout(null);
-        setHeldoutError(
-          "Chưa kết nối được tập held-out thật đã xác nhận quyền xử lý.",
-        );
-      });
+    if (SHOW_HELDOUT) {
+      fetch(`${API_BASE}/heldout/summary`)
+        .then((response) => {
+          if (!response.ok) throw new Error("Real held-out unavailable");
+          return response.json();
+        })
+        .then((payload: HeldoutSummary) => {
+          setApiOnline(true);
+          setHeldout(payload);
+          setHeldoutError("");
+          setActiveHeldoutId(
+            payload.documents.find((item) => item.previewAvailable)?.documentId ??
+              payload.documents[0]?.documentId ??
+              "",
+          );
+        })
+        .catch(() => {
+          setHeldout(null);
+          setHeldoutError(
+            "Chưa kết nối được tập held-out thật đã xác nhận quyền xử lý.",
+          );
+        });
+    }
     refreshUserSessions();
     fetch(`${API_BASE}/phase14/benchmark`)
       .then((response) => {
@@ -1624,7 +1630,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   }, []);
 
   useEffect(() => {
-    if (!activeHeldoutId) {
+    if (!SHOW_HELDOUT || !activeHeldoutId) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale evidence when the list becomes empty.
       setHeldoutEvidence(null);
       return;
@@ -2330,9 +2336,11 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     };
   }, [activeCccdSession, cccdEvidenceResult, cccdEvidenceReview]);
   const activeHeldoutDocument =
-    heldout?.documents.find(
-      (document) => document.documentId === activeHeldoutId,
-    ) ?? null;
+    SHOW_HELDOUT
+      ? heldout?.documents.find(
+          (document) => document.documentId === activeHeldoutId,
+        ) ?? null
+      : null;
   const unifiedIdp = userResult?.phase15 ?? userResult?.phase12;
 
   return (
@@ -2343,7 +2351,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           <span>OCR LAB</span>
         </a>
         <nav aria-label="Điều hướng chính">
-          <a href="#metrics">Held-out thật</a>
+          {SHOW_HELDOUT ? <a href="#metrics">Held-out thật</a> : null}
           <a href="#upload">OCR tài liệu thật</a>
           <a href="#explorer">Tài liệu &amp; CCCD</a>
           <a href="#phases">Policy</a>
@@ -2413,28 +2421,31 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         </figure>
       </section>
 
-      <section className="proof-strip" aria-label="Bằng chứng vận hành">
-        <div>
-          <span>Bằng chứng thật</span>
-          <strong>
-            {heldout?.documentCount ?? "—"} HR + {reviewedCccdSessions.length} CCCD
-          </strong>
-        </div>
-        <div>
-          <span>Phạm vi</span>
-          <strong>
-            {heldout ? Object.keys(heldout.byFamily).length : "—"} HR + ID
-          </strong>
-        </div>
-        <div>
-          <span>Field Exact</span>
-          <strong>{pct(heldout?.overall.fieldExactMatchRate ?? null)}</strong>
-        </div>
-        <div>
-          <span>Quyết định</span>
-          <strong>{heldout?.decision.production ?? "Chưa có"}</strong>
-        </div>
-      </section>
+      {SHOW_HELDOUT ? (
+        <section className="proof-strip" aria-label="Bằng chứng vận hành">
+          <div>
+            <span>Bằng chứng thật</span>
+            <strong>
+              {heldout?.documentCount ?? "—"} HR +{" "}
+              {reviewedCccdSessions.length} CCCD
+            </strong>
+          </div>
+          <div>
+            <span>Phạm vi</span>
+            <strong>
+              {heldout ? Object.keys(heldout.byFamily).length : "—"} HR + ID
+            </strong>
+          </div>
+          <div>
+            <span>Field Exact</span>
+            <strong>{pct(heldout?.overall.fieldExactMatchRate ?? null)}</strong>
+          </div>
+          <div>
+            <span>Quyết định</span>
+            <strong>{heldout?.decision.production ?? "Chưa có"}</strong>
+          </div>
+        </section>
+      ) : null}
 
       <section className="section product-section" id="product">
         <figure className="product-context">
@@ -2447,8 +2458,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             />
           ) : (
             <div className="native-heldout-file">
-              <strong>Chưa kết nối private-data</strong>
-              <p>Khởi động API local với tham số --heldout-root.</p>
+              <strong>Trích xuất tài liệu hành chính nhân sự</strong>
+              <p>Native parsing, OCR, quality gate và human review.</p>
             </div>
           )}
         </figure>
@@ -4050,7 +4061,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         </div>
       </section>
 
-      <section className="section metrics-section" id="metrics">
+      {SHOW_HELDOUT ? (
+        <section className="section metrics-section" id="metrics">
         <div className="section-heading">
           <div>
             <p className="eyebrow">REAL HELD-OUT · EVALUATE ONCE</p>
@@ -4247,7 +4259,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             </b>
           </aside>
         </div>
-      </section>
+        </section>
+      ) : null}
 
       <section className="section explorer-section" id="explorer">
         <div className="section-heading">
@@ -4261,14 +4274,16 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           </p>
         </div>
         <div className="evidence-switch" role="tablist">
-          <button
-            className={evidenceMode === "heldout" ? "active" : ""}
-            onClick={() => setEvidenceMode("heldout")}
-            role="tab"
-            aria-selected={evidenceMode === "heldout"}
-          >
-            18 tài liệu HCNS held-out
-          </button>
+          {SHOW_HELDOUT ? (
+            <button
+              className={evidenceMode === "heldout" ? "active" : ""}
+              onClick={() => setEvidenceMode("heldout")}
+              role="tab"
+              aria-selected={evidenceMode === "heldout"}
+            >
+              18 tài liệu HCNS held-out
+            </button>
+          ) : null}
           <button
             className={evidenceMode === "uploads" ? "active" : ""}
             onClick={() => setEvidenceMode("uploads")}
@@ -4286,7 +4301,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             {reviewedCccdSessions.length} CCCD đã Ground Truth
           </button>
         </div>
-        {evidenceMode === "heldout" ? (
+        {SHOW_HELDOUT && evidenceMode === "heldout" ? (
           <div className="heldout-evidence-grid">
             <div className="heldout-document-list" role="list">
               {(heldout?.documents ?? []).map((document) => (
@@ -4555,17 +4570,19 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             />
           </div>
         )}
-        <div className="privacy-boundary">
-          <strong>
-            Phạm vi quyền hiện tại: local-only · publicReleaseAuthorized=
-            {String(heldout?.publicReleaseAuthorized ?? false)}
-          </strong>
-          <p>
-            Báo cáo Git chỉ công khai số liệu aggregate không chứa PII. Muốn đưa
-            ảnh thô vào repository công khai phải bổ sung quyền phân phối công
-            khai và sự đồng ý của chủ thể cho từng document ID.
-          </p>
-        </div>
+        {SHOW_HELDOUT ? (
+          <div className="privacy-boundary">
+            <strong>
+              Phạm vi quyền hiện tại: local-only · publicReleaseAuthorized=
+              {String(heldout?.publicReleaseAuthorized ?? false)}
+            </strong>
+            <p>
+              Báo cáo Git chỉ công khai số liệu aggregate không chứa PII. Muốn
+              đưa ảnh thô vào repository công khai phải bổ sung quyền phân phối
+              công khai và sự đồng ý của chủ thể cho từng document ID.
+            </p>
+          </div>
+        ) : null}
       </section>
 
       <section className="section next-section" id="next">
