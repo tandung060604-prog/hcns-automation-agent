@@ -135,21 +135,13 @@ Giao diện hiện có một điểm upload mặc định, hiển thị bản xe
 | Drift manifest multi-format | Đã ghi nhận mismatch 30 khai báo/26 file | Sửa manifest và stale reference trong task riêng |
 | Sai phạm vi triển khai | API bind loopback, chưa có HRIS write | Railway deployment và external integration cần smoke-test/phê duyệt riêng |
 
-## Đề xuất tuần kế tiếp
+## Đề xuất kế hoạch kế tiếp
 
 1. Đo lỗi theo từng trường trên bộ phát triển ảnh/scan; không sử dụng đáp án chuẩn để điền dữ liệu khi hệ thống đang nhận dạng.
 2. Chỉ đọc lại vùng dữ liệu khi có nhãn/vị trí làm bằng chứng; mọi kết quả chưa chắc chắn vẫn cần người kiểm tra.
 3. Chạy lại gate multi-format. Chỉ xem xét promotion khi OCR field exact-match đạt ít nhất 44/54 và không làm mất trường đúng.
-4. Khi chuẩn bị Railway, bổ sung cấu hình deployment và chạy smoke-test với health, upload, source retention và session deletion.
+4. Bổ sung thêm các loại tài liệu bằng cấp, chứng chỉ, bản chấm công,...
+5. Tích hợp với hệ thống Camunda đã dựng sẵn dưới dạng External Worker
 
-## Khả năng tái lập
-
-```powershell
-python scripts/build_weekly_report_cccd_selection.py `
-  --data-root <authorized-private-data-root> `
-  --output docs/weekly-reports/2026-W31/assets/cccd/selection.json `
-  --limit 4
-python scripts/validate_weekly_report.py
-```
 
 Audit chi tiết: [AUDIT_NOTES.md](AUDIT_NOTES.md). Danh mục artifact: [EVIDENCE_MANIFEST.json](EVIDENCE_MANIFEST.json).
