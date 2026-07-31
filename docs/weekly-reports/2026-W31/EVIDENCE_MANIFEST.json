@@ -8,7 +8,8 @@
     "allowedEvidence": [
       "aggregate metrics",
       "opaque sample identifiers",
-      "safe local UI screenshots"
+      "safe local UI screenshots",
+      "synthetic AI-generated HCNS inputs and engine outputs"
     ]
   },
   "repository": {
@@ -35,6 +36,11 @@
       "ranking": "cccd-evidence-ranking/1.0"
     },
     {
+      "path": "assets/evidence-index.json",
+      "kind": "visual-evidence-index",
+      "scope": "4 redacted CCCD images and 12 unredacted synthetic HCNS images"
+    },
+    {
       "path": "AUDIT_NOTES.md",
       "kind": "audit"
     },
@@ -50,7 +56,7 @@
   "metricSources": [
     {
       "source": "docs/PROJECT_STATE.md",
-      "scope": "TF-P2-002 aggregate multi-format evidence"
+      "scope": "aggregate multi-format evidence for the two supported HR forms"
     },
     {
       "source": "docs/TEMPLATE_FIRST_PHASE1_REPORT.md",

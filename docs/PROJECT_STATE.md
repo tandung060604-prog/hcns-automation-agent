@@ -57,8 +57,8 @@ Local runtime checkpoint:
 - Mentor view hides held-out unless `VITE_SHOW_HELDOUT=true`
 - Evidence retains Template-first/CCCD and the right metadata/JSON panel
 - Hero uses the approved local workflow infographic; no remote asset is loaded
-- Weekly report 2026-W31 records a redacted audit, two safe local UI screenshots and a
-  reproducible selection of four review-complete CCCD sessions; no source or PII is tracked
+- Weekly report 2026-W31 includes two safe UI screenshots, four fully redacted CCCD
+  visuals, and six input/result pairs from AI-generated HR forms; no real PII is tracked
 
 Security:
 - No dataset, Ground Truth, upload, model weight, secret or raw PII added to Git
