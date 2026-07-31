@@ -57,6 +57,8 @@ Local runtime checkpoint:
 - Mentor view hides held-out unless `VITE_SHOW_HELDOUT=true`
 - Evidence retains Template-first/CCCD and the right metadata/JSON panel
 - Hero uses the approved local workflow infographic; no remote asset is loaded
+- Weekly report 2026-W31 records a redacted audit, two safe local UI screenshots and a
+  reproducible selection of four review-complete CCCD sessions; no source or PII is tracked
 
 Security:
 - No dataset, Ground Truth, upload, model weight, secret or raw PII added to Git
@@ -79,6 +81,7 @@ Key commands:
 - Current UX/API target: API preview 6 passed; web 9 passed/build; ESLint 0 error,
   17 warning hiện hữu
 - Previous full checkpoint: Python 225 passed; lint 0 errors/15 existing warnings
+- Weekly report: `python scripts/validate_weekly_report.py` and report-script Ruff pass
 
 Next:
 - Keep TF-P2-002 as the only active Template-first task; do not start TF-P2-003

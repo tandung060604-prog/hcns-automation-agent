@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "weekly-report-cccd-selection/1.0",
+  "rankingVersion": "cccd-evidence-ranking/1.0",
+  "selectionRule": "review-complete identity documents, sorted by score descending then opaque ID",
+  "privacy": {
+    "containsPII": false,
+    "containsRawOcrText": false,
+    "containsOriginalFileNames": false,
+    "sampleIdDerivation": "SHA-256(session_id), truncated to 10 hexadecimal characters"
+  },
+  "eligibleCount": 30,
+  "selected": [
+    {
+      "sampleId": "CCCD-EV-01358E57D2",
+      "score": 138.207,
+      "scoreComponents": {
+        "review_complete": 100.0,
+        "ocr_success": 20.0,
+        "phase11_present": 10.0,
+        "confidence": 8.536,
+        "duration_penalty": -0.32853333333333334
+      },
+      "format": "JPG",
+      "pageCount": 1,
+      "recognizedTextLineCount": 22,
+      "qualityGate": "FAIL",
+      "phase11Version": "1.1.0"
+    },
+    {
+      "sampleId": "CCCD-EV-EFD73FC886",
+      "score": 137.955,
+      "scoreComponents": {
+        "review_complete": 100.0,
+        "ocr_success": 20.0,
+        "phase11_present": 10.0,
+        "confidence": 8.39,
+        "duration_penalty": -0.4350333333333333
+      },
+      "format": "JPG",
+      "pageCount": 1,
+      "recognizedTextLineCount": 18,
+      "qualityGate": "REVIEW",
+      "phase11Version": "11.6.0"
+    },
+    {
+      "sampleId": "CCCD-EV-B3420B4361",
+      "score": 137.897,
+      "scoreComponents": {
+        "review_complete": 100.0,
+        "ocr_success": 20.0,
+        "phase11_present": 10.0,
+        "confidence": 8.656,
+        "duration_penalty": -0.7588166666666667
+      },
+      "format": "JPG",
+      "pageCount": 1,
+      "recognizedTextLineCount": 19,
+      "qualityGate": "FAIL",
+      "phase11Version": "11.6.0"
+    },
+    {
+      "sampleId": "CCCD-EV-493AB309B2",
+      "score": 137.763,
+      "scoreComponents": {
+        "review_complete": 100.0,
+        "ocr_success": 20.0,
+        "phase11_present": 10.0,
+        "confidence": 8.309,
+        "duration_penalty": -0.5456166666666666
+      },
+      "format": "JPG",
+      "pageCount": 1,
+      "recognizedTextLineCount": 22,
+      "qualityGate": "REVIEW",
+      "phase11Version": "11.6.0"
+    }
+  ]
+}

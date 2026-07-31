@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "weekly-report-evidence-manifest/1.0",
+  "reportWeek": "2026-W31",
+  "privacy": {
+    "containsPII": false,
+    "containsRawDocuments": false,
+    "containsRawOcrText": false,
+    "allowedEvidence": [
+      "aggregate metrics",
+      "opaque sample identifiers",
+      "safe local UI screenshots"
+    ]
+  },
+  "repository": {
+    "remoteMainCommit": "997d03187c1db01a2be46a6186dac3523761fdcb",
+    "auditWorktreeHead": "d14965f"
+  },
+  "artifacts": [
+    {
+      "path": "assets/website/local-overview.png",
+      "kind": "safe-local-ui-screenshot",
+      "sha256": "ff3d9e950676e5ce048e9595e4aa717893519246c8130e381f93b29b2b9dc89b",
+      "capture": "localhost upload surface, no document selected"
+    },
+    {
+      "path": "assets/website/local-product.png",
+      "kind": "safe-local-ui-screenshot",
+      "sha256": "5ec05290f87dfdf8cf74fb8e53845a44a6aa29a4c22cfcfd80c1c709d2c04820",
+      "capture": "localhost product overview, no user document visible"
+    },
+    {
+      "path": "assets/cccd/selection.json",
+      "kind": "redacted-selection",
+      "source": "authorized local session metadata only",
+      "ranking": "cccd-evidence-ranking/1.0"
+    },
+    {
+      "path": "AUDIT_NOTES.md",
+      "kind": "audit"
+    },
+    {
+      "path": "WEEKLY_REPORT.md",
+      "kind": "mentor-report"
+    },
+    {
+      "path": "WEEKLY_REPORT.html",
+      "kind": "mentor-report-html"
+    }
+  ],
+  "metricSources": [
+    {
+      "source": "docs/PROJECT_STATE.md",
+      "scope": "TF-P2-002 aggregate multi-format evidence"
+    },
+    {
+      "source": "docs/TEMPLATE_FIRST_PHASE1_REPORT.md",
+      "scope": "template-first evaluation protocol"
+    }
+  ]
+}
