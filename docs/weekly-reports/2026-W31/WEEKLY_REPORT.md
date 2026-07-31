@@ -36,7 +36,7 @@ Sáu mẫu HCNS dưới đây là dữ liệu tổng hợp do AI tạo và khôn
 |---|---|---|
 | DOCX | ![Đơn nghỉ phép DOCX tổng hợp](assets/hr/leave-docx-source-synthetic.png) | [Xem JSON kết quả](assets/hr/leave-docx-result.json) |
 | PDF | ![Đơn nghỉ phép PDF tổng hợp](assets/hr/leave-pdf-source-synthetic.png) | [Xem JSON kết quả](assets/hr/leave-pdf-result.json) |
-| Ảnh scan | ![Đơn nghỉ phép ảnh tổng hợp](assets/hr/leave-image-source-synthetic.png) | [Xem JSON kết quả](assets/hr/leave-image-result.json) |
+| Ảnh camera | ![Đơn nghỉ phép ảnh camera tổng hợp](assets/hr/leave-camera-ui-evidence.png) | [Xem JSON kết quả](assets/hr/leave-image-result.json) |
 
 ### Đơn tăng ca: đầu vào và kết quả engine
 
@@ -44,7 +44,7 @@ Sáu mẫu HCNS dưới đây là dữ liệu tổng hợp do AI tạo và khôn
 |---|---|---|
 | DOCX | ![Đơn tăng ca DOCX tổng hợp](assets/hr/overtime-docx-source-synthetic.png) | [Xem JSON kết quả](assets/hr/overtime-docx-result.json) |
 | PDF | ![Đơn tăng ca PDF tổng hợp](assets/hr/overtime-pdf-source-synthetic.png) | [Xem JSON kết quả](assets/hr/overtime-pdf-result.json) |
-| Ảnh scan | ![Đơn tăng ca ảnh tổng hợp](assets/hr/overtime-image-source-synthetic.png) | [Xem JSON kết quả](assets/hr/overtime-image-result.json) |
+| Ảnh camera | ![Đơn tăng ca ảnh camera tổng hợp](assets/hr/overtime-camera-ui-evidence.png) | [Xem JSON kết quả](assets/hr/overtime-image-result.json) |
 
 ### Ảnh chụp trực tiếp từ LOCAL REAL-DOCUMENT EVIDENCE
 
