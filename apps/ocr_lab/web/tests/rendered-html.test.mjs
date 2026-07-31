@@ -40,8 +40,8 @@ test("server-renders the Vietnamese OCR dashboard", async () => {
   assert.match(html, /Template-first cho biểu mẫu chuẩn/);
   assert.match(html, /Một luồng xử lý, bằng chứng đi cùng dữ liệu/);
   assert.match(html, /Biểu mẫu HCNS chuẩn/);
-  assert.match(html, /Đơn xin nghỉ phép/);
-  assert.match(html, /Đơn xin tăng ca/);
+  assert.match(html, /đơn nghỉ phép hoặc tăng ca/i);
+  assert.match(html, /Tải tài liệu HCNS/);
   assert.doesNotMatch(html, /hr-document-intelligence-context\.webp/);
   assert.match(html, /Đưa tài liệu thật vào/);
   assert.match(html, /Không upload cloud/);
@@ -156,33 +156,49 @@ test("hides held-out evidence by default behind a private local flag", async () 
   assert.match(envExample, /^VITE_SHOW_HELDOUT=false$/m);
 });
 
-test("exposes Template-first upload and structured result inspection", async () => {
-  const [dashboard, css] = await Promise.all([
+test("exposes one Template-first upload with source preview and structured results", async () => {
+  const [dashboard, css, envExample] = await Promise.all([
     readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
   ]);
 
   assert.match(dashboard, /\/api\/templates/);
   assert.match(dashboard, /\/api\/documents\/process/);
   assert.match(dashboard, /\/api\/documents\/sessions/);
   assert.match(dashboard, /\/api\/documents\/result\?id=/);
+  assert.match(dashboard, /\/api\/documents\/source\?id=/);
   assert.match(dashboard, /useState<"template" \| "legacy">\("template"\)/);
-  assert.match(dashboard, /Mẫu chuẩn/);
-  assert.match(dashboard, /DOCX · không OCR/);
+  assert.match(dashboard, /SHOW_LEGACY_UPLOAD/);
+  assert.match(dashboard, /Tải tài liệu HCNS/);
+  assert.match(dashboard, /Trích xuất tài liệu/);
+  assert.match(dashboard, /DOCX, PDF, PNG, JPG\/JPEG/);
   assert.match(dashboard, /Thông tin trích xuất từ biểu mẫu chuẩn/);
   assert.match(dashboard, /Xem JSON đầy đủ/);
   assert.match(dashboard, /Không có trong tài liệu/);
   assert.match(dashboard, /TemplateResultPanel/);
+  assert.match(dashboard, /TemplateDocumentPreview/);
   assert.match(dashboard, /TemplateEvidenceInspector/);
-  assert.match(dashboard, /Native DOCX \/ Template-first parser/);
+  assert.match(dashboard, /PaddleOCR local/);
+  assert.match(
+    dashboard,
+    /Dữ liệu được đọc trực tiếp bằng native parser, không dùng OCR/,
+  );
+  assert.match(dashboard, /\.docx,.pdf,.png,.jpg,.jpeg/);
   assert.match(dashboard, /data-testid="local-document-input"/);
+  assert.match(dashboard, /data-testid="template-document-preview"/);
   assert.match(dashboard, /data-testid="template-result-panel"/);
+  assert.match(dashboard, /\/assets\/template-first-local-workflow\.png/);
   assert.match(css, /\.upload-mode-switch/);
+  assert.match(css, /\.upload-workspace/);
+  assert.match(css, /\.template-document-preview/);
+  assert.match(css, /\.hero-workflow-visual/);
   assert.match(css, /\.template-field-grid/);
   assert.match(css, /\.template-json/);
   assert.match(css, /\.template-evidence-field-row/);
   assert.match(dashboard, /data-testid="product-showcase"/);
   assert.match(css, /\.product-showcase/);
+  assert.match(envExample, /^VITE_SHOW_LEGACY_UPLOAD=false$/m);
 });
 
 test("shows the reviewed Phase 14 recognizer decision", async () => {

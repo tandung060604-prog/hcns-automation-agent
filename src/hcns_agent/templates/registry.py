@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 from hcns_agent.domain.canonical import CanonicalDocument
-from hcns_agent.domain.documents import DocumentType
-from hcns_agent.templates.common import document_text, normalize_for_match
+from hcns_agent.domain.documents import DocumentType, SourceFormat
+from hcns_agent.templates.common import (
+    document_text,
+    fuzzy_ocr_contains,
+    normalize_for_match,
+    normalize_for_ocr_match,
+)
 from hcns_agent.templates.leave_request.parser import LeaveRequestParser
 from hcns_agent.templates.leave_request.validator import LeaveRequestValidator
 from hcns_agent.templates.model import TemplateDefinition, TemplateDetection
@@ -22,13 +27,29 @@ class TemplateRegistry:
         self._definitions[definition.template_id] = definition
 
     def detect(self, document: CanonicalDocument) -> TemplateDetection | None:
-        normalized = normalize_for_match(document_text(document))
+        normalize = (
+            normalize_for_ocr_match
+            if document.source_format in {SourceFormat.IMAGE, SourceFormat.PDF_SCAN}
+            else normalize_for_match
+        )
+        text = document_text(document)
+        normalized = normalize(text)
+        uses_ocr_matching = document.source_format in {
+            SourceFormat.IMAGE,
+            SourceFormat.PDF_SCAN,
+        }
         candidates: list[TemplateDetection] = []
         for definition in self._definitions.values():
             matched = tuple(
                 anchor
                 for anchor in definition.anchors
-                if normalize_for_match(anchor) in normalized
+                if (
+                    normalize(anchor) in normalized
+                    or (
+                        uses_ocr_matching
+                        and fuzzy_ocr_contains(text, anchor)
+                    )
+                )
             )
             if len(matched) < definition.minimum_anchor_matches:
                 continue
@@ -66,7 +87,7 @@ def build_default_template_registry() -> TemplateRegistry:
             template_id="leave-request-v1",
             document_type=DocumentType.LEAVE_REQUEST,
             version="1.0",
-            supported_file_types=("docx",),
+            supported_file_types=("docx", "pdf", "png", "jpg", "jpeg"),
             required_fields=(
                 "employeeName",
                 "jobTitle",
@@ -104,7 +125,7 @@ def build_default_template_registry() -> TemplateRegistry:
             template_id="overtime-request-v1",
             document_type=DocumentType.OVERTIME_REQUEST,
             version="1.0",
-            supported_file_types=("docx",),
+            supported_file_types=("docx", "pdf", "png", "jpg", "jpeg"),
             required_fields=(
                 "employeeName",
                 "jobTitle",

@@ -84,12 +84,13 @@ from hcns_agent.templates.service import (
     TemplateProcessingService,
     TemplateTechnicalError,
     TemplateUnsupportedError,
-    build_default_template_processing_service,
+    build_local_template_processing_service,
 )
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 MAX_REVIEW_BYTES = 2 * 1024 * 1024
 MAX_PDF_PAGES = 50
+TEMPLATE_ALLOWED_EXTENSIONS = {".docx", ".pdf", ".png", ".jpg", ".jpeg"}
 ALLOWED_EXTENSIONS = {
     ".png",
     ".jpg",
@@ -1134,6 +1135,17 @@ class UserOCRService:
             return None
         return payload
 
+    def template_source(self, session_id: str) -> Path | None:
+        if self.template_result(session_id) is None:
+            return None
+        session_dir = self.session_dir(session_id)
+        if session_dir is None:
+            return None
+        source_paths = sorted((session_dir / "input").glob("document.*"))
+        if len(source_paths) != 1 or not source_paths[0].is_file():
+            return None
+        return source_paths[0]
+
     def list_template_sessions(self) -> list[dict[str, Any]]:
         sessions: list[dict[str, Any]] = []
         for result_path in self.sessions_root.glob("*/template_first/result.json"):
@@ -1143,6 +1155,7 @@ class UserOCRService:
                 continue
             data = result.get("data", {})
             quality = result.get("quality", {})
+            processing = result.get("processing", {})
             try:
                 created_at = datetime.fromtimestamp(
                     result_path.stat().st_mtime,
@@ -1161,6 +1174,9 @@ class UserOCRService:
                     "status": result["status"],
                     "recommendedAction": quality.get("recommendedAction"),
                     "confidence": quality.get("confidence"),
+                    "sourceFormat": processing.get("sourceFormat", "DOCX"),
+                    "usesOcr": processing.get("usesOcr", False),
+                    "parserName": processing.get("parserName", "docx/ooxml"),
                 }
             )
         return sorted(sessions, key=lambda row: row["createdAt"], reverse=True)
@@ -1243,10 +1259,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     result_reference=result_reference,
                 )
                 payload = result.public_dict()
-                result_dir = (
-                    self.user_ocr.sessions_root / document_id / "template_first"
-                )
+                session_dir = self.user_ocr.sessions_root / document_id
+                result_dir = session_dir / "template_first"
+                input_dir = session_dir / "input"
                 result_dir.mkdir(parents=True, exist_ok=True)
+                input_dir.mkdir(parents=True, exist_ok=True)
+                extension = Path(filename).suffix.casefold()
+                (input_dir / f"document{extension}").write_bytes(content)
                 result_path = result_dir / "result.json"
                 result_path.write_text(
                     json.dumps(payload, ensure_ascii=False, indent=2),
@@ -1263,15 +1282,24 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     HTTPStatus.UNPROCESSABLE_ENTITY,
                 )
             except TemplateTechnicalError as exc:
+                status = (
+                    HTTPStatus.SERVICE_UNAVAILABLE
+                    if exc.code == "OCR_RUNTIME_UNAVAILABLE"
+                    else HTTPStatus.UNPROCESSABLE_ENTITY
+                )
                 self.send_json(
                     {
                         "status": "TECHNICAL_ERROR",
                         "recommendedAction": "TECHNICAL_ERROR",
                         "errorCode": exc.code,
                     },
-                    HTTPStatus.UNPROCESSABLE_ENTITY,
+                    status,
                 )
             except OSError:
+                shutil.rmtree(
+                    self.user_ocr.sessions_root / document_id,
+                    ignore_errors=True,
+                )
                 self.send_json(
                     {
                         "status": "TECHNICAL_ERROR",
@@ -1776,12 +1804,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return None
         submitted_filename = str(file_part.get_filename())
         filename = Path(submitted_filename).name
-        if Path(filename).suffix.casefold() != ".docx":
+        if Path(filename).suffix.casefold() not in TEMPLATE_ALLOWED_EXTENSIONS:
             self.send_json(
                 {
                     "status": "REJECT_UNSUPPORTED",
                     "recommendedAction": "REJECT_UNSUPPORTED",
-                    "errorCode": "DOCX_REQUIRED",
+                    "errorCode": "SUPPORTED_TEMPLATE_FORMAT_REQUIRED",
                 },
                 HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
             )
@@ -1851,6 +1879,22 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
                 return
             self.send_json(result)
+            return
+
+        if parsed.path == "/api/documents/source":
+            document_id = query.get("id", [""])[0]
+            source_path = self.user_ocr.template_source(document_id)
+            if source_path is None:
+                self.send_json(
+                    {"error": "Template-first source not found"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            content_type = (
+                mimetypes.guess_type(source_path.name)[0]
+                or "application/octet-stream"
+            )
+            self.send_file(source_path, content_type)
             return
 
         if parsed.path == "/heldout/summary":
@@ -2192,8 +2236,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         "phase14LineReviewEnabled": True,
                         "realHeldoutEvidenceEnabled": (self.heldout_root is not None),
                         "modelLoaded": self.user_ocr.model_loaded,
+                        "templateOcrModelLoaded": (
+                            self.template_processor.ocr_model_loaded
+                        ),
                         "sessionCount": len(self.user_ocr.list_sessions()),
                         "formats": sorted(ALLOWED_EXTENSIONS),
+                        "templateFormats": sorted(TEMPLATE_ALLOWED_EXTENSIONS),
                         "maxUploadBytes": MAX_UPLOAD_BYTES,
                     },
                 }
@@ -2623,7 +2671,7 @@ def main() -> int:
     )
     DashboardHandler.native_indexes = indexes
     DashboardHandler.user_ocr = UserOCRService(args.data_root)
-    DashboardHandler.template_processor = build_default_template_processing_service()
+    DashboardHandler.template_processor = build_local_template_processing_service()
     server = ThreadingHTTPServer((args.host, args.port), DashboardHandler)
     print(
         f"Local dashboard API ready: http://{args.host}:{args.port} "

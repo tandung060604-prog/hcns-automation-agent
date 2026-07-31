@@ -63,3 +63,24 @@ Overtime request: `employeeName`, `jobTitle`, `requestDate`, `reason`,
 Kết nối `MANUAL_REVIEW` với Camunda User Task trong một task riêng; giữ full
 extracted payload ở private result store và chỉ truyền reference qua process
 variables.
+
+## TF-P2-002 — Multi-format checkpoint
+
+Phase 1 vẫn được giữ nguyên như lịch sử ở trên. Phần mở rộng hiện tại nhận DOCX,
+native PDF, PNG/JPG/JPEG và PDF scan cho đúng hai template đã đăng ký.
+
+| Nguồn | Classification | Required-field EM | Schema | Routing |
+|---|---:|---:|---:|---|
+| DOCX | 10/10 | 90/90 (100%) | 0 | native |
+| Native PDF | 10/10 | 90/90 (100%) | 0 | native |
+| Camera image | 6/6 | 31/54 (57.41%) | 0 | 6/6 review |
+| Image-backed PDF | 6/6 | 31/54 (57.41%) | 0 | 6/6 review |
+
+OCR nhận đúng template và các trường số/ngày tốt hơn sau hiệu chỉnh phối cảnh,
+nhưng mất dấu/ký tự ở tên, chức vụ, phòng ban và text tự do. Vì gate đã duyệt là
+80%, TF-P2-002 vẫn `IN_PROGRESS`. Không dùng JSON Ground Truth hoặc DOCX/PDF
+song sinh để sửa kết quả OCR.
+
+Validation checkpoint: Python 225 tests; web build và 9 tests; Ruff, mypy,
+repository hygiene và diff check đều pass. Live HTTP smoke bằng ảnh camera trả
+đúng `LEAVE_REQUEST`, `paddleocr/pp-ocrv5-vi` và `MANUAL_REVIEW`; session đã xóa.

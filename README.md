@@ -55,18 +55,20 @@ Phạm vi dữ liệu, cách tính metric và các field required/optional đư�
 ### Thử một file mới trên dashboard
 
 Khởi động OCR Lab theo hướng dẫn bên dưới, sau đó mở
-[`http://localhost:3000`](http://localhost:3000). Chế độ **Mẫu chuẩn** là chế độ mặc
-định:
+[`http://localhost:3000`](http://localhost:3000). Màn hình mặc định chỉ có một
+khu vực tải tài liệu cho hai biểu mẫu HCNS:
 
-1. Chọn file DOCX được điền từ mẫu nghỉ phép hoặc tăng ca đang hỗ trợ.
-2. Nhấn **Trích xuất theo mẫu chuẩn**.
-3. Kiểm tra loại tài liệu, template/version, confidence và quality action.
-4. Xem từng field, `missingFields`, `validationErrors` hoặc full JSON.
+1. Chọn file DOCX, PDF, PNG, JPG hoặc JPEG của đơn nghỉ phép/tăng ca.
+2. Kiểm tra bản xem trước ảnh/PDF ngay cạnh khung kết quả.
+3. Nhấn **Trích xuất tài liệu**.
+4. Kiểm tra loại tài liệu, template/version, confidence, quality action, từng
+   field và full JSON.
 5. Xóa phiên local khi không còn cần kết quả.
 
-Dashboard dùng `GET /api/templates` để hiển thị registry và
-`POST /api/documents/process` để xử lý upload. Luồng **OCR/IDP cũ** vẫn có trên giao
-diện dưới dạng một chế độ riêng.
+Dashboard dùng `POST /api/documents/process` để xử lý upload và
+`GET /api/documents/source?id=<document_id>` để phục vụ lại file nguồn trên
+loopback. Luồng OCR/IDP cũ vẫn được giữ trong code và chỉ hiện khi bật
+`VITE_SHOW_LEGACY_UPLOAD=true` cho chẩn đoán riêng.
 
 Khởi động API local:
 

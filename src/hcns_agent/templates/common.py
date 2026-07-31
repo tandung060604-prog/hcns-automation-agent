@@ -6,6 +6,7 @@ import re
 import unicodedata
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from difflib import SequenceMatcher
 
 from hcns_agent.domain.canonical import CanonicalDocument
 from hcns_agent.domain.content import iter_text_observations
@@ -19,6 +20,33 @@ _DATE_WORD_RE = re.compile(
 
 def normalize_for_match(value: str) -> str:
     return " ".join(unicodedata.normalize("NFC", value).casefold().split())
+
+
+def normalize_for_ocr_match(value: str) -> str:
+    normalized = unicodedata.normalize("NFD", value).casefold()
+    without_marks = "".join(
+        character
+        for character in normalized
+        if unicodedata.category(character) != "Mn"
+    )
+    return " ".join(without_marks.replace("đ", "d").split())
+
+
+def fuzzy_ocr_contains(text: str, anchor: str, *, threshold: float = 0.78) -> bool:
+    """Match short fixed labels after OCR drops Vietnamese characters."""
+
+    normalized_text = normalize_for_ocr_match(text)
+    normalized_anchor = normalize_for_ocr_match(anchor)
+    if normalized_anchor in normalized_text:
+        return True
+    words = normalized_text.split()
+    anchor_words = normalized_anchor.split()
+    for size in range(max(1, len(anchor_words) - 1), len(anchor_words) + 2):
+        for start in range(0, len(words) - size + 1):
+            candidate = " ".join(words[start : start + size])
+            if SequenceMatcher(None, candidate, normalized_anchor).ratio() >= threshold:
+                return True
+    return False
 
 
 def document_text(document: CanonicalDocument) -> str:
@@ -113,7 +141,7 @@ def clock_time(hour: str | None, minute: str | None) -> str | None:
 def strip_terminal(value: str | None) -> str | None:
     if value is None:
         return None
-    cleaned = value.strip().rstrip(" .;,")
+    cleaned = " ".join(value.split()).rstrip(" .;,")
     return cleaned or None
 
 

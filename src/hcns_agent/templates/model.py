@@ -105,6 +105,7 @@ class TemplateProcessingResult:
     data: dict[str, object]
     validation: TemplateValidation
     camunda_variables: dict[str, object]
+    processing: dict[str, object]
 
     def public_dict(self) -> dict[str, object]:
         return {
@@ -120,5 +121,6 @@ class TemplateProcessingResult:
                 "confidence": self.validation.confidence,
                 "recommendedAction": self.validation.recommended_action.value,
             },
+            "processing": self.processing,
             "camundaVariables": self.camunda_variables,
         }

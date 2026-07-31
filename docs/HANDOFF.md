@@ -89,6 +89,31 @@
 - Phần dashboard minh họa lấy số template, session Template-first và CCCD đã review từ trạng thái runtime.
 - Không thêm taskbar, user menu, số liệu giả hoặc PII.
 
+### TF-P2-002 — Multi-format hai biểu mẫu
+
+- Đang là task Template-first duy nhất `IN_PROGRESS`; chưa mở TF-P2-003.
+- DOCX và PDF native đi parser riêng, không gọi OCR; ảnh/PDF scan dùng PaddleOCR local.
+- API/UI nhận năm extension và giữ panel metadata/JSON, bổ sung source/parser/OCR metadata.
+- Mặc định chỉ còn một vùng upload cho DOCX/PDF/PNG/JPG/JPEG; ảnh/PDF được xem
+  cạnh kết quả field/JSON. Luồng OCR/IDP cũ không bị xóa và có thể bật riêng bằng
+  `VITE_SHOW_LEGACY_UPLOAD=true`.
+- File nguồn Template-first nằm trong session private và được phục vụ lại qua
+  `/api/documents/source` trên loopback.
+- DOCX và PDF native đều đạt 10/10 classification, 90/90 required fields, 0 schema error.
+- Sáu ảnh camera và sáu PDF scan đều xử lý/phân loại 6/6, schema sạch và bắt buộc review.
+- OCR exact match đạt 31/54 (57.41%), thấp hơn gate 80%; sai số còn lại ở tên, chức vụ,
+  phòng ban, lý do và nội dung công việc tiếng Việt.
+- Không dùng Ground Truth để phục hồi dấu; phép thử VietOCR full-page không được đưa vào code
+  vì làm metric giảm.
+- Dataset local có 26 file thực so với 30 file khai báo và 10 tham chiếu image cũ bị stale.
+- Báo cáo evaluator aggregate không chứa raw field value; raw probe tạm đã xóa.
+- API preview 6 tests và web 9 tests/build pass; full checkpoint trước đó giữ
+  Python 225 tests, Ruff, mypy, hygiene và diff check pass.
+- API PID `36764`, web PID `28852`; health `ok`, OCR model đã load sau smoke.
+- Live HTTP smoke ảnh camera trả đúng `LEAVE_REQUEST` / `MANUAL_REVIEW`; session đã xóa.
+- UX smoke desktop xác nhận preview ảnh sticky nằm cạnh panel metadata/JSON; source
+  PDF/PNG tải lại khớp SHA-256 và mọi session smoke đã xóa.
+
 ## Verified evidence
 
 - Repository hygiene đã pass ở checkpoint gần nhất.
@@ -99,11 +124,9 @@
 
 ## Next action
 
-1. Theo dõi `paddleocr-cccd-heldout-v2-final/predictions/hidden_predict.stdout.log`.
-2. Chờ `HIDDEN_PREDICTIONS_STATUS.json` xuất hiện với
-   `BLINDED_PREDICTIONS_READY`.
-3. Cho người review xác nhận Ground Truth đủ 15 tài liệu.
-4. Khóa Ground Truth, mở prediction và evaluate đúng một lần.
+1. Giữ TF-P2-002 ở `IN_PROGRESS` vì OCR exact match còn dưới 80%.
+2. Trình người dùng bằng chứng và xin duyệt hướng cải thiện recognizer riêng.
+3. Chỉ mở TF-P2-003 sau khi TF-P2-002 đạt gate hoặc acceptance được phê duyệt lại.
 
 ## First command after resume
 
