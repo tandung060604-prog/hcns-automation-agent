@@ -34,6 +34,16 @@ Architecture:
 - Generic classifier/extractors are not a fallback for unsupported template-first uploads
 - Raw document and full extracted payload remain behind a local result reference
 
+Runtime checkpoint (2026-07-31):
+- Template-first implementation commit `53b22fb` was pushed to
+  `origin/codex/m1-m2-document-understanding` and verified by remote hash
+- Local API was started on `127.0.0.1:8765` with PID `14312`; `/health` reports `ok`
+- `/api/templates` lists `leave-request-v1` and `overtime-request-v1`
+- Live HTTP smoke used two original DOCX files outside the 14-file regression set
+- Both uploads returned `SUCCESS`, the expected document type, `AUTO_CONTINUE` and zero
+  validation errors; smoke sessions were deleted after aggregate-only verification
+- This is a loopback development runtime, not a production deployment
+
 Security:
 - No dataset, Ground Truth, upload, model weight, secret or raw PII added to Git
 - Regression reads the explicitly supplied local synthetic dataset and logs aggregates only
