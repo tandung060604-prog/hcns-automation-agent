@@ -1116,6 +1116,55 @@ class UserOCRService:
                 continue
         return sorted(sessions, key=lambda row: row["createdAt"], reverse=True)
 
+    def template_result(self, session_id: str) -> dict[str, Any] | None:
+        session_dir = self.session_dir(session_id)
+        if session_dir is None:
+            return None
+        result_path = session_dir / "template_first" / "result.json"
+        if not result_path.is_file():
+            return None
+        try:
+            payload = json.loads(result_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if payload.get("documentType") not in {
+            "LEAVE_REQUEST",
+            "OVERTIME_REQUEST",
+        }:
+            return None
+        return payload
+
+    def list_template_sessions(self) -> list[dict[str, Any]]:
+        sessions: list[dict[str, Any]] = []
+        for result_path in self.sessions_root.glob("*/template_first/result.json"):
+            session_id = result_path.parents[1].name
+            result = self.template_result(session_id)
+            if result is None:
+                continue
+            data = result.get("data", {})
+            quality = result.get("quality", {})
+            try:
+                created_at = datetime.fromtimestamp(
+                    result_path.stat().st_mtime,
+                    tz=timezone.utc,
+                ).isoformat()
+            except OSError:
+                continue
+            sessions.append(
+                {
+                    "documentId": session_id,
+                    "createdAt": created_at,
+                    "originalFileName": data.get("sourceFile") or "template-document.docx",
+                    "documentType": result["documentType"],
+                    "templateId": result["templateId"],
+                    "templateVersion": result["templateVersion"],
+                    "status": result["status"],
+                    "recommendedAction": quality.get("recommendedAction"),
+                    "confidence": quality.get("confidence"),
+                }
+            )
+        return sorted(sessions, key=lambda row: row["createdAt"], reverse=True)
+
 
 class DashboardHandler(BaseHTTPRequestHandler):
     data_root: Path
@@ -1786,6 +1835,22 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_header("Location", "http://localhost:3000")
             self.cors_headers()
             self.end_headers()
+            return
+
+        if parsed.path == "/api/documents/sessions":
+            self.send_json({"sessions": self.user_ocr.list_template_sessions()})
+            return
+
+        if parsed.path == "/api/documents/result":
+            document_id = query.get("id", [""])[0]
+            result = self.user_ocr.template_result(document_id)
+            if result is None:
+                self.send_json(
+                    {"error": "Template-first result not found"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            self.send_json(result)
             return
 
         if parsed.path == "/heldout/summary":

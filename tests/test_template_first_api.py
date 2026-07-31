@@ -69,11 +69,46 @@ def test_template_endpoints_process_docx_without_ocr(tmp_path: Path) -> None:
         assert (tmp_path / reference).is_file()
 
         document_id = result["data"]["documentId"]
+        legacy_dir = tmp_path / "user_uploads" / "sessions" / "legacy-session"
+        legacy_dir.mkdir(parents=True)
+        (legacy_dir / "result.json").write_text(
+            json.dumps({"documentType": "OTHER_HR_DOCUMENT"}),
+            encoding="utf-8",
+        )
+        connection.request("GET", "/api/documents/sessions")
+        response = connection.getresponse()
+        sessions_payload = json.loads(response.read().decode("utf-8"))
+        assert response.status == 200
+        assert sessions_payload["sessions"] == [
+            {
+                "documentId": document_id,
+                "createdAt": sessions_payload["sessions"][0]["createdAt"],
+                "originalFileName": "opaque.docx",
+                "documentType": "LEAVE_REQUEST",
+                "templateId": "leave-request-v1",
+                "templateVersion": "1.0",
+                "status": "SUCCESS",
+                "recommendedAction": "AUTO_CONTINUE",
+                "confidence": 1.0,
+            }
+        ]
+
+        connection.request("GET", f"/api/documents/result?id={document_id}")
+        response = connection.getresponse()
+        stored_result = json.loads(response.read().decode("utf-8"))
+        assert response.status == 200
+        assert stored_result == result
+
         connection.request("DELETE", f"/user/session?id={document_id}")
         response = connection.getresponse()
         assert response.status == 200
         assert json.loads(response.read().decode("utf-8")) == {"deleted": True}
         assert not (tmp_path / reference).exists()
+
+        connection.request("GET", "/api/documents/sessions")
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read().decode("utf-8")) == {"sessions": []}
     finally:
         connection.close()
         server.shutdown()
