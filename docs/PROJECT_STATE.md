@@ -1,6 +1,6 @@
 # Project State
 
-Current milestone: TF-P2-003B DONE; four-format UAT and version governance passed
+Current milestone: TF-P2-004 IN_PROGRESS; Vietnamese OCR fidelity and ROI boundary recovery
 Documentation profile: Standard (`PROJECT_STATE.md`, `BACKLOG.md`, `HANDOFF.md`)
 
 Completed:
@@ -126,6 +126,21 @@ TF-P2-003B DONE (2026-08-01):
 - Runtime pairing recorded `docx/ooxml-native@1.0.0`, `pdf/pymupdf-native@1.0.0`,
   `image/ocr@1.0.0`, `pdf/scan-ocr@1.0.0`, and `easyocr/vi-greedy`.
 
+TF-P2-004 evidence (2026-08-02):
+- Commit `655f51c` adds a generic leave-reason boundary repair when OCR places the
+  period sentence and the fixed reason label in one line; it does not use Ground
+  Truth, native twins, or document values. Targeted tests: 19 passed.
+- The explicitly probed Paddle `PP-OCRv5_mobile_rec` candidate reached 21/54
+  required exact on locked images and 21/54 on locked scan PDFs. Classification
+  was 6/6, schema errors 0, OCR review 6/6, and false `AUTO_CONTINUE` 0; it is
+  rejected and was not promoted.
+- A second explicit `PP-OCRv5_server_rec` image probe reached 17/54, so it is
+  also rejected without a scan run.
+- EasyOCR remains opt-in and reran at 50/54 on images and 48/54 on scan PDFs;
+  both runs passed classification, schema, review-routing, and false-auto gates.
+- PaddleOCR remains the default. VietOCR was not installed or switched into this
+  route; adding its runtime is a separate dependency/benchmark decision.
+
 Key commands:
 - `python -m pytest -q`
 - `python -m ruff check src tests scripts`
@@ -138,7 +153,9 @@ Key commands:
 - Weekly report: `python scripts/validate_weekly_report.py` and report-script Ruff pass
 
 Next:
-- Prepare a separate deployment/production-readiness task for Railway and run a
-  post-deploy smoke test; no deployment side effect was performed by TF-P2-003B.
-- Keep the EasyOCR backend opt-in until deployment performance/model storage are reviewed.
-- Keep historical CCCD/held-out work deferred from the Template-first default
+- Continue TF-P2-004 with Paddle ROI/recognizer recovery; do not promote the
+  rejected PP-OCRv5 candidate. Keep EasyOCR opt-in until deployment performance
+  and model storage are reviewed.
+- Keep historical CCCD/held-out work deferred from the Template-first default.
+- Prepare a separate Railway deployment/production-readiness task only after the
+  current OCR task is closed; no deployment side effect was performed here.

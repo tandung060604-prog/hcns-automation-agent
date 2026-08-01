@@ -19,6 +19,7 @@
 | TF-P2-002B | DONE | Vietnamese OCR Candidate Evaluation & Field Recovery cho field động còn sai | TF-P2-002A checkpoint, TF-P2-003A governance | P0 |
 | TF-P2-003A | DONE | Version Governance và UAT Harness cho hai biểu mẫu | TF-P2-002A checkpoint | P1 |
 | TF-P2-003B | DONE | Execute UAT và quản trị phiên bản trên bốn định dạng | TF-P2-002B đạt 44/54 | P1 |
+| TF-P2-004 | IN_PROGRESS | Vietnamese OCR Fidelity và ROI Boundary Recovery cho Paddle default | TF-P2-003B, parser boundary checkpoint | P0 |
 | WEEKLY-REPORT-2026-W31 | DONE | Audit và báo cáo mentor đã khử định danh | Evidence local được cấp quyền | P1 |
 | TF-P2-003 | BLOCKED | UAT và quản trị phiên bản hai biểu mẫu | TF-P2-002 đạt gate | P1 |
 | M4-CAM-001 | PLANNED | Dry-run Camunda 7.13 với External Task workers | OCR quality gate, mock HRIS | P1 |
@@ -149,3 +150,15 @@
 - Fail-closed mismatch test pass; report aggregate-only (`containsRawFieldValues: false`)
   và dataset integrity 30 actual files/30 references/0 stale references.
 - Chưa triển khai Railway, Camunda hay HRIS; bước kế tiếp cần task deployment riêng.
+
+## TF-P2-004 checkpoint (2026-08-02)
+
+- Parser boundary repair đã commit tại `655f51c`; targeted tests 19/19 pass.
+- Paddle `PP-OCRv5_mobile_rec` candidate chỉ đạt 21/54 trên cả ảnh và PDF scan,
+  nên không được promote. Classification 6/6, schema 0, OCR `MANUAL_REVIEW`
+  6/6 và false `AUTO_CONTINUE` 0.
+- Candidate `PP-OCRv5_server_rec` đạt 17/54 trên ảnh khóa và cũng bị loại.
+- EasyOCR opt-in rerun đạt 50/54 ảnh và 48/54 PDF scan; cả hai pass quality
+  gates. Không thay đổi Paddle default và không cài VietOCR trong runtime này.
+- Tiếp theo: sửa ROI/recognizer Paddle bằng evidence field-level, sau đó chạy lại
+  locked UAT; chỉ promote khi đạt tối thiểu 44/54 và không regression.

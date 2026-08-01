@@ -187,12 +187,29 @@
 - Template-first full suite đạt 219 tests; Ruff, mypy, compileall và hygiene đều pass.
 - OCR Lab build và 8 web tests pass; lint giữ nguyên 19 warning có sẵn, không có error.
 
+### TF-P2-004 — Vietnamese OCR Fidelity & ROI Boundary Recovery (IN_PROGRESS)
+
+- Current branch is `codex/m1-m2-document-understanding`; HEAD includes
+  `655f51c` parser boundary repair. Unrelated CCCD WIP remains uncommitted.
+- The repair removes a preceding leave-period sentence when OCR combines it with
+  the fixed reason label. Targeted parser/adapter tests: 19 passed; Ruff and
+  repository hygiene passed.
+- Paddle `PP-OCRv5_mobile_rec` was evaluated as an explicit candidate only:
+  21/54 exact on locked images and 21/54 on locked scan PDFs, with 6/6
+  classification, schema 0, 6/6 manual review, and false auto 0. It is not
+  promoted. EasyOCR opt-in rerun is 50/54 images and 48/54 scan PDFs.
+- The additional `PP-OCRv5_server_rec` image probe reached 17/54 and was also
+  rejected without a scan run.
+- VietOCR is preserved in the legacy/shadow route but is not installed or
+  selected by Template-first; adding that dependency requires a separate,
+  approved benchmark task.
+
 ## Next action
 
-1. Tạo task deployment/production-readiness cho Railway và smoke-test sau deploy.
-2. Giữ EasyOCR ở chế độ opt-in cho đến khi review latency/model storage trên môi trường
-   deployment; PaddleOCR vẫn là default.
-3. Giữ CCCD/held-out workstream ngoài Template-first default.
+1. Tiếp tục TF-P2-004: điều chỉnh ROI/recognizer Paddle dựa trên taxonomy, rồi
+   chạy lại locked image/scan UAT; không promote candidate 21/54.
+2. Giữ EasyOCR ở chế độ opt-in; không cài VietOCR nếu chưa có task benchmark riêng.
+3. Chỉ mở task Railway/production-readiness sau khi TF-P2-004 được đóng.
 
 ### WEEKLY-REPORT-2026-W31 — completed
 
