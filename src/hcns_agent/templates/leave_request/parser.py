@@ -243,9 +243,21 @@ def _fill_ocr_geometry_fields(
 
 
 def _extract_leave_reason(value: str | None) -> str | None:
-    """Keep the reason clause after the fixed ``trong thời gian`` label."""
+    """Keep only the reason clause after fixed template labels."""
     if value is None:
         return None
+    # A detector line can contain the preceding leave-period sentence and the
+    # reason label in one box.  Strip that generic label before trimming the
+    # signature sentence; never substitute a document value.
+    labeled = ocr_line_value(
+        value,
+        (
+            "Lý do xin nghỉ phép",
+            "LÃ½ do xin nghá»‰ phÃ©p",
+        ),
+    )
+    if labeled:
+        value = labeled
     # Camera OCR may emit ``trong thi`` or ``trong thoi gian``. The suffix is
     # free text, therefore only the fixed sentence boundary is normalized.
     match = re.search(

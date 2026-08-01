@@ -220,6 +220,22 @@ def test_ocr_field_recovery_uses_label_spans_and_fixed_vocab_only() -> None:
     )
 
 
+def test_leave_reason_drops_preceding_period_when_label_shares_ocr_line() -> None:
+    response = process(
+        [
+            "Nay tôi làm đơn xin nghỉ phép trong thời gian 02 ngày.",
+            (
+                "02 ngày, từ ngày 03/08/2026 đến hết ngày 04/08/2026. "
+                "Lý do xin nghỉ phép: Đưa con nhập học."
+            ),
+        ],
+        filename="camera.png",
+    )
+    data = response["data"]
+    assert isinstance(data, dict)
+    assert data["reason"] == "Đưa con nhập học"
+
+
 def test_missing_required_field_routes_to_manual_review_without_inference() -> None:
     lines = [line for line in leave_lines() if not line.startswith("Chức vụ:")]
     response = process(lines)
