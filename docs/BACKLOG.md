@@ -18,7 +18,7 @@
 | TF-P2-002 | IN_PROGRESS | DOCX/PDF/ảnh/scan cho hai template; native pass, OCR text gate mở | TF-P1-001 và dữ liệu được phê duyệt | P0 |
 | TF-P2-002B | DONE | Vietnamese OCR Candidate Evaluation & Field Recovery cho field động còn sai | TF-P2-002A checkpoint, TF-P2-003A governance | P0 |
 | TF-P2-003A | DONE | Version Governance và UAT Harness cho hai biểu mẫu | TF-P2-002A checkpoint | P1 |
-| TF-P2-003B | READY | Execute UAT và quản trị phiên bản trên bốn định dạng | TF-P2-002B đạt 44/54 | P1 |
+| TF-P2-003B | DONE | Execute UAT và quản trị phiên bản trên bốn định dạng | TF-P2-002B đạt 44/54 | P1 |
 | WEEKLY-REPORT-2026-W31 | DONE | Audit và báo cáo mentor đã khử định danh | Evidence local được cấp quyền | P1 |
 | TF-P2-003 | BLOCKED | UAT và quản trị phiên bản hai biểu mẫu | TF-P2-002 đạt gate | P1 |
 | M4-CAM-001 | PLANNED | Dry-run Camunda 7.13 với External Task workers | OCR quality gate, mock HRIS | P1 |
@@ -122,7 +122,7 @@
   `templateVersion`, `schemaRef`, `parserVersion` và required fields.
 - UAT harness xác thực matrix DOCX/native PDF/ảnh/PDF scan, gate quality và
   aggregate-only reporting trước khi evaluator được chạy.
-- TF-P2-003B (execute UAT) đã mở `READY` sau khi candidate OCR vượt gate 44/54.
+- TF-P2-003B (execute UAT) đã hoàn tất và pass toàn bộ gate sau khi candidate OCR vượt 44/54.
 
 ## TF-P2-002B completion checkpoint
 
@@ -137,3 +137,15 @@
   Ground Truth/native twin để điền giá trị và report aggregate không chứa raw values.
 - PaddleOCR vẫn là default; EasyOCR chỉ bật qua optional extra/config để tránh thay đổi
   deployment mặc định trước khi review latency và model storage.
+
+## TF-P2-003B completion checkpoint
+
+- Trạng thái `DONE`; version manifest FROZEN_V1 khóa template/schema/parser pairing
+  cho `leave-request-v1` và `overtime-request-v1`.
+- UAT full matrix chạy đủ `docx`, `pdf`, `image`, `scan_pdf`, mỗi format 10/10
+  available/processed; classification 10/10 và schema errors 0.
+- Required-field exact match: DOCX 90/90, native PDF 90/90, image 82/90 (91.11%),
+  scan PDF 77/90 (85.56%). OCR 20/20 items `MANUAL_REVIEW`, false `AUTO_CONTINUE` 0.
+- Fail-closed mismatch test pass; report aggregate-only (`containsRawFieldValues: false`)
+  và dataset integrity 30 actual files/30 references/0 stale references.
+- Chưa triển khai Railway, Camunda hay HRIS; bước kế tiếp cần task deployment riêng.

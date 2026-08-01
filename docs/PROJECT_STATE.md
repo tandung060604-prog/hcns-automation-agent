@@ -1,6 +1,6 @@
 # Project State
 
-Current milestone: TF-P2-003B READY; TF-P2-002B OCR gate passed, native multi-format passed
+Current milestone: TF-P2-003B DONE; four-format UAT and version governance passed
 Documentation profile: Standard (`PROJECT_STATE.md`, `BACKLOG.md`, `HANDOFF.md`)
 
 Completed:
@@ -93,7 +93,7 @@ TF-P2-002A checkpoint (2026-08-01):
 TF-P2-003A status (2026-08-01):
 - DONE and pushed to `origin/main` at commit `ae93bf0`.
 - Version governance freezes v1, validates schema/parser pairing and provides the
-  four-format UAT matrix; TF-P2-003B is now ready because the OCR gate has opened.
+  four-format UAT matrix; it unblocked TF-P2-003B after the OCR gate opened.
 
 TF-P2-002B DONE (2026-08-01):
 - Objective: evaluate Vietnamese OCR candidates and recover only the remaining
@@ -111,6 +111,21 @@ TF-P2-002B DONE (2026-08-01):
 - PaddleOCR remains the default; EasyOCR is selected only with the optional `easyocr`
   extra and `HCNS_TEMPLATE_OCR_BACKEND=easyocr` (or evaluator `--ocr-backend easyocr`).
 
+TF-P2-003B DONE (2026-08-01):
+- Frozen version governance passed: `validate_template_versions.py` reports PASS;
+  registry, schema, parser versions, lifecycle and UAT policy are consistent.
+- Fail-closed mismatch coverage passed in the versioning test suite; parser/schema
+  drift is rejected before evaluation.
+- Full UAT matrix passed with 10 available/processed items in each format:
+  DOCX 90/90 and native PDF 90/90 required exact; image 82/90 (91.11%); scan PDF
+  77/90 (85.56%).
+- Classification is 10/10 for all four formats, schema errors are 0, and all OCR
+  items route to `MANUAL_REVIEW` with 0 false `AUTO_CONTINUE`.
+- Dataset integrity is clean for this run: 30 actual files, 30 references, 0 stale
+  references, 10 linked images. The report has `containsRawFieldValues: false`.
+- Runtime pairing recorded `docx/ooxml-native@1.0.0`, `pdf/pymupdf-native@1.0.0`,
+  `image/ocr@1.0.0`, `pdf/scan-ocr@1.0.0`, and `easyocr/vi-greedy`.
+
 Key commands:
 - `python -m pytest -q`
 - `python -m ruff check src tests scripts`
@@ -123,7 +138,7 @@ Key commands:
 - Weekly report: `python scripts/validate_weekly_report.py` and report-script Ruff pass
 
 Next:
-- Execute TF-P2-003B UAT and version-governance validation across DOCX, native PDF,
-  image, and scan PDF using the promoted candidate evidence.
+- Prepare a separate deployment/production-readiness task for Railway and run a
+  post-deploy smoke test; no deployment side effect was performed by TF-P2-003B.
 - Keep the EasyOCR backend opt-in until deployment performance/model storage are reviewed.
 - Keep historical CCCD/held-out work deferred from the Template-first default

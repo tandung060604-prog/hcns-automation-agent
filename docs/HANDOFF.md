@@ -137,8 +137,8 @@
   không thay đổi runtime OCR.
 - Harness phải fail-closed khi registry, schema hoặc parser version lệch nhau và
   chỉ cho evaluator chạy với report aggregate-only.
-- TF-P2-003B đã chuyển `READY`: TF-P2-002B đạt 48/54 trên ảnh và 45/54 trên PDF
-  scan, vượt gate 44/54 ở cả hai OCR format.
+- TF-P2-003B đã hoàn tất; TF-P2-002B đạt 48/54 trên ảnh và 45/54 trên PDF
+  scan, sau đó UAT full matrix vượt tất cả gate.
 
 ### TF-P2-002B — Vietnamese OCR Candidate Evaluation & Field Recovery (DONE)
 
@@ -155,6 +155,17 @@
 - Ảnh locked subset: 48/54 exact, 6/6 classification, schema 0, review 6/6, false auto 0.
 - PDF scan locked subset: 45/54 exact, 6/6 classification, schema 0, review 6/6, false auto 0.
 - DOCX/native PDF regression: 90/90 exact mỗi format, schema 0; report chỉ aggregate.
+
+### TF-P2-003B — UAT & Version Governance (DONE)
+
+- `validate_template_versions.py` PASS; manifest FROZEN_V1, registry/schema/parser
+  pairing và UAT policy không drift.
+- Fail-closed parserVersion mismatch test PASS.
+- UAT bốn format đủ 10/10 available/processed: DOCX 90/90, native PDF 90/90,
+  image 82/90 (91.11%), scan PDF 77/90 (85.56%).
+- Classification 10/10 cả bốn format, schema 0, OCR `MANUAL_REVIEW` 20/20,
+  false `AUTO_CONTINUE` 0; report aggregate-only và 0 stale file references.
+- Chưa có Railway/Camunda/HRIS side effect; deployment phải mở task riêng.
 
 ### LOCAL-EVIDENCE-PREVIEW-001 — completed
 
@@ -178,8 +189,7 @@
 
 ## Next action
 
-1. Triển khai TF-P2-003B UAT/version-governance trên bốn định dạng bằng candidate
-   evidence đã khóa.
+1. Tạo task deployment/production-readiness cho Railway và smoke-test sau deploy.
 2. Giữ EasyOCR ở chế độ opt-in cho đến khi review latency/model storage trên môi trường
    deployment; PaddleOCR vẫn là default.
 3. Giữ CCCD/held-out workstream ngoài Template-first default.
