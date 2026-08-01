@@ -19,7 +19,8 @@
 | TF-P2-002B | DONE | Vietnamese OCR Candidate Evaluation & Field Recovery cho field động còn sai | TF-P2-002A checkpoint, TF-P2-003A governance | P0 |
 | TF-P2-003A | DONE | Version Governance và UAT Harness cho hai biểu mẫu | TF-P2-002A checkpoint | P1 |
 | TF-P2-003B | DONE | Execute UAT và quản trị phiên bản trên bốn định dạng | TF-P2-002B đạt 44/54 | P1 |
-| TF-P2-004 | IN_PROGRESS | Vietnamese OCR Fidelity và ROI Boundary Recovery cho Paddle default | TF-P2-003B, parser boundary checkpoint | P0 |
+| TF-P2-004 | BLOCKED | Paddle OCR fidelity candidates không đạt gate; superseded by evidence selection | TF-P2-003B, parser boundary checkpoint | P0 |
+| TF-P2-005 | DONE | Evidence-driven OCR Backend Selection và controlled EasyOCR promotion | TF-P2-004 candidate evidence | P0 |
 | WEEKLY-REPORT-2026-W31 | DONE | Audit và báo cáo mentor đã khử định danh | Evidence local được cấp quyền | P1 |
 | TF-P2-003 | BLOCKED | UAT và quản trị phiên bản hai biểu mẫu | TF-P2-002 đạt gate | P1 |
 | M4-CAM-001 | PLANNED | Dry-run Camunda 7.13 với External Task workers | OCR quality gate, mock HRIS | P1 |
@@ -136,8 +137,8 @@
   `MANUAL_REVIEW`, false `AUTO_CONTINUE` 0.
 - Native DOCX/PDF vẫn 90/90 required-field exact match. Candidate không dùng
   Ground Truth/native twin để điền giá trị và report aggregate không chứa raw values.
-- PaddleOCR vẫn là default; EasyOCR chỉ bật qua optional extra/config để tránh thay đổi
-  deployment mặc định trước khi review latency và model storage.
+- PaddleOCR là default ở checkpoint lịch sử này; TF-P2-005 đã đổi policy sau full UAT
+  và ghi nhận rollback rõ ràng qua `HCNS_TEMPLATE_OCR_BACKEND=paddle`.
 
 ## TF-P2-003B completion checkpoint
 
@@ -159,6 +160,16 @@
   6/6 và false `AUTO_CONTINUE` 0.
 - Candidate `PP-OCRv5_server_rec` đạt 17/54 trên ảnh khóa và cũng bị loại.
 - EasyOCR opt-in rerun đạt 50/54 ảnh và 48/54 PDF scan; cả hai pass quality
-  gates. Không thay đổi Paddle default và không cài VietOCR trong runtime này.
-- Tiếp theo: sửa ROI/recognizer Paddle bằng evidence field-level, sau đó chạy lại
-  locked UAT; chỉ promote khi đạt tối thiểu 44/54 và không regression.
+  gates. Candidate Paddle không đạt nên checkpoint này được supersede bởi TF-P2-005.
+
+## TF-P2-005 checkpoint (2026-08-02)
+
+- Trạng thái `DONE`; EasyOCR `vi-greedy` được promote làm backend mặc định cho
+  ảnh/PDF scan của Template-first. Paddle rollback qua `HCNS_TEMPLATE_OCR_BACKEND=paddle`.
+- Full UAT default: DOCX 90/90, native PDF 90/90, image 86/90, scan PDF 82/90;
+  classification 10/10 cả bốn format, schema 0, OCR manual review 20/20,
+  false auto 0 và report aggregate-only.
+- CPU p95: 23.5s/image, 22.6s/scan PDF; model cache 93.99 MiB. Rollback Paddle
+  smoke pass; VietOCR không được cài hoặc dùng trong route này.
+- Bước tiếp theo là task Railway/production-readiness riêng, không mở lại OCR
+  candidate nếu chưa có evidence mới.

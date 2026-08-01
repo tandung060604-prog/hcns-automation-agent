@@ -1,6 +1,6 @@
 # Project State
 
-Current milestone: TF-P2-004 IN_PROGRESS; Vietnamese OCR fidelity and ROI boundary recovery
+Current milestone: TF-P2-005 DONE; evidence-driven OCR backend selection passed UAT
 Documentation profile: Standard (`PROJECT_STATE.md`, `BACKLOG.md`, `HANDOFF.md`)
 
 Completed:
@@ -108,8 +108,8 @@ TF-P2-002B DONE (2026-08-01):
   classification, 0 schema errors, 6/6 `MANUAL_REVIEW`, and 0 false `AUTO_CONTINUE`.
 - Native regression remains 90/90 for DOCX and 90/90 for native PDF, with 0 schema
   errors. Reports contain aggregate metrics only (`containsRawFieldValues: false`).
-- PaddleOCR remains the default; EasyOCR is selected only with the optional `easyocr`
-  extra and `HCNS_TEMPLATE_OCR_BACKEND=easyocr` (or evaluator `--ocr-backend easyocr`).
+- At the TF-P2-002B checkpoint PaddleOCR remained the default; the backend policy
+  was revisited and changed only after the TF-P2-005 UAT evidence below.
 
 TF-P2-003B DONE (2026-08-01):
 - Frozen version governance passed: `validate_template_versions.py` reports PASS;
@@ -138,8 +138,22 @@ TF-P2-004 evidence (2026-08-02):
   also rejected without a scan run.
 - EasyOCR remains opt-in and reran at 50/54 on images and 48/54 on scan PDFs;
   both runs passed classification, schema, review-routing, and false-auto gates.
-- PaddleOCR remains the default. VietOCR was not installed or switched into this
-  route; adding its runtime is a separate dependency/benchmark decision.
+- Paddle candidates remain rejected for this template set. VietOCR was not
+  installed or switched into this route; adding its runtime is a separate
+  dependency/benchmark decision.
+
+TF-P2-005 evidence (2026-08-02):
+- EasyOCR `vi-greedy` is now the Template-first default for image/PDF-scan OCR;
+  PaddleOCR remains an explicit rollback via `HCNS_TEMPLATE_OCR_BACKEND=paddle`.
+- Full default UAT passed: DOCX 90/90, native PDF 90/90, image 86/90 (95.56%),
+  and scan PDF 82/90 (91.11%). All four formats classified 10/10; schema errors
+  0; all 20 OCR items routed to `MANUAL_REVIEW`; false `AUTO_CONTINUE` 0.
+- Default runtime report identifies `easyocr/vi-greedy`, has clean dataset
+  integrity (30 files/references, 0 stale), and `containsRawFieldValues=false`.
+- CPU latency probe over six images and six scan PDFs measured p95 23.5s/image
+  and 22.6s/scan PDF; the local EasyOCR model cache is 93.99 MiB.
+- Explicit Paddle rollback smoke passed classification/schema/review gates on one
+  image and reported `paddleocr/pp-ocrv5-vi`.
 
 Key commands:
 - `python -m pytest -q`
@@ -153,9 +167,7 @@ Key commands:
 - Weekly report: `python scripts/validate_weekly_report.py` and report-script Ruff pass
 
 Next:
-- Continue TF-P2-004 with Paddle ROI/recognizer recovery; do not promote the
-  rejected PP-OCRv5 candidate. Keep EasyOCR opt-in until deployment performance
-  and model storage are reviewed.
-- Keep historical CCCD/held-out work deferred from the Template-first default.
-- Prepare a separate Railway deployment/production-readiness task only after the
-  current OCR task is closed; no deployment side effect was performed here.
+- Prepare a separate Railway deployment/production-readiness task with the
+  EasyOCR model-storage and CPU-latency constraints recorded above.
+- Keep Paddle rollback and historical CCCD/held-out work outside the
+  Template-first default unless a new evidence task is approved.

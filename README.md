@@ -467,17 +467,22 @@ PaddleOCR là dependency tùy chọn và được load lazy:
 python -m pip install -e ".[paddle]"
 ```
 
-Candidate OCR tiếng Việt cho ảnh/PDF scan được giữ opt-in để không thay đổi deployment
-mặc định. Cài thêm EasyOCR và bật rõ backend khi cần đánh giá local:
+Template-first hiện chọn EasyOCR `vi` làm backend OCR mặc định cho ảnh/PDF scan
+trên hai biểu mẫu đã UAT. PaddleOCR vẫn có thể bật làm rollback rõ ràng:
 
 ```powershell
 python -m pip install -e ".[easyocr]"
-$env:HCNS_TEMPLATE_OCR_BACKEND = "easyocr"
 $env:HCNS_EASYOCR_MODEL_DIR = "C:\path\to\private\easyocr-models"  # tùy chọn
 ```
 
-Hoặc evaluator có thể dùng `--ocr-backend easyocr`. PaddleOCR vẫn là backend mặc định;
-mọi nguồn OCR tiếp tục `MANUAL_REVIEW` và report evaluator chỉ ghi aggregate metrics.
+Rollback về PaddleOCR bằng biến môi trường hoặc evaluator:
+
+```powershell
+$env:HCNS_TEMPLATE_OCR_BACKEND = "paddle"
+python scripts/evaluate_template_multiformat.py --ocr-backend paddle --data-root <local-root>
+```
+
+Mọi nguồn OCR tiếp tục `MANUAL_REVIEW` và report evaluator chỉ ghi aggregate metrics.
 
 MinerU challenger:
 

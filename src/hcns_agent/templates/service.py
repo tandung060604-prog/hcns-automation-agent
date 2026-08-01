@@ -82,6 +82,35 @@ class _LazyTemplatePaddleOcrEngine:
             raise TemplateTechnicalError("OCR_PROCESSING_FAILED") from error
 
 
+class _LazyTemplateEasyOcrEngine:
+    """Load the evidence-backed Vietnamese recognizer only on OCR intake."""
+
+    def __init__(self, *, device: str = "cpu") -> None:
+        self._device = device
+        self._delegate: OcrEngine | None = None
+
+    @property
+    def name(self) -> str:
+        return "easyocr/vi-greedy"
+
+    @property
+    def model_loaded(self) -> bool:
+        return self._delegate is not None
+
+    def recognize(self, source: DocumentSource) -> OcrResult:
+        if self._delegate is None:
+            try:
+                from hcns_agent.adapters.easyocr import EasyOcrEngine
+
+                self._delegate = EasyOcrEngine.from_default(device=self._device)
+            except (ImportError, RuntimeError) as error:
+                raise TemplateTechnicalError("OCR_RUNTIME_UNAVAILABLE") from error
+        try:
+            return self._delegate.recognize(source)
+        except RuntimeError as error:
+            raise TemplateTechnicalError("OCR_PROCESSING_FAILED") from error
+
+
 class TemplateProcessingService:
     def __init__(
         self,
@@ -179,13 +208,13 @@ def build_local_template_processing_service(
     device: str = "cpu",
     ocr_backend: str | None = None,
 ) -> TemplateProcessingService:
-    selected_backend = ocr_backend or os.getenv("HCNS_TEMPLATE_OCR_BACKEND", "paddle")
+    selected_backend = (
+        ocr_backend or os.getenv("HCNS_TEMPLATE_OCR_BACKEND") or "easyocr"
+    ).casefold()
     if selected_backend == "paddle":
         ocr_engine: OcrEngine = _LazyTemplatePaddleOcrEngine(device=device)
     elif selected_backend == "easyocr":
-        from hcns_agent.adapters.easyocr import EasyOcrEngine
-
-        ocr_engine = EasyOcrEngine.from_default(device=device)
+        ocr_engine = _LazyTemplateEasyOcrEngine(device=device)
     else:
         raise ValueError(f"Unsupported local OCR backend: {selected_backend}")
     return TemplateProcessingService(

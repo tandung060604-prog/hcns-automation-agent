@@ -68,7 +68,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--ocr-backend",
         choices=("paddle", "easyocr"),
-        default="paddle",
+        default="easyocr",
         help="OCR backend for image and scan_pdf candidates",
     )
     parser.add_argument(

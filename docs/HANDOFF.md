@@ -187,7 +187,7 @@
 - Template-first full suite đạt 219 tests; Ruff, mypy, compileall và hygiene đều pass.
 - OCR Lab build và 8 web tests pass; lint giữ nguyên 19 warning có sẵn, không có error.
 
-### TF-P2-004 — Vietnamese OCR Fidelity & ROI Boundary Recovery (IN_PROGRESS)
+### TF-P2-004 — Vietnamese OCR Fidelity & ROI Boundary Recovery (BLOCKED/SUPERSEDED)
 
 - Current branch is `codex/m1-m2-document-understanding`; HEAD includes
   `655f51c` parser boundary repair. Unrelated CCCD WIP remains uncommitted.
@@ -200,16 +200,27 @@
   promoted. EasyOCR opt-in rerun is 50/54 images and 48/54 scan PDFs.
 - The additional `PP-OCRv5_server_rec` image probe reached 17/54 and was also
   rejected without a scan run.
-- VietOCR is preserved in the legacy/shadow route but is not installed or
-  selected by Template-first; adding that dependency requires a separate,
-  approved benchmark task.
+- Paddle candidates did not reach the promotion gate, so this Paddle-specific
+  route is superseded by the evidence-driven backend selection below. VietOCR
+  remains legacy/shadow and is not installed in Template-first.
+
+### TF-P2-005 — Evidence-driven OCR Backend Selection (DONE)
+
+- EasyOCR `vi-greedy` is the default Template-first OCR backend for image and
+  scan PDF. Paddle remains an explicit rollback using
+  `HCNS_TEMPLATE_OCR_BACKEND=paddle`.
+- Full default UAT passed: DOCX 90/90, native PDF 90/90, image 86/90, scan PDF
+  82/90; all formats classify 10/10, schema 0, OCR review 20/20 and false auto 0.
+- Runtime is aggregate-only with 30/30 files/references and 0 stale references.
+  CPU p95 was 23.5s/image and 22.6s/scan PDF; EasyOCR cache size 93.99 MiB.
+- Explicit Paddle rollback smoke passed its routing/schema/review gates. No
+  VietOCR dependency or model was added.
 
 ## Next action
 
-1. Tiếp tục TF-P2-004: điều chỉnh ROI/recognizer Paddle dựa trên taxonomy, rồi
-   chạy lại locked image/scan UAT; không promote candidate 21/54.
-2. Giữ EasyOCR ở chế độ opt-in; không cài VietOCR nếu chưa có task benchmark riêng.
-3. Chỉ mở task Railway/production-readiness sau khi TF-P2-004 được đóng.
+1. Mở task Railway/production-readiness riêng, pin EasyOCR model storage và CPU
+   latency budget; giữ rollback Paddle.
+2. Giữ CCCD/held-out workstream ngoài Template-first default.
 
 ### WEEKLY-REPORT-2026-W31 — completed
 

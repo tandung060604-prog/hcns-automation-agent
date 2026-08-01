@@ -1,8 +1,8 @@
-"""Optional EasyOCR adapter for Vietnamese candidate evaluation.
+"""EasyOCR adapter for the evidence-backed Vietnamese template route.
 
-The dependency is intentionally lazy. PaddleOCR remains the default runtime;
-this adapter is only selected explicitly for a local candidate evaluation or a
-controlled deployment that has installed the optional ``easyocr`` extra.
+The dependency is intentionally lazy. The Template-first local route selects
+this recognizer by default after UAT; PaddleOCR remains an explicit rollback
+backend through ``HCNS_TEMPLATE_OCR_BACKEND=paddle``.
 """
 
 from __future__ import annotations
