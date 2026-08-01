@@ -1,6 +1,6 @@
 # Project State
 
-Current milestone: TF-P2-002B READY; native multi-format passed, OCR text gate open
+Current milestone: TF-P2-003B READY; TF-P2-002B OCR gate passed, native multi-format passed
 Documentation profile: Standard (`PROJECT_STATE.md`, `BACKLOG.md`, `HANDOFF.md`)
 
 Completed:
@@ -9,7 +9,7 @@ Completed:
 - Camunda 7 worker/assets and process-variable whitelist
 - Registered `leave-request-v1` and `overtime-request-v1`
 - Content detection is normalized, filename-independent and closed-set
-- DOCX/native PDF parse without OCR; image/PDF scan use local PaddleOCR
+- DOCX/native PDF parse without OCR; image/PDF scan use a local, explicitly selected OCR backend
 - Per-template extraction, validation, JSON Schema and quality routing
 - Multi-format `GET /api/templates` and `POST /api/documents/process`
 - One default upload surface with image/PDF preview beside structured fields/JSON
@@ -42,7 +42,7 @@ Preserved OCR evidence:
 
 Architecture:
 - Native: DOCX/PDF -> safety -> native parser -> registry -> validator
-- OCR: image/scan -> rectify -> PaddleOCR -> registry -> validator -> review
+- OCR: image/scan -> rectify -> selected local recognizer -> registry -> validator -> review
 - IDP reads; Agent proposes; Camunda owns workflow and Human Review
 - Unsupported templates never fall through to the generic extractor
 - Raw documents/full payloads remain behind local references
@@ -71,8 +71,9 @@ Security:
 
 Known limits:
 - Native DOCX/PDF pass; photographed/scanned text remains shadow-review quality
-- PaddleOCR loses Vietnamese characters in dynamic text on the six hard images
-- TF-P2-002 is not DONE until OCR EM reaches 80% or scope is re-approved
+- EasyOCR candidate still leaves a bounded set of low-confidence fields for human review;
+  it is opt-in and does not change the PaddleOCR default
+- OCR sources remain `MANUAL_REVIEW`; candidate promotion does not enable automatic continuation
 - Seven old overtime Ground Truth `department` labels do not occur in source DOCX
 - Phase 11.6/CCCD WIP remains uncommitted and outside this task
 
@@ -92,15 +93,23 @@ TF-P2-002A checkpoint (2026-08-01):
 TF-P2-003A status (2026-08-01):
 - DONE and pushed to `origin/main` at commit `ae93bf0`.
 - Version governance freezes v1, validates schema/parser pairing and provides the
-  four-format UAT matrix; TF-P2-003B remains blocked until the OCR gate opens.
+  four-format UAT matrix; TF-P2-003B is now ready because the OCR gate has opened.
 
-TF-P2-002B READY (2026-08-01):
+TF-P2-002B DONE (2026-08-01):
 - Objective: evaluate Vietnamese OCR candidates and recover only the remaining
   image/scan fields without Ground Truth/native twins or hardcoded document values.
 - Scope: 4 dynamic names, 6 `reason`, 3 `workContent`; scan PDFs also include
   `department` and `jobTitle`.
-- Gate: promote only at least 44/54 required exact fields (81.48%), zero schema
-  errors, zero false `AUTO_CONTINUE`, and `MANUAL_REVIEW` for every OCR source.
+- Implemented an optional EasyOCR Vietnamese backend, geometry-safe line grouping,
+  conservative OCR artifact repair, and label/continuation parsing for the two templates.
+- Locked six-document image rerun: 48/54 required exact (88.89%), 6/6
+  classification, 0 schema errors, 6/6 `MANUAL_REVIEW`, and 0 false `AUTO_CONTINUE`.
+- Locked six-document scan-PDF rerun: 45/54 required exact (83.33%), 6/6
+  classification, 0 schema errors, 6/6 `MANUAL_REVIEW`, and 0 false `AUTO_CONTINUE`.
+- Native regression remains 90/90 for DOCX and 90/90 for native PDF, with 0 schema
+  errors. Reports contain aggregate metrics only (`containsRawFieldValues: false`).
+- PaddleOCR remains the default; EasyOCR is selected only with the optional `easyocr`
+  extra and `HCNS_TEMPLATE_OCR_BACKEND=easyocr` (or evaluator `--ocr-backend easyocr`).
 
 Key commands:
 - `python -m pytest -q`
@@ -114,6 +123,7 @@ Key commands:
 - Weekly report: `python scripts/validate_weekly_report.py` and report-script Ruff pass
 
 Next:
-- Obtain approval for TF-P2-002B, then run one bounded candidate evaluation.
-- Keep TF-P2-003B BLOCKED until TF-P2-002B exceeds the 44/54 OCR gate.
+- Execute TF-P2-003B UAT and version-governance validation across DOCX, native PDF,
+  image, and scan PDF using the promoted candidate evidence.
+- Keep the EasyOCR backend opt-in until deployment performance/model storage are reviewed.
 - Keep historical CCCD/held-out work deferred from the Template-first default

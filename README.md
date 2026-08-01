@@ -121,8 +121,9 @@ curl.exe -X DELETE "http://127.0.0.1:8765/user/session?id=<documentId>"
 schema dưới `schemas/templates/`, đăng ký definition versioned trong
 `templates/registry.py`, rồi bổ sung unit test và regression Ground Truth ngoài Git.
 
-Giới hạn hiện tại: chỉ DOCX có native text; chưa hỗ trợ PDF/ảnh scan, OCR fallback,
-template tự do hoặc quyết định HR tự động.
+Giới hạn hiện tại: template-first chỉ mở hai biểu mẫu đã version; ảnh/PDF scan có OCR
+local nhưng vẫn bắt buộc `MANUAL_REVIEW`, không tự điền field thiếu và không quyết định HR
+tự động. PDF/DOCX native vẫn đi parser riêng; template tự do chưa được mở.
 
 ### Những năng lực cũ vẫn được giữ
 
@@ -465,6 +466,18 @@ PaddleOCR là dependency tùy chọn và được load lazy:
 ```powershell
 python -m pip install -e ".[paddle]"
 ```
+
+Candidate OCR tiếng Việt cho ảnh/PDF scan được giữ opt-in để không thay đổi deployment
+mặc định. Cài thêm EasyOCR và bật rõ backend khi cần đánh giá local:
+
+```powershell
+python -m pip install -e ".[easyocr]"
+$env:HCNS_TEMPLATE_OCR_BACKEND = "easyocr"
+$env:HCNS_EASYOCR_MODEL_DIR = "C:\path\to\private\easyocr-models"  # tùy chọn
+```
+
+Hoặc evaluator có thể dùng `--ocr-backend easyocr`. PaddleOCR vẫn là backend mặc định;
+mọi nguồn OCR tiếp tục `MANUAL_REVIEW` và report evaluator chỉ ghi aggregate metrics.
 
 MinerU challenger:
 

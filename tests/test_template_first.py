@@ -214,6 +214,10 @@ def test_ocr_field_recovery_uses_label_spans_and_fixed_vocab_only() -> None:
         trim_ocr_commitment("Noi dung. Toi cam kt tuan thu quy dinh.")
         == "Noi dung"
     )
+    assert trim_ocr_commitment("Lý do hợp lệ. Tôi dự kiến trở lại") == "Lý do hợp lệ"
+    assert repair_template_ocr_value("Phòng Hành chính Nhân sựự", "department") == (
+        "Phòng Hành chính Nhân sự"
+    )
 
 
 def test_missing_required_field_routes_to_manual_review_without_inference() -> None:

@@ -168,10 +168,26 @@ def repair_template_ocr_value(value: object, field_name: str) -> object:
         ("Nhân s", "Nhân sự"),
         ("nhân s", "nhân sự"),
     )
-    repaired = value
+    repaired = collapse_terminal_ocr_repeat(value)
     for source, target in replacements:
         repaired = repaired.replace(source, target)
-    return repaired
+    return collapse_terminal_ocr_repeat(repaired)
+
+
+def collapse_terminal_ocr_repeat(value: str) -> str:
+    """Remove a duplicated terminal code point from an OCR token.
+
+    This is a shape-level OCR artefact repair (for example ``sựự``), not a
+    lookup of a document value or a Vietnamese vocabulary substitution.
+    """
+
+    tokens = value.split()
+    repaired: list[str] = []
+    for token in tokens:
+        if len(token) >= 3 and token[-1] == token[-2]:
+            token = token[:-1]
+        repaired.append(token)
+    return " ".join(repaired)
 
 
 def trim_ocr_commitment(value: str | None) -> str | None:
@@ -183,6 +199,15 @@ def trim_ocr_commitment(value: str | None) -> str | None:
     """
     if value is None:
         return None
+    value = trim_ocr_at_markers(
+        value,
+        (
+            "Tôi dự kiến",
+            "Tôi dự",
+            "Tôi đề nghị",
+            "Tôi d",
+        ),
+    )
     markers = (
         r"\b(?:tôi|toi|ti)\s+cam\s+k\w{0,4}t\b",
         r"\b(?:kính|kinh)\s+mong\b",
@@ -194,6 +219,26 @@ def trim_ocr_commitment(value: str | None) -> str | None:
         if match:
             cut = min(cut, match.start())
     return strip_terminal(value[:cut])
+
+
+def trim_ocr_at_markers(value: str, markers: tuple[str, ...]) -> str:
+    """Trim a value at a fixed sentence marker using normalized word spans."""
+
+    original_words = list(re.finditer(r"\S+", value))
+    if not original_words:
+        return value
+    normalized_words = [
+        normalize_for_ocr_match(match.group(0)) for match in original_words
+    ]
+    for marker in markers:
+        marker_words = normalize_for_ocr_match(marker).split()
+        if not marker_words:
+            continue
+        for start in range(len(normalized_words) - len(marker_words) + 1):
+            if normalized_words[start : start + len(marker_words)] != marker_words:
+                continue
+            return value[: original_words[start].start()]
+    return value
 
 
 def extract_unique(

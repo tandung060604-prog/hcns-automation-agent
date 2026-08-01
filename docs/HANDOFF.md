@@ -137,9 +137,10 @@
   không thay đổi runtime OCR.
 - Harness phải fail-closed khi registry, schema hoặc parser version lệch nhau và
   chỉ cho evaluator chạy với report aggregate-only.
-- TF-P2-003B vẫn `BLOCKED` vì OCR hiện chưa đạt 44/54.
+- TF-P2-003B đã chuyển `READY`: TF-P2-002B đạt 48/54 trên ảnh và 45/54 trên PDF
+  scan, vượt gate 44/54 ở cả hai OCR format.
 
-### TF-P2-002B — Vietnamese OCR Candidate Evaluation & Field Recovery (READY)
+### TF-P2-002B — Vietnamese OCR Candidate Evaluation & Field Recovery (DONE)
 
 - Mục tiêu: đánh giá candidate recognizer/tiền xử lý cho các field động còn sai trên
   ảnh và PDF scan, không dùng Ground Truth/native twin để điền và không hardcode
@@ -148,7 +149,12 @@
   `department` và `jobTitle`.
 - Acceptance: tối thiểu 44/54 required exact (81.48%), không regression các field
   đúng, schema errors 0, false `AUTO_CONTINUE` 0 và mọi OCR source `MANUAL_REVIEW`.
-- Chưa sửa code; chờ người dùng phê duyệt scope trước khi triển khai.
+- Đã thêm EasyOCR `vi` dưới optional extra, không thay đổi PaddleOCR mặc định.
+- Geometry grouping/dedup, OCR artifact repair và label continuation parsing phục hồi
+  field động mà không dùng Ground Truth/native twin hoặc hardcode tên/nội dung.
+- Ảnh locked subset: 48/54 exact, 6/6 classification, schema 0, review 6/6, false auto 0.
+- PDF scan locked subset: 45/54 exact, 6/6 classification, schema 0, review 6/6, false auto 0.
+- DOCX/native PDF regression: 90/90 exact mỗi format, schema 0; report chỉ aggregate.
 
 ### LOCAL-EVIDENCE-PREVIEW-001 — completed
 
@@ -172,9 +178,11 @@
 
 ## Next action
 
-1. Chờ phê duyệt TF-P2-002B rồi triển khai đúng một candidate evaluation.
-2. Chỉ promote cấu hình nếu vượt gate 44/54 và giữ `MANUAL_REVIEW`/schema 0.
-3. Giữ TF-P2-003B `BLOCKED` cho đến khi TF-P2-002B vượt gate.
+1. Triển khai TF-P2-003B UAT/version-governance trên bốn định dạng bằng candidate
+   evidence đã khóa.
+2. Giữ EasyOCR ở chế độ opt-in cho đến khi review latency/model storage trên môi trường
+   deployment; PaddleOCR vẫn là default.
+3. Giữ CCCD/held-out workstream ngoài Template-first default.
 
 ### WEEKLY-REPORT-2026-W31 — completed
 

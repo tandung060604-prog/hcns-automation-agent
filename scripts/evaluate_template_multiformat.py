@@ -66,6 +66,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--ocr-device", default="cpu")
     parser.add_argument(
+        "--ocr-backend",
+        choices=("paddle", "easyocr"),
+        default="paddle",
+        help="OCR backend for image and scan_pdf candidates",
+    )
+    parser.add_argument(
         "--document-ids",
         help="Optional comma-separated sampleId/documentId subset for a locked UAT set",
     )
@@ -112,7 +118,7 @@ def main() -> int:
             in selected_ids
         ]
 
-    service = _build_service(requested_formats, args.ocr_device)
+    service = _build_service(requested_formats, args.ocr_device, args.ocr_backend)
     definitions = {
         str(item["templateId"]): item for item in service.list_templates()
     }
@@ -250,6 +256,7 @@ def main() -> int:
             "parserVersions": sorted(parser_versions),
             "ocrEngines": sorted(ocr_engines),
             "ocrDevice": args.ocr_device,
+            "ocrBackend": args.ocr_backend,
             "templateVersionManifest": VERSION_MANIFEST.relative_to(ROOT).as_posix(),
         },
         "metrics": metrics,
@@ -270,9 +277,13 @@ def main() -> int:
 def _build_service(
     requested_formats: tuple[str, ...],
     device: str,
+    ocr_backend: str,
 ) -> TemplateProcessingService:
     if {"image", "scan_pdf"} & set(requested_formats):
-        return build_local_template_processing_service(device=device)
+        return build_local_template_processing_service(
+            device=device,
+            ocr_backend=ocr_backend,
+        )
     return build_default_template_processing_service()
 
 

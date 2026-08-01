@@ -195,6 +195,11 @@ def _fill_ocr_geometry_fields(
         )
         if value:
             data["employeeName"] = strip_terminal(value.split("-", 1)[0])
+        job_value = ocr_line_value(text, ("Chức vụ", "Ch.c v."))
+        if job_value:
+            if ":" in text:
+                job_value = strip_terminal(text.rsplit(":", 1)[1])
+            data["jobTitle"] = strip_terminal(job_value)
         if "-" in text:
             job_text = text.split("-", 1)[1]
             value = ocr_line_value(job_text, ("Chức vụ", "Ch.c v."))

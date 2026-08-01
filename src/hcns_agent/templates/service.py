@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import PurePath
 
 from hcns_agent.adapters.camunda7.contract import (
@@ -176,8 +177,17 @@ def build_default_template_processing_service() -> TemplateProcessingService:
 def build_local_template_processing_service(
     *,
     device: str = "cpu",
+    ocr_backend: str | None = None,
 ) -> TemplateProcessingService:
-    ocr_engine = _LazyTemplatePaddleOcrEngine(device=device)
+    selected_backend = ocr_backend or os.getenv("HCNS_TEMPLATE_OCR_BACKEND", "paddle")
+    if selected_backend == "paddle":
+        ocr_engine: OcrEngine = _LazyTemplatePaddleOcrEngine(device=device)
+    elif selected_backend == "easyocr":
+        from hcns_agent.adapters.easyocr import EasyOcrEngine
+
+        ocr_engine = EasyOcrEngine.from_default(device=device)
+    else:
+        raise ValueError(f"Unsupported local OCR backend: {selected_backend}")
     return TemplateProcessingService(
         intake=build_default_intake(ocr_engine),
         registry=build_default_template_registry(),

@@ -214,13 +214,24 @@ def _fill_ocr_geometry_fields(
         if data.get(field_name) is not None and field_name != "reason":
             continue
         values: list[str] = []
+        started = False
         for observation in lines:
             box = observation.source.bounding_box
             if box is None or not lower <= ((box.y0 + box.y1) / 2) / page_height <= upper:
                 continue
-            value = ocr_line_value(observation.text, labels)
+            if not started:
+                value = ocr_line_value(observation.text, labels)
+                if value is None:
+                    continue
+                started = True
+            else:
+                value = strip_terminal(observation.text)
             if value:
-                values.append(value)
+                trimmed = trim_ocr_commitment(value)
+                if trimmed:
+                    values.append(trimmed)
+                if trimmed != value:
+                    break
         if values:
             candidate = strip_terminal(" ".join(values))
             if candidate and field_name == "reason":

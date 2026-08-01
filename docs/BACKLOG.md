@@ -16,9 +16,9 @@
 | TF-P1-008 | DONE | Redesign landing theo tham chiếu, dùng trạng thái sản phẩm thật | TF-P1-007 | P1 |
 | TF-P2-001 | PLANNED | Pilot Human Review qua Camunda User Task | TF-P1-001 | P1 |
 | TF-P2-002 | IN_PROGRESS | DOCX/PDF/ảnh/scan cho hai template; native pass, OCR text gate mở | TF-P1-001 và dữ liệu được phê duyệt | P0 |
-| TF-P2-002B | READY | Vietnamese OCR Candidate Evaluation & Field Recovery cho field động còn sai | TF-P2-002A checkpoint, TF-P2-003A governance | P0 |
+| TF-P2-002B | DONE | Vietnamese OCR Candidate Evaluation & Field Recovery cho field động còn sai | TF-P2-002A checkpoint, TF-P2-003A governance | P0 |
 | TF-P2-003A | DONE | Version Governance và UAT Harness cho hai biểu mẫu | TF-P2-002A checkpoint | P1 |
-| TF-P2-003B | BLOCKED | Execute UAT và quản trị phiên bản trên bốn định dạng | TF-P2-002B đạt 44/54 | P1 |
+| TF-P2-003B | READY | Execute UAT và quản trị phiên bản trên bốn định dạng | TF-P2-002B đạt 44/54 | P1 |
 | WEEKLY-REPORT-2026-W31 | DONE | Audit và báo cáo mentor đã khử định danh | Evidence local được cấp quyền | P1 |
 | TF-P2-003 | BLOCKED | UAT và quản trị phiên bản hai biểu mẫu | TF-P2-002 đạt gate | P1 |
 | M4-CAM-001 | PLANNED | Dry-run Camunda 7.13 với External Task workers | OCR quality gate, mock HRIS | P1 |
@@ -122,13 +122,18 @@
   `templateVersion`, `schemaRef`, `parserVersion` và required fields.
 - UAT harness xác thực matrix DOCX/native PDF/ảnh/PDF scan, gate quality và
   aggregate-only reporting trước khi evaluator được chạy.
-- TF-P2-003B (execute UAT) vẫn `BLOCKED` cho đến khi TF-P2-002A đạt 44/54.
+- TF-P2-003B (execute UAT) đã mở `READY` sau khi candidate OCR vượt gate 44/54.
 
-## TF-P2-002B scope checkpoint
+## TF-P2-002B completion checkpoint
 
-- Trạng thái `READY`; chỉ một task Template-first được phép triển khai tại một thời điểm.
+- Trạng thái `DONE`; chỉ một task Template-first được phép triển khai tại một thời điểm.
 - Phạm vi field: 4 tên động, 6 `reason`, 3 `workContent`; PDF scan thêm `department`
   và `jobTitle`.
 - Không dùng Ground Truth/native twin để điền kết quả và không hardcode tên/nội dung.
-- Chỉ promote candidate đạt tối thiểu 44/54 (81.48%), schema errors 0, false
-  `AUTO_CONTINUE` 0 và mọi OCR source vẫn `MANUAL_REVIEW`.
+- EasyOCR candidate được chọn cho controlled local evaluation: ảnh 48/54 (88.89%),
+  PDF scan 45/54 (83.33%); cả hai 6/6 classification, schema errors 0, 6/6
+  `MANUAL_REVIEW`, false `AUTO_CONTINUE` 0.
+- Native DOCX/PDF vẫn 90/90 required-field exact match. Candidate không dùng
+  Ground Truth/native twin để điền giá trị và report aggregate không chứa raw values.
+- PaddleOCR vẫn là default; EasyOCR chỉ bật qua optional extra/config để tránh thay đổi
+  deployment mặc định trước khi review latency và model storage.
