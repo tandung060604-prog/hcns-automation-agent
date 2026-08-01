@@ -84,10 +84,6 @@
     {
       "path": "WEEKLY_REPORT.md",
       "kind": "mentor-report"
-    },
-    {
-      "path": "WEEKLY_REPORT.html",
-      "kind": "mentor-report-html"
     }
   ],
   "metricSources": [

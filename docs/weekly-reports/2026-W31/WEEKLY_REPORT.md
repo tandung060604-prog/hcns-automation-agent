@@ -1,4 +1,4 @@
-# Weekly Product Report - 2026-W31
+# Weekly Product Report
 
 ## Tóm tắt điều hành
 
@@ -34,27 +34,25 @@ Sáu mẫu HCNS dưới đây là dữ liệu tổng hợp do AI tạo và khôn
 
 | Định dạng | Đầu vào tổng hợp | Kết quả trích xuất |
 |---|---|---|
-| DOCX | ![Đơn nghỉ phép DOCX tổng hợp](assets/hr/leave-docx-source-synthetic.png) | ![Kết quả DOCX](assets/hr/leave-docx-result-synthetic.png) |
-| PDF | ![Đơn nghỉ phép PDF tổng hợp](assets/hr/leave-pdf-source-synthetic.png) | ![Kết quả PDF](assets/hr/leave-pdf-result-synthetic.png) |
-| Ảnh scan | ![Đơn nghỉ phép ảnh tổng hợp](assets/hr/leave-image-source-synthetic.png) | ![Kết quả ảnh](assets/hr/leave-image-result-synthetic.png) |
+| DOCX | ![Đơn nghỉ phép DOCX tổng hợp](assets/hr/leave-docx-source-synthetic.png) | [Xem JSON kết quả](assets/hr/leave-docx-result.json) |
+| PDF | ![Đơn nghỉ phép PDF tổng hợp](assets/hr/leave-pdf-source-synthetic.png) | [Xem JSON kết quả](assets/hr/leave-pdf-result.json) |
+| Ảnh camera | ![Đơn nghỉ phép ảnh camera tổng hợp](assets/hr/leave-camera-ui-evidence.png) | [Xem JSON kết quả](assets/hr/leave-image-result.json) |
 
 ### Đơn tăng ca: đầu vào và kết quả engine
 
 | Định dạng | Đầu vào tổng hợp | Kết quả trích xuất |
 |---|---|---|
-| DOCX | ![Đơn tăng ca DOCX tổng hợp](assets/hr/overtime-docx-source-synthetic.png) | ![Kết quả DOCX](assets/hr/overtime-docx-result-synthetic.png) |
-| PDF | ![Đơn tăng ca PDF tổng hợp](assets/hr/overtime-pdf-source-synthetic.png) | ![Kết quả PDF](assets/hr/overtime-pdf-result-synthetic.png) |
-| Ảnh scan | ![Đơn tăng ca ảnh tổng hợp](assets/hr/overtime-image-source-synthetic.png) | ![Kết quả ảnh](assets/hr/overtime-image-result-synthetic.png) |
+| DOCX | ![Đơn tăng ca DOCX tổng hợp](assets/hr/overtime-docx-source-synthetic.png) | [Xem JSON kết quả](assets/hr/overtime-docx-result.json) |
+| PDF | ![Đơn tăng ca PDF tổng hợp](assets/hr/overtime-pdf-source-synthetic.png) | [Xem JSON kết quả](assets/hr/overtime-pdf-result.json) |
+| Ảnh camera | ![Đơn tăng ca ảnh camera tổng hợp](assets/hr/overtime-camera-ui-evidence.png) | [Xem JSON kết quả](assets/hr/overtime-image-result.json) |
 
 ### Ảnh chụp trực tiếp từ LOCAL REAL-DOCUMENT EVIDENCE
 
-Hai ảnh dưới đây được chụp từ localhost sau khi sửa preview: PDF được render thành ảnh trang đầu, còn ảnh scan hiển thị trực tiếp. Inspector schema/JSON bên phải vẫn giữ nguyên.
+Ảnh dưới đây được chụp từ localhost sau khi sửa preview: PDF được render thành ảnh trang đầu, còn ảnh scan hiển thị trực tiếp. Inspector schema/JSON bên phải vẫn giữ nguyên.
 
 | Định dạng | Evidence từ localhost |
 |---|---|
 | PDF nghỉ phép | ![Evidence localhost PDF nghỉ phép](assets/hr/local-evidence-leave-pdf.png) |
-| Ảnh tăng ca | ![Evidence localhost ảnh tăng ca](assets/hr/local-evidence-overtime-image.png) |
-
 ## CCCD: evidence tổng hợp và Prediction JSON
 
 Hai ảnh dưới đây do người dùng cung cấp và được xác nhận là dữ liệu AI-generated. Phần JSON là kết quả Prediction của engine local; Ground Truth không được dùng làm output. Các trường `needs_review` vẫn phải được người kiểm tra xác nhận.
@@ -135,21 +133,14 @@ Giao diện hiện có một điểm upload mặc định, hiển thị bản xe
 | Drift manifest multi-format | Đã ghi nhận mismatch 30 khai báo/26 file | Sửa manifest và stale reference trong task riêng |
 | Sai phạm vi triển khai | API bind loopback, chưa có HRIS write | Railway deployment và external integration cần smoke-test/phê duyệt riêng |
 
-## Đề xuất tuần kế tiếp
+## Đề xuất kế hoạch kế tiếp
 
 1. Đo lỗi theo từng trường trên bộ phát triển ảnh/scan; không sử dụng đáp án chuẩn để điền dữ liệu khi hệ thống đang nhận dạng.
 2. Chỉ đọc lại vùng dữ liệu khi có nhãn/vị trí làm bằng chứng; mọi kết quả chưa chắc chắn vẫn cần người kiểm tra.
 3. Chạy lại gate multi-format. Chỉ xem xét promotion khi OCR field exact-match đạt ít nhất 44/54 và không làm mất trường đúng.
-4. Khi chuẩn bị Railway, bổ sung cấu hình deployment và chạy smoke-test với health, upload, source retention và session deletion.
+4. Bổ sung thêm các loại tài liệu bằng cấp, chứng chỉ, bản chấm công,...
+5. Tích hợp với hệ thống Camunda đã dựng sẵn dưới dạng External Worker
+6. Tích hợp sử dụng với Camera điện thoại với tài liệu thật. Deploy local lên server.
 
-## Khả năng tái lập
-
-```powershell
-python scripts/build_weekly_report_cccd_selection.py `
-  --data-root <authorized-private-data-root> `
-  --output docs/weekly-reports/2026-W31/assets/cccd/selection.json `
-  --limit 4
-python scripts/validate_weekly_report.py
-```
 
 Audit chi tiết: [AUDIT_NOTES.md](AUDIT_NOTES.md). Danh mục artifact: [EVIDENCE_MANIFEST.json](EVIDENCE_MANIFEST.json).
