@@ -85,6 +85,11 @@ class ImageDocumentParser:
                     parser_version=self.version,
                     source_format=context.source_format,
                     model_manifest=manifest,
+                    metadata={
+                        "ocrRoiEvidence": result.model_manifest.get(
+                            "roiRecovery", "[]"
+                        )
+                    },
                 ),
             ),
             warnings=warnings,

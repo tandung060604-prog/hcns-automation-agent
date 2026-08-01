@@ -13,7 +13,12 @@ from hcns_agent.templates.common import (
     named_dates,
     normalize_for_match,
     number_value,
+    ocr_line_value,
+    ocr_lines,
+    ocr_roi_evidence,
+    repair_template_ocr_value,
     strip_terminal,
+    trim_ocr_commitment,
 )
 from hcns_agent.templates.model import ParsedTemplate, TemplateDetection
 
@@ -115,6 +120,12 @@ class LeaveRequestParser:
             )
         if document.source_format in {SourceFormat.IMAGE, SourceFormat.PDF_SCAN}:
             _fill_ocr_line_fields(data, text)
+            _fill_ocr_geometry_fields(data, document)
+            _fill_roi_fields(data, document)
+            data["jobTitle"] = repair_template_ocr_value(data.get("jobTitle"), "jobTitle")
+            data["department"] = repair_template_ocr_value(
+                data.get("department"), "department"
+            )
             slash_dates = re.findall(r"\d{1,2}/\d{1,2}/\d{4}", text)
             if data["startDate"] is None and len(slash_dates) >= 2:
                 data["startDate"] = iso_date(slash_dates[0])
@@ -153,3 +164,108 @@ def _fill_ocr_line_fields(data: dict[str, object], text: str) -> None:
             match = re.match(pattern, line.strip(), flags=re.IGNORECASE)
             if match:
                 data[field_name] = strip_terminal(match.group(1))
+
+
+def _fill_ocr_geometry_fields(
+    data: dict[str, object],
+    document: CanonicalDocument,
+) -> None:
+    lines = ocr_lines(document)
+    boxes = [
+        observation.source.bounding_box
+        for observation in lines
+        if observation.source.bounding_box is not None
+    ]
+    page_height = max((box.y1 for box in boxes), default=0.0)
+    if page_height <= 0.0:
+        return
+
+    field_specs = {
+        "employeeName": (("Tôi tên là", "TÃ´i tÃªn lÃ "), (0.16, 0.22)),
+        "jobTitle": (("Chức vụ", "Ch.c v."), (0.19, 0.26)),
+        "department": (("Bộ phận", "B. ph.n"), (0.21, 0.30)),
+        "address": (("Địa chỉ", "Äá»‹a chá»‰"), (0.23, 0.31)),
+        "phone": (("Điện thoại", "Äiá»‡n thoáº¡i"), (0.25, 0.34)),
+    }
+    for field_name, (labels, (lower, upper)) in field_specs.items():
+        if data.get(field_name) is not None:
+            continue
+        candidates: list[tuple[float, str]] = []
+        for observation in lines:
+            box = observation.source.bounding_box
+            if box is None or not lower <= ((box.y0 + box.y1) / 2) / page_height <= upper:
+                continue
+            value = ocr_line_value(observation.text, labels)
+            if value:
+                candidates.append((float(box.y0), value))
+        if candidates:
+            data[field_name] = candidates[0][1]
+
+    for field_name, labels, (lower, upper) in (
+        ("reason", ("Lý do xin nghỉ phép", "LÃ½ do xin nghá»‰ phÃ©p"), (0.30, 0.40)),
+        (
+            "handoverTasks",
+            ("Các công việc được bàn giao", "CÃ¡c cÃ´ng viá»‡c Ä‘Æ°á»£c bÃ n giao"),
+            (0.39, 0.49),
+        ),
+    ):
+        if data.get(field_name) is not None and field_name != "reason":
+            continue
+        values: list[str] = []
+        for observation in lines:
+            box = observation.source.bounding_box
+            if box is None or not lower <= ((box.y0 + box.y1) / 2) / page_height <= upper:
+                continue
+            value = ocr_line_value(observation.text, labels)
+            if value:
+                values.append(value)
+        if values:
+            candidate = strip_terminal(" ".join(values))
+            if candidate and field_name == "reason":
+                candidate = _extract_leave_reason(candidate)
+            if candidate:
+                # The geometry-labelled line is more specific than the broad
+                # full-page fallback which can swallow the surrounding sentence.
+                data[field_name] = candidate
+
+
+def _extract_leave_reason(value: str | None) -> str | None:
+    """Keep the reason clause after the fixed ``trong thời gian`` label."""
+    if value is None:
+        return None
+    # Camera OCR may emit ``trong thi`` or ``trong thoi gian``. The suffix is
+    # free text, therefore only the fixed sentence boundary is normalized.
+    match = re.search(
+        r"\btrong\s+th\S{0,8}(?:\s+gian)?\s+(.+)$",
+        value,
+        flags=re.IGNORECASE,
+    )
+    if match:
+        value = match.group(1)
+    return trim_ocr_commitment(value)
+
+
+def _fill_roi_fields(data: dict[str, object], document: CanonicalDocument) -> None:
+    labels = {
+        "employeeName": ("Tôi tên là", "TÃ´i tÃªn lÃ "),
+        "jobTitle": ("Chức vụ", "Ch.c v."),
+        "department": ("Bộ phận", "B. ph.n"),
+        "reason": ("Lý do xin nghỉ phép", "LÃ½ do xin nghá»‰ phÃ©p"),
+        "handoverTasks": ("Các công việc được bàn giao", "CÃ¡c cÃ´ng viá»‡c Ä‘Æ°á»£c bÃ n giao"),
+    }
+    for evidence in ocr_roi_evidence(document):
+        field_name = evidence.get("field")
+        raw_value = evidence.get("text")
+        if not isinstance(field_name, str) or not isinstance(raw_value, str):
+            continue
+        if data.get(field_name) is not None:
+            continue
+        value = ocr_line_value(raw_value, labels.get(field_name, ()))
+        if value is None:
+            value = strip_terminal(raw_value)
+        if value:
+            data[field_name] = (
+                _extract_leave_reason(value)
+                if field_name == "reason"
+                else value
+            )

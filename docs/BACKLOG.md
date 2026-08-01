@@ -103,3 +103,12 @@
   `MANUAL_REVIEW`; session smoke đã xóa.
 - API preview 6 tests và web 9 tests/build pass; full-suite checkpoint trước đó:
   Python 225 tests, Ruff, mypy, hygiene và diff check pass.
+
+## TF-P2-002A implementation checkpoint
+
+- Đã triển khai phục hồi field theo ROI cố định cho hai layout, parser dùng
+  nhãn + vị trí hình học, và provenance chỉ chứa field/confidence/box/reason.
+- Bộ sáu ảnh khóa đạt 41/54 (75.93%) và PDF scan đạt 36/54 (66.67%) ở lần chạy
+  mới nhất; cả hai đều classification 6/6, schema 0, review 6/6, false auto 0.
+- Gate 44/54 (81.48%) chưa đạt; lỗi còn lại là tên tiếng Việt động, `reason`
+  và `workContent`. Không được mở TF-P2-003 hoặc dùng Ground Truth để bù giá trị.

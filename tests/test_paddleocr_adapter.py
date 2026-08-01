@@ -1,3 +1,4 @@
+import json
 from unittest import TestCase
 
 from synthetic_fixtures import administrative_image_bytes
@@ -41,6 +42,7 @@ class PaddleOcrAdapterTests(TestCase):
         self.assertEqual("HỒ SƠ SYNTHETIC", result.pages[0].lines[0].text)
         self.assertEqual(0.97, result.pages[0].lines[0].confidence)
         self.assertEqual((100.0, 20.0), result.pages[0].lines[0].box[2])
+        self.assertEqual([], json.loads(result.model_manifest["roiRecovery"]))
 
 
 class _FakeImageInput:

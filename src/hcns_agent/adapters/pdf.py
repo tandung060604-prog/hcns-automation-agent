@@ -298,7 +298,10 @@ class ScannedPdfDocumentParser:
                     parser_version=self.version,
                     source_format=context.source_format,
                     model_manifest=manifest,
-                    metadata={"rasterizer": "PyMuPDF"},
+                    metadata={
+                        "rasterizer": "PyMuPDF",
+                        "ocrRoiEvidence": manifest_data.get("roiRecovery", "[]"),
+                    },
                 ),
             ),
             warnings=warnings,

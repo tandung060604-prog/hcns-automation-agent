@@ -14,6 +14,8 @@ Completed:
 - Multi-format `GET /api/templates` and `POST /api/documents/process`
 - One default upload surface with image/PDF preview beside structured fields/JSON
 - Session-scoped source retention and loopback-only `GET /api/documents/source`
+- Local evidence preview uses `GET /api/documents/preview`; PDFs render their first page
+  through the existing local PDFium dependency so the browser never shows a blank iframe
 - Private result JSON; Camunda receives only scalar metadata/reference
 - README foregrounds the two forms while preserving legacy OCR/IDP documentation
 
@@ -47,7 +49,8 @@ Architecture:
 
 Local runtime checkpoint:
 - UI: `http://localhost:3000`; API: `http://127.0.0.1:8765`
-- API PID `36764`; web PID `28852`; health reports OCR model loaded after smoke
+- API was restarted from `.venv` after the preview change; web remains on `localhost:3000`;
+  health returns `ok`
 - Live camera upload returned `LEAVE_REQUEST` / `MANUAL_REVIEW`; smoke session deleted
 - UX smoke trên desktop xác nhận một vùng upload, ảnh preview sticky cạnh metadata/JSON;
   PDF/PNG source round-trip khớp SHA-256 và các session smoke đã xóa
@@ -57,8 +60,9 @@ Local runtime checkpoint:
 - Mentor view hides held-out unless `VITE_SHOW_HELDOUT=true`
 - Evidence retains Template-first/CCCD and the right metadata/JSON panel
 - Hero uses the approved local workflow infographic; no remote asset is loaded
-- Weekly report 2026-W31 includes two safe UI screenshots, four fully redacted CCCD
-  visuals, and six input/result pairs from AI-generated HR forms; no real PII is tracked
+- Weekly report 2026-W31 includes two local evidence screenshots, two user-declared
+  synthetic CCCD UI screenshots with Prediction JSON, and six input/result pairs from
+  AI-generated HR forms; no real PII is tracked
 
 Security:
 - No dataset, Ground Truth, upload, model weight, secret or raw PII added to Git
@@ -72,13 +76,26 @@ Known limits:
 - Seven old overtime Ground Truth `department` labels do not occur in source DOCX
 - Phase 11.6/CCCD WIP remains uncommitted and outside this task
 
+TF-P2-002A checkpoint (2026-08-01):
+- Approved six-image subset remains 6/6 classified, 0 schema errors, 6/6
+  `MANUAL_REVIEW`, and 0 false `AUTO_CONTINUE`.
+- Bounded template ROI evidence, geometry-aware label parsing, conservative
+  vocabulary repair, and field-level provenance are implemented for both forms.
+- Latest image rerun is 41/54 required exact fields (75.93%) and scan-PDF rerun
+  is 36/54 (66.67%); the 80% gate is still open. Remaining aggregate mismatches
+  are dynamic Vietnamese names, reason text, and overtime work-content text; no
+  Ground Truth/native twin is used at runtime.
+- Evaluator now classifies field failures as `ABSENT_IN_SOURCE`,
+  `OCR_NOT_RECOGNIZED`, `OCR_RECOGNIZED_PARSER_MISSED`, or
+  `VALIDATION_REJECTED` without writing field values to reports.
+
 Key commands:
 - `python -m pytest -q`
 - `python -m ruff check src tests scripts`
 - `python -m mypy src`
 - `python scripts/check_repository.py`
 - `python scripts/evaluate_template_multiformat.py --data-root <local-root>`
-- Current UX/API target: API preview 6 passed; web 9 passed/build; ESLint 0 error,
+- Current UX/API target: API preview 7 passed; web 9 passed/build; ESLint 0 error,
   17 warning hiện hữu
 - Previous full checkpoint: Python 225 passed; lint 0 errors/15 existing warnings
 - Weekly report: `python scripts/validate_weekly_report.py` and report-script Ruff pass

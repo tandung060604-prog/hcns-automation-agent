@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from datetime import date
@@ -9,7 +10,7 @@ from decimal import Decimal, InvalidOperation
 from difflib import SequenceMatcher
 
 from hcns_agent.domain.canonical import CanonicalDocument
-from hcns_agent.domain.content import iter_text_observations
+from hcns_agent.domain.content import TextObservation, iter_text_observations
 
 _DATE_SLASH_RE = re.compile(r"(?P<day>\d{1,2})/(?P<month>\d{1,2})/(?P<year>\d{4})")
 _DATE_WORD_RE = re.compile(
@@ -55,6 +56,144 @@ def document_text(document: CanonicalDocument) -> str:
         for observation in iter_text_observations(document)
         if observation.text.strip()
     )
+
+
+def ocr_lines(document: CanonicalDocument) -> tuple[TextObservation, ...]:
+    """Return text observations that carry OCR geometry when available."""
+    return tuple(iter_text_observations(document))
+
+
+def ocr_roi_evidence(
+    document: CanonicalDocument,
+    field_name: str | None = None,
+) -> tuple[dict[str, object], ...]:
+    """Read adapter-produced ROI evidence without making it a data source.
+
+    Evidence is provenance only: parsers still validate and only use a candidate
+    when the corresponding field is absent from the primary parse.
+    """
+    for provenance in reversed(document.provenance):
+        raw = provenance.metadata.get("ocrRoiEvidence")
+        if not isinstance(raw, str):
+            continue
+        try:
+            decoded = json.loads(raw)
+        except json.JSONDecodeError:
+            return ()
+        if not isinstance(decoded, list):
+            return ()
+        values = tuple(
+            item
+            for item in decoded
+            if isinstance(item, dict)
+            and (field_name is None or item.get("field") == field_name)
+        )
+        return values
+    return ()
+
+
+def ocr_line_value(
+    text: str,
+    labels: tuple[str, ...],
+    *,
+    stop_labels: tuple[str, ...] = (),
+) -> str | None:
+    """Extract the value portion of an OCR line after a fixed label.
+
+    OCR frequently keeps the colon but drops Vietnamese marks. The helper uses a
+    tolerant label check and never invents a value when no label is present.
+    """
+    if not any(fuzzy_ocr_contains(text, label, threshold=0.62) for label in labels):
+        return None
+    value = text
+    if ":" in value:
+        value = value.split(":", 1)[1]
+    else:
+        # Normalization removes combining marks and can change the number of
+        # code points, so slicing the original string with the normalized
+        # offset is unsafe. Locate the label by word spans instead.
+        original_words = list(re.finditer(r"\S+", value))
+        normalized_words = [
+            normalize_for_ocr_match(match.group(0)) for match in original_words
+        ]
+        best_match: tuple[float, int, int] | None = None
+        for label in labels:
+            anchor_words = normalize_for_ocr_match(label).split()
+            if not anchor_words:
+                continue
+            for start in range(len(normalized_words)):
+                for size in range(max(1, len(anchor_words) - 1), len(anchor_words) + 2):
+                    end = start + size
+                    if end > len(normalized_words):
+                        continue
+                    candidate = " ".join(normalized_words[start:end])
+                    score = SequenceMatcher(
+                        None, candidate, " ".join(anchor_words)
+                    ).ratio()
+                    if score >= 0.62 and (
+                        best_match is None or score > best_match[0]
+                    ):
+                        best_match = (score, start, end)
+        if best_match is not None:
+            _, start, end = best_match
+            value = value[original_words[end - 1].end() :]
+    for stop_label in stop_labels:
+        match = re.search(
+            re.escape(stop_label),
+            value,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            value = value[: match.start()]
+    return strip_terminal(value)
+
+
+def repair_template_ocr_value(value: object, field_name: str) -> object:
+    """Apply conservative vocabulary repairs to short HR fields.
+
+    PP-OCRv5 latin occasionally drops Vietnamese code points in stable HR
+    vocabulary (for example ``K sư`` or ``Cng ngh``). This is not a lookup of
+    document data: only fixed vocabulary fragments are repaired, and unknown
+    names/free text are returned unchanged for human review.
+    """
+    if field_name not in {"jobTitle", "department"} or not isinstance(value, str):
+        return value
+    replacements = (
+        ("Tuyn dng", "Tuyển dụng"),
+        ("K sư", "Kỹ sư"),
+        ("K toán", "Kế toán"),
+        ("Cng ngh", "Công nghệ"),
+        ("Công ngh", "Công nghệ"),
+        ("D liu", "Dữ liệu"),
+        ("Nhân s", "Nhân sự"),
+        ("nhân s", "nhân sự"),
+    )
+    repaired = value
+    for source, target in replacements:
+        repaired = repaired.replace(source, target)
+    return repaired
+
+
+def trim_ocr_commitment(value: str | None) -> str | None:
+    """Drop boilerplate after a free-text template field.
+
+    The commitment/signature block is not part of ``reason`` or
+    ``workContent``. OCR often joins it to the preceding line, so the parser
+    needs a conservative boundary that is independent of document values.
+    """
+    if value is None:
+        return None
+    markers = (
+        r"\b(?:tôi|toi|ti)\s+cam\s+k\w{0,4}t\b",
+        r"\b(?:kính|kinh)\s+mong\b",
+        r"\bngu(?:ờ|o|ò)?i\s+lam\s+don\b",
+    )
+    cut = len(value)
+    for marker in markers:
+        match = re.search(marker, value, flags=re.IGNORECASE)
+        if match:
+            cut = min(cut, match.start())
+    return strip_terminal(value[:cut])
 
 
 def extract_unique(

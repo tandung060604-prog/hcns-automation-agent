@@ -12,8 +12,14 @@ from hcns_agent.templates.common import (
     extract_unique,
     iso_date,
     named_dates,
+    normalize_for_ocr_match,
     number_value,
+    ocr_line_value,
+    ocr_lines,
+    ocr_roi_evidence,
+    repair_template_ocr_value,
     strip_terminal,
+    trim_ocr_commitment,
 )
 from hcns_agent.templates.model import ParsedTemplate, TemplateDetection
 
@@ -135,34 +141,17 @@ class OvertimeRequestParser:
             if work_content:
                 data["workContent"] = strip_terminal(work_content.group(1))
         if document.source_format in {SourceFormat.IMAGE, SourceFormat.PDF_SCAN}:
+            _fill_ocr_geometry_fields(data, document)
+            _fill_roi_fields(data, document)
+            data["jobTitle"] = repair_template_ocr_value(data.get("jobTitle"), "jobTitle")
+            data["department"] = repair_template_ocr_value(
+                data.get("department"), "department"
+            )
             slash_dates = re.findall(r"\d{1,2}/\d{1,2}/\d{4}", text)
             if data["startDate"] is None and len(slash_dates) >= 3:
                 data["startDate"] = iso_date(slash_dates[1])
                 data["endDate"] = iso_date(slash_dates[2])
-            if data["overtimeHoursPerDay"] is None:
-                numeric_period = re.search(
-                    r"tăng\s+thêm\s+(\d+(?:[.,]\d+)?)\s+gi.{0,3}m.\s+ngày"
-                    r"\D{0,12}(\d{1,2})\s+gi\s+(\d{1,2})\s+phút"
-                    r"\D{0,8}(\d{1,2})\s+gi\s+(\d{1,2})\s+phút"
-                    r".*?(\d+(?:[.,]\d+)?)\s+gi",
-                    text,
-                    flags=re.IGNORECASE | re.DOTALL,
-                )
-                if numeric_period:
-                    data["overtimeHoursPerDay"] = number_value(
-                        numeric_period.group(1)
-                    )
-                    data["overtimeStartTime"] = clock_time(
-                        numeric_period.group(2),
-                        numeric_period.group(3),
-                    )
-                    data["overtimeEndTime"] = clock_time(
-                        numeric_period.group(4),
-                        numeric_period.group(5),
-                    )
-                    data["totalOvertimeHours"] = number_value(
-                        numeric_period.group(6)
-                    )
+            _fill_numeric_ocr_fields(data, text)
             signature = re.search(
                 r"NGƯỜI\s+LÀM\s+ĐƠN\s*\n"
                 r"(?:\([^\n]*\)\s*\n)?([^\n]+)",
@@ -172,3 +161,146 @@ class OvertimeRequestParser:
             if signature:
                 data["employeeName"] = strip_terminal(signature.group(1))
         return ParsedTemplate(data=data, conflicting_fields=tuple(sorted(conflicts)))
+
+
+def _fill_ocr_geometry_fields(
+    data: dict[str, object],
+    document: CanonicalDocument,
+) -> None:
+    lines = ocr_lines(document)
+    boxes = [
+        observation.source.bounding_box
+        for observation in lines
+        if observation.source.bounding_box is not None
+    ]
+    page_height = max((box.y1 for box in boxes), default=0.0)
+    if page_height <= 0.0:
+        return
+    reason_values: list[str] = []
+    reason_started = False
+    for observation in lines:
+        box = observation.source.bounding_box
+        if box is None:
+            continue
+        ratio = ((box.y0 + box.y1) / 2) / page_height
+        if not 0.21 <= ratio <= 0.30:
+            continue
+        text = observation.text
+        value = ocr_line_value(
+            text,
+            ("Tôi là", "TÃ´i lÃ "),
+            stop_labels=("Chức vụ", "Ch.c v."),
+        )
+        if value:
+            data["employeeName"] = strip_terminal(value.split("-", 1)[0])
+        if "-" in text:
+            job_text = text.split("-", 1)[1]
+            value = ocr_line_value(job_text, ("Chức vụ", "Ch.c v."))
+            if value:
+                data["jobTitle"] = strip_terminal(value)
+    for observation in lines:
+        box = observation.source.bounding_box
+        if box is None:
+            continue
+        ratio = ((box.y0 + box.y1) / 2) / page_height
+        if not 0.25 <= ratio <= 0.39:
+            continue
+        value = observation.text
+        if not reason_started:
+            reason_match = re.search(r"\bD[oô]\b\s+(.+)$", value)
+            if reason_match is None:
+                continue
+            reason_started = True
+            value = reason_match.group(1)
+        request_marker = re.search(
+            r"[,;]?\s*(?:tôi|toi|ti)\s+[dđ]\S{0,5}\s+ngh",
+            value,
+            flags=re.IGNORECASE,
+        )
+        if request_marker:
+            value = value[: request_marker.start()]
+            reason_values.append(value)
+            break
+        reason_values.append(value)
+    if reason_values:
+        data["reason"] = trim_ocr_commitment(" ".join(reason_values))
+    content_values: list[str] = []
+    content_started = False
+    for observation in lines:
+        box = observation.source.bounding_box
+        if box is None:
+            continue
+        ratio = ((box.y0 + box.y1) / 2) / page_height
+        if not 0.40 <= ratio <= 0.58:
+            continue
+        value = ocr_line_value(
+            observation.text,
+            ("Nội dung công việc", "Ná»™i dung cÃ´ng viá»‡c"),
+        )
+        if value:
+            content_started = True
+            content_values.append(value)
+        elif content_started:
+            if re.search(r"cam\s+k\w{0,4}t", observation.text, re.IGNORECASE):
+                break
+            content_values.append(observation.text)
+    if content_values:
+        data["workContent"] = trim_ocr_commitment(" ".join(content_values))
+
+
+def _fill_numeric_ocr_fields(data: dict[str, object], text: str) -> None:
+    """Recover the fixed numeric block without relying on Vietnamese marks."""
+    normalized = normalize_for_ocr_match(text)
+    overtime_marker = re.search(
+        r"t.?ng\s+them\s+\d+(?:[.,]\d+)?\s+gi\w*",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    time_text = normalized[overtime_marker.end() :] if overtime_marker else normalized
+    hour_pairs = re.findall(
+        r"\b(\d{1,2})\s+gi\w*\s+(\d{1,2})\s+phut\b",
+        time_text,
+        flags=re.IGNORECASE,
+    )
+    per_day = re.search(
+        r"t.?ng\s+them\s+(\d+(?:[.,]\d+)?)\s+gi\w*",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    total = re.search(
+        r"t.?ng\s+thi\s+gian.*?\b(\d+(?:[.,]\d+)?)\s+gi\w*",
+        normalized,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if data.get("overtimeHoursPerDay") is None and per_day:
+        data["overtimeHoursPerDay"] = number_value(per_day.group(1))
+    if len(hour_pairs) >= 2:
+        if data.get("overtimeStartTime") is None:
+            data["overtimeStartTime"] = clock_time(*hour_pairs[0])
+        if data.get("overtimeEndTime") is None:
+            data["overtimeEndTime"] = clock_time(*hour_pairs[1])
+    if data.get("totalOvertimeHours") is None and total:
+        data["totalOvertimeHours"] = number_value(total.group(1))
+
+
+def _fill_roi_fields(data: dict[str, object], document: CanonicalDocument) -> None:
+    labels = {
+        "employeeName": ("Tôi là", "TÃ´i lÃ "),
+        "jobTitle": ("Chức vụ", "Ch.c v."),
+        "reason": ("Lý do", "Do"),
+        "workContent": ("Nội dung công việc", "Ná»™i dung cÃ´ng viá»‡c"),
+    }
+    for evidence in ocr_roi_evidence(document):
+        field_name = evidence.get("field")
+        raw_value = evidence.get("text")
+        if not isinstance(field_name, str) or not isinstance(raw_value, str):
+            continue
+        if data.get(field_name) is not None:
+            continue
+        value = ocr_line_value(raw_value, labels.get(field_name, ()))
+        if value is None:
+            value = strip_terminal(raw_value)
+        if field_name == "employeeName" and value:
+            value = strip_terminal(value.split("-", 1)[0])
+        if value:
+            data[field_name] = value

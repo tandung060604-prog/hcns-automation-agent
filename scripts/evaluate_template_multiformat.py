@@ -63,6 +63,10 @@ def parse_args() -> argparse.Namespace:
         help="Comma-separated subset: docx,pdf,image,scan_pdf",
     )
     parser.add_argument("--ocr-device", default="cpu")
+    parser.add_argument(
+        "--document-ids",
+        help="Optional comma-separated sampleId/documentId subset for a locked UAT set",
+    )
     parser.add_argument("--minimum-ocr-required-em", type=float, default=0.8)
     parser.add_argument("--report", type=Path)
     return parser.parse_args()
@@ -83,6 +87,19 @@ def main() -> int:
     records = dataset["documents"]
     if not isinstance(records, list):
         raise SystemExit("Ground Truth documents must be an array")
+    if args.document_ids:
+        selected_ids = {
+            value.strip()
+            for value in args.document_ids.split(",")
+            if value.strip()
+        }
+        records = [
+            record
+            for record in records
+            if isinstance(record, dict)
+            and str(record.get("sampleId", record.get("documentId", "")))
+            in selected_ids
+        ]
 
     service = _build_service(requested_formats, args.ocr_device)
     definitions = {
@@ -96,7 +113,13 @@ def main() -> int:
     mismatch_fields = {
         format_name: Counter() for format_name in requested_formats
     }
+    field_taxonomy = {
+        format_name: Counter() for format_name in requested_formats
+    }
     technical_errors = {
+        format_name: Counter() for format_name in requested_formats
+    }
+    schema_error_fields = {
         format_name: Counter() for format_name in requested_formats
     }
     parser_versions: set[str] = set()
@@ -145,6 +168,9 @@ def main() -> int:
             )
             schema_errors = tuple(validator.iter_errors(result.data))
             metric["schemaErrors"] += len(schema_errors)
+            for schema_error in schema_errors:
+                path = ".".join(str(part) for part in schema_error.path)
+                schema_error_fields[item.format_name][path or "<root>"] += 1
             required_exact_for_item = 0
             for field_name in required_fields:
                 metric["requiredTotal"] += 1
@@ -153,6 +179,25 @@ def main() -> int:
                 required_exact_for_item += int(exact)
                 if not exact:
                     mismatch_fields[item.format_name][field_name] += 1
+                    expected = record.get(field_name)
+                    actual = result.data.get(field_name)
+                    if expected is None:
+                        category = "ABSENT_IN_SOURCE"
+                    elif actual is None:
+                        evidence = result.processing.get("ocrFieldEvidence", ())
+                        evidence_fields = {
+                            item.get("field")
+                            for item in evidence
+                            if isinstance(item, dict)
+                        }
+                        category = (
+                            "OCR_RECOGNIZED_PARSER_MISSED"
+                            if field_name in evidence_fields
+                            else "OCR_NOT_RECOGNIZED"
+                        )
+                    else:
+                        category = "VALIDATION_REJECTED"
+                    field_taxonomy[item.format_name][category] += 1
 
             action = result.validation.recommended_action.value
             metric["autoContinue"] += int(action == "AUTO_CONTINUE")
@@ -174,6 +219,8 @@ def main() -> int:
             counters[format_name],
             mismatch_fields[format_name],
             technical_errors[format_name],
+            field_taxonomy[format_name],
+            schema_error_fields[format_name],
         )
         for format_name in requested_formats
     }
@@ -237,6 +284,9 @@ def _items_for_record(
             continue
         linked_images = record.get("linkedImageFiles")
         if not isinstance(linked_images, list):
+            image_file = file_map.get("image")
+            linked_images = [image_file] if isinstance(image_file, str) else None
+        if not isinstance(linked_images, list):
             continue
         for relative in linked_images:
             if not isinstance(relative, str):
@@ -287,6 +337,9 @@ def _dataset_integrity(data_root: Path, dataset: dict[str, Any]) -> dict[str, ob
                 referenced += 1
                 stale += int(not (data_root / relative).is_file())
         linked = record.get("linkedImageFiles")
+        if not isinstance(linked, list) and isinstance(record.get("files"), dict):
+            image_file = record["files"].get("image")
+            linked = [image_file] if isinstance(image_file, str) else None
         if isinstance(linked, list):
             linked_images += sum(
                 1
@@ -312,6 +365,8 @@ def _metric_report(
     metric: Counter[str],
     mismatches: Counter[str],
     errors: Counter[str],
+    taxonomy: Counter[str],
+    schema_fields: Counter[str],
 ) -> dict[str, object]:
     return {
         "available": metric["available"],
@@ -332,6 +387,8 @@ def _metric_report(
         "technicalErrorCount": metric["technicalErrors"],
         "unsupportedCount": metric["unsupported"],
         "mismatchFields": dict(sorted(mismatches.items())),
+        "fieldErrorTaxonomy": dict(sorted(taxonomy.items())),
+        "schemaErrorFields": dict(sorted(schema_fields.items())),
         "technicalErrors": dict(sorted(errors.items())),
     }
 

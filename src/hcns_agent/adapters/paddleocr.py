@@ -6,7 +6,9 @@ models. Use ``from_default`` only inside a trusted local runtime.
 
 from __future__ import annotations
 
+import json
 import time
+import unicodedata
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from importlib import import_module
@@ -35,6 +37,7 @@ class PaddleOcrEngine:
             "text_rec_score_thresh": 0.0,
         }
     )
+    enable_roi_recovery: bool = False
 
     @property
     def name(self) -> str:
@@ -69,6 +72,7 @@ class PaddleOcrEngine:
             image_converter=_prepare_for_paddle,
             recognition_model=recognition_model,
             device=device,
+            enable_roi_recovery=True,
         )
 
     def recognize(self, source: DocumentSource) -> OcrResult:
@@ -91,6 +95,9 @@ class PaddleOcrEngine:
             predictor_input, **self.predict_options
         )
         pages = tuple(self._to_pages(predictions))
+        roi_evidence: list[dict[str, object]] = []
+        if self.enable_roi_recovery:
+            roi_evidence = self._recover_roi_fields(predictor_input, pages)
         duration_ms = round((time.perf_counter() - started) * 1000)
         return OcrResult(
             document_id=source.document_id,
@@ -103,8 +110,84 @@ class PaddleOcrEngine:
                 "recognitionModel": self.recognition_model,
                 "device": self.device,
                 "version": "3",
+                "roiRecovery": json.dumps(roi_evidence, ensure_ascii=False),
             },
         )
+
+    def _recover_roi_fields(
+        self,
+        predictor_input: Any,
+        pages: tuple[OcrPage, ...],
+    ) -> list[dict[str, object]]:
+        """Run a bounded second pass over fixed-template value regions.
+
+        The first pass remains the source of truth for layout and classification.
+        These small regions only provide candidates for fields commonly lost by
+        Vietnamese OCR; parsers decide whether a candidate is safe to apply.
+        The configuration is deliberately layout-relative so scan-PDF raster sizes
+        and camera captures use the same coordinates.
+        """
+        shape: Any = getattr(predictor_input, "shape", ())
+        if len(shape) < 2 or not pages:
+            return []
+        height, width = int(shape[0]), int(shape[1])
+        layout = _roi_layout(pages)
+        if layout is None:
+            return []
+        evidence: list[dict[str, object]] = []
+        for field_name, (x0, y0, x1, y1) in layout:
+            crop_box = (
+                max(0, int(width * x0)),
+                max(0, int(height * y0)),
+                min(width, int(width * x1)),
+                min(height, int(height * y1)),
+            )
+            if crop_box[2] - crop_box[0] < 80 or crop_box[3] - crop_box[1] < 24:
+                continue
+            try:
+                import numpy as np  # type: ignore[import-not-found,unused-ignore]
+
+                crop = np.ascontiguousarray(
+                    predictor_input[
+                        crop_box[1] : crop_box[3], crop_box[0] : crop_box[2]
+                    ]
+                )
+                predictions = self.predictor.predict(
+                    crop, **self.predict_options
+                )
+            except Exception:
+                # ROI is an enhancement. A failed crop must never fail the full
+                # document or change the mandatory manual-review route.
+                continue
+            texts: list[str] = []
+            scores: list[float] = []
+            for prediction in predictions:
+                texts.extend(
+                    str(value).strip()
+                    for value in prediction.get("rec_texts", [])
+                    if str(value).strip()
+                )
+                scores.extend(float(value) for value in prediction.get("rec_scores", []))
+            if field_name == "employeeName":
+                texts = [
+                    value.split(":", 1)[1].split("-", 1)[0].strip()
+                    if ":" in value
+                    else value.split("-", 1)[0].strip()
+                    for value in texts
+                ]
+            if not texts:
+                continue
+            evidence.append(
+                {
+                    "field": field_name,
+                    "text": " ".join(texts),
+                    "confidence": round(sum(scores) / len(scores), 4) if scores else 0.0,
+                    "box": list(crop_box),
+                    "recognizer": self.name,
+                    "reason": "fixed_template_value_roi",
+                }
+            )
+        return evidence
 
     @staticmethod
     def _to_pages(predictions: Iterable[Any]) -> Iterable[OcrPage]:
@@ -136,6 +219,59 @@ def _to_numpy(image: Any) -> Any:
             "NumPy is required by PaddleOCR; install the paddle extra"
         ) from error
     return np.asarray(image)
+
+
+def _roi_layout(
+    pages: tuple[OcrPage, ...],
+) -> tuple[tuple[str, tuple[float, float, float, float]], ...] | None:
+    """Choose one of the two approved HR layouts from OCR title anchors."""
+    text = " ".join(line.text for page in pages for line in page.lines)
+    normalized = _normalize_label(text)
+    folded = text.casefold()
+    top_lines = [
+        line
+        for page in pages
+        for line in page.lines
+        if line.box and min(point[1] for point in line.box) < 320
+    ]
+    leave_title = any("ngh" in line.text.casefold() for line in top_lines[:3])
+    overtime_title = any(
+        "ca" in line.text.casefold()
+        and "ng" in line.text.casefold()
+        and "t" in line.text.casefold()
+        for line in top_lines
+    )
+    # PP-OCRv5 latin may preserve ``ngh``/``t...ng ca`` while dropping the
+    # remaining Vietnamese marks. These title-local combinations are mutually
+    # exclusive for the two closed-set layouts.
+    if overtime_title:
+        return (
+            ("employeeName", (0.18, 0.23, 0.48, 0.25)),
+            ("jobTitle", (0.39, 0.23, 0.90, 0.25)),
+            ("reason", (0.08, 0.26, 0.97, 0.38)),
+            ("workContent", (0.18, 0.41, 0.97, 0.48)),
+        )
+    if leave_title or "ngh" in folded or "don xin nghi phep" in normalized:
+        return (
+            ("employeeName", (0.18, 0.175, 0.86, 0.20)),
+            ("jobTitle", (0.18, 0.20, 0.86, 0.225)),
+            ("department", (0.18, 0.22, 0.90, 0.25)),
+            ("reason", (0.18, 0.31, 0.97, 0.40)),
+            ("handoverTasks", (0.18, 0.40, 0.97, 0.48)),
+        )
+    return None
+
+
+def _normalize_label(value: str) -> str:
+    decomposed = unicodedata.normalize("NFD", value).casefold()
+    plain = "".join(
+        character
+        for character in decomposed
+        if unicodedata.category(character) != "Mn"
+    )
+    return " ".join(
+        "".join(character if character.isalnum() else " " for character in plain).split()
+    )
 
 
 def _prepare_for_paddle(image: Any) -> Any:

@@ -99,6 +99,8 @@
   `VITE_SHOW_LEGACY_UPLOAD=true`.
 - File nguồn Template-first nằm trong session private và được phục vụ lại qua
   `/api/documents/source` trên loopback.
+- Local Real-Document Evidence phục vụ preview ảnh trực tiếp và preview PNG
+  trang đầu của PDF qua `/api/documents/preview`; không còn placeholder PDF trắng.
 - DOCX và PDF native đều đạt 10/10 classification, 90/90 required fields, 0 schema error.
 - Sáu ảnh camera và sáu PDF scan đều xử lý/phân loại 6/6, schema sạch và bắt buộc review.
 - OCR exact match đạt 31/54 (57.41%), thấp hơn gate 80%; sai số còn lại ở tên, chức vụ,
@@ -113,6 +115,31 @@
 - Live HTTP smoke ảnh camera trả đúng `LEAVE_REQUEST` / `MANUAL_REVIEW`; session đã xóa.
 - UX smoke desktop xác nhận preview ảnh sticky nằm cạnh panel metadata/JSON; source
   PDF/PNG tải lại khớp SHA-256 và mọi session smoke đã xóa.
+
+### TF-P2-002A — OCR Field Recovery checkpoint
+
+- ROI cố định, parsing theo nhãn + vị trí hình học, vocabulary repair bảo thủ và
+  provenance field-level đã được triển khai; recognizer v3 thử nghiệm không được
+  promote vì chưa vượt primary.
+- Locked image rerun mới nhất: 41/54 exact (75.93%); PDF scan đạt 36/54
+  (66.67%). Cả hai đều classification 6/6, schema 0, `MANUAL_REVIEW` 6/6,
+  false `AUTO_CONTINUE` 0.
+- Gate 44/54 (81.48%) vẫn mở; còn mismatch aggregate ở tên động, `reason` và
+  `workContent`. Không dùng Ground Truth/native twin và chưa mở TF-P2-003.
+- Báo cáo evaluator lưu taxonomy field-level, chỉ aggregate/provenance metadata,
+  không lưu giá trị OCR thô.
+
+### LOCAL-EVIDENCE-PREVIEW-001 — completed
+
+- Preview panel giữa đã hiển thị ảnh HCNS trực tiếp và render trang đầu PDF bằng
+  PDFium local; inspector schema/JSON bên phải được giữ nguyên.
+- Test API mục tiêu đạt 7/7; web build và rendered HTML đạt 9/9; lint 0 error với
+  các warning hiện hữu.
+- Browser smoke trên localhost xác nhận PDF preview có kích thước 953×1348,
+  ảnh preview 1448×1086 và metadata `LEAVE_REQUEST`/`OVERTIME_REQUEST` vẫn hiển thị.
+- Report đã bổ sung hai screenshot Local Real-Document Evidence, hai screenshot CCCD
+  do người dùng cung cấp (đã xác nhận synthetic) và hai Prediction JSON tách khỏi
+  Ground Truth.
 
 ## Verified evidence
 
@@ -131,8 +158,8 @@
 ### WEEKLY-REPORT-2026-W31 — completed
 
 - Report artifacts live under `docs/weekly-reports/2026-W31/`.
-- `assets/cccd/selection.json` has four opaque sample IDs from 30 review-complete sessions;
-  their four report images are fully blurred and contain no readable PII.
+- `assets/cccd/selection.json` remains as legacy ranking metadata; current report
+  evidence uses two user-declared synthetic CCCD screenshots and two Prediction JSON files.
 - The report has six unredacted input/result pairs for leave/overtime DOCX, PDF and image
   sources. These sources are AI-generated synthetic data; result cards come from actual
   engine output, not Ground Truth.

@@ -21,6 +21,11 @@ from hcns_agent.adapters.mock_ocr import DeterministicMockOcrEngine
 from hcns_agent.bootstrap import build_default_intake
 from hcns_agent.domain.documents import DocumentType
 from hcns_agent.ports.document_parser import DocumentSource
+from hcns_agent.templates.common import (
+    ocr_line_value,
+    repair_template_ocr_value,
+    trim_ocr_commitment,
+)
 from hcns_agent.templates.registry import build_default_template_registry
 from hcns_agent.templates.service import (
     TemplateProcessingService,
@@ -191,6 +196,22 @@ def test_overtime_parser_normalizes_wrapped_reason_and_work_content() -> None:
 
     assert data["reason"] == "hoàn thiện kiểm thử synthetic"
     assert data["workContent"] == "Hoàn thiện kiểm thử synthetic"
+
+
+def test_ocr_field_recovery_uses_label_spans_and_fixed_vocab_only() -> None:
+    assert (
+        ocr_line_value("Chc v Ky su Backend", ("Chức vụ", "Ch.c v."))
+        == "Ky su Backend"
+    )
+    assert (
+        repair_template_ocr_value("K sư Backend", "jobTitle")
+        == "Kỹ sư Backend"
+    )
+    assert repair_template_ocr_value("ten tu do", "employeeName") == "ten tu do"
+    assert (
+        trim_ocr_commitment("Noi dung. Toi cam kt tuan thu quy dinh.")
+        == "Noi dung"
+    )
 
 
 def test_missing_required_field_routes_to_manual_review_without_inference() -> None:

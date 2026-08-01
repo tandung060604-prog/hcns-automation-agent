@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import PurePath
 
 from hcns_agent.adapters.camunda7.contract import (
@@ -218,7 +219,7 @@ def _processing_metadata(
     parser = document.provenance[-1] if document.provenance else None
     model_manifest = getattr(parser, "model_manifest", None)
     uses_ocr = source_format in _OCR_TEMPLATE_FORMATS
-    return {
+    metadata: dict[str, object] = {
         "sourceFormat": source_format.value,
         "parserName": getattr(parser, "parser_name", "unknown"),
         "parserVersion": getattr(parser, "parser_version", "unknown"),
@@ -226,3 +227,21 @@ def _processing_metadata(
         "ocrEngine": getattr(model_manifest, "engine", None) if uses_ocr else None,
         "ocrConfidence": ocr_confidence if uses_ocr else None,
     }
+    provenance_metadata = getattr(parser, "metadata", {})
+    raw_evidence = provenance_metadata.get("ocrRoiEvidence")
+    if isinstance(raw_evidence, str):
+        try:
+            decoded = json.loads(raw_evidence)
+        except json.JSONDecodeError:
+            decoded = []
+        if isinstance(decoded, list):
+            metadata["ocrFieldEvidence"] = [
+                {
+                    key: item[key]
+                    for key in ("field", "confidence", "box", "recognizer", "reason")
+                    if key in item
+                }
+                for item in decoded
+                if isinstance(item, dict)
+            ]
+    return metadata
