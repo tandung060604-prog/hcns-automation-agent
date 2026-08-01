@@ -110,6 +110,8 @@ def build_default_template_registry() -> TemplateRegistry:
                 "handoverTasks",
                 "approverName",
             ),
+            schema_ref="schemas/templates/leave_request_v1.schema.json",
+            parser_version="1.0.0",
             anchors=(
                 "ĐƠN XIN NGHỈ PHÉP",
                 "Lý do xin nghỉ phép",
@@ -148,6 +150,8 @@ def build_default_template_registry() -> TemplateRegistry:
                 "laborContractDate",
                 "standardWorkSchedule",
             ),
+            schema_ref="schemas/templates/overtime_request_v1.schema.json",
+            parser_version="1.0.0",
             anchors=(
                 "ĐƠN XIN TĂNG CA",
                 "Thời gian đề nghị",

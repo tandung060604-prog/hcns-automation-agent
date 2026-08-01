@@ -89,6 +89,11 @@ TF-P2-002A checkpoint (2026-08-01):
   `OCR_NOT_RECOGNIZED`, `OCR_RECOGNIZED_PARSER_MISSED`, or
   `VALIDATION_REJECTED` without writing field values to reports.
 
+TF-P2-003A status (2026-08-01):
+- Approved and active after the TF-P2-002A checkpoint was pushed to `origin/main`.
+- Version governance will freeze v1, validate schema/parser pairing and provide
+  the four-format UAT matrix; TF-P2-003B remains blocked until the OCR gate opens.
+
 Key commands:
 - `python -m pytest -q`
 - `python -m ruff check src tests scripts`

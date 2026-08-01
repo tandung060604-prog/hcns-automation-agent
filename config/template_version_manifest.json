@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "template-version-governance/1.0.0",
+  "lifecycle": "FROZEN_V1",
+  "templates": [
+    {
+      "templateId": "leave-request-v1",
+      "documentType": "LEAVE_REQUEST",
+      "version": "1.0",
+      "schemaRef": "schemas/templates/leave_request_v1.schema.json",
+      "parserVersion": "1.0.0",
+      "lifecycle": "FROZEN",
+      "supportedFileTypes": ["docx", "pdf", "png", "jpg", "jpeg"],
+      "requiredFields": [
+        "employeeName",
+        "jobTitle",
+        "department",
+        "requestDate",
+        "startDate",
+        "endDate",
+        "reason"
+      ]
+    },
+    {
+      "templateId": "overtime-request-v1",
+      "documentType": "OVERTIME_REQUEST",
+      "version": "1.0",
+      "schemaRef": "schemas/templates/overtime_request_v1.schema.json",
+      "parserVersion": "1.0.0",
+      "lifecycle": "FROZEN",
+      "supportedFileTypes": ["docx", "pdf", "png", "jpg", "jpeg"],
+      "requiredFields": [
+        "employeeName",
+        "jobTitle",
+        "requestDate",
+        "reason",
+        "startDate",
+        "endDate",
+        "overtimeHoursPerDay",
+        "overtimeStartTime",
+        "overtimeEndTime",
+        "totalOvertimeHours",
+        "workContent"
+      ]
+    }
+  ],
+  "uat": {
+    "formats": ["docx", "pdf", "image", "scan_pdf"],
+    "gates": {
+      "classificationRate": 1.0,
+      "nativeRequiredFieldExactMatch": 1.0,
+      "ocrRequiredFieldExactMatch": 0.8,
+      "schemaErrorCount": 0,
+      "falseAutoContinueCount": 0,
+      "ocrReviewRouting": "MANUAL_REVIEW"
+    },
+    "reportContainsRawFieldValues": false
+  }
+}

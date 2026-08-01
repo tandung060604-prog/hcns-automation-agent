@@ -129,6 +129,15 @@
 - Báo cáo evaluator lưu taxonomy field-level, chỉ aggregate/provenance metadata,
   không lưu giá trị OCR thô.
 
+### TF-P2-003A — Version Governance & UAT Harness
+
+- Đã được phê duyệt sau khi checkpoint TF-P2-002A được push lên `origin/main`.
+- Scope là manifest version đóng băng, ghép schema/parser và compatibility matrix;
+  không thay đổi runtime OCR.
+- Harness phải fail-closed khi registry, schema hoặc parser version lệch nhau và
+  chỉ cho evaluator chạy với report aggregate-only.
+- TF-P2-003B vẫn `BLOCKED` vì OCR hiện chưa đạt 44/54.
+
 ### LOCAL-EVIDENCE-PREVIEW-001 — completed
 
 - Preview panel giữa đã hiển thị ảnh HCNS trực tiếp và render trang đầu PDF bằng

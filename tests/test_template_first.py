@@ -132,6 +132,8 @@ def test_registry_lists_only_two_approved_templates() -> None:
         == ["docx", "pdf", "png", "jpg", "jpeg"]
         for template in templates
     )
+    assert all(template["lifecycle"] == "FROZEN" for template in templates)
+    assert all(template["parserVersion"] == "1.0.0" for template in templates)
 
 
 def test_leave_template_is_filename_independent_and_schema_valid() -> None:

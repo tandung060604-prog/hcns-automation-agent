@@ -58,6 +58,8 @@ class TemplateDefinition:
     supported_file_types: tuple[str, ...]
     required_fields: tuple[str, ...]
     optional_fields: tuple[str, ...]
+    schema_ref: str
+    parser_version: str
     anchors: tuple[str, ...]
     minimum_anchor_matches: int
     parser: TemplateParser
@@ -66,6 +68,10 @@ class TemplateDefinition:
     def __post_init__(self) -> None:
         if not self.template_id or not self.version:
             raise ValueError("Template id and version are required")
+        if not self.schema_ref or not self.schema_ref.endswith(".json"):
+            raise ValueError("Template schema reference is required")
+        if not self.parser_version:
+            raise ValueError("Template parser version is required")
         if not 1 <= self.minimum_anchor_matches <= len(self.anchors):
             raise ValueError("Template anchor threshold is invalid")
 
@@ -74,6 +80,9 @@ class TemplateDefinition:
             "templateId": self.template_id,
             "documentType": self.document_type.value,
             "version": self.version,
+            "schemaRef": self.schema_ref,
+            "parserVersion": self.parser_version,
+            "lifecycle": "FROZEN",
             "supportedFileTypes": list(self.supported_file_types),
             "requiredFields": list(self.required_fields),
             "optionalFields": list(self.optional_fields),
@@ -94,6 +103,7 @@ class TemplateDetection:
         return {
             "templateId": self.definition.template_id,
             "documentType": self.definition.document_type.value,
+            "templateVersion": self.definition.version,
             "matchedAnchors": list(self.matched_anchors),
             "detectionConfidence": self.confidence,
         }

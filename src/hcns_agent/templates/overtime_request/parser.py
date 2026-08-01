@@ -25,6 +25,8 @@ from hcns_agent.templates.model import ParsedTemplate, TemplateDetection
 
 
 class OvertimeRequestParser:
+    version = "1.0.0"
+
     def parse(
         self,
         document: CanonicalDocument,

@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from hcns_agent.ports.document_parser import DocumentSource  # noqa: E402
+from hcns_agent.templates.registry import build_default_template_registry  # noqa: E402
 from hcns_agent.templates.service import (  # noqa: E402
     TemplateProcessingService,
     TemplateTechnicalError,
@@ -25,12 +26,13 @@ from hcns_agent.templates.service import (  # noqa: E402
     build_default_template_processing_service,
     build_local_template_processing_service,
 )
+from hcns_agent.templates.versioning import (  # noqa: E402
+    schema_paths_by_document_type,
+    validate_template_version_manifest,
+)
 
 SUPPORTED_FORMATS = ("docx", "pdf", "image", "scan_pdf")
-SCHEMAS = {
-    "LEAVE_REQUEST": ROOT / "schemas/templates/leave_request_v1.schema.json",
-    "OVERTIME_REQUEST": ROOT / "schemas/templates/overtime_request_v1.schema.json",
-}
+VERSION_MANIFEST = ROOT / "config/template_version_manifest.json"
 MEDIA_TYPES = {
     "docx": (
         "application/vnd.openxmlformats-officedocument."
@@ -84,6 +86,15 @@ def main() -> int:
         raise SystemExit("--minimum-ocr-required-em must be between 0 and 1")
 
     dataset = _load_dataset(args.data_root)
+    version_manifest = validate_template_version_manifest(
+        root=ROOT,
+        registry=build_default_template_registry(),
+        manifest_path=VERSION_MANIFEST,
+    )
+    schema_paths = schema_paths_by_document_type(
+        root=ROOT,
+        manifest=version_manifest,
+    )
     records = dataset["documents"]
     if not isinstance(records, list):
         raise SystemExit("Ground Truth documents must be an array")
@@ -107,7 +118,7 @@ def main() -> int:
     }
     validators = {
         document_type: Draft202012Validator(_load_json(schema_path))
-        for document_type, schema_path in SCHEMAS.items()
+        for document_type, schema_path in schema_paths.items()
     }
     counters = {format_name: Counter() for format_name in requested_formats}
     mismatch_fields = {
@@ -239,6 +250,7 @@ def main() -> int:
             "parserVersions": sorted(parser_versions),
             "ocrEngines": sorted(ocr_engines),
             "ocrDevice": args.ocr_device,
+            "templateVersionManifest": VERSION_MANIFEST.relative_to(ROOT).as_posix(),
         },
         "metrics": metrics,
         "gates": gates,
