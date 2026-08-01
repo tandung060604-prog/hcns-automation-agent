@@ -1,6 +1,6 @@
 # Project State
 
-Current milestone: TF-P2-002 in progress; native multi-format passed, OCR text gate open
+Current milestone: TF-P2-002B READY; native multi-format passed, OCR text gate open
 Documentation profile: Standard (`PROJECT_STATE.md`, `BACKLOG.md`, `HANDOFF.md`)
 
 Completed:
@@ -90,9 +90,17 @@ TF-P2-002A checkpoint (2026-08-01):
   `VALIDATION_REJECTED` without writing field values to reports.
 
 TF-P2-003A status (2026-08-01):
-- Approved and active after the TF-P2-002A checkpoint was pushed to `origin/main`.
-- Version governance will freeze v1, validate schema/parser pairing and provide
-  the four-format UAT matrix; TF-P2-003B remains blocked until the OCR gate opens.
+- DONE and pushed to `origin/main` at commit `ae93bf0`.
+- Version governance freezes v1, validates schema/parser pairing and provides the
+  four-format UAT matrix; TF-P2-003B remains blocked until the OCR gate opens.
+
+TF-P2-002B READY (2026-08-01):
+- Objective: evaluate Vietnamese OCR candidates and recover only the remaining
+  image/scan fields without Ground Truth/native twins or hardcoded document values.
+- Scope: 4 dynamic names, 6 `reason`, 3 `workContent`; scan PDFs also include
+  `department` and `jobTitle`.
+- Gate: promote only at least 44/54 required exact fields (81.48%), zero schema
+  errors, zero false `AUTO_CONTINUE`, and `MANUAL_REVIEW` for every OCR source.
 
 Key commands:
 - `python -m pytest -q`
@@ -106,6 +114,6 @@ Key commands:
 - Weekly report: `python scripts/validate_weekly_report.py` and report-script Ruff pass
 
 Next:
-- Keep TF-P2-002 as the only active Template-first task; do not start TF-P2-003
-- Review a Vietnamese line-recognition improvement for camera/scan text
+- Obtain approval for TF-P2-002B, then run one bounded candidate evaluation.
+- Keep TF-P2-003B BLOCKED until TF-P2-002B exceeds the 44/54 OCR gate.
 - Keep historical CCCD/held-out work deferred from the Template-first default

@@ -131,12 +131,24 @@
 
 ### TF-P2-003A — Version Governance & UAT Harness
 
-- Đã được phê duyệt sau khi checkpoint TF-P2-002A được push lên `origin/main`.
+- Đã hoàn tất và push lên `origin/main` tại commit `ae93bf0` sau checkpoint
+  TF-P2-002A.
 - Scope là manifest version đóng băng, ghép schema/parser và compatibility matrix;
   không thay đổi runtime OCR.
 - Harness phải fail-closed khi registry, schema hoặc parser version lệch nhau và
   chỉ cho evaluator chạy với report aggregate-only.
 - TF-P2-003B vẫn `BLOCKED` vì OCR hiện chưa đạt 44/54.
+
+### TF-P2-002B — Vietnamese OCR Candidate Evaluation & Field Recovery (READY)
+
+- Mục tiêu: đánh giá candidate recognizer/tiền xử lý cho các field động còn sai trên
+  ảnh và PDF scan, không dùng Ground Truth/native twin để điền và không hardcode
+  tên/nội dung.
+- Phạm vi bắt buộc: 4 tên, 6 `reason`, 3 `workContent`; scan PDF thêm
+  `department` và `jobTitle`.
+- Acceptance: tối thiểu 44/54 required exact (81.48%), không regression các field
+  đúng, schema errors 0, false `AUTO_CONTINUE` 0 và mọi OCR source `MANUAL_REVIEW`.
+- Chưa sửa code; chờ người dùng phê duyệt scope trước khi triển khai.
 
 ### LOCAL-EVIDENCE-PREVIEW-001 — completed
 
@@ -160,9 +172,9 @@
 
 ## Next action
 
-1. Giữ TF-P2-002 ở `IN_PROGRESS` vì OCR exact match còn dưới 80%.
-2. Trình người dùng bằng chứng và xin duyệt hướng cải thiện recognizer riêng.
-3. Chỉ mở TF-P2-003 sau khi TF-P2-002 đạt gate hoặc acceptance được phê duyệt lại.
+1. Chờ phê duyệt TF-P2-002B rồi triển khai đúng một candidate evaluation.
+2. Chỉ promote cấu hình nếu vượt gate 44/54 và giữ `MANUAL_REVIEW`/schema 0.
+3. Giữ TF-P2-003B `BLOCKED` cho đến khi TF-P2-002B vượt gate.
 
 ### WEEKLY-REPORT-2026-W31 — completed
 
