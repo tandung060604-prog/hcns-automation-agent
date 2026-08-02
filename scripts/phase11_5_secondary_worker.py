@@ -100,7 +100,9 @@ def main() -> int:
     args = parse_args()
     job = json.loads(args.job.read_text(encoding="utf-8"))
     job_digest = sha256(args.job)
+    policy_digest = sha256(args.policy)
     policy = json.loads(args.policy.read_text(encoding="utf-8"))
+    runtime_profile = policy.get("recognitionRuntime", {})
     locked = {
         model["profile"]: model["sha256"]
         for model in policy.get("modelLocks", policy.get("models", []))
@@ -136,7 +138,10 @@ def main() -> int:
     results: dict[str, Any] = {}
     if partial_path.is_file():
         partial = json.loads(partial_path.read_text(encoding="utf-8"))
-        if partial.get("jobSha256") == job_digest:
+        if (
+            partial.get("jobSha256") == job_digest
+            and partial.get("policySha256") == policy_digest
+        ):
             results = partial.get("results", {})
     for index, item in enumerate(job["items"], start=1):
         if str(item["caseId"]) in results:
@@ -149,9 +154,9 @@ def main() -> int:
             image,
             detail=1,
             paragraph=False,
-            decoder="beamsearch",
-            batch_size=1,
-            rotation_info=None,
+            decoder=str(runtime_profile.get("easyocrDecoder", "beamsearch")),
+            batch_size=int(runtime_profile.get("easyocrBatchSize", 1)),
+            rotation_info=runtime_profile.get("easyocrRotationInfo"),
         )
         easy_duration = round((time.perf_counter() - started) * 1000, 3)
         easy_lines = ordered_easy_lines(easy_raw)
@@ -204,6 +209,7 @@ def main() -> int:
                     {
                         "status": "RUNNING",
                         "jobSha256": job_digest,
+                        "policySha256": policy_digest,
                         "results": results,
                     },
                     ensure_ascii=False,
@@ -215,9 +221,13 @@ def main() -> int:
     args.output.write_text(
         json.dumps(
             {
-                "schemaVersion": "phase11.5-secondary/1.0.0",
+                "schemaVersion": (
+                    f"phase{str(policy.get('phaseVersion', '11.5.0')).removesuffix('.0')}"
+                    "-secondary/1.0.0"
+                ),
                 "status": "COMPLETE",
                 "jobSha256": job_digest,
+                "policySha256": policy_digest,
                 "containsRealPII": True,
                 "results": results,
             },

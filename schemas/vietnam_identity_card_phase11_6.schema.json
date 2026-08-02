@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hcns.local/schemas/vietnam_identity_card_phase11_6.schema.json",
+  "title": "Vietnam Citizen Identity Card Front - Phase 11.6",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "documentType", "extractionPolicy", "policyMode", "fields", "summary"],
+  "properties": {
+    "schemaVersion": { "const": "11.6.0" },
+    "documentType": { "const": "VIETNAM_CITIZEN_ID_FRONT" },
+    "extractionPolicy": { "const": "phase11.6-cccd-address-lines-name-selection" },
+    "policyMode": { "const": "SHADOW_REVIEW_ONLY" },
+    "fields": {
+      "type": "object",
+      "required": [
+        "identityNumber", "fullName", "dateOfBirth", "sex",
+        "nationality", "placeOfOrigin", "placeOfResidence", "dateOfExpiry"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "identityNumber": { "$ref": "#/$defs/field" },
+        "fullName": { "$ref": "#/$defs/field" },
+        "dateOfBirth": { "$ref": "#/$defs/field" },
+        "sex": { "$ref": "#/$defs/field" },
+        "nationality": { "$ref": "#/$defs/field" },
+        "placeOfOrigin": { "$ref": "#/$defs/field" },
+        "placeOfResidence": { "$ref": "#/$defs/field" },
+        "dateOfExpiry": { "$ref": "#/$defs/field" }
+      }
+    },
+    "summary": { "type": "object" }
+  },
+  "$defs": {
+    "field": {
+      "type": "object",
+      "required": [
+        "value", "asciiValue", "status", "asciiStatus", "confidence",
+        "errorSignals", "selectionMode", "evidence"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "value": { "type": ["string", "null"] },
+        "asciiValue": { "type": ["string", "null"] },
+        "status": { "enum": ["accepted", "needs_review", "not_found"] },
+        "asciiStatus": { "enum": ["verified_base_text", "needs_review", "not_found"] },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "errorSignals": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "diacritic_disagreement", "character_omission",
+              "character_substitution", "region_or_line_merge",
+              "label_contamination", "not_found"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "selectionMode": {
+          "type": "string",
+          "pattern": "^phase11_6_(exact_consensus|base_text_consensus|single_candidate|baseline_preserved)$"
+        },
+        "phase11_6Candidate": { "$ref": "#/$defs/field" },
+        "validation": { "type": "object" },
+        "evidence": {
+          "type": "object",
+          "required": ["pageIndex", "bbox", "candidates"],
+          "properties": {
+            "pageIndex": { "type": "integer", "minimum": 0 },
+            "bbox": { "type": "array" },
+            "candidates": { "type": "array" }
+          }
+        }
+      }
+    }
+  }
+}

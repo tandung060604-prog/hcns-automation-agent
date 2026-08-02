@@ -32,6 +32,8 @@ from phase11_5_cccd import (  # noqa: E402
 )
 from serve_dashboard_api import UserOCRService  # noqa: E402
 
+TARGET_FIELDS = FIELD_ORDER
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -63,6 +65,7 @@ def configure_phase(module_name: str) -> None:
     globals().update(
         {
             "FIELD_ORDER": module.FIELD_ORDER,
+            "TARGET_FIELDS": getattr(module, "TARGET_FIELDS", module.FIELD_ORDER),
             "build_crop_variants": module.build_crop_variants,
             "build_identity_card": module.build_identity_card,
             "business_values": module.business_values,
@@ -172,7 +175,7 @@ def prepare(
         )
         candidates: dict[str, list[dict[str, Any]]] = {name: [] for name in FIELD_ORDER}
         crop_records: dict[str, Any] = {}
-        for field_name in FIELD_ORDER:
+        for field_name in TARGET_FIELDS:
             region = regions[field_name]
             variants = build_crop_variants(
                 images[int(region["pageIndex"])],
@@ -279,13 +282,24 @@ def publish(
             ),
             3,
         )
-        identity_card = build_identity_card(
-            document["candidates"],
-            document["regions"],
-        )
         session_dir = sessions_root / document["sessionId"]
         result_path = session_dir / "result.json"
         result = json.loads(result_path.read_text(encoding="utf-8"))
+        baseline_fields = None
+        if args.phase_key != "phase11_5":
+            baseline_path = session_dir / "phase11_5" / "identity_card.json"
+            if not baseline_path.is_file():
+                raise FileNotFoundError(
+                    f"Phase 11.5 baseline is required for protected replay: {baseline_path}"
+                )
+            baseline_fields = json.loads(
+                baseline_path.read_text(encoding="utf-8")
+            ).get("fields", {})
+        identity_card = build_identity_card(
+            document["candidates"],
+            document["regions"],
+            **({"baseline_fields": baseline_fields} if baseline_fields is not None else {}),
+        )
         current_identity = result.get("phase11", {}).get("identityCard")
         history = session_dir / "phase11" / "history" / "identity_card_phase11_4.json"
         if current_identity and not history.is_file():
@@ -308,7 +322,10 @@ def publish(
             "version": args.phase_version,
             "status": "COMPLETE",
             "mode": "SHADOW_REVIEW_ONLY",
-            "strategy": "normalized_roi_four_recognizer_consensus",
+            "strategy": policy.get(
+                "strategy",
+                "normalized_roi_four_recognizer_consensus",
+            ),
             "recognizers": [
                 "paddle_ppocrv5",
                 "easyocr_vi",
@@ -351,7 +368,9 @@ def publish(
         write_json(
             private_path,
             {
-                "schemaVersion": "phase11.5-private-evidence/1.0.0",
+                "schemaVersion": (
+                    f"{args.phase_key.replace('_', '.')}-private-evidence/1.0.0"
+                ),
                 "containsRealPII": True,
                 "sessionId": document["sessionId"],
                 "policyLock": result[args.phase_key]["policyLock"],

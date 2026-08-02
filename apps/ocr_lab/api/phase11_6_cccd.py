@@ -8,6 +8,7 @@ it never creates text, accents, or an accepted value from a directory lookup.
 from __future__ import annotations
 
 import re
+from copy import deepcopy
 from typing import Any
 
 import phase11_5_cccd as phase11_5
@@ -22,14 +23,16 @@ phase11_5_select_field_candidate = phase11_5.select_field_candidate
 
 SCHEMA_VERSION = "11.6.0"
 POLICY_ID = "phase11.6-cccd-address-lines-name-selection"
+TARGET_FIELDS = ("fullName", "placeOfOrigin", "placeOfResidence")
+PROTECTED_FIELDS = tuple(name for name in FIELD_ORDER if name not in TARGET_FIELDS)
 
 # The old template bands overlapped two different address fields.  These are
 # only fallbacks: a detected label and the following label take precedence.
 PHASE11_6_ROIS = {
     **FRONT_FIELD_ROIS,
-    "fullName": (0.27, 0.40, 0.90, 0.56),
-    "placeOfOrigin": (0.25, 0.66, 0.99, 0.80),
-    "placeOfResidence": (0.24, 0.77, 0.99, 0.94),
+    "fullName": (0.27, 0.45, 0.90, 0.55),
+    "placeOfOrigin": (0.25, 0.71, 0.99, 0.81),
+    "placeOfResidence": (0.24, 0.82, 0.99, 0.97),
 }
 
 
@@ -84,18 +87,23 @@ def _line_bbox(
     fallback: list[int],
     *,
     height: int,
+    max_value_lines: int,
 ) -> list[int]:
-    left, top, right, bottom = _bounds(anchor["box"])
+    _, top, _, bottom = _bounds(anchor["box"])
     line_height = max(10.0, bottom - top)
-    start = max(0, int(top - line_height * 0.10))
-    # A two-line value is allowed but it must not consume the next field label.
-    maximum = min(height, int(bottom + line_height * 3.15))
+    # CCCD labels sit above their values. Excluding the label row makes the
+    # recognizers see one logical field instead of a bilingual paragraph.
+    start = max(0, int(bottom + line_height * 0.05))
+    maximum = min(
+        height,
+        int(bottom + line_height * (1.75 if max_value_lines == 1 else 3.05)),
+    )
     if next_anchor is not None:
         next_top = _bounds(next_anchor["box"])[1]
-        if next_top > bottom + line_height * 0.25:
+        if next_top > start + line_height * 0.55:
             maximum = min(
                 maximum,
-                max(start + int(line_height * 1.15), int(next_top - line_height * 0.10)),
+                max(start + int(line_height * 0.75), int(next_top - line_height * 0.12)),
             )
     return [fallback[0], start, fallback[2], max(start + 1, maximum)]
 
@@ -113,7 +121,6 @@ def locate_field_regions(
     following = {
         "fullName": "dateOfBirth",
         "placeOfOrigin": "placeOfResidence",
-        "placeOfResidence": "dateOfExpiry",
     }
     for field_name in FIELD_ORDER:
         x0, y0, x1, y1 = PHASE11_6_ROIS[field_name]
@@ -131,7 +138,18 @@ def locate_field_regions(
             and abs(anchor_center - fallback_center)
             <= max(height * 0.12, fallback[3] - fallback[1])
         )
-        bbox = _line_bbox(anchor, next_anchor, fallback, height=height) if use_anchor else fallback
+        max_value_lines = 2 if field_name in {"placeOfOrigin", "placeOfResidence"} else 1
+        bbox = (
+            _line_bbox(
+                anchor,
+                next_anchor,
+                fallback,
+                height=height,
+                max_value_lines=max_value_lines,
+            )
+            if use_anchor
+            else fallback
+        )
         regions[field_name] = {
             "pageIndex": 0,
             "bbox": bbox,
@@ -140,7 +158,7 @@ def locate_field_regions(
                 "phase11_6_label_line_band" if use_anchor else "phase11_6_template_fallback"
             ),
             "labelMatchScore": 1.0 if use_anchor else 0.0,
-            "maxValueLines": 2 if field_name in {"placeOfOrigin", "placeOfResidence"} else 1,
+            "maxValueLines": max_value_lines,
         }
     return regions
 
@@ -199,11 +217,13 @@ def select_field_candidate(
 def build_identity_card(
     candidates_by_field: dict[str, list[dict[str, Any]]],
     regions: dict[str, dict[str, Any]],
+    *,
+    baseline_fields: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     fields: dict[str, dict[str, Any]] = {}
     for field_name in FIELD_ORDER:
         region = regions.get(field_name, {})
-        fields[field_name] = select_field_candidate(
+        candidate = select_field_candidate(
             field_name,
             candidates_by_field.get(field_name, []),
             bbox=region.get("bbox"),
@@ -214,6 +234,24 @@ def build_identity_card(
                 else None
             ),
         )
+        baseline = deepcopy((baseline_fields or {}).get(field_name) or {})
+        baseline_value = nfc_text(baseline.get("value")) or None
+        candidate_value = nfc_text(candidate.get("value")) or None
+        if baseline_value:
+            if candidate_value == baseline_value and candidate["status"] == "accepted":
+                fields[field_name] = candidate
+            else:
+                baseline["selectionMode"] = "phase11_6_baseline_preserved"
+                baseline["phase11_6Candidate"] = candidate
+                fields[field_name] = baseline
+        elif candidate_value:
+            # A newly found value remains review-only until it survives held-out
+            # evaluation; exact OCR consensus alone does not override an empty
+            # baseline during this development replay.
+            candidate["status"] = "needs_review"
+            fields[field_name] = candidate
+        else:
+            fields[field_name] = candidate
     present = sum(field["value"] is not None for field in fields.values())
     accepted = sum(field["status"] == "accepted" for field in fields.values())
     review = sum(field["status"] == "needs_review" for field in fields.values())
