@@ -80,6 +80,10 @@ class FormatDetectorTests(TestCase):
     def test_unknown_format_is_explicit(self) -> None:
         self.assertIs(SourceFormat.UNKNOWN, self.detect("unknown.bin", b"synthetic"))
 
+    def test_detects_utf8_plain_text_only_when_extension_is_txt(self) -> None:
+        self.assertIs(SourceFormat.PLAIN_TEXT, self.detect("source.txt", "CV\nKỹ năng".encode()))
+        self.assertIs(SourceFormat.UNKNOWN, self.detect("source.bin", "CV\nKỹ năng".encode()))
+
     def test_corrupted_zip_is_rejected(self) -> None:
         with self.assertRaises(DocumentIntakeError) as raised:
             self.detect("corrupt.docx", b"PK\x03\x04synthetic-corruption")

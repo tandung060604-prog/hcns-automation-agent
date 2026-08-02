@@ -115,6 +115,18 @@ class DocumentParserContractTests(TestCase):
         self.assertEqual("Gia tri", table.rows[0].cells[1].text)
         self.assertEqual([], self.ocr.calls)
 
+    def test_plain_text_uses_native_parser_without_ocr(self) -> None:
+        document = self.parse(
+            "SYNTHETIC-TEXT",
+            "cv.txt",
+            "CV\nKỹ năng: Python\n".encode(),
+        )
+
+        self.assertIs(SourceFormat.PLAIN_TEXT, document.source_format)
+        self.assertEqual(ParseStatus.SUCCESS, document.parse_status)
+        self.assertEqual("CV", document.content.pages[0].blocks[0].text)
+        self.assertEqual([], self.ocr.calls)
+
     def test_xlsx_preserves_sheet_cell_formula_and_merged_range(self) -> None:
         document = self.parse(
             "SYNTHETIC-TIMESHEET",

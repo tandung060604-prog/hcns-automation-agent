@@ -22,6 +22,7 @@ _IMAGE_SIGNATURES: tuple[tuple[bytes, str], ...] = (
 )
 
 _EXTENSION_FORMATS = {
+    ".txt": {SourceFormat.PLAIN_TEXT},
     ".pdf": {SourceFormat.PDF_TEXT, SourceFormat.PDF_SCAN},
     ".docx": {SourceFormat.DOCX},
     ".xlsx": {SourceFormat.XLSX},
@@ -88,6 +89,12 @@ class FormatDetector:
                 else SourceFormat.UNKNOWN
             )
             media_type = "application/x-ole-storage"
+        elif (
+            _looks_like_utf8_text(source.content)
+            and PurePath(source.filename).suffix.lower() == ".txt"
+        ):
+            detected = SourceFormat.PLAIN_TEXT
+            media_type = "text/plain"
         else:
             detected = SourceFormat.UNKNOWN
             media_type = None
@@ -162,6 +169,16 @@ def _detect_image_media_type(content: bytes) -> str | None:
     if len(content) >= 12 and content.startswith(b"RIFF") and content[8:12] == b"WEBP":
         return "image/webp"
     return None
+
+
+def _looks_like_utf8_text(content: bytes) -> bool:
+    if not content or b"\x00" in content:
+        return False
+    try:
+        content.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
 
 
 def _formats_for_mime(media_type: str) -> set[SourceFormat] | None:

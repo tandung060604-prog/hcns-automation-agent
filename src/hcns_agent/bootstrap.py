@@ -5,6 +5,7 @@ from __future__ import annotations
 from hcns_agent.adapters.classification import RuleBasedDocumentClassifier
 from hcns_agent.adapters.docx import DocxDocumentParser
 from hcns_agent.adapters.extractors import (
+    CertificateFieldExtractor,
     CvFieldExtractor,
     EmploymentContractFieldExtractor,
     LeaveRequestFieldExtractor,
@@ -18,6 +19,7 @@ from hcns_agent.adapters.pdf import (
     PyMuPdfRasterizer,
     ScannedPdfDocumentParser,
 )
+from hcns_agent.adapters.plain_text import PlainTextDocumentParser
 from hcns_agent.adapters.pptx import PptxDocumentParser
 from hcns_agent.adapters.xlsx import XlsxDocumentParser
 from hcns_agent.application.extractor_registry import FieldExtractorRegistry
@@ -46,6 +48,7 @@ def build_default_intake(
     registry.register(DocxDocumentParser())
     registry.register(XlsxDocumentParser())
     registry.register(PptxDocumentParser())
+    registry.register(PlainTextDocumentParser())
     return UniversalDocumentIntake(
         detector=FormatDetector(pdf_inspector),
         safety_validator=FileSafetyValidator(
@@ -60,6 +63,7 @@ def build_default_understanding() -> DocumentUnderstandingService:
     extractors = FieldExtractorRegistry()
     extractors.register(CvFieldExtractor())
     extractors.register(EmploymentContractFieldExtractor())
+    extractors.register(CertificateFieldExtractor())
     extractors.register(LeaveRequestFieldExtractor())
     extractors.register(TimesheetFieldExtractor())
     return DocumentUnderstandingService(

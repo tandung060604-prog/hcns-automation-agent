@@ -6,6 +6,7 @@ from enum import Enum
 
 
 class SourceFormat(str, Enum):
+    PLAIN_TEXT = "PLAIN_TEXT"
     IMAGE = "IMAGE"
     PDF_TEXT = "PDF_TEXT"
     PDF_SCAN = "PDF_SCAN"

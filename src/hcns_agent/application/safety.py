@@ -25,6 +25,7 @@ class FileSafetyPolicy:
             SourceFormat.DOCX,
             SourceFormat.XLSX,
             SourceFormat.PPTX,
+            SourceFormat.PLAIN_TEXT,
         }
     )
     maximum_file_size: int = 25 * 1024 * 1024

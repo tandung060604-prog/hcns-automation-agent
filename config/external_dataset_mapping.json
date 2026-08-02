@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0.0",
+  "datasetId": "vuhocpublic-data",
+  "datasetVersion": "2026-07-31-dec17acb",
+  "sourceCommit": "dec17acbe2b409e0aa5daeb4db820d3e95d05bdf",
+  "groundTruthStatus": "NOT_PROVIDED",
+  "promotionAllowed": false,
+  "mappings": [
+    {
+      "category": "cv",
+      "documentType": "CV",
+      "businessFamily": "CV",
+      "route": "GENERIC_IDP",
+      "templateFirst": "UNSUPPORTED",
+      "schemaRef": "schemas/hr_document_families/cv.schema.json",
+      "formatPolicy": {
+        "PLAIN_TEXT": "NATIVE",
+        "DOCX": "NATIVE",
+        "IMAGE": "OCR_REVIEW",
+        "PPTX": "NATIVE_PARTIAL",
+        "PDF_SCAN": "OCR_REVIEW"
+      }
+    },
+    {
+      "category": "contract",
+      "documentType": "EMPLOYMENT_CONTRACT",
+      "businessFamily": "CONTRACT",
+      "route": "GENERIC_IDP",
+      "templateFirst": "UNSUPPORTED",
+      "schemaRef": "schemas/hr_document_families/contract_decision.schema.json",
+      "formatPolicy": {
+        "PLAIN_TEXT": "NATIVE",
+        "DOCX": "NATIVE",
+        "IMAGE": "OCR_REVIEW",
+        "PPTX": "NATIVE_PARTIAL",
+        "PDF_SCAN": "OCR_REVIEW"
+      }
+    },
+    {
+      "category": "ielts",
+      "documentType": "CERTIFICATE",
+      "businessFamily": "CERTIFICATE",
+      "route": "GENERIC_IDP",
+      "templateFirst": "UNSUPPORTED",
+      "schemaRef": null,
+      "formatPolicy": {
+        "IMAGE": "OCR_REVIEW",
+        "DOCX": "NATIVE_EMBEDDED_IMAGE_REVIEW",
+        "PDF_SCAN": "OCR_REVIEW"
+      },
+      "mappingNote": "Certificate field schema requires independent Ground Truth before promotion."
+    }
+  ]
+}

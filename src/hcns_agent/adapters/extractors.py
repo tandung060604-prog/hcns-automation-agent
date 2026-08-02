@@ -123,6 +123,28 @@ class EmploymentContractFieldExtractor(_LabeledFieldExtractor):
     )
 
 
+class CertificateFieldExtractor(_LabeledFieldExtractor):
+    name = "field/certificate-labeled"
+    document_types = frozenset({DocumentType.CERTIFICATE})
+    field_specs = (
+        _FieldSpec(
+            "recipient_name",
+            ("candidate name", "candidate", "họ tên", "ho ten"),
+            sensitive=True,
+        ),
+        _FieldSpec("credential_id", ("candidate number", "certificate number", "certificate no")),
+        _FieldSpec(
+            "credential_type",
+            ("test type", "certificate type", "loại chứng chỉ", "loai chung chi"),
+        ),
+        _FieldSpec(
+            "overall_score",
+            ("overall band score", "overall score", "điểm tổng", "diem tong"),
+        ),
+        _FieldSpec("issue_date", ("test date", "issue date", "ngày thi", "ngay thi")),
+    )
+
+
 class LeaveRequestFieldExtractor(_LabeledFieldExtractor):
     name = "field/leave-request-labeled"
     document_types = frozenset({DocumentType.LEAVE_REQUEST})

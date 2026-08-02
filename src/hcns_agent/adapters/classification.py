@@ -31,9 +31,18 @@ _RULES: dict[DocumentType, tuple[_Marker, ...]] = {
     DocumentType.EMPLOYMENT_CONTRACT: (
         _Marker("hop dong lao dong", 3.0),
         _Marker("employment contract", 3.0),
+        _Marker("hop dong thu viec", 3.0),
+        _Marker("thu viec", 3.0),
+        _Marker("probation", 2.5),
         _Marker("hop dong", 1.5),
         _Marker("dieu khoan", 1.0),
         _Marker("so hop dong", 1.0),
+    ),
+    DocumentType.CERTIFICATE: (
+        _Marker("ielts", 4.0),
+        _Marker("test report form", 4.0),
+        _Marker("overall band score", 3.0),
+        _Marker("candidate number", 2.0),
     ),
     DocumentType.LEAVE_REQUEST: (
         _Marker("don nghi phep", 3.0),
