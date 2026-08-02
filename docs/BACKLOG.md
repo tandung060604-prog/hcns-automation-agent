@@ -150,7 +150,7 @@
   scan PDF 77/90 (85.56%). OCR 20/20 items `MANUAL_REVIEW`, false `AUTO_CONTINUE` 0.
 - Fail-closed mismatch test pass; report aggregate-only (`containsRawFieldValues: false`)
   và dataset integrity 30 actual files/30 references/0 stale references.
-- Chưa triển khai Railway, Camunda hay HRIS; bước kế tiếp cần task deployment riêng.
+- Chưa có external deployment side effect; phạm vi kế hoạch hiện tại là local-only.
 
 ## TF-P2-004 checkpoint (2026-08-02)
 
@@ -171,5 +171,5 @@
   false auto 0 và report aggregate-only.
 - CPU p95: 23.5s/image, 22.6s/scan PDF; model cache 93.99 MiB. Rollback Paddle
   smoke pass; VietOCR không được cài hoặc dùng trong route này.
-- Bước tiếp theo là task Railway/production-readiness riêng, không mở lại OCR
+- Deployment/production-readiness không thuộc kế hoạch hiện tại; không mở lại OCR
   candidate nếu chưa có evidence mới.

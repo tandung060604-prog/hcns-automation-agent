@@ -165,7 +165,7 @@
   image 82/90 (91.11%), scan PDF 77/90 (85.56%).
 - Classification 10/10 cả bốn format, schema 0, OCR `MANUAL_REVIEW` 20/20,
   false `AUTO_CONTINUE` 0; report aggregate-only và 0 stale file references.
-- Chưa có Railway/Camunda/HRIS side effect; deployment phải mở task riêng.
+- Chưa có external deployment side effect; phạm vi checkpoint này là local-only.
 
 ### LOCAL-EVIDENCE-PREVIEW-001 — completed
 
@@ -218,8 +218,8 @@
 
 ## Next action
 
-1. Mở task Railway/production-readiness riêng, pin EasyOCR model storage và CPU
-   latency budget; giữ rollback Paddle.
+1. Giữ localhost/loopback là runtime target; không mở task deployment trong kế
+   hoạch hiện tại. Giữ rollback Paddle.
 2. Giữ CCCD/held-out workstream ngoài Template-first default.
 
 ### WEEKLY-REPORT-2026-W31 — completed

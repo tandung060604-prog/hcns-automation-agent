@@ -167,7 +167,7 @@ Key commands:
 - Weekly report: `python scripts/validate_weekly_report.py` and report-script Ruff pass
 
 Next:
-- Prepare a separate Railway deployment/production-readiness task with the
-  EasyOCR model-storage and CPU-latency constraints recorded above.
+- Không mở task deployment/production-readiness trong kế hoạch hiện tại; giữ
+  localhost/loopback là runtime target.
 - Keep Paddle rollback and historical CCCD/held-out work outside the
   Template-first default unless a new evidence task is approved.
