@@ -3,7 +3,7 @@
   "datasetId": "vuhocpublic-data",
   "datasetVersion": "2026-07-31-dec17acb",
   "sourceCommit": "dec17acbe2b409e0aa5daeb4db820d3e95d05bdf",
-  "groundTruthStatus": "NOT_PROVIDED",
+  "groundTruthStatus": "DRAFT",
   "promotionAllowed": false,
   "mappings": [
     {
@@ -42,13 +42,13 @@
       "businessFamily": "CERTIFICATE",
       "route": "GENERIC_IDP",
       "templateFirst": "UNSUPPORTED",
-      "schemaRef": null,
+      "schemaRef": "schemas/hr_document_families/certificate.schema.json",
       "formatPolicy": {
         "IMAGE": "OCR_REVIEW",
         "DOCX": "NATIVE_EMBEDDED_IMAGE_REVIEW",
         "PDF_SCAN": "OCR_REVIEW"
       },
-      "mappingNote": "Certificate field schema requires independent Ground Truth before promotion."
+      "mappingNote": "Certificate schema is versioned; independent Ground Truth review is required before promotion."
     }
   ]
 }

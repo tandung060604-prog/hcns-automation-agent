@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hcns:external:certificate:1.0.0",
+  "title": "External Dataset Certificate Business JSON",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "documentFamily", "documentType", "idpStatus", "payload"],
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "documentFamily": {"const": "CERTIFICATE"},
+    "documentType": {"const": "CERTIFICATE"},
+    "idpStatus": {"enum": ["READY", "NEEDS_REVIEW"]},
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fields", "tables", "summary"],
+      "properties": {
+        "fields": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "recipient_name",
+            "credential_id",
+            "credential_type",
+            "overall_score",
+            "issue_date"
+          ],
+          "properties": {
+            "recipient_name": {"type": ["string", "null"]},
+            "credential_id": {"type": ["string", "null"]},
+            "credential_type": {"type": ["string", "null"]},
+            "overall_score": {"type": ["number", "string", "null"]},
+            "issue_date": {"type": ["string", "null"]}
+          }
+        },
+        "tables": {"type": "array"},
+        "summary": {"type": "object"}
+      }
+    }
+  }
+}

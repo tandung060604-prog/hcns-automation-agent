@@ -19,6 +19,7 @@ from hcns_agent.application.external_dataset import (
 from hcns_agent.bootstrap import build_default_intake
 from hcns_agent.domain.documents import DocumentType, SourceFormat
 from hcns_agent.ports.document_parser import DocumentSource
+from scripts.prepare_external_dataset_ground_truth import build_ground_truth_draft
 
 
 class ExternalDatasetInventoryTests(TestCase):
@@ -115,6 +116,58 @@ class ExternalDatasetInventoryTests(TestCase):
         mapping["datasetVersion"] = "drifted"
         with self.assertRaisesRegex(ExternalDatasetError, "version"):
             validate_mapping(inventory, mapping)
+
+    def test_certificate_schema_and_ground_truth_draft_are_versioned(self) -> None:
+        root = Path(__file__).parents[1]
+        mapping = json.loads(
+            (root / "config" / "external_dataset_mapping.json").read_text(encoding="utf-8")
+        )
+        inventory = inventory_dataset(
+            self.root,
+            dataset_id="vuhocpublic-data",
+            version="2026-07-31-dec17acb",
+            source_commit="dec17acbe2b409e0aa5daeb4db820d3e95d05bdf",
+        )
+        draft = build_ground_truth_draft(inventory, mapping)
+        draft_schema = json.loads(
+            (root / "schemas" / "external_dataset_ground_truth.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        certificate_schema = json.loads(
+            (
+                root
+                / "schemas"
+                / "hr_document_families"
+                / "certificate.schema.json"
+            ).read_text(encoding="utf-8")
+        )
+        Draft202012Validator.check_schema(certificate_schema)
+        Draft202012Validator(draft_schema).validate(draft)
+
+        self.assertEqual("DRAFT", draft["dataset"]["groundTruthStatus"])
+        self.assertTrue(draft["review"]["predictionBlindness"])
+        certificate_case = next(
+            case for case in draft["cases"] if case["documentType"] == "CERTIFICATE"
+        )
+        self.assertEqual(
+            [
+                "recipient_name",
+                "credential_id",
+                "credential_type",
+                "overall_score",
+                "issue_date",
+            ],
+            [field["name"] for field in certificate_case["fields"]],
+        )
+        self.assertTrue(all(field["value"] is None for field in certificate_case["fields"]))
+        certificate_mapping = next(
+            item for item in mapping["mappings"] if item["category"] == "ielts"
+        )
+        self.assertEqual(
+            "schemas/hr_document_families/certificate.schema.json",
+            certificate_mapping["schemaRef"],
+        )
 
 
 class ExternalDatasetIntakeTests(TestCase):

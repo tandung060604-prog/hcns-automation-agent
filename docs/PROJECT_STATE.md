@@ -180,6 +180,17 @@ External dataset DATA-00..DATA-05 checkpoint (2026-08-02):
 - Final validation for this checkpoint: `pytest` 239 passed; Ruff, mypy,
   compileall, `check_repository.py` and `git diff --check` passed.
 
+External dataset DATA-06 checkpoint (2026-08-02):
+- Certificate mapping is versioned through
+  `schemas/hr_document_families/certificate.schema.json`; mapping status is
+  `groundTruthStatus=DRAFT` and promotion remains disabled.
+- A prediction-blind Ground Truth review artifact exists outside Git at
+  `C:\tmp\hcns-dataset-run-dec17acb-ground-truth-draft.json`.
+- The draft covers 13 cases / 17 pages and 55 expected fields, all with
+  `value=null` and `reviewStatus=PENDING`; no OCR/model output was copied.
+- DATA-06 remains `IN_PROGRESS` until an independent reviewer confirms and
+  seals the source-document values; only then may field-level evaluation run.
+
 OCR-HO-V2-001 checkpoint (2026-08-02):
 - From 89 file-level new candidates in the local CCCD test folder, 15 images
   were selected deterministically by SHA-256 after excluding the legacy 29 and

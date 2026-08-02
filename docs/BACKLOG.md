@@ -30,6 +30,7 @@
 | DATA-03 | DONE | Map CV/contract/certificate to generic IDP; add native TXT and versioned drift checks | DATA-02 | P0 |
 | DATA-04 | DONE (HOLD) | Run EasyOCR aggregate-only pilot over 13 documents / 17 pages | DATA-03 | P0 |
 | DATA-05 | DONE | Add synthetic inventory/mapping/parser regression coverage and checkpoint evidence | DATA-04 | P1 |
+| DATA-06 | IN_PROGRESS | Add certificate schema and prediction-blind Ground Truth review artifact | DATA-05 | P0 |
 
 ## DATA-00..DATA-05 acceptance criteria
 
@@ -49,6 +50,9 @@
 - `DATA-05`: synthetic tests cover README exclusion, digest/page drift, mapping
   version drift, TXT routing and schema validation. Required checks are
   `pytest`, `ruff`, `mypy`, `compileall` and `check_repository.py`.
+- `DATA-06`: certificate mapping has a versioned schema; the private review
+  artifact covers every case/field with source digests, no model values, and
+  remains `DRAFT` until an independent reviewer confirms it.
 
 ## OCR-HO-V2-001 acceptance criteria
 

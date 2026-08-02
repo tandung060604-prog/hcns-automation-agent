@@ -238,6 +238,17 @@
   schema, then rerun the existing aggregate benchmark without changing frozen
   Template-first schemas.
 
+### DATA-06 — Certificate schema and Ground Truth review (IN_PROGRESS)
+
+- Mapping now references `schemas/hr_document_families/certificate.schema.json`;
+  `groundTruthStatus` is `DRAFT`.
+- A prediction-blind review artifact was generated outside Git at
+  `C:\tmp\hcns-dataset-run-dec17acb-ground-truth-draft.json` for 13 cases / 17
+  pages. It contains 55 pending field labels, 0 field values, and reviewer
+  status `UNASSIGNED`.
+- Next action: an independent reviewer fills and confirms the source-document
+  fields, then seals the artifact before any field-level benchmark run.
+
 ### OCR-HO-V2-001 — CCCD held-out prediction seal (REVIEW)
 
 - Fifteen file-level new CCCD images were selected from the Roboflow test set
