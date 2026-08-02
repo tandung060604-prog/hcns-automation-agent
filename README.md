@@ -3,18 +3,19 @@
 [![CI](https://github.com/tandung060604-prog/hcns-automation-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/tandung060604-prog/hcns-automation-agent/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Web-3178C6?logo=typescript&logoColor=white)
-![PaddleOCR](https://img.shields.io/badge/OCR-PaddleOCR-0A8FDC)
+![EasyOCR default](https://img.shields.io/badge/OCR-EasyOCR%20vi--greedy-0A8FDC)
+![Paddle rollback](https://img.shields.io/badge/Fallback-PaddleOCR-0A8FDC)
 ![Camunda](https://img.shields.io/badge/Workflow-Camunda%207.13-FF5A00)
 ![Architecture](https://img.shields.io/badge/Architecture-Local--first-16745A)
 ![Privacy](https://img.shields.io/badge/PII-Private%20by%20default-6B46C1)
-![Current MVP](https://img.shields.io/badge/Current%20MVP-Template--first%20Phase%201-16745A)
-![Status](https://img.shields.io/badge/Status-Shadow%20review%20only-B7791F)
+![Current MVP](https://img.shields.io/badge/Current%20MVP-Template--first%20Phase%202-16745A)
+![Status](https://img.shields.io/badge/Status-Local%20UAT%20passed-16745A)
 
 > Nền tảng Intelligent Document Processing (IDP) cho tài liệu hành chính nhân sự
 > tiếng Việt, kết hợp native parsing, OCR có provenance, human review và Camunda
 > orchestration.
 
-## MVP Template-first (Phase 1)
+## MVP Template-first (Phase 1 baseline)
 
 MVP mặc định hiện dùng **closed-set document processing** để giảm biến số và tăng khả
 năng kiểm chứng. Mỗi nghiệp vụ chỉ được mở khi đã có template, schema, parser,
@@ -51,6 +52,29 @@ Kết quả kiểm chứng Phase 1:
 
 Phạm vi dữ liệu, cách tính metric và các field required/optional được ghi tại
 [báo cáo Template-first Phase 1](docs/TEMPLATE_FIRST_PHASE1_REPORT.md).
+
+## Checkpoint hiện tại — TF-P2-005 (2026-08-02)
+
+Template-first đã hoàn tất lựa chọn backend OCR theo bằng chứng UAT. **EasyOCR
+`vi-greedy` là backend mặc định cho ảnh và PDF scan**; PaddleOCR vẫn được giữ như
+rollback explicit qua `HCNS_TEMPLATE_OCR_BACKEND=paddle`. Các parser native cho
+DOCX và PDF text không bị thay đổi.
+
+| Hạng mục | Kết quả đã xác minh |
+|---|---:|
+| Classification | 10/10 ở cả DOCX, PDF native, ảnh và PDF scan |
+| Required-field exact match — DOCX | 90/90 |
+| Required-field exact match — PDF native | 90/90 |
+| Required-field exact match — ảnh | 86/90 (95,56%) |
+| Required-field exact match — PDF scan | 82/90 (91,11%) |
+| JSON Schema error | 0 |
+| OCR routing | 20/20 `MANUAL_REVIEW`; false `AUTO_CONTINUE`: 0 |
+
+Đo trên CPU local, p95 là khoảng **23,5 giây/ảnh** và **22,6 giây/PDF scan**;
+model cache EasyOCR khoảng **93,99 MiB**. UAT không dùng Ground Truth, file native
+song sinh hoặc giá trị hard-code để điền kết quả; report chỉ ghi aggregate metrics.
+Runtime hiện vẫn **local-only** và Railway production-readiness không nằm trong kế
+hoạch hiện tại.
 
 ### Thử một file mới trên dashboard
 
@@ -141,11 +165,15 @@ chiếu kết quả, không nhận raw file hay PII đầy đủ.
 
 | Nội dung | Trạng thái hiện tại |
 |---|---|
-| Luồng MVP mặc định | Template-first cho đơn nghỉ phép và đơn tăng ca DOCX |
-| Định dạng | Ảnh/PDF scan qua OCR; PDF text, DOCX, XLSX, PPTX qua native parsing |
+| Luồng MVP mặc định | Template-first cho đơn nghỉ phép và đơn tăng ca với template/version được quản trị |
+| Định dạng | DOCX/PDF native qua parser; PNG/JPG/JPEG và PDF scan qua OCR |
+| Backend OCR hiện tại | EasyOCR `vi-greedy` mặc định; PaddleOCR là rollback explicit |
+| UAT Template-first mới nhất | DOCX 90/90; PDF native 90/90; ảnh 86/90; PDF scan 82/90 |
+| Quality gate OCR | OCR luôn `MANUAL_REVIEW`; schema error 0; false `AUTO_CONTINUE` 0 |
 | Khả năng nền tảng/legacy | CCCD, CV, hợp đồng/quyết định, đơn/biểu mẫu, bằng cấp/chứng chỉ, bảng biểu HR |
 | OCR CCCD | Phase 11.5 dùng ROI mặt trước, 4 recognizer và provenance theo field |
-| Chất lượng | `SHADOW_REVIEW_ONLY` — chưa đủ điều kiện production hoặc tự động fallback |
+| Rollout hiện tại | Local-only; chưa có Railway production deployment trong current plan |
+| Chất lượng legacy/CCCD | `SHADOW_REVIEW_ONLY` — chưa đủ điều kiện production hoặc tự động fallback |
 | Camunda | BPMN/DMN và External Task worker ở mức shadow/dry-run; HRIS là mock adapter |
 | Dữ liệu | Tài liệu thật, Ground Truth, OCR output và model weights ở local/private, không commit Git |
 
@@ -164,7 +192,7 @@ liệu không trùng lặp, chưa đạt cổng tối thiểu 15 tài liệu và
 ```powershell
 git clone https://github.com/tandung060604-prog/hcns-automation-agent.git
 cd hcns-automation-agent
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,easyocr]"
 Set-Location apps\ocr_lab\web
 npm ci
 Set-Location ..\..\..
@@ -467,7 +495,7 @@ PaddleOCR là dependency tùy chọn và được load lazy:
 python -m pip install -e ".[paddle]"
 ```
 
-Template-first hiện chọn EasyOCR `vi` làm backend OCR mặc định cho ảnh/PDF scan
+Template-first hiện chọn EasyOCR `vi-greedy` làm backend OCR mặc định cho ảnh/PDF scan
 trên hai biểu mẫu đã UAT. PaddleOCR vẫn có thể bật làm rollback rõ ràng:
 
 ```powershell
@@ -482,7 +510,8 @@ $env:HCNS_TEMPLATE_OCR_BACKEND = "paddle"
 python scripts/evaluate_template_multiformat.py --ocr-backend paddle --data-root <local-root>
 ```
 
-Mọi nguồn OCR tiếp tục `MANUAL_REVIEW` và report evaluator chỉ ghi aggregate metrics.
+Trong Template-first, mọi nguồn OCR tiếp tục `MANUAL_REVIEW` và report evaluator chỉ
+ghi aggregate metrics.
 
 MinerU challenger:
 
@@ -554,22 +583,26 @@ liệu thật.
 
 ## Trạng thái dự án
 
-Dự án hiện ưu tiên **Template-first Phase 1** cho các mẫu hành chính nhân sự chuẩn,
-đồng thời giữ lại nền tảng IDP/OCR cũ:
+Dự án hiện ở checkpoint **TF-P2-005 — DONE**: Template-first đã được UAT trên
+bốn định dạng đầu vào, EasyOCR `vi-greedy` được promote làm backend OCR mặc định,
+đồng thời giữ lại nền tảng IDP/OCR cũ để tương thích và benchmark:
 
 - Registry đã có `leave-request-v1` và `overtime-request-v1`.
-- Dashboard local mặc định xử lý DOCX theo template, hiển thị field, quality và JSON.
+- Dashboard local mặc định xử lý DOCX/PDF native và ảnh/PDF scan theo template, hiển thị field, evidence, quality và JSON.
 - API local có `GET /api/templates` và `POST /api/documents/process`.
 - Regression Template-first đạt 14/14 classification, 126/126 required fields và
   không có JSON Schema error.
+- UAT mới nhất đạt DOCX 90/90, PDF native 90/90, ảnh 86/90 và PDF scan 82/90;
+  classification 10/10 ở mỗi định dạng, schema error 0.
+- Các nguồn OCR của Template-first đều route `MANUAL_REVIEW`; không có false `AUTO_CONTINUE`.
 - Universal Document Intake và native/OCR routing đã có.
 - Canonical model, classifier, extractor và quality gate đã có.
 - Benchmark baseline/challenger và promotion gate đã có.
 - Benchmark recognition-only và audit charset tiếng Việt đã có.
-- EasyOCR đã được chọn cho pilot recognition; VietOCR dùng để kiểm chứng.
+- EasyOCR `vi-greedy` là backend mặc định cho Template-first OCR; PaddleOCR là
+  rollback explicit, còn VietOCR/recognizer cũ chỉ giữ cho benchmark hoặc shadow review.
 - Camunda 7 shadow contract, BPMN/DMN safety routing và REST worker runtime đã có.
-- Benchmark trên tài liệu thật có quyền sử dụng và triển khai Camunda thực tế
-  vẫn đang chờ phê duyệt.
+- Runtime hiện local-only; Railway production-readiness đã được loại khỏi current plan.
 
 Các baseline rule-based và fixture synthetic dùng để kiểm tra kiến trúc/contract,
 không phải tuyên bố độ chính xác production. Xem
