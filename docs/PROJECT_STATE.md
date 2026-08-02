@@ -155,6 +155,50 @@ TF-P2-005 evidence (2026-08-02):
 - Explicit Paddle rollback smoke passed classification/schema/review gates on one
   image and reported `paddleocr/pp-ocrv5-vi`.
 
+External dataset DATA-00..DATA-05 checkpoint (2026-08-02):
+- Source is pinned to commit `dec17acbe2b409e0aa5daeb4db820d3e95d05bdf` and staged
+  outside Git; README and generator scripts are excluded from inventory.
+- Inventory is 13 documents / 17 pages with digest
+  `sha256:fef7fb1b09e253536d7734bbe5369675fc5621b69eed5ec4fb1ad68d4e7cc0ec`.
+- Folder-derived contract mapping covers CV, employment contract and certificate;
+  all three remain on `GENERIC_IDP`, never Template-first v1.
+- Native UTF-8 TXT parsing and certificate/short-contract classification are
+  versioned; mapping and inventory drift validators fail closed.
+- EasyOCR `vi-greedy` pilot processed 13/13 with 0 failures; folder-derived
+  classification matched 12/13. Report is aggregate-only and contains no raw
+  OCR/field values; quality counts are PASS 2, REVIEW_REQUIRED 6, REJECTED 5.
+- The user-directed synthetic/public profile is `PUBLIC` + `APPROVED`; the
+  aggregate report keeps promotion `HOLD` because independent Ground Truth is
+  absent and the corpus is below the 30-page benchmark minimum.
+- Pilot reason reporting is conditional on inventory governance; an approved
+  public profile no longer reports a false authorization HOLD reason.
+- Tracked artifacts: `config/external_dataset_mapping.json`,
+  `schemas/external_dataset_inventory.schema.json`,
+  `schemas/external_dataset_mapping.schema.json`, and the inventory/pilot
+  scripts plus synthetic contract tests. Raw documents, inventory JSON and
+  EasyOCR models remain outside the repository.
+- Final validation for this checkpoint: `pytest` 239 passed; Ruff, mypy,
+  compileall, `check_repository.py` and `git diff --check` passed.
+
+OCR-HO-V2-001 checkpoint (2026-08-02):
+- From 89 file-level new candidates in the local CCCD test folder, 15 images
+  were selected deterministically by SHA-256 after excluding the legacy 29 and
+  prior private 8. They are locked outside Git at the private held-out root.
+- Phase 11.5 and Phase 11.6 each completed 15/15 in
+  `SHADOW_REVIEW_ONLY`. The sealed snapshot is blinded with
+  `groundTruthPresent=false` and `predictionsHiddenDuringGroundTruthReview=true`;
+  no field values were copied from Ground Truth or a sibling document.
+- `validate_phase11_6_lock.py` returned `LOCK_VERIFIED` (`11.6.0`, six model
+  artifacts, 15 development documents). Checkpoint tests: 10 passed; Ruff,
+  `check_repository.py`, and `git diff --check` passed.
+- Ground Truth audit checked 15/15 source label files. They are YOLO
+  detection-only annotations (class IDs and polygons/boxes) and provide no
+  text transcription for the eight OCR fields. Therefore they cannot be used
+  as an independent exact-OCR Ground Truth.
+- Decision is `NOT_PROMOTED`; predictions remain sealed and unscored. The
+  manifest is still `PENDING_HUMAN_CONFIRMATION`; a human-verified text
+  transcription must be added before the sealed snapshot is evaluated once.
+
 Key commands:
 - `python -m pytest -q`
 - `python -m ruff check src tests scripts`

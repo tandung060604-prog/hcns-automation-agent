@@ -230,6 +230,67 @@ ký tự giảm 82,35% và không còn sensitive-field false acceptance. Gate v�
 `SHADOW_REVIEW_ONLY`: full-name ASCII EM mới đạt 73,33%, address ASCII EM
 3,33%, còn 5 field regression và ROI/candidate oracle của địa chỉ quá thấp.
 
+## Phase 11.6 — ROI địa chỉ và selection họ tên
+
+Policy 11.6 khóa ROI theo dải từ nhãn hiện tại đến nhãn kế tiếp, giới hạn địa chỉ
+hai dòng và tăng điểm cho candidate họ tên sạch. Runtime CPU dùng EasyOCR
+`greedy` thay cho `beamsearch`, do decoder beamsearch bị treo tại một crop địa
+chỉ lớn trong lần chạy development. Manifest 15 CCCD, sáu artifact model, schema,
+crop profile, recognition policy, runtime profile, runner, worker và evaluator
+đều được khóa SHA-256 trong `config/phase11_6_cccd_policy.json`.
+
+Replay đầu tiên trên 15/15 CCCD development hoàn tất với 480 crop nhưng làm
+regression. Policy sau đó được sửa theo nguyên tắc baseline-preserving:
+
+- chỉ OCR lại `fullName`, `placeOfOrigin` và `placeOfResidence`;
+- crop bắt đầu dưới dòng nhãn, địa chỉ ghép tối đa hai dòng;
+- `placeOfResidence` không còn bị cắt theo nhãn `dateOfExpiry` ở cột trái;
+- năm field ngoài phạm vi luôn giữ kết quả/evidence Phase 11.5;
+- candidate mục tiêu khác baseline chỉ được lưu làm shadow evidence;
+- field mới tìm thấy luôn `needs_review`.
+
+Replay cuối chạy 180 crop mục tiêu bằng EasyOCR/VietOCR và không dùng Ground
+Truth trong inference:
+
+| Metric | Phase 11.5 | Phase 11.6 |
+|---|---:|---:|
+| Strict Field Exact Match | 60,00% | 60,00% |
+| ASCII Field Exact Match | 61,67% | 61,67% |
+| CER | 43,60% | 43,60% |
+| Base CER | 41,87% | 41,87% |
+| DER | 12,65% | 12,65% |
+| Character Omission Rate | 2,50% | 2,50% |
+| Field Presence | 95,83% | 95,83% |
+| Accepted Precision | 100,00% | 100,00% |
+| Mean duration/document | 250,7 giây | 56,4 giây |
+
+Replay cuối không cải thiện hoặc làm mất field exact nào: improvement/regression
+là 0/0. Điều kiện bảo vệ field Phase 11.5 đã đạt, nhưng full-name ASCII EM vẫn
+73,33% và address ASCII EM vẫn 3,33%. Policy vì vậy tiếp tục
+`SHADOW_REVIEW_ONLY`; ROI candidate có thể đi sang protocol held-out ẩn để đo
+khả năng tổng quát hóa, nhưng chưa được dùng làm fallback tự động.
+
+Phân tích riêng shadow candidate của ba ROI mới (không phải output được chọn)
+đạt Strict EM 58,33%, ASCII EM 63,33%, CER 39,34%, DER 17,00% và Region
+Selection Accuracy 85,83%. Full-name ASCII EM tăng lên 86,67%, nhưng origin chỉ
+6,67% và residence vẫn 0%; Accepted Precision của shadow candidate là 96,15%.
+Điều này cho thấy crop họ tên có tín hiệu cải thiện, còn ghép địa chỉ vẫn chưa
+đủ bằng chứng để promote.
+
+### Protocol held-out CCCD v2
+
+Manifest private chứa 15 CCCD mới, không trùng SHA-256 với các manifest
+development/private trước đó. Nguồn, manifest, policy và prediction Phase 11.5/
+11.6 được khóa SHA-256 ngoài Git; prediction đã được seal trước khi mở Ground
+Truth và vẫn ở `SHADOW_REVIEW_ONLY`.
+
+Audit source test cho thấy 15/15 label files chỉ là YOLO detection annotations
+(class IDs và polygon/box), không có text transcription của tám field OCR. Vì
+vậy chúng chưa phải Ground Truth độc lập cho exact-OCR và chưa được phép mở
+prediction để evaluate-once. Cần human-verified text transcription trước khi
+đánh giá; Phase 11.5 vẫn là primary, Phase 11.6 vẫn là candidate
+`SHADOW_REVIEW_ONLY`.
+
 ## MinerU challenger
 
 Phù hợp khi:

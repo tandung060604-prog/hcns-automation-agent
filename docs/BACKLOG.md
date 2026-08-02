@@ -5,7 +5,7 @@
 
 | ID | Trạng thái | Mục tiêu | Phụ thuộc | Ưu tiên |
 |---|---|---|---|---|
-| OCR-HO-V2-001 | IN_PROGRESS | Chạy prediction ẩn trên 15 CCCD held-out, khóa Ground Truth rồi evaluate-once | Manifest v2, policy 11.6 | P0 |
+| OCR-HO-V2-001 | REVIEW | Đã seal prediction ẩn trên 15 CCCD held-out; chờ xác nhận Ground Truth để evaluate-once | Manifest v2, policy 11.6 | P0 |
 | TF-P1-001 | DONE | Template-first cho đơn nghỉ phép và tăng ca DOCX | 14 mẫu synthetic local | P0 |
 | TF-P1-002 | DONE | Commit/push Template-first, chạy API local và live smoke hai DOCX gốc | TF-P1-001 | P0 |
 | TF-P1-003 | DONE | Tích hợp Template-first vào OCR Lab localhost và hiển thị kết quả trích xuất | TF-P1-002 | P0 |
@@ -24,6 +24,31 @@
 | WEEKLY-REPORT-2026-W31 | DONE | Audit và báo cáo mentor đã khử định danh | Evidence local được cấp quyền | P1 |
 | TF-P2-003 | BLOCKED | UAT và quản trị phiên bản hai biểu mẫu | TF-P2-002 đạt gate | P1 |
 | M4-CAM-001 | PLANNED | Dry-run Camunda 7.13 với External Task workers | OCR quality gate, mock HRIS | P1 |
+| DATA-00 | DONE | Pin external source, isolate staging and reconcile dataset workstream | User-directed dataset commit | P0 |
+| DATA-01 | DONE (PUBLIC TEST PROFILE) | Record explicit public/synthetic classification; keep unknown/private sources fail-closed | DATA-00 | P0 |
+| DATA-02 | DONE | Build SHA-256/page-count inventory outside Git | DATA-01 | P0 |
+| DATA-03 | DONE | Map CV/contract/certificate to generic IDP; add native TXT and versioned drift checks | DATA-02 | P0 |
+| DATA-04 | DONE (HOLD) | Run EasyOCR aggregate-only pilot over 13 documents / 17 pages | DATA-03 | P0 |
+| DATA-05 | DONE | Add synthetic inventory/mapping/parser regression coverage and checkpoint evidence | DATA-04 | P1 |
+
+## DATA-00..DATA-05 acceptance criteria
+
+- `DATA-00`: source commit is pinned; raw source is staged outside this Git
+  repository; existing CCCD WIP remains untouched.
+- `DATA-01`: governance fields are explicit; this synthetic repository source
+  uses a user-directed `PUBLIC` + `APPROVED` test profile, while unknown/private
+  sources still fail closed.
+- `DATA-02`: every source has stable case ID, SHA-256, format and page count;
+  inventory digest changes on any source drift.
+- `DATA-03`: every category maps to a generic `DocumentType` or is rejected with
+  a reason; Template-first v1 is never used as a fallback; TXT is native and
+  PPTX remains `PARTIAL`.
+- `DATA-04`: all staged documents run through the local pipeline; report is
+  aggregate-only, OCR remains review-only, and no promotion occurs without
+  approved Ground Truth.
+- `DATA-05`: synthetic tests cover README exclusion, digest/page drift, mapping
+  version drift, TXT routing and schema validation. Required checks are
+  `pytest`, `ruff`, `mypy`, `compileall` and `check_repository.py`.
 
 ## OCR-HO-V2-001 acceptance criteria
 
@@ -32,6 +57,32 @@
 - Ground Truth được xác nhận từ ảnh gốc; prediction không hiển thị trong lúc review.
 - Đánh giá đúng một lần, không chỉnh threshold trên tập held-out.
 - Policy tiếp tục `SHADOW_REVIEW_ONLY` nếu candidate làm hỏng field primary hoặc không đạt gate.
+
+## OCR-HO-V2-001 checkpoint (prediction sealed; evaluation pending)
+
+- Dataset source: Roboflow test images selected deterministically by SHA-256 after
+  excluding the 29 legacy Phase 11 samples and 8 prior private images. Fifteen
+  file-level new documents were locked from 89 candidates.
+- The source and authorization remain outside Git under the local private data
+  root. The authorization records the user-directed local-only basis and the
+  source dataset's CC BY 4.0 declaration; no network export was performed.
+- Phase 11.5 and Phase 11.6 completed 15/15 documents with status
+  `SHADOW_REVIEW_ONLY`; the sealed private prediction snapshot has
+  `documentCount=15`, `groundTruthPresent=false`, and
+  `predictionsHiddenDuringGroundTruthReview=true`.
+- `validate_phase11_6_lock.py` returned `LOCK_VERIFIED` for phase `11.6.0`, six
+  locked model artifacts, and 15 development documents. No promotion or
+  threshold tuning was performed.
+- Regression checks for this checkpoint: 10 held-out/lock tests passed, Ruff
+  passed, repository hygiene passed, and `git diff --check` reported no content
+  errors (only normal line-ending warnings).
+- Ground Truth audit result: all 15 selected files have source YOLO label files,
+  but those annotations contain only class IDs and polygons/boxes (field
+  locations). They contain no text transcription for the eight OCR fields, so
+  they are insufficient for an exact OCR evaluation.
+- Decision: do not open or score the sealed predictions, and do not promote.
+  The private manifest remains `PENDING_HUMAN_CONFIRMATION`; a human text
+  transcription/verification pass is required before the one-time evaluation.
 
 ## TF-P1-001 acceptance criteria
 

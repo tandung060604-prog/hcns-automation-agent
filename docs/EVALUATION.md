@@ -24,6 +24,15 @@ Milestone Universal Document Intake có bốn fixture regression synthetic:
 Fixture này chỉ chứng minh contract/routing/safety, không chứng minh accuracy
 trên tài liệu HCNS thật.
 
+External DATA-00..DATA-05 pilot
+
+Dataset ngoài repository được khóa bằng source commit, SHA-256 inventory và page
+count; raw source, prediction và Ground Truth nằm ngoài Git. Khi chưa có quyền
+được xác nhận và Ground Truth độc lập, pilot chỉ chạy intake/classification
+aggregate-only, luôn `promotionAllowed=false` và không được gọi là accuracy
+benchmark. Mapping folder/type là nhãn vận hành tạm thời, không thay thế review
+Ground Truth.
+
 ## Metrics
 
 - OCR: CER, WER, reading-order accuracy.

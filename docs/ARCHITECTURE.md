@@ -18,6 +18,7 @@ DocumentSource
       ├─ IMAGE      → ImageDocumentParser → OcrEngine
       ├─ PDF_TEXT   → NativePdfDocumentParser
       ├─ PDF_SCAN   → ScannedPdfDocumentParser → rasterizer → OcrEngine
+      ├─ PLAIN_TEXT → PlainTextDocumentParser
       ├─ DOCX       → DocxDocumentParser
       ├─ XLSX       → XlsxDocumentParser
       └─ PPTX       → extension point
@@ -37,8 +38,8 @@ storage được kiểm soát; Camunda chỉ nhận reference và biến routing
 
 ## Ba lớp phân loại độc lập
 
-- `SourceFormat` chọn parser kỹ thuật: IMAGE, PDF_TEXT, PDF_SCAN, DOCX, XLSX,
-  PPTX, LEGACY_DOC, LEGACY_XLS hoặc UNKNOWN.
+- `SourceFormat` chọn parser kỹ thuật: PLAIN_TEXT, IMAGE, PDF_TEXT, PDF_SCAN,
+  DOCX, XLSX, PPTX, LEGACY_DOC, LEGACY_XLS hoặc UNKNOWN.
 - `DocumentType` chọn extractor nghiệp vụ, ví dụ CV, hợp đồng, đơn nghỉ hoặc
   bảng chấm công.
 - `WorkflowType` là context quy trình do Camunda điều phối.

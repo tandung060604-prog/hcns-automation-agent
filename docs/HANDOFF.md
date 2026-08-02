@@ -216,6 +216,50 @@
 - Explicit Paddle rollback smoke passed its routing/schema/review gates. No
   VietOCR dependency or model was added.
 
+### DATA-00..DATA-05 — External dataset intake (DONE / HOLD)
+
+- Source commit `dec17acbe2b409e0aa5daeb4db820d3e95d05bdf` is staged outside the
+  repository; raw documents and model cache are not tracked.
+- Inventory is pinned at 13 documents / 17 pages and is verified by SHA-256,
+  source-format and page-count drift checks.
+- Mapping covers CV, employment contract and certificate through generic IDP;
+  Template-first v1 is explicitly unsupported for every category.
+- Native TXT parser, certificate markers and short-contract markers were added
+  with synthetic tests; PPTX remains text-only `PARTIAL` by policy.
+- EasyOCR `vi-greedy` pilot: 13/13 processed, 0 failures, 12/13 folder-derived
+  classification matches; report is aggregate-only with 0 raw OCR/field values.
+- Final validation: Python `pytest` 239 passed; Ruff, mypy, compileall,
+  repository hygiene and `git diff --check` passed.
+- The user directed this simulated repository dataset to use a `PUBLIC` +
+  `APPROVED` test profile. Promotion remains `HOLD` because independently
+  reviewed Ground Truth is absent and 17 pages is below the benchmark minimum
+  of 30.
+- Exact next action: create a sealed Ground Truth split and the certificate
+  schema, then rerun the existing aggregate benchmark without changing frozen
+  Template-first schemas.
+
+### OCR-HO-V2-001 — CCCD held-out prediction seal (REVIEW)
+
+- Fifteen file-level new CCCD images were selected from the Roboflow test set
+  after excluding legacy/private SHA-256 matches and locked in the private
+  manifest. Raw images, authorization, model cache, and predictions are not in
+  Git.
+- Phase 11.5 and Phase 11.6 both completed 15/15 with
+  `SHADOW_REVIEW_ONLY`. The private prediction snapshot is sealed before any
+  Ground Truth was opened; the aggregate status file reports
+  `BLINDED_PREDICTIONS_READY`, `sampleGate=SUFFICIENT`, and
+  `groundTruthPresent=false`.
+- Lock verification passed for phase 11.6.0 with six model artifacts and the
+  15-document development manifest. Held-out/lock tests (10), Ruff,
+  `check_repository.py`, and `git diff --check` passed.
+- Ground Truth audit found 15/15 source label files, but they are YOLO
+  detection-only annotations (class IDs plus polygons/boxes) with no text
+  transcription for the eight OCR fields. This is not an independent text
+  Ground Truth and cannot support an exact OCR score.
+- Decision: do not open/score the sealed predictions and do not promote. The
+  manifest remains `PENDING_HUMAN_CONFIRMATION`; obtain a human-verified text
+  transcription first, then evaluate the sealed snapshot exactly once.
+
 ## Next action
 
 1. Giữ localhost/loopback là runtime target; không mở task deployment trong kế
