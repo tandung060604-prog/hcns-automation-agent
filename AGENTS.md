@@ -17,7 +17,7 @@ Chỉ đọc các file cần cho tác vụ:
 
 | Tác vụ | Chỉ đọc thêm |
 |---|---|
-| OCR/model | `docs/MODEL_GUIDE.md`, `src/hcns_agent/ports/ocr.py` |
+| OCR/model | `docs/MODEL_GUIDE.md`, `docs/OCR_METHODS_AND_METRICS.md`, `src/hcns_agent/ports/ocr.py` |
 | Intake/parser | `docs/ARCHITECTURE.md`, ADR-0002, `tests/AGENTS.md` |
 | Classification/extraction | ADR-0003, `schemas/`, `docs/EVALUATION.md` |
 | Workflow/HITL | `docs/WORKFLOWS.md`, `docs/HUMAN_IN_THE_LOOP.md` |
