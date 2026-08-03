@@ -22,7 +22,18 @@ from typing import Any
 from xml.etree import ElementTree
 
 FIELD_SPECS: dict[str, tuple[str, ...]] = {
-    "cv": ("full_name", "skills", "education"),
+    "cv": (
+        "full_name",
+        "headline",
+        "email",
+        "phone_number",
+        "address",
+        "desired_role",
+        "years_experience",
+        "experience",
+        "skills",
+        "education",
+    ),
     "contract": (
         "contract_number",
         "contract_sign_date",
@@ -46,6 +57,9 @@ FIELD_SPECS: dict[str, tuple[str, ...]] = {
         "overall_score",
         "issue_date",
     ),
+}
+OUT_OF_SCOPE_REVIEW_FORMATS: dict[str, frozenset[str]] = {
+    "cv": frozenset({"PLAIN_TEXT", "PPTX"}),
 }
 ALLOWED_SUFFIXES = {".txt", ".docx", ".png", ".jpg", ".jpeg", ".pdf", ".pptx"}
 CASE_ID_RE = re.compile(r"^(?:cv|contract|ielts)-\d{3}$")
@@ -169,6 +183,12 @@ def _case_maps(
     )
 
 
+def _is_reviewable(record: dict[str, Any]) -> bool:
+    category = str(record.get("category", ""))
+    source_format = str(record.get("sourceFormat", ""))
+    return source_format not in OUT_OF_SCOPE_REVIEW_FORMATS.get(category, frozenset())
+
+
 def _field_count(case: dict[str, Any]) -> int:
     return sum(
         1
@@ -200,6 +220,7 @@ def load_review_summary(
         source = _source_path(root.resolve(), record)
         category = str(record.get("category", ""))
         fields = FIELD_SPECS[category]
+        reviewable = _is_reviewable(record)
         documents.append(
             {
                 "caseId": case_id,
@@ -209,12 +230,19 @@ def load_review_summary(
                 "sourceFile": source.name,
                 "pageCount": record.get("pageCount", case.get("pageCount", 1)),
                 "previewAvailable": True,
-                "reviewStatus": "CONFIRMED" if _field_count(case) == len(fields) else "PENDING",
+                "reviewStatus": (
+                    "OUT_OF_SCOPE"
+                    if not reviewable
+                    else "CONFIRMED" if _field_count(case) == len(fields) else "PENDING"
+                ),
                 "reviewedFieldCount": _field_count(case),
                 "fieldCount": len(fields),
+                "reviewable": reviewable,
+                "scopeStatus": "ACTIVE" if reviewable else "OUT_OF_SCOPE",
             }
         )
     status = _dataset_status(draft)
+    reviewable_documents = [item for item in documents if item["reviewable"]]
     return {
         "schemaVersion": "external-dataset-ground-truth-review/1.0.0",
         "datasetId": draft.get("dataset", {}).get("datasetId"),
@@ -223,13 +251,20 @@ def load_review_summary(
         "documentCount": len(documents),
         "pageCount": sum(int(item.get("pageCount", 0)) for item in documents),
         "fieldCount": sum(int(item["fieldCount"]) for item in documents),
+        "reviewableDocumentCount": len(reviewable_documents),
+        "reviewablePageCount": sum(int(item.get("pageCount", 0)) for item in reviewable_documents),
+        "reviewableFieldCount": sum(int(item["fieldCount"]) for item in reviewable_documents),
         "groundTruthStatus": status,
         "reviewStatus": draft.get("review", {}).get("status", "PENDING"),
         "predictionsHiddenDuringReview": True,
         "localOnly": True,
         "documents": documents,
         "canLock": status not in {"SEALED", "APPROVED"}
-        and all(item["reviewedFieldCount"] == item["fieldCount"] for item in documents),
+        and bool(reviewable_documents)
+        and all(
+            item["reviewedFieldCount"] == item["fieldCount"]
+            for item in reviewable_documents
+        ),
     }
 
 
@@ -275,9 +310,13 @@ def load_review_document(
         "sourceFormat": record.get("sourceFormat"),
         "sourceFile": source.name,
         "pageCount": record.get("pageCount", case.get("pageCount", 1)),
+        "reviewable": _is_reviewable(record),
+        "scopeStatus": "ACTIVE" if _is_reviewable(record) else "OUT_OF_SCOPE",
         "fields": field_values,
         "reviewStatus": (
-            "CONFIRMED" if _field_count(case) == len(FIELD_SPECS[category]) else "PENDING"
+            "OUT_OF_SCOPE"
+            if not _is_reviewable(record)
+            else "CONFIRMED" if _field_count(case) == len(FIELD_SPECS[category]) else "PENDING"
         ),
         "predictionsHidden": True,
         "localOnly": True,
@@ -331,7 +370,9 @@ def save_review(
     inventory_path: Path | None = None,
     ground_truth_path: Path | None = None,
 ) -> dict[str, Any]:
-    _, draft, _, _ = _get_case(root, case_id, inventory_path, ground_truth_path)
+    _, draft, record, _ = _get_case(root, case_id, inventory_path, ground_truth_path)
+    if not _is_reviewable(record):
+        raise ValueError("This source format is outside the active review scope")
     if _dataset_status(draft) in {"SEALED", "APPROVED"}:
         raise ValueError("Ground Truth is already sealed")
     fields = payload.get("fields")
@@ -344,7 +385,7 @@ def save_review(
         str(item.get("name")): item for item in existing_case.get("fields", [])
     }
     if set(fields) != set(expected):
-        raise ValueError("All and only the contract fields must be supplied")
+        raise ValueError("All and only the fields for this category must be supplied")
     reviewer = " ".join(str(payload.get("reviewer", "local_user")).split()).strip() or "local_user"
     if len(reviewer) > 200:
         raise ValueError("Reviewer name is too large")
@@ -396,13 +437,17 @@ def lock_ground_truth(
 ) -> dict[str, Any]:
     if confirm is not True:
         raise ValueError("Explicit SEALED confirmation is required")
-    _, draft, ground_truth_file = _require_local_dataset(root, inventory_path, ground_truth_path)
+    inventory, draft, ground_truth_file = _require_local_dataset(
+        root, inventory_path, ground_truth_path
+    )
     if _dataset_status(draft) in {"SEALED", "APPROVED"}:
         raise ValueError("Ground Truth is already sealed")
+    inventory_by_id, _ = _case_maps(inventory, draft)
     if any(
         _field_count(case)
         != len(FIELD_SPECS[str(case["caseId"]).split("-", 1)[0]])
         for case in draft["cases"]
+        if _is_reviewable(inventory_by_id[str(case["caseId"])])
     ):
         raise ValueError("Every document and field must be confirmed before sealing")
     now = utc_now()

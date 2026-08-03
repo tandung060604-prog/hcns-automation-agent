@@ -19,7 +19,8 @@
         "IMAGE": "OCR_REVIEW",
         "PPTX": "NATIVE_PARTIAL",
         "PDF_SCAN": "OCR_REVIEW"
-      }
+      },
+      "mappingNote": "Active Ground Truth review uses 10 HR-recruiting fields for DOCX/IMAGE/PDF_SCAN; PLAIN_TEXT and PPTX remain inventory-only."
     },
     {
       "category": "contract",
@@ -49,7 +50,7 @@
         "DOCX": "NATIVE_EMBEDDED_IMAGE_REVIEW",
         "PDF_SCAN": "OCR_REVIEW"
       },
-      "mappingNote": "Certificate schema is versioned; independent Ground Truth review is required before promotion."
+      "mappingNote": "Certificate review keeps recipient, credential and issue metadata; recipient_name is the printed family name + first name string; overall_score is the only score field. Independent Ground Truth review is required before promotion."
     }
   ]
 }

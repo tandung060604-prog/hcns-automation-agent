@@ -177,10 +177,11 @@ test("hides held-out evidence by default behind a private local flag", async () 
 });
 
 test("exposes the DATA-08 independent contract review panel behind a private flag", async () => {
-  const [dashboard, component, envExample] = await Promise.all([
+  const [dashboard, component, envExample, css] = await Promise.all([
     readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/ExternalDatasetReview.tsx", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   assert.match(dashboard, /VITE_SHOW_EXTERNAL_DATASET_REVIEW === "true"/);
   assert.match(envExample, /^VITE_SHOW_EXTERNAL_DATASET_REVIEW=false$/m);
@@ -189,10 +190,20 @@ test("exposes the DATA-08 independent contract review panel behind a private fla
   assert.match(component, /\/external-dataset\/review\/save\?id=/);
   assert.match(component, /\/external-dataset\/review\/lock/);
   assert.match(component, /predictionsHiddenDuringReview/);
-  assert.match(component, /DATA-08 · INDEPENDENT CONTRACT REVIEW/);
+  assert.match(component, /EXTERNAL DATASET · INDEPENDENT REVIEW/);
   assert.match(component, /Contract · 4 case \/ 56 field/);
+  assert.match(component, /CV · 3 case \/ 10 field/);
+  assert.match(component, /IELTS · 3 case \/ 5 field/);
+  assert.match(component, /Family name \+ First name/);
+  assert.match(component, /không tự đảo hoặc tách thành field khác/);
+  assert.match(component, /item\.reviewable/);
   assert.match(component, /PDF_TEXT/);
   assert.match(component, /Không có \/ không đọc được/);
+  assert.match(component, /save-current-external-review/);
+  assert.match(component, /Lưu review hiện tại/);
+  assert.match(component, /DRAFT_STORAGE_PREFIX/);
+  assert.match(component, /Bạn còn dữ liệu chưa lưu/);
+  assert.match(css, /external-review-primary-save:disabled/);
 });
 
 test("exposes one Template-first upload with source preview and structured results", async () => {

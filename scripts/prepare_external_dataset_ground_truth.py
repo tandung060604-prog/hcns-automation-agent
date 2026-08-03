@@ -22,6 +22,13 @@ from hcns_agent.application.external_dataset import (
 FIELD_SPECS: dict[str, tuple[tuple[str, bool], ...]] = {
     "cv": (
         ("full_name", True),
+        ("headline", False),
+        ("email", True),
+        ("phone_number", True),
+        ("address", True),
+        ("desired_role", False),
+        ("years_experience", False),
+        ("experience", False),
         ("skills", False),
         ("education", False),
     ),
@@ -49,6 +56,9 @@ FIELD_SPECS: dict[str, tuple[tuple[str, bool], ...]] = {
         ("issue_date", False),
     ),
 }
+OUT_OF_SCOPE_REVIEW_FORMATS: dict[str, frozenset[str]] = {
+    "cv": frozenset({"PLAIN_TEXT", "PPTX"}),
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -60,7 +70,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--preserve-from",
         type=Path,
-        help="Previous local draft whose non-contract review fields must be preserved.",
+        help="Previous local draft whose matching review fields must be preserved.",
+    )
+    parser.add_argument(
+        "--preserve-all",
+        action="store_true",
+        help="Preserve matching fields and review metadata for every existing case.",
     )
     return parser.parse_args()
 
@@ -96,7 +111,7 @@ def build_ground_truth_draft(
                     for field_name, sensitive in field_specs
                 ],
                 "expectedQualityStatus": "REVIEW_REQUIRED",
-                "reviewRequired": True,
+                "reviewRequired": _review_required(case),
             }
         )
     return {
@@ -133,8 +148,15 @@ def main() -> int:
         )
         mapping = _read_object(args.mapping)
         draft = build_ground_truth_draft(inventory, mapping)
+        if args.preserve_all and args.preserve_from is None:
+            raise ExternalDatasetError("--preserve-all requires --preserve-from")
         if args.preserve_from is not None:
-            draft = preserve_non_contract_reviews(draft, _read_object(args.preserve_from))
+            previous = _read_object(args.preserve_from)
+            draft = (
+                preserve_all_review_state(draft, previous)
+                if args.preserve_all
+                else preserve_non_contract_reviews(draft, previous)
+            )
     except ExternalDatasetError as error:
         raise SystemExit(f"Ground Truth draft rejected: {error}") from error
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -178,7 +200,22 @@ def preserve_non_contract_reviews(
             continue
         prior_fields = prior.get("fields")
         if isinstance(prior_fields, list):
-            case["fields"] = prior_fields
+            category = case_id.split("-", 1)[0]
+            current_fields = {
+                str(field.get("name")): field
+                for field in case.get("fields", [])
+                if isinstance(field, dict) and field.get("name")
+            }
+            for field in prior_fields:
+                if not isinstance(field, dict):
+                    continue
+                name = str(field.get("name", ""))
+                if name in current_fields:
+                    current_fields[name] = field
+            case["fields"] = [
+                current_fields[str(field_name)]
+                for field_name, _ in FIELD_SPECS[category]
+            ]
         for key in ("reviewRequired", "reviewedAt", "reviewer"):
             if key in prior:
                 case[key] = prior[key]
@@ -200,6 +237,73 @@ def preserve_non_contract_reviews(
             else "IN_PROGRESS"
         )
     return draft
+
+
+def preserve_all_review_state(
+    draft: dict[str, object], previous: dict[str, object]
+) -> dict[str, object]:
+    """Migrate matching field values without losing completed cases."""
+
+    previous_cases = {
+        str(case.get("caseId")): case for case in _objects(previous, "cases")
+    }
+    for case in _objects(draft, "cases"):
+        case_id = _string(case, "caseId")
+        prior = previous_cases.get(case_id)
+        if prior is None:
+            continue
+        current_fields = {
+            str(field.get("name")): field
+            for field in case.get("fields", [])
+            if isinstance(field, dict) and field.get("name")
+        }
+        prior_fields = prior.get("fields")
+        if isinstance(prior_fields, list):
+            for field in prior_fields:
+                if not isinstance(field, dict):
+                    continue
+                name = str(field.get("name", ""))
+                if name in current_fields:
+                    current_fields[name] = field
+        category = case_id.split("-", 1)[0]
+        case["fields"] = [
+            current_fields[str(field_name)]
+            for field_name, _ in FIELD_SPECS[category]
+        ]
+        if case.get("reviewRequired") is False:
+            continue
+        confirmed = all(
+            str(field.get("reviewStatus")) == "CONFIRMED"
+            for field in case["fields"]
+        )
+        case["reviewRequired"] = not confirmed
+        if confirmed:
+            for key in ("reviewedAt", "reviewer"):
+                if key in prior:
+                    case[key] = prior[key]
+
+    prior_review = previous.get("review")
+    if isinstance(prior_review, dict):
+        current_review = _object(draft, "review")
+        for key in ("reviewer", "reviewedAt", "evidenceReference", "predictionBlindness"):
+            if key in prior_review:
+                current_review[key] = prior_review[key]
+    current_review = _object(draft, "review")
+    current_review["status"] = (
+        "CONFIRMED"
+        if all(
+            case.get("reviewRequired") is False
+            for case in _objects(draft, "cases")
+        )
+        else "IN_PROGRESS"
+    )
+    return draft
+
+
+def _review_required(case: dict[str, object]) -> bool:
+    category = str(case.get("category", ""))
+    source_format = str(case.get("sourceFormat", ""))
+    return source_format not in OUT_OF_SCOPE_REVIEW_FORMATS.get(category, frozenset())
 
 
 def _object(payload: dict[str, object], key: str) -> dict[str, object]:

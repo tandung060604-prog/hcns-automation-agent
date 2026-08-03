@@ -26,7 +26,10 @@
             "issue_date"
           ],
           "properties": {
-            "recipient_name": {"type": ["string", "null"]},
+            "recipient_name": {
+              "type": ["string", "null"],
+              "description": "Full printed recipient name in IELTS order: family name + first name; preserve the source order and characters."
+            },
             "credential_id": {"type": ["string", "null"]},
             "credential_type": {"type": ["string", "null"]},
             "overall_score": {"type": ["number", "string", "null"]},

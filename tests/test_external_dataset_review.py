@@ -38,7 +38,7 @@ def build_dataset(tmp_path: Path) -> tuple[Path, Path, Path]:
             "category": category,
             "documentType": category.upper(),
             "pageCount": 1,
-            "sourceFormat": "PLAIN_TEXT",
+            "sourceFormat": "DOCX" if category == "cv" else "PLAIN_TEXT",
             "sourceRelativePath": relative,
             "sourceSha256": f"sha256:{digest}",
         }
@@ -99,7 +99,8 @@ def test_summary_is_prediction_blind_and_counts_current_fields(tmp_path: Path) -
         ground_truth_path=ground_truth,
     )
     assert summary["documentCount"] == 3
-    assert summary["fieldCount"] == 22
+    assert summary["fieldCount"] == 29
+    assert summary["reviewableDocumentCount"] == 3
     assert summary["predictionsHiddenDuringReview"] is True
     assert summary["localOnly"] is True
     assert "value" not in json.dumps(summary)
@@ -111,6 +112,38 @@ def test_summary_is_prediction_blind_and_counts_current_fields(tmp_path: Path) -
     )
     assert detail["predictionsHidden"] is True
     assert "prediction" not in detail
+
+
+def test_cv_text_and_pptx_are_out_of_scope_and_cannot_be_saved(tmp_path: Path) -> None:
+    root, inventory, ground_truth = build_dataset(tmp_path)
+    payload = json.loads(inventory.read_text(encoding="utf-8"))
+    cv_record = next(item for item in payload["cases"] if item["caseId"] == "cv-001")
+    cv_record["sourceFormat"] = "PPTX"
+    inventory.write_text(json.dumps(payload), encoding="utf-8")
+
+    summary = load_review_summary(
+        root,
+        inventory_path=inventory,
+        ground_truth_path=ground_truth,
+    )
+    excluded = next(item for item in summary["documents"] if item["caseId"] == "cv-001")
+    assert excluded["reviewable"] is False
+    assert excluded["reviewStatus"] == "OUT_OF_SCOPE"
+    detail = load_review_document(
+        root,
+        "cv-001",
+        inventory_path=inventory,
+        ground_truth_path=ground_truth,
+    )
+    assert detail["reviewStatus"] == "OUT_OF_SCOPE"
+    with pytest.raises(ValueError, match="outside the active review scope"):
+        save_review(
+            root,
+            "cv-001",
+            {"fields": all_fields("cv")},
+            inventory_path=inventory,
+            ground_truth_path=ground_truth,
+        )
 
 
 def test_source_path_escape_is_rejected(tmp_path: Path) -> None:

@@ -4,7 +4,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 /* eslint-disable react-hooks/exhaustive-deps */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const API_BASE = "http://127.0.0.1:8765";
 
@@ -17,6 +17,8 @@ type ReviewDocument = {
   pageCount: number;
   fields: Record<string, { value: string | null; reviewStatus: string; sensitive: boolean }>;
   reviewStatus: string;
+  reviewable: boolean;
+  scopeStatus: string;
 };
 
 type ReviewSummary = {
@@ -40,13 +42,28 @@ type ReviewSummary = {
     reviewStatus: string;
     reviewedFieldCount: number;
     fieldCount: number;
+    reviewable: boolean;
+    scopeStatus: string;
   }>;
 };
 
+type LocalReviewDraft = {
+  values: Record<string, string>;
+  absentFields: string[];
+};
+
 const TEXT_FORMATS = new Set(["PLAIN_TEXT", "TXT", "DOCX", "PPTX"]);
+const DRAFT_STORAGE_PREFIX = "vinhris:data-08:review-draft:v2";
 type ReviewCategory = "contract" | "cv" | "ielts";
 const FIELD_LABELS: Record<string, string> = {
   full_name: "Họ và tên",
+  headline: "Tiêu đề nghề nghiệp",
+  email: "Email",
+  phone_number: "Số điện thoại",
+  address: "Địa chỉ",
+  desired_role: "Vị trí mong muốn",
+  years_experience: "Số năm kinh nghiệm",
+  experience: "Kinh nghiệm làm việc",
   skills: "Kỹ năng",
   education: "Học vấn",
   contract_number: "Số hợp đồng",
@@ -63,44 +80,95 @@ const FIELD_LABELS: Record<string, string> = {
   probation_salary_monthly: "Lương thử việc mỗi tháng",
   allowances_summary: "Phụ cấp và hỗ trợ",
   salary_payment_schedule: "Lịch trả lương",
-  recipient_name: "Tên người nhận",
+  recipient_name: "Tên người nhận (Family name + First name)",
   credential_id: "Mã chứng chỉ",
   credential_type: "Loại chứng chỉ",
   overall_score: "Điểm tổng",
   issue_date: "Ngày cấp",
+};
+const FIELD_HINTS: Record<string, string> = {
+  recipient_name:
+    "Ghi nguyên chuỗi Family name + First name đúng thứ tự trên chứng chỉ; không tự đảo hoặc tách thành field khác.",
 };
 
 function categoryLabel(category: string): string {
   return { cv: "CV", contract: "Hợp đồng", ielts: "IELTS" }[category] ?? category;
 }
 
+function draftStorageKey(caseId: string): string {
+  return `${DRAFT_STORAGE_PREFIX}:${caseId}`;
+}
+
+function readLocalDraft(caseId: string): LocalReviewDraft | null {
+  try {
+    const raw = window.localStorage.getItem(draftStorageKey(caseId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<LocalReviewDraft>;
+    if (!parsed.values || typeof parsed.values !== "object") return null;
+    return {
+      values: Object.fromEntries(
+        Object.entries(parsed.values).filter((entry): entry is [string, string] =>
+          typeof entry[1] === "string",
+        ),
+      ),
+      absentFields: Array.isArray(parsed.absentFields)
+        ? parsed.absentFields.filter((name): name is string => typeof name === "string")
+        : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function ExternalDatasetReview() {
+  const suppressDraftPersistence = useRef(false);
   const [summary, setSummary] = useState<ReviewSummary | null>(null);
   const [reviewCategory, setReviewCategory] = useState<ReviewCategory>("contract");
   const [activeCaseId, setActiveCaseId] = useState("");
   const [document, setDocument] = useState<ReviewDocument | null>(null);
-  const [values, setValues] = useState<Record<string, string | null>>({});
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [absentFields, setAbsentFields] = useState<string[]>([]);
   const [previewText, setPreviewText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [locking, setLocking] = useState(false);
+  const [confirmedForSave, setConfirmedForSave] = useState(false);
 
   const activeItem = useMemo(
     () =>
       summary?.documents.find(
-        (item) => item.category === reviewCategory && item.caseId === activeCaseId,
+        (item) =>
+          item.category === reviewCategory && item.reviewable && item.caseId === activeCaseId,
       ) ?? null,
     [summary, reviewCategory, activeCaseId],
   );
   const scopedDocuments = useMemo(
-    () => summary?.documents.filter((item) => item.category === reviewCategory) ?? [],
+    () =>
+      summary?.documents.filter(
+        (item) => item.category === reviewCategory && item.reviewable,
+      ) ?? [],
     [summary, reviewCategory],
   );
   const scopedFieldCount = scopedDocuments.reduce((total, item) => total + item.fieldCount, 0);
   const scopedReviewedFieldCount = scopedDocuments.reduce(
     (total, item) => total + item.reviewedFieldCount,
     0,
+  );
+  const fieldNames = document ? Object.keys(document.fields) : [];
+  const completedFieldCount = fieldNames.filter(
+    (name) => absentFields.includes(name) || Boolean(values[name]?.trim()),
+  ).length;
+  const allFieldsCompleted = fieldNames.length > 0 && completedFieldCount === fieldNames.length;
+  const canSave = Boolean(
+    document &&
+      (dirty || document.reviewStatus !== "CONFIRMED") &&
+      allFieldsCompleted &&
+      confirmedForSave &&
+      !saving &&
+      summary?.groundTruthStatus !== "SEALED",
   );
   const previewUrl = activeCaseId
     ? `${API_BASE}/external-dataset/review/document?id=${encodeURIComponent(
@@ -116,7 +184,8 @@ export default function ExternalDatasetReview() {
     if (selectFirst || !activeCaseId) {
       setActiveCaseId(
         payload.documents?.find(
-          (item: ReviewSummary["documents"][number]) => item.category === reviewCategory,
+          (item: ReviewSummary["documents"][number]) =>
+            item.category === reviewCategory && item.reviewable,
         )?.caseId ?? "",
       );
     }
@@ -137,8 +206,14 @@ export default function ExternalDatasetReview() {
   useEffect(() => {
     if (!activeCaseId) {
       setDocument(null);
+      setConfirmedForSave(false);
+      setDirty(false);
       return;
     }
+    setConfirmedForSave(false);
+    setDirty(false);
+    setValues({});
+    setAbsentFields([]);
     setLoading(true);
     setError("");
     Promise.all([
@@ -156,15 +231,39 @@ export default function ExternalDatasetReview() {
       .then(async ([detailResponse, previewResponse]) => {
         const detailPayload = await detailResponse.json();
         if (!detailResponse.ok) throw new Error(detailPayload.error ?? "Không đọc được tài liệu");
-        setDocument(detailPayload);
-        setValues(
-          Object.fromEntries(
-            Object.entries(detailPayload.fields ?? {}).map(([name, field]) => [
-              name,
-              (field as { value: string | null }).value,
-            ]),
-          ),
+        const names = Object.keys(detailPayload.fields ?? {});
+        const serverValues = Object.fromEntries(
+          Object.entries(detailPayload.fields ?? {}).map(([name, field]) => [
+            name,
+            (field as { value: string | null }).value ?? "",
+          ]),
         );
+        const serverAbsentFields = Object.entries(detailPayload.fields ?? {})
+          .filter(
+            ([, field]) =>
+              (field as { value: string | null; reviewStatus: string }).value === null &&
+              (field as { value: string | null; reviewStatus: string }).reviewStatus === "CONFIRMED",
+          )
+          .map(([name]) => name);
+        const localDraft = readLocalDraft(activeCaseId);
+        const restoredValues = localDraft
+          ? {
+              ...serverValues,
+              ...Object.fromEntries(
+                Object.entries(localDraft.values).filter(([name]) => names.includes(name)),
+              ),
+            }
+          : serverValues;
+        const restoredAbsentFields = localDraft
+          ? localDraft.absentFields.filter((name) => names.includes(name))
+          : serverAbsentFields;
+        setDocument(detailPayload);
+        setValues(restoredValues);
+        setAbsentFields(restoredAbsentFields);
+        setDirty(Boolean(localDraft));
+        if (localDraft) {
+          setMessage(`Đã khôi phục bản nháp chưa lưu của ${activeCaseId}.`);
+        }
         if (previewResponse.headers.get("content-type")?.includes("application/json")) {
           const previewPayload = await previewResponse.json();
           setPreviewText(previewPayload.text ?? "");
@@ -178,28 +277,160 @@ export default function ExternalDatasetReview() {
       .finally(() => setLoading(false));
   }, [activeCaseId]);
 
-  async function save() {
-    if (!document) return;
-    setMessage("");
-    setError("");
-    const fields = Object.fromEntries(
-      Object.entries(values).map(([name, value]) => [name, { value }]),
-    );
-    const response = await fetch(
-      `${API_BASE}/external-dataset/review/save?id=${encodeURIComponent(document.caseId)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fields, reviewer: "local_user" }),
-      },
-    );
-    const payload = await response.json();
-    if (!response.ok) {
-      setError(payload.error ?? "Không lưu được review");
+  useEffect(() => {
+    if (suppressDraftPersistence.current) {
+      suppressDraftPersistence.current = false;
       return;
     }
-    setMessage(`Đã xác nhận ${payload.reviewedFieldCount} field cho ${document.caseId}.`);
-    await refreshSummary();
+    if (!dirty || !document) return;
+    window.localStorage.setItem(
+      draftStorageKey(document.caseId),
+      JSON.stringify({ values, absentFields } satisfies LocalReviewDraft),
+    );
+  }, [dirty, values, absentFields, document]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const preventUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", preventUnload);
+    return () => window.removeEventListener("beforeunload", preventUnload);
+  }, [dirty]);
+
+  function updateFieldValue(name: string, value: string) {
+    setValues((current) => ({ ...current, [name]: value }));
+    setAbsentFields((current) => current.filter((fieldName) => fieldName !== name));
+    setDirty(true);
+    setConfirmedForSave(false);
+    setMessage("");
+    setError("");
+  }
+
+  function updateAbsentField(name: string, absent: boolean) {
+    setAbsentFields((current) =>
+      absent
+        ? Array.from(new Set([...current, name]))
+        : current.filter((fieldName) => fieldName !== name),
+    );
+    setDirty(true);
+    setConfirmedForSave(false);
+    setMessage("");
+    setError("");
+  }
+
+  function selectCase(caseId: string) {
+    if (caseId === activeCaseId) return;
+    if (dirty) {
+      setError(
+        `Bạn còn dữ liệu chưa lưu ở ${activeCaseId}. Hãy bấm “Lưu review hiện tại” hoặc bỏ bản nháp trước khi chuyển case.`,
+      );
+      return;
+    }
+    setError("");
+    setMessage("");
+    setActiveCaseId(caseId);
+  }
+
+  function selectCategory(category: ReviewCategory) {
+    if (category === reviewCategory) return;
+    if (dirty) {
+      setError(
+        `Bạn còn dữ liệu chưa lưu ở ${activeCaseId}. Hãy lưu hoặc bỏ bản nháp trước khi đổi phạm vi.`,
+      );
+      return;
+    }
+    setError("");
+    setMessage("");
+    setReviewCategory(category);
+  }
+
+  function discardDraft() {
+    if (!document || !dirty) return;
+    suppressDraftPersistence.current = true;
+    setValues(
+      Object.fromEntries(
+        Object.entries(document.fields).map(([name, field]) => [name, field.value ?? ""]),
+      ),
+    );
+    setAbsentFields(
+      Object.entries(document.fields)
+        .filter(([, field]) => field.value === null && field.reviewStatus === "CONFIRMED")
+        .map(([name]) => name),
+    );
+    window.localStorage.removeItem(draftStorageKey(document.caseId));
+    setDirty(false);
+    setConfirmedForSave(false);
+    setError("");
+    setMessage(`Đã bỏ bản nháp của ${document.caseId}.`);
+  }
+
+  async function save() {
+    if (!document) return;
+    if (!allFieldsCompleted) {
+      setError(`Còn ${fieldNames.length - completedFieldCount} field chưa điền hoặc chưa đánh dấu không có.`);
+      return;
+    }
+    if (!confirmedForSave) {
+      setError("Hãy tick xác nhận đã đối chiếu đủ field trước khi lưu.");
+      return;
+    }
+    setMessage("");
+    setError("");
+    setSaving(true);
+    const fields = Object.fromEntries(
+      fieldNames.map((name) => [
+        name,
+        { value: absentFields.includes(name) ? null : values[name]?.trim() ?? "" },
+      ]),
+    );
+    try {
+      const response = await fetch(
+        `${API_BASE}/external-dataset/review/save?id=${encodeURIComponent(document.caseId)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fields, reviewer: "local_user" }),
+        },
+      );
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Không lưu được review");
+      setMessage(
+        `Đã lưu ${payload.reviewedFieldCount} field cho ${document.caseId}. Bạn có thể chuyển sang case tiếp theo.`,
+      );
+      setDocument((current) =>
+        current
+          ? {
+              ...current,
+              reviewStatus: payload.reviewStatus ?? "CONFIRMED",
+              fields: Object.fromEntries(
+                Object.entries(current.fields).map(([name, field]) => [
+                  name,
+                  {
+                    ...field,
+                    value: (fields[name] as { value: string | null }).value,
+                    reviewStatus: "CONFIRMED",
+                  },
+                ]),
+              ),
+            }
+          : current,
+      );
+      suppressDraftPersistence.current = true;
+      window.localStorage.removeItem(draftStorageKey(document.caseId));
+      setDirty(false);
+      setConfirmedForSave(false);
+      await refreshSummary();
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? `Không lưu được review: ${reason.message}`
+          : "Không lưu được review. Kiểm tra Local API rồi thử lại.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function lock() {
@@ -228,11 +459,11 @@ export default function ExternalDatasetReview() {
     <section className="external-review-panel" data-testid="external-dataset-review">
       <div className="external-review-header">
         <div>
-          <span className="eyebrow">DATA-08 · INDEPENDENT CONTRACT REVIEW</span>
-          <h3>Review hợp đồng thử việc</h3>
+          <span className="eyebrow">EXTERNAL DATASET · INDEPENDENT REVIEW</span>
+          <h3>Review CV, hợp đồng và IELTS</h3>
           <p>
-            Mở từng DOCX/PDF, đối chiếu nguồn và xác nhận 14 field cho mỗi hợp đồng. Ảnh đời thực
-            sẽ được xử lý ở workstream sau; OCR/prediction bị ẩn trong suốt review.
+            Chọn từng phạm vi, mở nguồn và xác nhận field trực tiếp từ tài liệu. CV dạng text/PPTX
+            đang nằm ngoài active review; OCR/prediction bị ẩn trong suốt review.
           </p>
         </div>
         <div className="external-review-status">
@@ -248,11 +479,11 @@ export default function ExternalDatasetReview() {
           Phạm vi review
           <select
             value={reviewCategory}
-            onChange={(event) => setReviewCategory(event.target.value as ReviewCategory)}
+            onChange={(event) => selectCategory(event.target.value as ReviewCategory)}
           >
             <option value="contract">Contract · 4 case / 56 field</option>
-            <option value="cv">CV · review riêng</option>
-            <option value="ielts">IELTS · review riêng</option>
+            <option value="cv">CV · 3 case / 10 field</option>
+            <option value="ielts">IELTS · 3 case / 5 field</option>
           </select>
         </label>
       </div>
@@ -264,14 +495,19 @@ export default function ExternalDatasetReview() {
             <button
               className={item.caseId === activeCaseId ? "active" : ""}
               key={item.caseId}
-              onClick={() => setActiveCaseId(item.caseId)}
+              onClick={() => selectCase(item.caseId)}
               role="listitem"
               type="button"
             >
               <span>{item.caseId}</span>
               <strong>{categoryLabel(item.category)}</strong>
               <small>
-                {item.sourceFormat} · {item.reviewedFieldCount}/{item.fieldCount} field · {item.reviewStatus}
+                {item.sourceFormat} ·{" "}
+                {item.caseId === activeCaseId && dirty
+                  ? completedFieldCount
+                  : item.reviewedFieldCount}
+                /{item.fieldCount} field ·{" "}
+                {item.caseId === activeCaseId && dirty ? "BẢN NHÁP" : item.reviewStatus}
               </small>
             </button>
           ))}
@@ -314,31 +550,64 @@ export default function ExternalDatasetReview() {
               <span>Independent reviewer</span>
               <strong>{document?.caseId ?? "—"}</strong>
             </div>
-            <small>{document?.reviewStatus ?? "PENDING"}</small>
+            <small>{dirty ? "BẢN NHÁP CHƯA LƯU" : document?.reviewStatus ?? "PENDING"}</small>
+          </div>
+          <div className={`external-review-save-bar${dirty ? " is-dirty" : ""}`} aria-live="polite">
+            <div className="external-review-save-progress">
+              <strong>
+                {completedFieldCount}/{fieldNames.length || 0} field đã điền
+              </strong>
+              <span>
+                {dirty
+                  ? "Bản nháp đang được giữ trên trình duyệt; bấm Lưu để ghi vào Ground Truth."
+                  : document?.reviewStatus === "CONFIRMED"
+                    ? "Case này đã được lưu vào Ground Truth."
+                    : "Điền đủ field hoặc đánh dấu Không có / không đọc được."}
+              </span>
+            </div>
+            <label className="external-review-confirmation">
+              <input
+                type="checkbox"
+                checked={confirmedForSave}
+                onChange={(event) => {
+                  setConfirmedForSave(event.target.checked);
+                  setError("");
+                }}
+                disabled={
+                  !document ||
+                  !allFieldsCompleted ||
+                  summary?.groundTruthStatus === "SEALED"
+                }
+              />
+              <span>Tôi đã đối chiếu đủ field với tài liệu gốc.</span>
+            </label>
+            <button
+              className="external-review-primary-save"
+              data-testid="save-current-external-review"
+              type="button"
+              onClick={save}
+              disabled={!canSave}
+            >
+              {saving ? "Đang lưu…" : "Lưu review hiện tại"}
+            </button>
           </div>
           {(document ? Object.keys(document.fields) : []).map((name) => {
-            const absent = values[name] === null;
+            const absent = absentFields.includes(name);
             return (
               <label className="external-review-field" key={name}>
                 <span>{FIELD_LABELS[name] ?? name}</span>
+                {FIELD_HINTS[name] ? <small>{FIELD_HINTS[name]}</small> : null}
                 <input
                   value={values[name] ?? ""}
-                  onChange={(event) =>
-                    setValues((current) => ({ ...current, [name]: event.target.value }))
-                  }
-                  disabled={summary?.groundTruthStatus === "SEALED"}
+                  onChange={(event) => updateFieldValue(name, event.target.value)}
+                  disabled={summary?.groundTruthStatus === "SEALED" || absent}
                   placeholder={name}
                 />
                 <small>
                   <input
                     type="checkbox"
                     checked={absent}
-                    onChange={(event) =>
-                      setValues((current) => ({
-                        ...current,
-                        [name]: event.target.checked ? null : "",
-                      }))
-                    }
+                    onChange={(event) => updateAbsentField(name, event.target.checked)}
                     disabled={summary?.groundTruthStatus === "SEALED"}
                   />
                   Không có / không đọc được
@@ -347,9 +616,19 @@ export default function ExternalDatasetReview() {
             );
           })}
           <div className="external-review-actions">
-            <button type="button" onClick={save} disabled={!document || summary?.groundTruthStatus === "SEALED"}>
-              Lưu xác nhận tài liệu
+            <button
+              className="external-review-primary-save"
+              type="button"
+              onClick={save}
+              disabled={!canSave}
+            >
+              {saving ? "Đang lưu…" : `Xác nhận & lưu ${fieldNames.length || 0} field`}
             </button>
+            {dirty ? (
+              <button className="secondary-action" type="button" onClick={discardDraft}>
+                Bỏ bản nháp
+              </button>
+            ) : null}
             <button type="button" onClick={lock} disabled={!summary?.canLock || locking}>
               {locking ? "Đang SEALED…" : `SEALED đủ ${summary?.fieldCount ?? 0} field`}
             </button>

@@ -11,6 +11,7 @@
   --lime: #f3d9d5;
   --amber: #c9952e;
   --red: #c34f42;
+  --accent: #8f1d2d;
 }
 
 * { box-sizing: border-box; }
@@ -1585,13 +1586,29 @@ footer { display: flex; justify-content: space-between; padding: 26px clamp(24px
 .external-review-form-heading { display: flex; justify-content: space-between; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .external-review-form-heading div { display: grid; gap: 3px; }
 .external-review-form-heading span, .external-review-form-heading small { color: var(--muted); }
+.external-review-save-bar { position: sticky; top: 12px; z-index: 5; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; padding: 12px; border: 1px solid #b8c8bf; background: rgba(255,255,255,.97); box-shadow: 0 8px 24px rgba(19, 46, 33, .12); backdrop-filter: blur(8px); }
+.external-review-save-bar.is-dirty { border-color: #c78b2d; box-shadow: inset 4px 0 0 #c78b2d, 0 8px 24px rgba(19, 46, 33, .12); }
+.external-review-save-progress { display: grid; gap: 3px; }
+.external-review-save-progress span { color: var(--muted); font-size: .82rem; line-height: 1.35; }
+.external-review-save-bar .external-review-confirmation { grid-column: 1; padding: 7px 9px; }
+.external-review-save-bar > button { grid-column: 2; grid-row: 1 / span 2; min-width: 150px; padding: 11px 13px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+.external-review-save-bar > button:disabled { opacity: .45; cursor: not-allowed; }
 .external-review-field { display: grid; gap: 5px; }
 .external-review-field > span { font-weight: 600; }
 .external-review-field input:not([type="checkbox"]) { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 4px; }
 .external-review-field small { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+.external-review-confirmation { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border: 1px solid #c7d9ce; background: #f4faf6; color: var(--ink); line-height: 1.4; }
+.external-review-confirmation input { margin-top: 3px; accent-color: var(--accent); }
 .external-review-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 7px; }
 .external-review-actions button { padding: 9px 12px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+.external-review-actions .secondary-action { border-color: var(--line); background: #fff; color: var(--ink); }
 .external-review-actions button:disabled { opacity: .45; cursor: not-allowed; }
+.external-review-save-bar > .external-review-primary-save,
+.external-review-actions > .external-review-primary-save { border-color: #8f1d2d; border-radius: 6px; background: #8f1d2d; color: #fff; font-weight: 750; box-shadow: 0 6px 16px rgba(143, 29, 45, .22); }
+.external-review-save-bar > .external-review-primary-save:not(:disabled):hover,
+.external-review-actions > .external-review-primary-save:not(:disabled):hover { border-color: #6f1421; background: #6f1421; }
+.external-review-save-bar > .external-review-primary-save:disabled,
+.external-review-actions > .external-review-primary-save:disabled { border-color: #aebbb4; background: #e3e9e5; color: #405149; opacity: 1; box-shadow: none; }
 
 @media (max-width: 1100px) {
   .external-review-grid { grid-template-columns: 190px 1fr; }
@@ -1603,6 +1620,8 @@ footer { display: flex; justify-content: space-between; padding: 26px clamp(24px
   .external-review-status { text-align: left; }
   .external-review-grid { grid-template-columns: 1fr; }
   .external-review-list { max-height: 260px; }
+  .external-review-save-bar { grid-template-columns: 1fr; }
+  .external-review-save-bar .external-review-confirmation, .external-review-save-bar > button { grid-column: 1; grid-row: auto; }
 }
 
 /* VinHRIS marketing surface: a restrained crimson, gold and paper system. */

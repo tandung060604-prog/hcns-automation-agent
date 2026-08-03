@@ -21,6 +21,7 @@ from hcns_agent.domain.documents import DocumentType, SourceFormat
 from hcns_agent.ports.document_parser import DocumentSource
 from scripts.prepare_external_dataset_ground_truth import (
     build_ground_truth_draft,
+    preserve_all_review_state,
     preserve_non_contract_reviews,
 )
 
@@ -163,6 +164,12 @@ class ExternalDatasetInventoryTests(TestCase):
             ],
             [field["name"] for field in certificate_case["fields"]],
         )
+        self.assertIn(
+            "family name + first name",
+            certificate_schema["properties"]["payload"]["properties"]["fields"]["properties"][
+                "recipient_name"
+            ]["description"],
+        )
         self.assertTrue(all(field["value"] is None for field in certificate_case["fields"]))
         contract_case = next(
             case for case in draft["cases"] if case["documentType"] == "EMPLOYMENT_CONTRACT"
@@ -231,6 +238,34 @@ class ExternalDatasetInventoryTests(TestCase):
         self.assertIsNone(updated_contract["fields"][0]["value"])
         self.assertEqual("PENDING", updated_contract["fields"][0]["reviewStatus"])
         self.assertEqual("IN_PROGRESS", updated["review"]["status"])
+
+    def test_schema_migration_preserves_matching_contract_fields(self) -> None:
+        root = Path(__file__).parents[1]
+        mapping = json.loads(
+            (root / "config" / "external_dataset_mapping.json").read_text(encoding="utf-8")
+        )
+        inventory = inventory_dataset(
+            self.root,
+            dataset_id="vuhocpublic-data",
+            version="2026-08-03-contract-probation",
+            source_commit="dec17acbe2b409e0aa5daeb4db820d3e95d05bdf",
+        )
+        previous = build_ground_truth_draft(inventory, mapping)
+        old_contract = next(
+            case for case in previous["cases"] if case["caseId"] == "contract-001"
+        )
+        old_contract["fields"][0].update(value="kept", reviewStatus="CONFIRMED")
+        old_contract["reviewRequired"] = False
+
+        migrated = preserve_all_review_state(build_ground_truth_draft(inventory, mapping), previous)
+        migrated_contract = next(
+            case for case in migrated["cases"] if case["caseId"] == "contract-001"
+        )
+        migrated_cv = next(case for case in migrated["cases"] if case["caseId"] == "cv-001")
+        self.assertEqual("kept", migrated_contract["fields"][0]["value"])
+        self.assertTrue(migrated_contract["reviewRequired"])
+        self.assertEqual(10, len(migrated_cv["fields"]))
+        self.assertFalse(migrated_cv["reviewRequired"])
 
 
 class ExternalDatasetIntakeTests(TestCase):
