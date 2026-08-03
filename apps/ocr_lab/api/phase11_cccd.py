@@ -21,6 +21,12 @@ import numpy as np
 
 
 ORIENTATIONS = (0, 90, 180, 270)
+# OCR-HO-V2-004 keeps runtime orientation conservative while the new
+# field-recovery policy is evaluated. Rotation helpers remain available for
+# historical diagnostics, but v1.1 only runs the original image orientation.
+OCR_HO_V2_VERSION = "1.1.0"
+ORIENTATION_POLICY = "fixed_0_degree"
+SUPPORTED_ORIENTATIONS = (0,)
 CARD_ASPECT_RATIO = 85.60 / 53.98
 CANONICAL_MIN_WIDTH = 2000
 CANONICAL_MAX_WIDTH = 3200
@@ -108,7 +114,16 @@ FIELD_SPECS: dict[str, dict[str, Any]] = {
         "multiline": False,
     },
     "placeOfOrigin": {
-        "labels": ("que quan place of origin", "que quan", "place of origin"),
+        "labels": (
+            "que quan place of origin",
+            "que quan place of ongin",
+            "que quan place of orgin",
+            "que quan",
+            "place of origin",
+            "place of ongin",
+            "place of orgin",
+            "place of qrigin",
+        ),
         "labelThreshold": 0.65,
         "threshold": 0.82,
         "multiline": True,
@@ -117,7 +132,11 @@ FIELD_SPECS: dict[str, dict[str, Any]] = {
         "labels": (
             "noi thuong tru place of residence",
             "noi thuong tru",
+            "no thuong tru",
+            "no thuong trul",
             "place of residence",
+            "placeof residence",
+            "placeof resdece",
         ),
         "labelThreshold": 0.60,
         "threshold": 0.82,
@@ -129,6 +148,40 @@ FIELD_SPECS: dict[str, dict[str, Any]] = {
         "threshold": 0.86,
         "multiline": False,
     },
+}
+
+# OCR often renders bilingual labels with a separator or a single character
+# substitution (for example ``Piace`` for ``Place``). These aliases are only
+# used to remove label prefixes from evidence; they never synthesize values.
+FIELD_LABEL_ALIASES: dict[str, tuple[str, ...]] = {
+    "identityNumber": ("so no", "so can cuoc", "identity number"),
+    "fullName": ("ho va ten full name", "ho va ten", "full name"),
+    "dateOfBirth": ("ngay sinh date of birth", "ngay sinh", "date of birth"),
+    "sex": ("gioi tinh sex", "gioi tinh", "sex"),
+    "nationality": ("quoc tich nationality", "quoc tich", "nationality"),
+    "placeOfOrigin": (
+        "que quan place of origin",
+        "que quan",
+        "place of origin",
+        "place of ongin",
+        "place of orgin",
+        "place of qrigin",
+    ),
+    "placeOfResidence": (
+        "noi thuong tru place of residence",
+        "noi thuong tru",
+        "no thuong tru",
+        "no thuong trul",
+        "place of residence",
+        "placeof residence",
+        "placeof resdece",
+        "piace of residence",
+    ),
+    "dateOfExpiry": (
+        "co gia tri den date of expiry",
+        "co gia tri den",
+        "date of expiry",
+    ),
 }
 
 DATE_RE = re.compile(r"\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b")
@@ -632,6 +685,63 @@ def _exact_label_spans(text: str) -> list[dict[str, Any]]:
     return spans
 
 
+def _remove_normalized_prefix(text: str, prefix: str) -> tuple[str, bool]:
+    normalized, source_indices = _normalized_source_map(text)
+    if not normalized.startswith(prefix) or len(source_indices) < len(prefix):
+        return text, False
+    source_end = source_indices[len(prefix) - 1] + 1
+    return text[source_end:], True
+
+
+def _clean_field_value_fragment(field_name: str, text: str) -> str:
+    """Remove OCR label contamination from a field evidence fragment."""
+    cleaned = " ".join(str(text).split()).strip(" \t\r\n/:;,.|-")
+    # A fragment returned after a Vietnamese label may still begin with the
+    # OCR rendering of the bilingual separator (``I``/``l``).
+    cleaned = re.sub(r"^\s*[iIl|]\s+", "", cleaned, count=1)
+    aliases = tuple(
+        sorted(
+            (accent_key(alias) for alias in FIELD_LABEL_ALIASES[field_name]),
+            key=len,
+            reverse=True,
+        )
+    )
+    removed_label = False
+    for _ in range(4):
+        normalized, _ = _normalized_source_map(cleaned)
+        matched = next(
+            (
+                alias
+                for alias in aliases
+                if normalized == alias or normalized.startswith(alias + " ")
+            ),
+            None,
+        )
+        if matched is None:
+            break
+        cleaned, _ = _remove_normalized_prefix(cleaned, matched)
+        cleaned = re.sub(r"^\s*[/|:;,.\\-]+\s*", "", cleaned)
+        # OCR sometimes renders the slash between Vietnamese and English as a
+        # standalone capital I/l. Remove it only after a label was removed.
+        cleaned = re.sub(r"^\s*[iIl|]\s+", "", cleaned, count=1)
+        removed_label = True
+
+    # Stop before a later confidently recognized schema label in the same OCR
+    # line. This is important for the two multiline address fields.
+    later_spans = [
+        span
+        for span in _exact_label_spans(cleaned)
+        if span["field"] != field_name and int(span["sourceStart"]) > 0
+    ]
+    if later_spans:
+        boundary = min(int(span["sourceStart"]) for span in later_spans)
+        cleaned = cleaned[:boundary]
+
+    if removed_label:
+        cleaned = cleaned.strip(" \t\r\n/:;,.|-")
+    return " ".join(cleaned.split())
+
+
 def _labeled_segment(field_name: str, text: str) -> str:
     spans = [
         span for span in _exact_label_spans(text) if span["field"] == field_name
@@ -656,9 +766,10 @@ def _labeled_segment(field_name: str, text: str) -> str:
         if later_spans
         else len(text)
     )
-    return " ".join(
+    segment = " ".join(
         text[int(current["sourceEnd"]) : segment_end].split()
     ).strip(" \t\r\n/:;,.|-_")
+    return _clean_field_value_fragment(field_name, segment)
 
 
 def _canonical_sex(value: str) -> str:
@@ -689,15 +800,21 @@ def _canonical_nationality(value: str) -> str:
     for start in range(len(tokens)):
         for width in (1, 2):
             candidate = "".join(tokens[start : start + width])
-            if len(candidate) in {6, 7, 8} and difflib.SequenceMatcher(
-                None, candidate, "vietnam"
-            ).ratio() >= 0.82:
+            if (
+                len(candidate) in {5, 6, 7, 8}
+                and candidate.startswith("v")
+                and difflib.SequenceMatcher(None, candidate, "vietnam").ratio()
+                >= (0.72 if len(candidate) == 5 else 0.82)
+            ):
                 return "Việt Nam"
     return ""
 
 
 def _normalize_field_value(field_name: str, value: str) -> tuple[str, str | None]:
-    normalized = unicodedata.normalize("NFC", value)
+    normalized = unicodedata.normalize(
+        "NFC",
+        _clean_field_value_fragment(field_name, value),
+    )
     normalized = " ".join(normalized.split()).strip(" \t\r\n/:;.|-_")
     normalized = re.sub(r"\s*,\s*", ", ", normalized)
     normalized = re.sub(r"\s*;\s*", "; ", normalized)
@@ -748,9 +865,11 @@ def _candidate_text_value(field_name: str, text: str) -> str:
         match = DATE_RE.search(text)
         return match.group(0) if match else ""
     if field_name == "sex":
-        return _canonical_sex(text)
+        segment = _labeled_segment(field_name, text) or text
+        return _canonical_sex(segment)
     if field_name == "nationality":
-        return _canonical_nationality(text)
+        segment = _labeled_segment(field_name, text) or text
+        return _canonical_nationality(segment)
     value, _ = _normalize_field_value(field_name, text)
     key = accent_key(value)
     if any(
@@ -870,6 +989,7 @@ def _loose_candidate_lines(
     records: list[dict[str, Any]],
     multiline: bool,
     stop_y: float | None,
+    field_name: str,
 ) -> list[dict[str, Any]]:
     """Retain nearby OCR evidence as review-only when strict parsing finds none."""
     anchor_bounds = _bounds(anchor["box"])
@@ -884,7 +1004,7 @@ def _loose_candidate_lines(
         _, candidate_label_score = _best_field_label(candidate)
         if candidate_label_score >= 0.72:
             continue
-        text = " ".join(candidate["text"].split()).strip(" \t\r\n/:;.|-_")
+        text = _candidate_text_value(field_name, candidate["text"])
         if len(text) < 2:
             continue
         candidate_bounds = _bounds(candidate["box"])
@@ -1011,6 +1131,13 @@ def extract_cccd_fields(
     anchors: dict[str, tuple[dict[str, Any], float]] = {}
     for record in records:
         for field_name, spec in FIELD_SPECS.items():
+            # ``date of birth`` and ``date of expiry`` are close enough for a
+            # fuzzy label score to cross-match. Require the expiry-specific
+            # Vietnamese or English anchor before considering that field.
+            if field_name == "dateOfExpiry":
+                record_key = accent_key(record["text"])
+                if "co gia tri den" not in record_key and "date of expiry" not in record_key:
+                    continue
             score = max(_label_score(record["text"], label) for label in spec["labels"])
             if score >= float(spec["labelThreshold"]) and (
                 field_name not in anchors or score > anchors[field_name][1]
@@ -1040,7 +1167,10 @@ def extract_cccd_fields(
                     "placeOfOrigin",
                 },
                 "dateOfBirth": {"sex", "nationality", "placeOfOrigin"},
-                "placeOfOrigin": {"placeOfResidence"},
+                "sex": {"nationality", "placeOfOrigin"},
+                "nationality": {"placeOfOrigin"},
+                "placeOfOrigin": {"placeOfResidence", "dateOfExpiry"},
+                "placeOfResidence": {"dateOfExpiry"},
             }.get(field_name, set())
             following_anchor_tops = [
                 _bounds(other_anchor["box"])[1]
@@ -1113,44 +1243,53 @@ def extract_cccd_fields(
                 evidence_lines = [candidate]
                 label_score = 0.0
         if not value and field_name in {"sex", "nationality"}:
-            enum_candidates = []
-            for record in records:
-                candidate_value = _candidate_text_value(field_name, record["text"])
-                if not candidate_value:
-                    continue
-                record_bounds = _bounds(record["box"])
-                enum_candidates.append(
-                    (
-                        float(record.get("confidence") or 0.0)
-                        + record_bounds[1] * 0.00001,
-                        record,
-                        candidate_value,
+            # Do not scan the whole page for an enum: a value from another
+            # section (or a bilingual label) is not evidence for this field.
+            context_pair = anchors.get(field_name) or anchors.get("dateOfBirth")
+            enum_candidates: list[tuple[float, dict[str, Any], str]] = []
+            if context_pair:
+                context_anchor = context_pair[0]
+                context_bounds = _bounds(context_anchor["box"])
+                context_height = max(8.0, context_bounds[3] - context_bounds[1])
+                for record in records:
+                    if (
+                        record["globalIndex"] == context_anchor["globalIndex"]
+                        or record["pageIndex"] != context_anchor["pageIndex"]
+                    ):
+                        continue
+                    record_bounds = _bounds(record["box"])
+                    vertical_distance = record_bounds[1] - context_bounds[3]
+                    same_row = _vertical_overlap(context_bounds, record_bounds) >= 0.25
+                    nearby_below = (
+                        -context_height * 0.20
+                        <= vertical_distance
+                        <= context_height * 2.5
+                        and record_bounds[2]
+                        >= context_bounds[0] - context_height * 2.0
+                        and record_bounds[0]
+                        <= context_bounds[2] + context_height * 2.0
                     )
-                )
+                    if not same_row and not nearby_below:
+                        continue
+                    candidate_value = _candidate_text_value(
+                        field_name,
+                        record["text"],
+                    )
+                    if not candidate_value:
+                        continue
+                    enum_candidates.append(
+                        (
+                            float(record.get("confidence") or 0.0),
+                            record,
+                            candidate_value,
+                        )
+                    )
             if enum_candidates:
                 _, candidate, value = max(enum_candidates, key=lambda item: item[0])
                 evidence_lines = [candidate]
-                label_score = 0.0
-        if not value and field_name == "dateOfExpiry":
-            expiry_candidates = []
-            for record in records:
-                match = DATE_RE.search(record["text"])
-                if not match:
-                    continue
-                left, top, _, _ = _bounds(record["box"])
-                expiry_candidates.append(
-                    (
-                        top - left * 0.10,
-                        record,
-                        match.group(0),
-                    )
-                )
-            if expiry_candidates:
-                _, candidate, value = max(
-                    expiry_candidates, key=lambda item: item[0]
-                )
-                evidence_lines = [candidate]
-                label_score = 0.0
+                label_score = context_pair[1] if context_pair else 0.0
+                force_review = True
+                selection_mode = "context_enum_fallback"
         if (
             not value
             and anchor_pair
@@ -1174,6 +1313,7 @@ def extract_cccd_fields(
                         records,
                         bool(spec["multiline"]),
                         stop_y,
+                        field_name,
                     )
                 )
                 if candidate["globalIndex"] not in used_value_lines
@@ -1213,11 +1353,15 @@ def extract_cccd_fields(
     accepted_count = sum(field["status"] == "accepted" for field in fields.values())
     review_count = sum(field["status"] == "needs_review" for field in fields.values())
     not_found_count = sum(field["status"] == "not_found" for field in fields.values())
-    critical_fields = ("identityNumber", "fullName", "dateOfBirth")
     return {
-        "schemaVersion": "1.1.0",
+        "schemaVersion": OCR_HO_V2_VERSION,
+        "recognizerVersion": OCR_HO_V2_VERSION,
         "documentType": "VIETNAM_CITIZEN_ID_FRONT",
-        "extractionPolicy": "ocr_evidence_with_deterministic_normalization",
+        "orientationPolicy": ORIENTATION_POLICY,
+        "evaluationScope": "DEVELOPMENT_ONLY",
+        "extractionPolicy": (
+            "ocr_evidence_with_label_boundary_and_deterministic_normalization"
+        ),
         "fields": fields,
         "summary": {
             "expectedFieldCount": len(FIELD_ORDER),
@@ -1227,9 +1371,8 @@ def extract_cccd_fields(
             "notFoundFieldCount": not_found_count,
             "documentCompleteness": round(present_count / len(FIELD_ORDER), 6),
             "acceptedRate": round(accepted_count / len(FIELD_ORDER), 6),
-            "readyForAutomaticUse": all(
-                fields[field]["status"] == "accepted" for field in critical_fields
-            ),
+            "readyForAutomaticUse": False,
+            "manualReviewRequired": True,
         },
     }
 

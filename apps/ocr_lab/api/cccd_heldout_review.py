@@ -193,6 +193,20 @@ def load_review_summary(root: Path) -> dict[str, Any]:
         else str(queue.get("groundTruthStatus", "PENDING_HUMAN_CONFIRMATION"))
     )
     evaluation_status = "COMPLETE" if evaluation.is_file() else "NOT_RUN"
+    evaluation_summary: dict[str, Any] | None = None
+    if evaluation.is_file():
+        evaluation_payload = _load_json(evaluation)
+        promotion_gate = evaluation_payload.get("promotionGate", {})
+        evaluation_summary = {
+            "evaluationKind": evaluation_payload.get("evaluationKind"),
+            "evaluatedAt": evaluation_payload.get("evaluatedAt"),
+            "metrics": evaluation_payload.get("metrics", {}),
+            "promotionGateStatus": (
+                promotion_gate.get("status")
+                if isinstance(promotion_gate, dict)
+                else None
+            ),
+        }
     eligible_documents = [item for item in documents if item["disposition"] == DISPOSITION_IN_SCOPE]
     excluded_documents = [item for item in documents if item["disposition"] != DISPOSITION_IN_SCOPE]
     return {
@@ -206,6 +220,7 @@ def load_review_summary(root: Path) -> dict[str, Any]:
         "fields": list(FIELD_ORDER),
         "groundTruthStatus": ground_truth_status,
         "evaluationStatus": evaluation_status,
+        "evaluation": evaluation_summary,
         "predictionsHiddenDuringReview": True,
         "localOnly": True,
         "documentIds": [item["documentId"] for item in documents],

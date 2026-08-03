@@ -1116,6 +1116,9 @@ section[id] { scroll-margin-top: 72px; }
   font: 500 10px/1.45 var(--font-geist-mono), monospace;
   overflow-wrap: anywhere;
 }
+.evidence-metrics-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; padding: 10px; border: 1px solid #c7ddd0; background: #f4faf6; }
+.evidence-metrics-strip span { display: grid; gap: 2px; color: var(--muted); font: 700 9px/1.2 var(--font-geist-mono), monospace; text-transform: uppercase; }
+.evidence-metrics-strip strong { color: var(--green); font-size: 13px; }
 .evidence-prediction-source {
   display: grid;
   grid-template-columns: auto 1fr 1fr;

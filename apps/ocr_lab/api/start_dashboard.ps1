@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$DataRoot,
     [string]$HeldoutRoot = "",
+    [string]$CccdHeldoutRoot = "",
     [string]$ExternalDatasetRoot = "",
     [string]$ExternalDatasetInventory = "",
     [string]$ExternalDatasetGroundTruth = "",
@@ -22,6 +23,9 @@ if (-not (Test-Path -LiteralPath $DataRoot)) {
 }
 if ($HeldoutRoot -and -not (Test-Path -LiteralPath $HeldoutRoot)) {
     throw "Held-out root not found: $HeldoutRoot"
+}
+if ($CccdHeldoutRoot -and -not (Test-Path -LiteralPath $CccdHeldoutRoot)) {
+    throw "CCCD held-out root not found: $CccdHeldoutRoot"
 }
 if ($ExternalDatasetRoot -and -not (Test-Path -LiteralPath $ExternalDatasetRoot)) {
     throw "External dataset root not found: $ExternalDatasetRoot"
@@ -52,6 +56,9 @@ if (-not $apiRunning) {
     )
     if ($HeldoutRoot) {
         $apiArguments += @("--heldout-root", "`"$HeldoutRoot`"")
+    }
+    if ($CccdHeldoutRoot) {
+        $apiArguments += @("--cccd-heldout-root", "`"$CccdHeldoutRoot`"")
     }
     if ($ExternalDatasetRoot) {
         $apiArguments += @("--external-dataset-root", "`"$ExternalDatasetRoot`"")

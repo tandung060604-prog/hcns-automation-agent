@@ -184,6 +184,12 @@ type CccdGroundTruthReviewSummary = {
   fields: string[];
   groundTruthStatus: string;
   evaluationStatus: string;
+  evaluation?: {
+    evaluationKind?: string;
+    evaluatedAt?: string;
+    metrics: Record<string, Record<string, number>>;
+    promotionGateStatus?: string | null;
+  } | null;
   predictionsHiddenDuringReview: true;
   localOnly: true;
   documentIds: string[];
@@ -497,9 +503,13 @@ type UserResult = {
   };
   phase11?: {
     version: string;
+    recognizerVersion?: string;
+    orientationPolicy?: string;
+    evaluationScope?: string;
     status: "PASS" | "NEEDS_REVIEW" | "NOT_APPLICABLE";
     orientation: {
       strategy: string;
+      supportedOrientations?: number[];
       pages: Array<{
         pageIndex: number;
         selectedRotationDegrees: number;
@@ -531,6 +541,7 @@ type UserResult = {
         documentCompleteness: number;
         acceptedRate: number;
         readyForAutomaticUse: boolean;
+        manualReviewRequired?: boolean;
       };
     } | null;
     durationMs: number;
@@ -1505,7 +1516,9 @@ function TemplateEvidenceInspector({
           <span>NGUỒN DỮ LIỆU</span>
           <strong>
             {result.processing?.sourceFormat ?? "DOCX"} /{" "}
-            {result.processing?.usesOcr ? "PaddleOCR local" : "Native parser"}
+            {result.processing?.usesOcr
+              ? result.processing?.ocrEngine ?? "OCR local"
+              : "Native parser"}
           </strong>
           <small>
             {result.processing?.parserName ?? "docx/ooxml"} ·{" "}
@@ -1568,6 +1581,9 @@ function TemplateEvidenceInspector({
 }
 
 function phase11Label(result: UserResult) {
+  if (result.phase11?.version === "1.1.0") {
+    return "1.1";
+  }
   return result.phase11_5
     ? "11.5"
     : result.phase11_4
@@ -2104,7 +2120,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   }, [activeHeldoutId]);
 
   useEffect(() => {
-    if (!SHOW_GROUND_TRUTH_REVIEW) return;
     fetch(`${API_BASE}/cccd-heldout/review/summary`)
       .then((response) => {
         if (!response.ok) throw new Error("Ground Truth review unavailable");
@@ -2129,6 +2144,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
 
   useEffect(() => {
     if (!SHOW_GROUND_TRUTH_REVIEW || !activeGroundTruthId) {
+      // Clear dependent review state when the selected document is unavailable.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset state from the external review queue.
       setGroundTruthReviewDocument(null);
       setGroundTruthFields({});
       return;
@@ -2162,10 +2179,11 @@ export default function Dashboard({ data }: { data: DashboardData }) {
 
   useEffect(() => {
     if (
-      !SHOW_GROUND_TRUTH_REVIEW ||
       !activeGroundTruthId ||
       groundTruthReview?.evaluationStatus !== "COMPLETE"
     ) {
+      // Clear stale evaluation output when the external status is not complete.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset state from the external evaluation queue.
       setGroundTruthEvaluationDetail(null);
       setGroundTruthEvaluationDetailError("");
       return;
@@ -2812,6 +2830,21 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         ),
       );
   }, [userSessions]);
+  const cccdEvidenceDocuments = useMemo(
+    () =>
+      (groundTruthReview?.documents ?? []).filter(
+        (document) => document.disposition === "IN_SCOPE_FRONT",
+      ),
+    [groundTruthReview],
+  );
+  const activeCccdEvidenceDocument =
+    cccdEvidenceDocuments.find(
+      (document) => document.documentId === activeGroundTruthId,
+    ) ??
+    cccdEvidenceDocuments[0] ??
+    null;
+  const cccdEvidenceMetrics =
+    groundTruthReview?.evaluation?.metrics?.phase11_6 ?? null;
   const activeTemplateSession =
     templateSessions.find(
       (session) => session.documentId === activeTemplateSessionId,
@@ -2941,7 +2974,9 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         phase15?.classification.documentType ??
         cccdEvidenceResult.document.documentType,
       schemaRef:
-        cccdEvidenceResult.phase11_5
+        identityCard && cccdEvidenceResult.phase11?.version === "1.1.0"
+          ? "VIETNAM_CITIZEN_ID_FRONT / OCR-HO-V2 v1.1"
+          : cccdEvidenceResult.phase11_5
           ? "schemas/vietnam_identity_card_phase11_5.schema.json"
           : phase15?.classification.schemaRef ??
             "schemas/business_document.schema.json",
@@ -3051,7 +3086,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             <span>Bằng chứng thật</span>
             <strong>
               {heldout?.documentCount ?? "—"} HR +{" "}
-              {reviewedCccdSessions.length} CCCD
+              {groundTruthReview?.documentCount ?? 0} CCCD
             </strong>
           </div>
           <div>
@@ -3709,12 +3744,12 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                 {userResult.phase11?.identityCard && (
                   <div className="phase11-strip">
                     <div>
-                      <span>
-                        PHASE {phase11Label(userResult)} / CCCD
-                      </span>
-                      <strong>{userResult.phase11.status}</strong>
+                      <span>OCR-HO-V2 / CCCD</span>
+                      <strong>
+                        v{phase11Label(userResult)} · {userResult.phase11.status}
+                      </strong>
                       <small>
-                        Xoay{" "}
+                        fixed 0° · scope {userResult.phase11.evaluationScope ?? "DEVELOPMENT_ONLY"} · xoay{" "}
                         {userResult.phase11.orientation.pages[activeUserPage]
                           ?.selectedRotationDegrees ?? 0}
                         °
@@ -5147,8 +5182,9 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             <h2>Biểu mẫu HCNS chuẩn và CCCD</h2>
           </div>
           <p>
-            Chỉ hiển thị đơn nghỉ phép, tăng ca theo template registry và CCCD
-            đã review. Các upload HCNS generic cũ vẫn được giữ local.
+            Chỉ hiển thị kết quả Template-first và bộ CCCD held-out mới nhất đã
+            evaluate-once trên localhost. Prediction, Ground Truth và metrics
+            được giữ trong boundary local-only.
           </p>
         </div>
         <div className="evidence-switch" role="tablist">
@@ -5176,7 +5212,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             role="tab"
             aria-selected={evidenceMode === "cccd"}
           >
-            {reviewedCccdSessions.length} CCCD đã Ground Truth
+            {groundTruthReview?.documentCount ?? 0} CCCD mới đã Ground Truth
           </button>
           {SHOW_EXTERNAL_DATASET_REVIEW ? (
             <button
@@ -5185,7 +5221,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               role="tab"
               aria-selected={evidenceMode === "external-dataset"}
             >
-              DATA-07 · 13 tài liệu review
+              DATA-08 · 4 contract case review
             </button>
           ) : null}
         </div>
@@ -5355,6 +5391,89 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               view={evidenceInspectorView}
               onViewChange={setEvidenceInspectorView}
             />
+          </div>
+        ) : evidenceMode === "cccd" ? (
+          <div className="heldout-evidence-grid">
+            <div className="heldout-document-list" role="list">
+              {cccdEvidenceDocuments.map((document) => (
+                <button
+                  className={
+                    document.documentId === activeGroundTruthId ? "active" : ""
+                  }
+                  key={document.documentId}
+                  onClick={() => setActiveGroundTruthId(document.documentId)}
+                  role="listitem"
+                >
+                  <span>{document.documentId}</span>
+                  <strong>CCCD mặt trước · Phase 11.6</strong>
+                  <small>
+                    Ground Truth ✓ · {document.reviewedFieldCount}/
+                    {document.fieldCount} field · {document.sourceFormat}
+                  </small>
+                </button>
+              ))}
+            </div>
+            <div className="heldout-preview">
+              {activeCccdEvidenceDocument ? (
+                <img
+                  src={`${API_BASE}/cccd-heldout/review/document?id=${encodeURIComponent(
+                    activeCccdEvidenceDocument.documentId,
+                  )}&mode=preview`}
+                  alt={`CCCD held-out ${activeCccdEvidenceDocument.documentId}`}
+                />
+              ) : (
+                <div className="native-heldout-file">
+                  <strong>Chưa có CCCD held-out mới</strong>
+                </div>
+              )}
+              {activeCccdEvidenceDocument ? (
+                <div className="heldout-preview-actions">
+                  <div>
+                    <strong>{activeCccdEvidenceDocument.documentId}</strong>
+                    <span>
+                      {activeCccdEvidenceDocument.sourceFile} · Ground Truth ✓ ·
+                      Phase 11.6
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <aside className="evidence-inspector" aria-live="polite">
+              <header>
+                <div>
+                  <span>SEALED PREDICTION / METRICS</span>
+                  <strong>CCCD Phase 11.6</strong>
+                </div>
+                <small>
+                  {groundTruthReview?.evaluation?.evaluatedAt ??
+                    "Chưa có evaluate-once"}
+                </small>
+              </header>
+              {cccdEvidenceMetrics ? (
+                <div className="evidence-metrics-strip" data-testid="cccd-evidence-metrics">
+                  <span>
+                    Strict EM <strong>{pct(cccdEvidenceMetrics.strictFieldExactMatch ?? null, 2)}</strong>
+                  </span>
+                  <span>
+                    ASCII EM <strong>{pct(cccdEvidenceMetrics.asciiFieldExactMatch ?? null, 2)}</strong>
+                  </span>
+                  <span>
+                    CER <strong>{pct(cccdEvidenceMetrics.cer ?? null, 2)}</strong>
+                  </span>
+                  <span>
+                    Field presence <strong>{pct(cccdEvidenceMetrics.fieldPresence ?? null, 2)}</strong>
+                  </span>
+                  <span>
+                    Accepted precision <strong>{pct(cccdEvidenceMetrics.acceptedPrecision ?? null, 2)}</strong>
+                  </span>
+                </div>
+              ) : null}
+              <CccdEvaluationInspector
+                detail={groundTruthEvaluationDetail}
+                loading={isLoadingGroundTruthEvaluationDetail}
+                error={groundTruthEvaluationDetailError}
+              />
+            </aside>
           </div>
         ) : (
           <div className="heldout-evidence-grid">

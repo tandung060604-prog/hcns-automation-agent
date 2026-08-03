@@ -74,12 +74,14 @@ from phase9_pipeline import (
 )
 from phase10_review import review_payload, save_review
 from phase11_cccd import (
+    OCR_HO_V2_VERSION,
+    ORIENTATION_POLICY,
+    SUPPORTED_ORIENTATIONS,
     extract_cccd_fields,
     is_identity_likely,
     orientation_diagnostics,
     prepare_identity_card_page,
     rotate_image,
-    select_orientation,
 )
 from phase12_ingestion import (
     ingest_document,
@@ -390,7 +392,7 @@ class UserOCRService:
             if image is None:
                 raise ValueError("Cannot read rendered page for Phase 11")
             candidate_records: list[tuple[dict[str, Any], dict[str, Any], Path]] = []
-            for rotation_degrees in (0, 90, 180, 270):
+            for rotation_degrees in SUPPORTED_ORIENTATIONS:
                 if rotation_degrees == 0:
                     candidate_path = page_path
                     if page_index < len(raw_pages):
@@ -415,23 +417,7 @@ class UserOCRService:
                 )
                 candidate_records.append((candidate_page, diagnostic, candidate_path))
 
-            selected_page, selected_diagnostic = select_orientation(
-                [(page, diagnostic) for page, diagnostic, _ in candidate_records]
-            )
-            original_record = candidate_records[0]
-            selected_record = next(
-                record
-                for record in candidate_records
-                if record[1]["rotationDegrees"] == selected_diagnostic["rotationDegrees"]
-            )
-            if not is_identity_likely(selected_diagnostic) or (
-                selected_diagnostic["rotationDegrees"] != 0
-                and float(selected_diagnostic["score"]) < float(original_record[1]["score"]) + 0.35
-            ):
-                selected_record = original_record
-                selected_page, selected_diagnostic, selected_path = selected_record
-            else:
-                selected_page, selected_diagnostic, selected_path = selected_record
+            selected_page, selected_diagnostic, selected_path = candidate_records[0]
 
             oriented_path = oriented_root / f"page_{page_index:03d}.png"
             selected_image = cv2.imread(str(selected_path), cv2.IMREAD_COLOR)
@@ -443,10 +429,10 @@ class UserOCRService:
                 {
                     "pageIndex": page_index,
                     "selectedRotationDegrees": int(selected_diagnostic["rotationDegrees"]),
+                    "orientationPolicy": ORIENTATION_POLICY,
+                    "supportedOrientations": list(SUPPORTED_ORIENTATIONS),
                     "selectionScore": selected_diagnostic["score"],
-                    "identityLikely": any(
-                        is_identity_likely(record[1]) for record in candidate_records
-                    ),
+                    "identityLikely": is_identity_likely(selected_diagnostic),
                     "selectedIdentityLikely": is_identity_likely(selected_diagnostic),
                     "candidates": [record[1] for record in candidate_records],
                 }
@@ -468,15 +454,19 @@ class UserOCRService:
 
         if document_type != "IDENTITY_DOCUMENT":
             result["phase11"] = {
-                "version": "1.2.0",
+                "version": OCR_HO_V2_VERSION,
                 "status": "NOT_APPLICABLE",
+                "recognizerVersion": OCR_HO_V2_VERSION,
+                "orientationPolicy": ORIENTATION_POLICY,
+                "evaluationScope": "DEVELOPMENT_ONLY",
                 "documentRoute": {
                     "type": document_type,
                     "confidence": route_confidence,
                     "evidence": route_evidence,
                 },
                 "orientation": {
-                    "strategy": "four_way_ocr_anchor_score",
+                    "strategy": ORIENTATION_POLICY,
+                    "supportedOrientations": list(SUPPORTED_ORIENTATIONS),
                     "pages": orientation_pages,
                 },
                 "identityCard": None,
@@ -600,17 +590,19 @@ class UserOCRService:
         )
         result["document"]["structuredFields"] = identity_card["fields"]
         result["phase11"] = {
-            "version": "1.2.0",
-            "status": (
-                "PASS" if identity_card["summary"]["readyForAutomaticUse"] else "NEEDS_REVIEW"
-            ),
+            "version": OCR_HO_V2_VERSION,
+            "status": "NEEDS_REVIEW",
+            "recognizerVersion": OCR_HO_V2_VERSION,
+            "orientationPolicy": ORIENTATION_POLICY,
+            "evaluationScope": "DEVELOPMENT_ONLY",
             "documentRoute": {
                 "type": "IDENTITY_DOCUMENT",
                 "confidence": route_confidence,
                 "evidence": route_evidence,
             },
             "orientation": {
-                "strategy": "four_way_ocr_anchor_layout_score",
+                "strategy": ORIENTATION_POLICY,
+                "supportedOrientations": list(SUPPORTED_ORIENTATIONS),
                 "pages": orientation_pages,
             },
             "canonicalization": canonicalization,
@@ -619,9 +611,14 @@ class UserOCRService:
             "identityCard": identity_card,
             "durationMs": round((time.perf_counter() - phase_started) * 1000),
         }
+        result["processing"]["phase11Version"] = OCR_HO_V2_VERSION
+        result["processing"]["orientationPolicy"] = ORIENTATION_POLICY
         result["processing"]["phase11DurationMs"] = result["phase11"]["durationMs"]
         identity_output = {
             "schemaVersion": identity_card["schemaVersion"],
+            "recognizerVersion": OCR_HO_V2_VERSION,
+            "orientationPolicy": ORIENTATION_POLICY,
+            "evaluationScope": "DEVELOPMENT_ONLY",
             "sessionId": result["sessionId"],
             "createdAt": utc_now(),
             "containsRealPII": True,
