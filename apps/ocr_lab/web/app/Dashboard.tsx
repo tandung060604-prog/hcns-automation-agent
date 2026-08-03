@@ -3022,8 +3022,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     <main>
       <header className="topbar">
         <a className="brand" href="#overview" aria-label="Về đầu trang">
-          <span className="brand-mark">HR</span>
-          <span>OCR LAB</span>
+          <span className="brand-mark">V</span>
+          <span>VinHRIS</span>
         </a>
         <nav aria-label="Điều hướng chính">
           {SHOW_HELDOUT ? <a href="#metrics">Held-out thật</a> : null}
@@ -3042,8 +3042,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         <div className="hero-copy">
           <p className="eyebrow">XỬ LÝ NỘI BỘ · AN TOÀN · LOCAL-ONLY</p>
           <h1>
-            HCNS
-            <span> Automation Agent</span>
+            VinHRIS
+            <span> HR workspace</span>
           </h1>
           <p className="hero-lead">
             Tự động hóa biểu mẫu hành chính nhân sự với native DOCX, quality routing

@@ -27,32 +27,35 @@ async function render() {
   );
 }
 
-test("server-renders the Vietnamese OCR dashboard", async () => {
+test("server-renders the VinHRIS landing page", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>HR Document Intelligence Lab \| OCR tiếng Việt<\/title>/i);
-  assert.match(html, /LOCAL PRIVATE OCR/);
-  assert.match(html, /HCNS/);
-  assert.match(html, /Automation Agent/);
-  assert.match(html, /Template-first cho biểu mẫu chuẩn/);
-  assert.match(html, /Một luồng xử lý, bằng chứng đi cùng dữ liệu/);
-  assert.match(html, /Biểu mẫu HCNS chuẩn/);
-  assert.match(html, /đơn nghỉ phép hoặc tăng ca/i);
-  assert.match(html, /Tải tài liệu HCNS/);
-  assert.doesNotMatch(html, /hr-document-intelligence-context\.webp/);
-  assert.match(html, /Đưa tài liệu thật vào/);
-  assert.match(html, /Không upload cloud/);
+  assert.match(html, /<title>VinHRIS \| AI document operations cho HR<\/title>/i);
+  assert.match(html, /VinHRIS/);
+  assert.match(html, /AI DOCUMENT OPERATIONS FOR HR/);
+  assert.match(html, /Human review ready/);
+  assert.match(html, /Business JSON/);
+  assert.match(html, /template-first-local-workflow\.png/);
+  assert.match(html, /Mở workspace/);
+  assert.match(html, /vinhris-hero-source\.mp4/);
+  assert.match(html, /Bật âm thanh/);
+  assert.match(html, /Kiến tạo một cuộc sống tốt đẹp hơn cho mọi người/);
+  assert.match(html, /WORKSPACE PROOF \/ TEMPLATE-FIRST/);
+  assert.match(html, /Xem một hồ sơ đi qua VinHRIS/);
+  assert.match(html, /SAMPLE DOCUMENT · KHÔNG PHẢI PII THẬT/);
+  assert.match(html, /vinhris-journey-progress/);
   assert.doesNotMatch(html, /Your site is taking shape|Building your site/);
 });
 
-test("keeps Phase 11.4 CCCD controls in the local upload flow", async () => {
-  const [dashboard, css, page, layout] = await Promise.all([
+test("keeps Phase 11.4 CCCD controls in the local workspace flow", async () => {
+  const [dashboard, css, page, workspacePage, layout] = await Promise.all([
     readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/workspace/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
   ]);
 
@@ -70,8 +73,9 @@ test("keeps Phase 11.4 CCCD controls in the local upload flow", async () => {
   assert.match(css, /\.identity-fields/);
   assert.match(css, /\.identity-ground-truth-grid/);
   assert.match(css, /\.field-evaluation/);
-  assert.match(page, /<Dashboard/);
-  assert.match(layout, /HR Document Intelligence Lab/);
+  assert.match(page, /VinHRISLanding/);
+  assert.match(workspacePage, /<Dashboard/);
+  assert.match(layout, /VinHRIS \| AI document operations/);
 });
 
 test("shows Phase 11.5 Unicode, ASCII and crop evidence controls", async () => {
