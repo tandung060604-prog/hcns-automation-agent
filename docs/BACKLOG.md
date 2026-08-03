@@ -6,6 +6,8 @@
 | ID | Trạng thái | Mục tiêu | Phụ thuộc | Ưu tiên |
 |---|---|---|---|---|
 | OCR-HO-V2-001 | REVIEW | Đã seal prediction ẩn trên 15 CCCD held-out; chờ xác nhận Ground Truth để evaluate-once | Manifest v2, policy 11.6 | P0 |
+| OCR-HO-V2-002 | DONE | Review Ground Truth độc lập, loại ảnh mặt sau, khóa queue và evaluate đúng một lần trên 14 ảnh | OCR-HO-V2-001 | P0 |
+| OCR-HO-V2-003 | DONE | Local inspector đối chiếu Ground Truth và output Phase 11.5/11.6 sau evaluate-once | OCR-HO-V2-002 | P1 |
 | TF-P1-001 | DONE | Template-first cho đơn nghỉ phép và tăng ca DOCX | 14 mẫu synthetic local | P0 |
 | TF-P1-002 | DONE | Commit/push Template-first, chạy API local và live smoke hai DOCX gốc | TF-P1-001 | P0 |
 | TF-P1-003 | DONE | Tích hợp Template-first vào OCR Lab localhost và hiển thị kết quả trích xuất | TF-P1-002 | P0 |
@@ -31,6 +33,7 @@
 | DATA-04 | DONE (HOLD) | Run EasyOCR aggregate-only pilot over 13 documents / 17 pages | DATA-03 | P0 |
 | DATA-05 | DONE | Add synthetic inventory/mapping/parser regression coverage and checkpoint evidence | DATA-04 | P1 |
 | DATA-06 | IN_PROGRESS | Add certificate schema and prediction-blind Ground Truth review artifact | DATA-05 | P0 |
+| DATA-07 | IN_PROGRESS | Localhost review UI for source preview and independent confirmation of all 86 current external-dataset fields (56 contract fields in the reduced schema) | DATA-06 approved | P0 |
 
 ## DATA-00..DATA-05 acceptance criteria
 
@@ -53,6 +56,11 @@
 - `DATA-06`: certificate mapping has a versioned schema; the private review
   artifact covers every case/field with source digests, no model values, and
   remains `DRAFT` until an independent reviewer confirms it.
+- `DATA-07`: localhost-only review routes expose source documents and the
+  private draft for CV/contract/IELTS, hide predictions, persist edits outside
+  Git, and allow `SEALED` only after every current field is explicitly
+  confirmed. The contract subset is four cases × 14 fields; CV/IELTS review
+  state is preserved across the contract-source replacement.
 
 ## OCR-HO-V2-001 acceptance criteria
 
@@ -228,3 +236,45 @@
   smoke pass; VietOCR không được cài hoặc dùng trong route này.
 - Deployment/production-readiness không thuộc kế hoạch hiện tại; không mở lại OCR
   candidate nếu chưa có evidence mới.
+
+## OCR-HO-V2-002 checkpoint (local Ground Truth review gate)
+
+- Đã thêm contract/backend local-only cho 15 CCCD held-out v2: summary, source
+  preview, review/save, lock và evaluate-once. Endpoint không đọc prediction trong
+  lúc người dùng xác nhận Ground Truth.
+- Đã thêm UI `LOCAL GROUND TRUTH REVIEW · CCCD`, gated bởi
+  `VITE_SHOW_GROUND_TRUTH_REVIEW=true`. Mỗi ảnh có 8 field, checkbox
+  `Không có trên ảnh`, và hai assertion bắt buộc kiểm tra chữ/dấu với ảnh gốc.
+- Prediction snapshot vẫn sealed ngoài Git; summary thực tế đang ở
+  `PENDING_HUMAN_CONFIRMATION`, 4/14 tài liệu trong metric đã review, evaluate
+  chưa chạy.
+- Scope amendment: `CCCD-HO-005` được xác nhận là ảnh mặt sau
+  (`OUT_OF_SCOPE_BACK`), không đánh dấu 8 field là không có và không đưa vào
+  metric. Source audit vẫn giữ 15 ảnh; metric denominator còn 14 ảnh.
+- Ground Truth và ảnh nguồn tiếp tục nằm ngoài repository tại private root; không
+  ghi PII vào commit/report. Chỉ sau khi người dùng lưu đủ 14 tài liệu hợp lệ,
+  giữ ảnh loại ở trạng thái `EXCLUDED`, và bấm khóa mới cho phép evaluate đúng
+  một lần.
+- Validation: `tests/test_cccd_heldout_review.py` 5 passed; web build và rendered
+  HTML 9 passed; template API regression 25 passed; compileall và Ruff cho module
+  mới/script/test đều pass.
+- Evaluate-once đã chạy đúng một lần sau khi khóa Ground Truth: 14 tài liệu hợp lệ,
+  112 field. Phase 11.5/11.6 đều đạt strict exact match 50.00%, ASCII exact
+  match 50.89%, CER 80.71%, DER 16.14%; promotion gate giữ
+  `SHADOW_REVIEW_ONLY` vì không đạt accepted precision/field presence và còn một
+  sensitive false acceptance. Không có exact regression và không promote model.
+
+## OCR-HO-V2-003 checkpoint (post-evaluation local inspector)
+
+- Đã thêm endpoint read-only `/cccd-heldout/review/evaluation?id=...`; endpoint
+  chỉ đọc Ground Truth và sealed prediction sau khi queue đã `CONFIRMED` và
+  evaluate-once đã tạo report. Trong lúc review hoặc trước evaluation, prediction
+  tiếp tục bị chặn.
+- Localhost hiển thị output theo từng ảnh và 8 field: Ground Truth, Phase 11.5,
+  Phase 11.6, strict/ASCII match, status/error class, confidence và ROI bbox.
+  `CCCD-HO-005` không có output vì vẫn ngoài metric.
+- Dữ liệu chi tiết chỉ được phục vụ loopback từ private root; không ghi raw OCR,
+  Ground Truth hoặc prediction vào Git/report công khai.
+- Validation: targeted review tests 5 passed, full Python suite 248 passed / 16
+  subtests, web build + rendered HTML 10 passed, module Ruff/compileall passed,
+  repository hygiene passed.

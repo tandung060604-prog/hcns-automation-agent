@@ -50,7 +50,7 @@
         "predictionBlindness"
       ],
       "properties": {
-        "status": {"enum": ["PENDING", "CONFIRMED"]},
+        "status": {"enum": ["PENDING", "IN_PROGRESS", "CONFIRMED"]},
         "reviewMethod": {"const": "SOURCE_DOCUMENT_REVIEW"},
         "reviewer": {"type": "string", "minLength": 1},
         "reviewedAt": {"type": ["string", "null"], "format": "date"},
@@ -86,7 +86,9 @@
           "items": {"$ref": "#/$defs/field"}
         },
         "expectedQualityStatus": {"const": "REVIEW_REQUIRED"},
-        "reviewRequired": {"const": true}
+        "reviewRequired": {"type": "boolean"},
+        "reviewedAt": {"type": ["string", "null"]},
+        "reviewer": {"type": "string", "minLength": 1}
       }
     },
     "field": {

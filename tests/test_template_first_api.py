@@ -4,10 +4,11 @@ import http.client
 import json
 import sys
 import threading
+import uuid
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
-from synthetic_fixtures import administrative_image_bytes
+from synthetic_fixtures import administrative_image_bytes, scanned_pdf_bytes
 from test_template_first import docx_bytes, leave_lines
 
 from hcns_agent.adapters.mock_ocr import DeterministicMockOcrEngine
@@ -34,6 +35,7 @@ def configure_handler(
 ) -> None:
     DashboardHandler.data_root = data_root
     DashboardHandler.heldout_root = None
+    DashboardHandler.cccd_heldout_root = None
     DashboardHandler.native_indexes = {}
     DashboardHandler.user_ocr = UserOCRService(data_root)
     DashboardHandler.template_processor = (
@@ -155,6 +157,48 @@ def test_api_root_redirects_to_local_dashboard(tmp_path: Path) -> None:
         response.read()
         assert response.status == 307
         assert response.getheader("Location") == "http://localhost:3000"
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_template_preview_renders_pdf_and_preserves_image(tmp_path: Path) -> None:
+    configure_handler(tmp_path)
+    session_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
+    sources = [
+        ("document.pdf", scanned_pdf_bytes(), "image/png"),
+        ("document.png", administrative_image_bytes(), "image/png"),
+    ]
+    for session_id, (filename, content, _) in zip(session_ids, sources, strict=True):
+        session_dir = tmp_path / "user_uploads" / "sessions" / session_id
+        (session_dir / "input").mkdir(parents=True)
+        (session_dir / "template_first").mkdir()
+        (session_dir / "input" / filename).write_bytes(content)
+        (session_dir / "template_first" / "result.json").write_text(
+            json.dumps({"documentType": "LEAVE_REQUEST"}),
+            encoding="utf-8",
+        )
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+    try:
+        for session_id, (_, content, expected_type) in zip(
+            session_ids,
+            sources,
+            strict=True,
+        ):
+            connection.request("GET", f"/api/documents/preview?id={session_id}")
+            response = connection.getresponse()
+            preview = response.read()
+            assert response.status == 200
+            assert response.getheader("Content-Type") == expected_type
+            assert preview.startswith(b"\x89PNG\r\n\x1a\n")
+            if content.startswith(b"\x89PNG"):
+                assert preview == content
     finally:
         connection.close()
         server.shutdown()

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "datasetId": "vuhocpublic-data",
-  "datasetVersion": "2026-07-31-dec17acb",
+  "datasetVersion": "2026-08-03-contract-probation",
   "sourceCommit": "dec17acbe2b409e0aa5daeb4db820d3e95d05bdf",
   "groundTruthStatus": "DRAFT",
   "promotionAllowed": false,
@@ -27,14 +27,15 @@
       "businessFamily": "CONTRACT",
       "route": "GENERIC_IDP",
       "templateFirst": "UNSUPPORTED",
-      "schemaRef": "schemas/hr_document_families/contract_decision.schema.json",
+      "schemaRef": "schemas/hr_document_families/probation_contract.schema.json",
       "formatPolicy": {
         "PLAIN_TEXT": "NATIVE",
         "DOCX": "NATIVE",
         "IMAGE": "OCR_REVIEW",
         "PPTX": "NATIVE_PARTIAL",
         "PDF_SCAN": "OCR_REVIEW"
-      }
+      },
+      "mappingNote": "External contract cases are probation agreements; review uses the reduced 14-field probation schema."
     },
     {
       "category": "ielts",

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hcns:external:probation-contract:1.0.0",
+  "title": "External Dataset Probation Contract Business JSON",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "documentFamily", "documentType", "idpStatus", "payload"],
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "documentFamily": {"const": "CONTRACT_DECISION"},
+    "documentType": {"const": "EMPLOYMENT_CONTRACT"},
+    "idpStatus": {"enum": ["READY", "NEEDS_REVIEW"]},
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fields", "tables", "summary"],
+      "properties": {
+        "fields": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "contract_number",
+            "contract_sign_date",
+            "effective_date",
+            "probation_end_date",
+            "employer_name",
+            "employer_representative",
+            "employee_name",
+            "employee_id_number",
+            "job_title",
+            "workplace",
+            "weekly_hours",
+            "probation_salary_monthly",
+            "allowances_summary",
+            "salary_payment_schedule"
+          ],
+          "properties": {
+            "contract_number": {"type": ["string", "null"]},
+            "contract_sign_date": {"type": ["string", "null"]},
+            "effective_date": {"type": ["string", "null"]},
+            "probation_end_date": {"type": ["string", "null"]},
+            "employer_name": {"type": ["string", "null"]},
+            "employer_representative": {"type": ["string", "null"]},
+            "employee_name": {"type": ["string", "null"]},
+            "employee_id_number": {"type": ["string", "null"]},
+            "job_title": {"type": ["string", "null"]},
+            "workplace": {"type": ["string", "null"]},
+            "weekly_hours": {"type": ["number", "string", "null"]},
+            "probation_salary_monthly": {"type": ["number", "string", "null"]},
+            "allowances_summary": {"type": ["string", "null"]},
+            "salary_payment_schedule": {"type": ["string", "null"]}
+          }
+        },
+        "tables": {"type": "array"},
+        "summary": {"type": "object"}
+      }
+    }
+  }
+}

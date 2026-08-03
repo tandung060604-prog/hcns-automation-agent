@@ -18,6 +18,33 @@
   Ground Truth được khóa.
 - Policy hiện tại: `SHADOW_REVIEW_ONLY`.
 
+### OCR-HO-V2-002 — Local Ground Truth review gate (IN_PROGRESS)
+
+- API local currently runs at `http://127.0.0.1:8765` with
+  `--cccd-heldout-root C:\Camunda\private-data\paddleocr-hr-cccd-heldout-v2`.
+- Web local runs at `http://localhost:3000/` with
+  `VITE_SHOW_GROUND_TRUTH_REVIEW=true`; the visible section is
+  `LOCAL GROUND TRUTH REVIEW · CCCD`.
+- The UI lists 15 images and shows each source image plus eight field inputs. It
+  requires both source-image and full-diacritic assertions before saving.
+- `CCCD-HO-005` is now marked `OUT_OF_SCOPE_BACK`: it remains visible for source
+  audit, is not treated as eight missing fields, and is excluded from the metric.
+  The current denominator is 14 eligible front-side images out of 15 sources.
+- Ground Truth is now `CONFIRMED` after 14/14 eligible reviews; the queue was
+  locked and evaluate-once ran exactly once. The aggregate result is
+  `SHADOW_REVIEW_ONLY` (strict exact 50.00%, ASCII exact 50.89%, CER 80.71%,
+  DER 16.14%, 112 fields). No candidate was promoted.
+- Do not rerun evaluate-once or open the private prediction JSON. Keep the
+  sealed snapshot and evaluation report immutable; the next task must address
+  the failed promotion gates with new development evidence, not held-out tuning.
+- OCR-HO-V2-003 adds a local-only post-evaluation inspector at
+  `/cccd-heldout/review/evaluation?id=...`. After selecting an image, the panel
+  shows Ground Truth versus Phase 11.5/11.6, match verdict, error class,
+  confidence, and ROI. It is unavailable before evaluation and does not expose
+  `CCCD-HO-005` because that document is out of scope.
+- Private outputs remain outside Git: `ground_truth/ground_truth_confirmed_private.json`,
+  `ground_truth/GROUND_TRUTH_LOCK.json`, and `evaluation/evaluate_once_private.json`.
+
 ### TF-P1-001 — Template-first MVP
 
 - Hai template DOCX: `leave-request-v1` và `overtime-request-v1`.
@@ -248,6 +275,20 @@
   status `UNASSIGNED`.
 - Next action: an independent reviewer fills and confirms the source-document
   fields, then seals the artifact before any field-level benchmark run.
+
+### DATA-07 — Local external-dataset Ground Truth review UI (IN_PROGRESS)
+
+- DATA-07 was approved and implemented as a loopback-only review panel for the
+  13 synthetic `cv`/`contract`/`ielts` cases (55 fields / 17 pages).
+- API routes are `/external-dataset/review/summary`, `/document`, `/save`, and
+  `/lock`. The API reads only the staging source and the private Ground Truth
+  draft; predictions are not exposed. Draft writes and the seal marker remain
+  outside Git.
+- Start the UI with `start_dashboard.ps1 -ExternalDatasetRoot` and the optional
+  inventory/draft paths. Set `VITE_SHOW_EXTERNAL_DATASET_REVIEW=true` (the
+  launcher sets it automatically when the external root is supplied).
+- DATA-07 is not a promotion approval: an independent reviewer still has to
+  open each source, confirm all 55 fields, and explicitly press `SEALED`.
 
 ### OCR-HO-V2-001 — CCCD held-out prediction seal (REVIEW)
 

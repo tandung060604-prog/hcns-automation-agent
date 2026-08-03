@@ -186,10 +186,36 @@ External dataset DATA-06 checkpoint (2026-08-02):
   `groundTruthStatus=DRAFT` and promotion remains disabled.
 - A prediction-blind Ground Truth review artifact exists outside Git at
   `C:\tmp\hcns-dataset-run-dec17acb-ground-truth-draft.json`.
-- The draft covers 13 cases / 17 pages and 55 expected fields, all with
-  `value=null` and `reviewStatus=PENDING`; no OCR/model output was copied.
+- The pre-contract-replacement draft covered 13 cases / 17 pages and 55
+  expected fields; it was moved to a timestamped backup outside the staging
+  root before the new contract source was installed.
 - DATA-06 remains `IN_PROGRESS` until an independent reviewer confirms and
   seals the source-document values; only then may field-level evaluation run.
+
+External dataset DATA-07 checkpoint (2026-08-03):
+- DATA-07 was approved and the local review UI/API is implemented for the
+  current synthetic external dataset: 12 documents / 16 pages and 86 fields.
+  CV/IELTS remain unchanged (30 fields total); four contract cases use the
+  reduced 14-field probation schema (56 fields total).
+- The queue exposes source previews for image/PDF/TXT and native text previews
+  for DOCX/PPTX, plus a dynamic field form for CV, contract and IELTS.
+- API writes the private draft atomically outside Git and refuses `SEALED`
+  until all fields are `CONFIRMED`; prediction/OCR output is never read by the
+  review module.
+- The old staged contract directory was moved to
+  `C:\tmp\hcns-dataset-run-dec17acb-contract-old-20260803` (recoverable),
+  and the new DOCX/PDF contract sources remain only in local staging.
+- Inventory digest is
+  `sha256:d1076de9fcfc675e881f4d5e2370765971974c779cfb9affb9faf926e3f9cb33`.
+  The prediction-blind draft remains `DRAFT` / `IN_PROGRESS`; no field values
+  were copied from OCR output. Mock pilot processed 12/12 with 0 failures and
+  decision `HOLD`.
+- Validation: targeted review tests 9 passed; full Python suite 248 passed plus
+  16 subtests; Ruff and mypy passed. The existing Dashboard lint error is
+  unrelated WIP.
+- Runtime command: `apps/ocr_lab/api/start_dashboard.ps1 -DataRoot <data-root>
+  -ExternalDatasetRoot C:\\tmp\\hcns-dataset-run-dec17acb` (inventory and draft
+  paths infer from the staging root name).
 
 OCR-HO-V2-001 checkpoint (2026-08-02):
 - From 89 file-level new candidates in the local CCCD test folder, 15 images
@@ -209,6 +235,46 @@ OCR-HO-V2-001 checkpoint (2026-08-02):
 - Decision is `NOT_PROMOTED`; predictions remain sealed and unscored. The
   manifest is still `PENDING_HUMAN_CONFIRMATION`; a human-verified text
   transcription must be added before the sealed snapshot is evaluated once.
+
+OCR-HO-V2-002 checkpoint (local-only Ground Truth review gate, 2026-08-02):
+- Backend contract and endpoints are implemented in
+  `apps/ocr_lab/api/cccd_heldout_review.py` and
+  `serve_dashboard_api.py`: summary, source preview, per-document save, lock,
+  and evaluate-once.
+- The localhost UI is gated by `VITE_SHOW_GROUND_TRUTH_REVIEW=true`; it shows
+  the source image and eight field inputs but never exposes sealed prediction
+  values during review.
+- The private v2 root currently reports 15 documents, 8 fields/document,
+  `PENDING_HUMAN_CONFIRMATION`, `canLock=false`, `canEvaluate=false`.
+- Scope amendment: `CCCD-HO-005` is confirmed as `OUT_OF_SCOPE_BACK` because it
+  is a back-side card image outside the front-side eight-field schema. It is
+  retained in the source audit (`sourceDocumentCount=15`) but excluded from
+  Ground Truth metrics (`documentCount=14`, `excludedDocumentCount=1`); its
+  fields are not marked as absent and no sealed prediction or manifest entry
+  was changed.
+- No Ground Truth value, prediction, source image, or private manifest is tracked
+-  in Git. The user completed the 14 eligible reviews; the queue was locked and
+  the sealed snapshot was evaluated exactly once.
+- Evaluate-once result: 14 documents / 112 fields; Phase 11.5 and 11.6 both have
+  strict exact match 50.00%, ASCII exact match 50.89%, CER 80.71%, DER 16.14%,
+  field presence 86.61%, and accepted precision 95.45%. Promotion gate is
+  `SHADOW_REVIEW_ONLY`: no exact regression, but accepted precision, field
+  presence, full-name/address checks, and sensitive-false-acceptance gate failed.
+  No candidate was promoted.
+- Tests: review/API/evaluate-once 5 passed; Template-first API regression 25
+  passed; web build and rendered HTML 9 passed; new Python files pass Ruff and
+  compileall. The legacy dashboard module still has its pre-existing import
+  placement warnings when Ruff is run on `apps/` directly.
+
+OCR-HO-V2-003 checkpoint (post-evaluation local inspector, 2026-08-03):
+- Added read-only `/cccd-heldout/review/evaluation?id=...`; it is fail-closed
+  until Ground Truth is `CONFIRMED` and the immutable evaluate-once report exists.
+- Local UI now compares each eligible image's Ground Truth with Phase 11.5 and
+  11.6 values, strict/ASCII verdicts, prediction status/error signals,
+  confidence, and evidence ROI. Back-side `CCCD-HO-005` remains excluded.
+- No raw private output is tracked in Git. Full Python suite: 248 passed and 16
+  subtests; web build/rendered HTML: 10 passed; targeted Ruff/compileall and
+  repository hygiene passed.
 
 Key commands:
 - `python -m pytest -q`

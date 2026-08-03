@@ -18,6 +18,7 @@ from email import policy
 from email.parser import BytesParser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -31,6 +32,24 @@ try:
     import pypdfium2 as pdfium
 except ImportError:  # Evidence-only mode can run without PDF rendering.
     pdfium = None
+from cccd_heldout_review import (
+    evaluate_once as evaluate_cccd_ground_truth_once,
+    load_evaluation_document,
+    load_review_document,
+    load_review_summary,
+    lock_ground_truth,
+    resolve_review_source,
+    save_review as save_cccd_ground_truth_review,
+    set_review_disposition,
+)
+from external_dataset_review import (
+    load_review_document as load_external_review_document,
+    load_review_summary as load_external_review_summary,
+    load_text_preview as load_external_text_preview,
+    lock_ground_truth as lock_external_ground_truth,
+    resolve_review_source as resolve_external_review_source,
+    save_review as save_external_review,
+)
 from document_route_safety import (
     safe_existing_document_route,
     selected_orientations_are_identity,
@@ -1146,6 +1165,39 @@ class UserOCRService:
             return None
         return source_paths[0]
 
+    def template_preview(self, session_id: str) -> tuple[bytes, str] | None:
+        source_path = self.template_source(session_id)
+        if source_path is None:
+            return None
+        if source_path.suffix.lower() != ".pdf":
+            content_type = (
+                mimetypes.guess_type(source_path.name)[0]
+                or "application/octet-stream"
+            )
+            return source_path.read_bytes(), content_type
+        if pdfium is None:
+            raise RuntimeError("PDF preview rendering is unavailable.")
+
+        document = pdfium.PdfDocument(source_path)
+        try:
+            if len(document) == 0:
+                raise ValueError("PDF has no pages")
+            page = document[0]
+            try:
+                bitmap = page.render(scale=1.6)
+                try:
+                    image = bitmap.to_pil().convert("RGB")
+                finally:
+                    bitmap.close()
+            finally:
+                page.close()
+        finally:
+            document.close()
+
+        output = BytesIO()
+        image.save(output, format="PNG", optimize=True)
+        return output.getvalue(), "image/png"
+
     def list_template_sessions(self) -> list[dict[str, Any]]:
         sessions: list[dict[str, Any]] = []
         for result_path in self.sessions_root.glob("*/template_first/result.json"):
@@ -1185,6 +1237,10 @@ class UserOCRService:
 class DashboardHandler(BaseHTTPRequestHandler):
     data_root: Path
     heldout_root: Path | None
+    cccd_heldout_root: Path | None
+    external_dataset_root: Path | None
+    external_dataset_inventory: Path | None
+    external_dataset_ground_truth: Path | None
     native_indexes: dict[str, dict[str, Path]]
     user_ocr: UserOCRService
     template_processor: TemplateProcessingService
@@ -1317,6 +1373,188 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     },
                     HTTPStatus.INTERNAL_SERVER_ERROR,
                 )
+            return
+        if parsed.path == "/cccd-heldout/review/save":
+            if self.cccd_heldout_root is None:
+                self.send_json(
+                    {"error": "CCCD Ground Truth review is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            document_id = parse_qs(parsed.query).get("id", [""])[0]
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                content_length = 0
+            if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                self.send_json(
+                    {"error": "Review payload is empty or too large"},
+                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                )
+                return
+            try:
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                self.send_json(
+                    save_cccd_ground_truth_review(
+                        self.cccd_heldout_root,
+                        document_id,
+                        payload,
+                    )
+                )
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if parsed.path == "/external-dataset/review/save":
+            if self.external_dataset_root is None:
+                self.send_json(
+                    {"error": "External dataset Ground Truth review is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            case_id = parse_qs(parsed.query).get("id", [""])[0]
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                content_length = 0
+            if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                self.send_json(
+                    {"error": "Review payload is empty or too large"},
+                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                )
+                return
+            try:
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                self.send_json(
+                    save_external_review(
+                        self.external_dataset_root,
+                        case_id,
+                        payload,
+                        inventory_path=self.external_dataset_inventory,
+                        ground_truth_path=self.external_dataset_ground_truth,
+                    )
+                )
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if parsed.path == "/external-dataset/review/lock":
+            if self.external_dataset_root is None:
+                self.send_json(
+                    {"error": "External dataset Ground Truth review is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                content_length = 0
+            if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                self.send_json(
+                    {"error": "Lock confirmation payload is empty or too large"},
+                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                )
+                return
+            try:
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                self.send_json(
+                    lock_external_ground_truth(
+                        self.external_dataset_root,
+                        confirm=payload.get("confirm") is True,
+                        inventory_path=self.external_dataset_inventory,
+                        ground_truth_path=self.external_dataset_ground_truth,
+                    )
+                )
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if parsed.path == "/cccd-heldout/review/disposition":
+            if self.cccd_heldout_root is None:
+                self.send_json(
+                    {"error": "CCCD Ground Truth review is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            document_id = parse_qs(parsed.query).get("id", [""])[0]
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                content_length = 0
+            if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                self.send_json(
+                    {"error": "Disposition payload is empty or too large"},
+                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                )
+                return
+            try:
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                self.send_json(
+                    set_review_disposition(
+                        self.cccd_heldout_root,
+                        document_id,
+                        str(payload.get("disposition", "")),
+                        payload.get("reason"),
+                    )
+                )
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if parsed.path == "/cccd-heldout/review/lock":
+            if self.cccd_heldout_root is None:
+                self.send_json(
+                    {"error": "CCCD Ground Truth review is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                content_length = 0
+            if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                self.send_json(
+                    {"error": "Lock confirmation payload is empty or too large"},
+                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                )
+                return
+            try:
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                self.send_json(
+                    lock_ground_truth(
+                        self.cccd_heldout_root,
+                        confirm=payload.get("confirm") is True,
+                    )
+                )
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if parsed.path == "/cccd-heldout/review/evaluate":
+            if self.cccd_heldout_root is None:
+                self.send_json(
+                    {"error": "CCCD Ground Truth review is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            try:
+                result = evaluate_cccd_ground_truth_once(
+                    self.cccd_heldout_root,
+                    python_executable=sys.executable,
+                    script_path=REPO_ROOT / "scripts" / "evaluate_cccd_heldout_once.py",
+                )
+                self.send_json(result)
+            except FileExistsError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.CONFLICT)
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except (OSError, RuntimeError, ValueError) as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
         if parsed.path == "/phase14/review":
             try:
@@ -1895,6 +2133,185 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 or "application/octet-stream"
             )
             self.send_file(source_path, content_type)
+            return
+
+        if parsed.path == "/api/documents/preview":
+            document_id = query.get("id", [""])[0]
+            try:
+                preview = self.user_ocr.template_preview(document_id)
+            except (OSError, RuntimeError, ValueError):
+                self.send_json(
+                    {"error": "Template-first preview unavailable"},
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                )
+                return
+            if preview is None:
+                self.send_json(
+                    {"error": "Template-first preview not found"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            body, content_type = preview
+            self.send_bytes(body, content_type)
+            return
+
+        if parsed.path == "/cccd-heldout/review/summary":
+            if self.cccd_heldout_root is None:
+                self.send_json(
+                    {"error": "CCCD Ground Truth review is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            try:
+                self.send_json(load_review_summary(self.cccd_heldout_root))
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+                self.send_json(
+                    {"error": f"CCCD Ground Truth review unavailable: {exc}"},
+                    HTTPStatus.NOT_FOUND,
+                )
+            return
+
+        if parsed.path == "/external-dataset/review/summary":
+            if self.external_dataset_root is None:
+                self.send_json(
+                    {"error": "External dataset Ground Truth review is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            try:
+                self.send_json(
+                    load_external_review_summary(
+                        self.external_dataset_root,
+                        inventory_path=self.external_dataset_inventory,
+                        ground_truth_path=self.external_dataset_ground_truth,
+                    )
+                )
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+                self.send_json(
+                    {"error": f"External dataset review unavailable: {exc}"},
+                    HTTPStatus.NOT_FOUND,
+                )
+            return
+
+        if parsed.path == "/external-dataset/review/document":
+            if self.external_dataset_root is None:
+                self.send_json(
+                    {"error": "External dataset Ground Truth review is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            case_id = query.get("id", [""])[0]
+            mode = query.get("mode", ["detail"])[0]
+            try:
+                source = resolve_external_review_source(
+                    self.external_dataset_root,
+                    case_id,
+                    inventory_path=self.external_dataset_inventory,
+                    ground_truth_path=self.external_dataset_ground_truth,
+                )
+                if mode == "detail":
+                    self.send_json(
+                        load_external_review_document(
+                            self.external_dataset_root,
+                            case_id,
+                            inventory_path=self.external_dataset_inventory,
+                            ground_truth_path=self.external_dataset_ground_truth,
+                        )
+                    )
+                elif mode == "source":
+                    self.send_file(
+                        source,
+                        mimetypes.guess_type(source.name)[0] or "application/octet-stream",
+                        f"{case_id}{source.suffix.lower()}",
+                    )
+                elif mode == "preview":
+                    if source.suffix.casefold() in {".txt", ".docx", ".pptx"}:
+                        self.send_json(
+                            {
+                                "kind": "text",
+                                "sourceFile": source.name,
+                                "text": load_external_text_preview(source),
+                            }
+                        )
+                    else:
+                        self.send_file(
+                            source,
+                            mimetypes.guess_type(source.name)[0] or "application/octet-stream",
+                        )
+                else:
+                    self.send_json(
+                        {"error": "Invalid review document mode"}, HTTPStatus.BAD_REQUEST
+                    )
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            except (OSError, FileNotFoundError, KeyError, json.JSONDecodeError):
+                self.send_json(
+                    {"error": "External dataset review document is unavailable"},
+                    HTTPStatus.NOT_FOUND,
+                )
+            return
+
+        if parsed.path == "/cccd-heldout/review/document":
+            if self.cccd_heldout_root is None:
+                self.send_json(
+                    {"error": "CCCD Ground Truth review is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            document_id = query.get("id", [""])[0]
+            mode = query.get("mode", ["detail"])[0]
+            try:
+                if mode == "preview":
+                    source = resolve_review_source(self.cccd_heldout_root, document_id)
+                    self.send_file(
+                        source,
+                        mimetypes.guess_type(source.name)[0] or "image/jpeg",
+                    )
+                elif mode == "detail":
+                    self.send_json(load_review_document(self.cccd_heldout_root, document_id))
+                else:
+                    self.send_json(
+                        {"error": "Invalid review document mode"},
+                        HTTPStatus.BAD_REQUEST,
+                    )
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            except (OSError, FileNotFoundError, KeyError, json.JSONDecodeError):
+                self.send_json(
+                    {"error": "CCCD review document is unavailable"},
+                    HTTPStatus.NOT_FOUND,
+                )
+            return
+
+        if parsed.path == "/cccd-heldout/review/evaluation":
+            if self.cccd_heldout_root is None:
+                self.send_json(
+                    {"error": "CCCD Ground Truth review is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            document_id = query.get("id", [""])[0]
+            try:
+                self.send_json(
+                    load_evaluation_document(self.cccd_heldout_root, document_id)
+                )
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            except (OSError, FileNotFoundError, KeyError, json.JSONDecodeError):
+                self.send_json(
+                    {"error": "CCCD evaluation output is unavailable"},
+                    HTTPStatus.NOT_FOUND,
+                )
             return
 
         if parsed.path == "/heldout/summary":
@@ -2649,6 +3066,26 @@ def parse_args() -> argparse.Namespace:
             "paddleocr-hr-heldout-v1 sibling of --data-root."
         ),
     )
+    parser.add_argument(
+        "--cccd-heldout-root",
+        type=Path,
+        help="Authorized local CCCD Phase 11.6 Ground Truth review root.",
+    )
+    parser.add_argument(
+        "--external-dataset-root",
+        type=Path,
+        help="Local staging root for the synthetic external dataset review UI.",
+    )
+    parser.add_argument(
+        "--external-dataset-inventory",
+        type=Path,
+        help="Public inventory JSON for the external dataset (optional sibling inference).",
+    )
+    parser.add_argument(
+        "--external-dataset-ground-truth",
+        type=Path,
+        help="Private local Ground Truth draft JSON for the external dataset.",
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     return parser.parse_args()
@@ -2669,6 +3106,26 @@ def main() -> int:
         args.data_root,
         args.heldout_root,
     )
+    DashboardHandler.cccd_heldout_root = (
+        args.cccd_heldout_root.expanduser().resolve()
+        if args.cccd_heldout_root is not None
+        else None
+    )
+    DashboardHandler.external_dataset_root = (
+        args.external_dataset_root.expanduser().resolve()
+        if args.external_dataset_root is not None
+        else None
+    )
+    DashboardHandler.external_dataset_inventory = (
+        args.external_dataset_inventory.expanduser().resolve()
+        if args.external_dataset_inventory is not None
+        else None
+    )
+    DashboardHandler.external_dataset_ground_truth = (
+        args.external_dataset_ground_truth.expanduser().resolve()
+        if args.external_dataset_ground_truth is not None
+        else None
+    )
     DashboardHandler.native_indexes = indexes
     DashboardHandler.user_ocr = UserOCRService(args.data_root)
     DashboardHandler.template_processor = build_local_template_processing_service()
@@ -2676,7 +3133,8 @@ def main() -> int:
     print(
         f"Local dashboard API ready: http://{args.host}:{args.port} "
         f"(baseline={len(indexes['baseline'])}, phase7={len(indexes['phase7'])}, "
-        f"real-heldout={'on' if DashboardHandler.heldout_root else 'off'})"
+        f"real-heldout={'on' if DashboardHandler.heldout_root else 'off'}, "
+        f"external-review={'on' if DashboardHandler.external_dataset_root else 'off'})"
     )
     try:
         server.serve_forever()

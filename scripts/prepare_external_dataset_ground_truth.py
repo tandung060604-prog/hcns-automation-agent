@@ -27,10 +27,19 @@ FIELD_SPECS: dict[str, tuple[tuple[str, bool], ...]] = {
     ),
     "contract": (
         ("contract_number", False),
+        ("contract_sign_date", False),
+        ("effective_date", False),
+        ("probation_end_date", False),
+        ("employer_name", False),
+        ("employer_representative", False),
         ("employee_name", True),
-        ("start_date", False),
-        ("end_date", False),
-        ("salary", True),
+        ("employee_id_number", True),
+        ("job_title", False),
+        ("workplace", False),
+        ("weekly_hours", False),
+        ("probation_salary_monthly", True),
+        ("allowances_summary", False),
+        ("salary_payment_schedule", False),
     ),
     "ielts": (
         ("recipient_name", True),
@@ -48,6 +57,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--inventory", type=Path, required=True)
     parser.add_argument("--mapping", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--preserve-from",
+        type=Path,
+        help="Previous local draft whose non-contract review fields must be preserved.",
+    )
     return parser.parse_args()
 
 
@@ -119,6 +133,8 @@ def main() -> int:
         )
         mapping = _read_object(args.mapping)
         draft = build_ground_truth_draft(inventory, mapping)
+        if args.preserve_from is not None:
+            draft = preserve_non_contract_reviews(draft, _read_object(args.preserve_from))
     except ExternalDatasetError as error:
         raise SystemExit(f"Ground Truth draft rejected: {error}") from error
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -142,6 +158,48 @@ def _read_object(path: Path) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise ExternalDatasetError("Mapping root must be an object")
     return payload
+
+
+def preserve_non_contract_reviews(
+    draft: dict[str, object], previous: dict[str, object]
+) -> dict[str, object]:
+    """Carry forward CV/IELTS review state while replacing contract cases."""
+    previous_cases = {
+        str(case.get("caseId")): case
+        for case in _objects(previous, "cases")
+        if str(case.get("caseId", "")).split("-", 1)[0] != "contract"
+    }
+    for case in _objects(draft, "cases"):
+        case_id = _string(case, "caseId")
+        if case_id.split("-", 1)[0] == "contract":
+            continue
+        prior = previous_cases.get(case_id)
+        if prior is None:
+            continue
+        prior_fields = prior.get("fields")
+        if isinstance(prior_fields, list):
+            case["fields"] = prior_fields
+        for key in ("reviewRequired", "reviewedAt", "reviewer"):
+            if key in prior:
+                case[key] = prior[key]
+    prior_review = previous.get("review")
+    if isinstance(prior_review, dict):
+        current_review = _object(draft, "review")
+        for key in ("reviewer", "reviewedAt", "evidenceReference", "predictionBlindness"):
+            if key in prior_review:
+                current_review[key] = prior_review[key]
+        current_review["status"] = (
+            "CONFIRMED"
+            if all(
+                all(
+                    str(field.get("reviewStatus")) == "CONFIRMED"
+                    for field in case.get("fields", [])
+                )
+                for case in _objects(draft, "cases")
+            )
+            else "IN_PROGRESS"
+        )
+    return draft
 
 
 def _object(payload: dict[str, object], key: str) -> dict[str, object]:

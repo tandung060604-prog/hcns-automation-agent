@@ -5,8 +5,13 @@ import {
   pendingReviewCases,
   resumePendingReview,
 } from "./review-queue.mjs";
+import ExternalDatasetReview from "./ExternalDatasetReview";
 
 const SHOW_HELDOUT = import.meta.env.VITE_SHOW_HELDOUT === "true";
+const SHOW_GROUND_TRUTH_REVIEW =
+  import.meta.env.VITE_SHOW_GROUND_TRUTH_REVIEW === "true";
+const SHOW_EXTERNAL_DATASET_REVIEW =
+  import.meta.env.VITE_SHOW_EXTERNAL_DATASET_REVIEW === "true";
 const SHOW_LEGACY_UPLOAD =
   import.meta.env.VITE_SHOW_LEGACY_UPLOAD === "true";
 
@@ -161,6 +166,117 @@ type HeldoutSummary = {
   latestReplay?: ReplayAudit | null;
   latestLiveV5Replay?: ReplayAudit | null;
   documents: HeldoutDocument[];
+};
+
+type CccdGroundTruthField = {
+  value: string;
+  notPresent: boolean;
+};
+
+type CccdGroundTruthReviewSummary = {
+  schemaVersion: string;
+  datasetId: string;
+  datasetDigest: string;
+  documentCount: number;
+  sourceDocumentCount: number;
+  excludedDocumentCount: number;
+  fieldCount: number;
+  fields: string[];
+  groundTruthStatus: string;
+  evaluationStatus: string;
+  predictionsHiddenDuringReview: true;
+  localOnly: true;
+  documentIds: string[];
+  documents: Array<{
+    documentId: string;
+    documentIndex: number;
+    sourceFormat: string;
+    sourceFile: string;
+    previewAvailable: boolean;
+    reviewStatus: string;
+    disposition: "IN_SCOPE_FRONT" | "OUT_OF_SCOPE_BACK";
+    exclusionReason?: string;
+    reviewedFieldCount: number;
+    fieldCount: number;
+  }>;
+  canLock: boolean;
+  canEvaluate: boolean;
+};
+
+type CccdGroundTruthReviewDocument = {
+  schemaVersion: string;
+  documentId: string;
+  documentIndex: number;
+  sourceFormat: string;
+  sourceFile: string;
+  previewAvailable: boolean;
+  reviewStatus: string;
+  disposition: "IN_SCOPE_FRONT" | "OUT_OF_SCOPE_BACK";
+  exclusionReason?: string;
+  fields: Record<string, CccdGroundTruthField>;
+  verificationAssertions: {
+    comparedWithImage: boolean;
+    allTextChecked: boolean;
+  };
+  predictionsHidden: true;
+};
+
+type CccdGroundTruthEvaluation = {
+  status: string;
+  evaluationKind: string;
+  documentCount: number;
+  metrics: Record<string, Record<string, number>>;
+  promotionGate: {
+    status: string;
+    checks: Record<string, boolean>;
+    exactImprovementCount?: number;
+    exactRegressionCount?: number;
+  };
+};
+
+type CccdEvaluationPredictionField = {
+  value: string | null;
+  asciiValue: string | null;
+  status: string | null;
+  confidence: number | null;
+  errorSignals: string[];
+  selectionMode: string | null;
+  evidence: {
+    pageIndex?: number | null;
+    bbox?: number[] | null;
+    candidateCount?: number;
+  };
+};
+
+type CccdEvaluationComparison = {
+  status: "EXACT" | "MISMATCH" | "NOT_IN_SOURCE";
+  strictExact: boolean | null;
+  asciiExact: boolean | null;
+  errorClass: string | null;
+};
+
+type CccdGroundTruthEvaluationDetail = {
+  schemaVersion: string;
+  evaluationKind: string;
+  evaluatedAt: string;
+  documentId: string;
+  documentIndex: number;
+  sourceFile: string;
+  documentCount: number;
+  localOnly: true;
+  predictionsHiddenDuringReview: true;
+  fields: Record<
+    string,
+    {
+      groundTruth: { value: string | null; notPresent: boolean };
+      phase11_5: CccdEvaluationPredictionField;
+      phase11_6: CccdEvaluationPredictionField;
+      comparison: {
+        phase11_5: CccdEvaluationComparison;
+        phase11_6: CccdEvaluationComparison;
+      };
+    }
+  >;
 };
 
 type LocalEvidenceDetail = {
@@ -946,6 +1062,73 @@ const identityFieldLabels: Record<string, string> = {
   dateOfExpiry: "Có giá trị đến",
 };
 
+function CccdEvaluationInspector({
+  detail,
+  loading,
+  error,
+}: {
+  detail: CccdGroundTruthEvaluationDetail | null;
+  loading: boolean;
+  error: string;
+}) {
+  if (loading) {
+    return (
+      <div className="ground-truth-evaluation-inspector" data-testid="ground-truth-evaluation-inspector">
+        <strong>Đang đọc output sau evaluate-once…</strong>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="ground-truth-evaluation-inspector error" data-testid="ground-truth-evaluation-inspector">
+        <strong>Không đọc được output</strong>
+        <span>{error}</span>
+      </div>
+    );
+  }
+  if (!detail) return null;
+  return (
+    <div className="ground-truth-evaluation-inspector" data-testid="ground-truth-evaluation-inspector">
+      <div className="ground-truth-evaluation-inspector-heading">
+        <div>
+          <strong>OUTPUT THẬT SAU EVALUATE-ONCE</strong>
+          <span>{detail.sourceFile} · {detail.documentCount} ảnh trong metric</span>
+        </div>
+        <small>Chỉ hiển thị local sau khi Ground Truth đã khóa.</small>
+      </div>
+      <div className="ground-truth-evaluation-table" role="table">
+        <div className="ground-truth-evaluation-row heading" role="row">
+          <span>FIELD</span>
+          <span>GROUND TRUTH</span>
+          <span>PHASE 11.5</span>
+          <span>PHASE 11.6</span>
+          <span>CHẨN ĐOÁN</span>
+        </div>
+        {Object.entries(detail.fields).map(([fieldName, field]) => {
+          const phase11_6 = field.phase11_6;
+          const comparison = field.comparison.phase11_6;
+          const rowClass = comparison.status.toLowerCase();
+          const bbox = phase11_6.evidence.bbox?.join(", ") ?? "—";
+          return (
+            <div className={`ground-truth-evaluation-row ${rowClass}`} key={fieldName} role="row">
+              <strong>{identityFieldLabels[fieldName] ?? fieldName}</strong>
+              <span>{evidenceValue(field.groundTruth.value)}</span>
+              <span>{evidenceValue(field.phase11_5.value)}</span>
+              <span>{evidenceValue(phase11_6.value)}</span>
+              <span>
+                <b>{comparison.errorClass ?? comparison.status}</b>
+                <small>
+                  {phase11_6.status ?? "—"} · {phase11_6.confidence == null ? "—" : `${(phase11_6.confidence * 100).toFixed(1)}%`} · ROI [{bbox}]
+                </small>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const phase17Steps = [
   {
     order: 1,
@@ -1599,6 +1782,32 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [apiOnline, setApiOnline] = useState(false);
   const [heldout, setHeldout] = useState<HeldoutSummary | null>(null);
   const [heldoutError, setHeldoutError] = useState("");
+  const [groundTruthReview, setGroundTruthReview] =
+    useState<CccdGroundTruthReviewSummary | null>(null);
+  const [groundTruthReviewError, setGroundTruthReviewError] = useState("");
+  const [activeGroundTruthId, setActiveGroundTruthId] = useState("");
+  const [groundTruthReviewDocument, setGroundTruthReviewDocument] =
+    useState<CccdGroundTruthReviewDocument | null>(null);
+  const [groundTruthFields, setGroundTruthFields] = useState<
+    Record<string, CccdGroundTruthField>
+  >({});
+  const [groundTruthAssertions, setGroundTruthAssertions] = useState({
+    comparedWithImage: false,
+    allTextChecked: false,
+  });
+  const [isSavingGroundTruth, setIsSavingGroundTruth] = useState(false);
+  const [isLockingGroundTruth, setIsLockingGroundTruth] = useState(false);
+  const [isEvaluatingGroundTruth, setIsEvaluatingGroundTruth] = useState(false);
+  const [groundTruthEvaluation, setGroundTruthEvaluation] =
+    useState<CccdGroundTruthEvaluation | null>(null);
+  const [groundTruthEvaluationDetail, setGroundTruthEvaluationDetail] =
+    useState<CccdGroundTruthEvaluationDetail | null>(null);
+  const [groundTruthEvaluationDetailError, setGroundTruthEvaluationDetailError] =
+    useState("");
+  const [isLoadingGroundTruthEvaluationDetail, setIsLoadingGroundTruthEvaluationDetail] =
+    useState(false);
+  const groundTruthDocumentExcluded =
+    groundTruthReviewDocument?.disposition === "OUT_OF_SCOPE_BACK";
   const replayAudit =
     heldout?.latestLiveV5Replay ?? heldout?.latestReplay ?? null;
   const replayIsLiveV5 = Boolean(heldout?.latestLiveV5Replay);
@@ -1608,8 +1817,13 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [heldoutEvidenceLoading, setHeldoutEvidenceLoading] = useState(false);
   const [heldoutEvidenceError, setHeldoutEvidenceError] = useState("");
   const [evidenceMode, setEvidenceMode] =
-    useState<"heldout" | "templates" | "cccd">(
-      SHOW_HELDOUT ? "heldout" : "templates",
+    useState<"heldout" | "templates" | "cccd" | "external-dataset">(
+      // Legacy default: SHOW_HELDOUT ? "heldout" : "templates"
+      SHOW_HELDOUT
+        ? "heldout"
+        : SHOW_EXTERNAL_DATASET_REVIEW
+          ? "external-dataset"
+          : "templates",
     );
   const [evidenceInspectorView, setEvidenceInspectorView] =
     useState<"fields" | "json">("fields");
@@ -1889,6 +2103,106 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     };
   }, [activeHeldoutId]);
 
+  useEffect(() => {
+    if (!SHOW_GROUND_TRUTH_REVIEW) return;
+    fetch(`${API_BASE}/cccd-heldout/review/summary`)
+      .then((response) => {
+        if (!response.ok) throw new Error("Ground Truth review unavailable");
+        return response.json();
+      })
+      .then((payload: CccdGroundTruthReviewSummary) => {
+        setGroundTruthReview(payload);
+        setGroundTruthReviewError("");
+        setActiveGroundTruthId((current) =>
+          payload.documents.some((document) => document.documentId === current)
+            ? current
+            : payload.documents[0]?.documentId ?? "",
+        );
+      })
+      .catch(() => {
+        setGroundTruthReview(null);
+        setGroundTruthReviewError(
+          "Chưa kết nối được hàng đợi Ground Truth local-only.",
+        );
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!SHOW_GROUND_TRUTH_REVIEW || !activeGroundTruthId) {
+      setGroundTruthReviewDocument(null);
+      setGroundTruthFields({});
+      return;
+    }
+    let cancelled = false;
+    fetch(
+      `${API_BASE}/cccd-heldout/review/document?id=${encodeURIComponent(
+        activeGroundTruthId,
+      )}&mode=detail`,
+    )
+      .then((response) => {
+        if (!response.ok) throw new Error("Ground Truth document unavailable");
+        return response.json();
+      })
+      .then((payload: CccdGroundTruthReviewDocument) => {
+        if (cancelled) return;
+        setGroundTruthReviewDocument(payload);
+        setGroundTruthFields(payload.fields);
+        setGroundTruthAssertions(payload.verificationAssertions);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setGroundTruthReviewDocument(null);
+          setGroundTruthReviewError("Không đọc được tài liệu Ground Truth local.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeGroundTruthId]);
+
+  useEffect(() => {
+    if (
+      !SHOW_GROUND_TRUTH_REVIEW ||
+      !activeGroundTruthId ||
+      groundTruthReview?.evaluationStatus !== "COMPLETE"
+    ) {
+      setGroundTruthEvaluationDetail(null);
+      setGroundTruthEvaluationDetailError("");
+      return;
+    }
+    let cancelled = false;
+    setIsLoadingGroundTruthEvaluationDetail(true);
+    fetch(
+      `${API_BASE}/cccd-heldout/review/evaluation?id=${encodeURIComponent(
+        activeGroundTruthId,
+      )}`,
+    )
+      .then((response) => {
+        if (!response.ok) throw new Error("Evaluation output unavailable");
+        return response.json();
+      })
+      .then((payload: CccdGroundTruthEvaluationDetail) => {
+        if (cancelled) return;
+        setGroundTruthEvaluationDetail(payload);
+        setGroundTruthEvaluationDetailError("");
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setGroundTruthEvaluationDetail(null);
+        setGroundTruthEvaluationDetailError(
+          error instanceof Error
+            ? error.message
+            : "Không đọc được output sau evaluate-once.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingGroundTruthEvaluationDetail(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeGroundTruthId, groundTruthReview?.evaluationStatus]);
+
   const selectPhase14Case = (index: number) => {
     if (
       !phase14 ||
@@ -1904,6 +2218,142 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       comparedWithCrop: false,
       allTextChecked: false,
     });
+  };
+
+  const refreshGroundTruthReview = async () => {
+    const response = await fetch(`${API_BASE}/cccd-heldout/review/summary`);
+    if (!response.ok) throw new Error("Ground Truth review unavailable");
+    const payload = (await response.json()) as CccdGroundTruthReviewSummary;
+    setGroundTruthReview(payload);
+    setActiveGroundTruthId((current) =>
+      payload.documents.some((document) => document.documentId === current)
+        ? current
+        : payload.documents[0]?.documentId ?? "",
+    );
+  };
+
+  const setGroundTruthDisposition = async (
+    disposition: "IN_SCOPE_FRONT" | "OUT_OF_SCOPE_BACK",
+  ) => {
+    if (
+      !activeGroundTruthId ||
+      !groundTruthReviewDocument ||
+      groundTruthReview?.groundTruthStatus === "CONFIRMED"
+    ) {
+      return;
+    }
+    setGroundTruthReviewError("");
+    try {
+      const response = await fetch(
+        `${API_BASE}/cccd-heldout/review/disposition?id=${encodeURIComponent(
+          activeGroundTruthId,
+        )}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            disposition,
+            reason:
+              disposition === "OUT_OF_SCOPE_BACK"
+                ? "back_side_outside_front_schema"
+                : "",
+          }),
+        },
+      );
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Không cập nhật phạm vi tài liệu");
+      }
+      await refreshGroundTruthReview();
+    } catch (error) {
+      setGroundTruthReviewError(
+        error instanceof Error
+          ? error.message
+          : "Không cập nhật phạm vi tài liệu local.",
+      );
+    }
+  };
+
+  const saveGroundTruthReview = async () => {
+    if (
+      !activeGroundTruthId ||
+      !groundTruthReviewDocument ||
+      groundTruthDocumentExcluded ||
+      isSavingGroundTruth
+    ) {
+      return;
+    }
+    setIsSavingGroundTruth(true);
+    setGroundTruthReviewError("");
+    try {
+      const response = await fetch(
+        `${API_BASE}/cccd-heldout/review/save?id=${encodeURIComponent(
+          activeGroundTruthId,
+        )}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fields: groundTruthFields,
+            assertions: groundTruthAssertions,
+          }),
+        },
+      );
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Không lưu được Ground Truth");
+      await refreshGroundTruthReview();
+    } catch (error) {
+      setGroundTruthReviewError(
+        error instanceof Error ? error.message : "Không lưu được Ground Truth local.",
+      );
+    } finally {
+      setIsSavingGroundTruth(false);
+    }
+  };
+
+  const lockGroundTruthReview = async () => {
+    if (!groundTruthReview?.canLock || isLockingGroundTruth) return;
+    setIsLockingGroundTruth(true);
+    setGroundTruthReviewError("");
+    try {
+      const response = await fetch(`${API_BASE}/cccd-heldout/review/lock`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Không khóa được Ground Truth");
+      await refreshGroundTruthReview();
+    } catch (error) {
+      setGroundTruthReviewError(
+        error instanceof Error ? error.message : "Không khóa được Ground Truth local.",
+      );
+    } finally {
+      setIsLockingGroundTruth(false);
+    }
+  };
+
+  const evaluateGroundTruthOnce = async () => {
+    if (!groundTruthReview?.canEvaluate || isEvaluatingGroundTruth) return;
+    setIsEvaluatingGroundTruth(true);
+    setGroundTruthReviewError("");
+    try {
+      const response = await fetch(`${API_BASE}/cccd-heldout/review/evaluate`, {
+        method: "POST",
+      });
+      const payload = (await response.json()) as CccdGroundTruthEvaluation & {
+        error?: string;
+      };
+      if (!response.ok) throw new Error(payload.error ?? "Evaluate once thất bại");
+      setGroundTruthEvaluation(payload);
+      await refreshGroundTruthReview();
+    } catch (error) {
+      setGroundTruthReviewError(
+        error instanceof Error ? error.message : "Evaluate once thất bại.",
+      );
+    } finally {
+      setIsEvaluatingGroundTruth(false);
+    }
   };
 
   const savePhase14Review = async () => {
@@ -2369,6 +2819,23 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     templateSessions[0] ??
     null;
   const activeTemplateEvidenceId = activeTemplateSession?.documentId ?? "";
+  const activeTemplateEvidencePreviewUrl = activeTemplateEvidenceId
+    ? `${API_BASE}/api/documents/preview?id=${encodeURIComponent(
+        activeTemplateEvidenceId,
+      )}`
+    : "";
+  const activeTemplateEvidenceExtension =
+    activeTemplateSession?.originalFileName
+      .split(".")
+      .pop()
+      ?.toLocaleLowerCase() ?? "";
+  const activeTemplateEvidenceIsImage =
+    activeTemplateSession?.sourceFormat === "IMAGE" ||
+    ["png", "jpg", "jpeg"].includes(activeTemplateEvidenceExtension);
+  const activeTemplateEvidenceIsPdf =
+    activeTemplateSession?.sourceFormat === "PDF_TEXT" ||
+    activeTemplateSession?.sourceFormat === "PDF_SCAN" ||
+    activeTemplateEvidenceExtension === "pdf";
   useEffect(() => {
     if (!activeTemplateEvidenceId) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale evidence when the selected template result disappears.
@@ -4424,6 +4891,255 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         </section>
       ) : null}
 
+      {SHOW_GROUND_TRUTH_REVIEW ? (
+        <section className="section ground-truth-review-section" id="ground-truth-review">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">LOCAL GROUND TRUTH REVIEW · CCCD</p>
+              <h2>Xác nhận ảnh gốc trước evaluate-once</h2>
+            </div>
+            <p>
+              Prediction vẫn bị ẩn. Bạn chỉ đối chiếu ảnh gốc, nhập giá trị nhìn thấy
+              hoặc đánh dấu không có, rồi khóa bộ Ground Truth local.
+            </p>
+          </div>
+          {groundTruthReviewError ? (
+            <div className="ground-truth-review-error">{groundTruthReviewError}</div>
+          ) : null}
+          <div className="ground-truth-review-toolbar">
+            <span>
+              {groundTruthReview?.documentCount ?? 0} ảnh vào metric · {groundTruthReview?.excludedDocumentCount ?? 0} ảnh loại · {groundTruthReview?.fieldCount ?? 0} field/ảnh
+            </span>
+            <strong>
+              {groundTruthReview?.groundTruthStatus ?? "CHƯA KẾT NỐI"}
+            </strong>
+            <span>
+              {groundTruthReview?.evaluationStatus === "COMPLETE"
+                ? "Evaluate once đã chạy"
+                : "Prediction hidden · local-only"}
+            </span>
+          </div>
+          <div className="ground-truth-review-grid">
+            <div className="ground-truth-review-list" role="list">
+              {(groundTruthReview?.documents ?? []).map((document) => (
+                <button
+                  key={document.documentId}
+                  className={document.documentId === activeGroundTruthId ? "active" : ""}
+                  onClick={() => setActiveGroundTruthId(document.documentId)}
+                  role="listitem"
+                  type="button"
+                >
+                  <span>{document.documentId}</span>
+                  <strong>{document.sourceFile}</strong>
+                  <small>
+                    {document.disposition === "OUT_OF_SCOPE_BACK"
+                      ? "OUT_OF_SCOPE_BACK · không tính metric"
+                      : `${document.reviewedFieldCount}/${document.fieldCount} field · ${document.reviewStatus}`}
+                  </small>
+                </button>
+              ))}
+            </div>
+            <div className="ground-truth-review-source">
+              {groundTruthReviewDocument?.previewAvailable ? (
+                <img
+                  src={`${API_BASE}/cccd-heldout/review/document?id=${encodeURIComponent(
+                    activeGroundTruthId,
+                  )}&mode=preview`}
+                  alt={`Ảnh CCCD ${activeGroundTruthId}`}
+                  data-testid="ground-truth-source-preview"
+                />
+              ) : (
+                <div className="native-heldout-file">
+                  <span>LOCAL</span>
+                  <strong>Ảnh nguồn chưa sẵn sàng</strong>
+                </div>
+              )}
+              <div className="heldout-preview-actions">
+                <div>
+                  <strong>{groundTruthReviewDocument?.documentId ?? "—"}</strong>
+                  <span>{groundTruthReviewDocument?.sourceFile ?? "Chọn tài liệu"}</span>
+                </div>
+              </div>
+            </div>
+            <div className="ground-truth-review-form">
+              <div className="ground-truth-form-heading">
+                <strong>Ground Truth theo field</strong>
+                <span>Không hiển thị prediction trong màn hình này.</span>
+              </div>
+              {groundTruthDocumentExcluded ? (
+                <div className="ground-truth-excluded-note">
+                  <strong>OUT_OF_SCOPE_BACK</strong>
+                  <span>
+                    Ảnh mặt sau không thuộc schema CCCD mặt trước và không đưa vào metric.
+                  </span>
+                </div>
+              ) : null}
+              <div className="ground-truth-disposition-actions">
+                <span>
+                  Phạm vi: {groundTruthDocumentExcluded ? "loại khỏi metric" : "CCCD mặt trước"}
+                </span>
+                <button
+                  className="secondary-action"
+                  type="button"
+                  onClick={() =>
+                    setGroundTruthDisposition(
+                      groundTruthDocumentExcluded
+                        ? "IN_SCOPE_FRONT"
+                        : "OUT_OF_SCOPE_BACK",
+                    )
+                  }
+                  disabled={groundTruthReview?.groundTruthStatus === "CONFIRMED"}
+                >
+                  {groundTruthDocumentExcluded
+                    ? "Đưa lại vào metric"
+                    : "Loại ảnh mặt sau"}
+                </button>
+              </div>
+              <div className="identity-ground-truth-grid">
+                {Object.keys(identityFieldLabels).map((field) => {
+                  const current = groundTruthFields[field] ?? {
+                    value: "",
+                    notPresent: false,
+                  };
+                  return (
+                    <label key={field}>
+                      <span>{identityFieldLabels[field]}</span>
+                      <input
+                        value={current.notPresent ? "" : current.value}
+                        disabled={
+                          groundTruthDocumentExcluded ||
+                          groundTruthReview?.groundTruthStatus === "CONFIRMED"
+                        }
+                        onChange={(event) =>
+                          setGroundTruthFields((previous) => ({
+                            ...previous,
+                            [field]: {
+                              value: event.target.value,
+                              notPresent: false,
+                            },
+                          }))
+                        }
+                        spellCheck
+                      />
+                      <small>
+                        <input
+                          type="checkbox"
+                          checked={current.notPresent}
+                          disabled={
+                            groundTruthDocumentExcluded ||
+                            groundTruthReview?.groundTruthStatus === "CONFIRMED"
+                          }
+                          onChange={(event) =>
+                            setGroundTruthFields((previous) => ({
+                              ...previous,
+                              [field]: {
+                                value: "",
+                                notPresent: event.target.checked,
+                              },
+                            }))
+                          }
+                        />
+                        Không có trên ảnh
+                      </small>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="review-assertions">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={groundTruthAssertions.comparedWithImage}
+                    disabled={
+                      groundTruthDocumentExcluded ||
+                      groundTruthReview?.groundTruthStatus === "CONFIRMED"
+                    }
+                    onChange={(event) =>
+                      setGroundTruthAssertions((current) => ({
+                        ...current,
+                        comparedWithImage: event.target.checked,
+                      }))
+                    }
+                  />
+                  Tôi đã đối chiếu trực tiếp với ảnh gốc
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={groundTruthAssertions.allTextChecked}
+                    disabled={
+                      groundTruthDocumentExcluded ||
+                      groundTruthReview?.groundTruthStatus === "CONFIRMED"
+                    }
+                    onChange={(event) =>
+                      setGroundTruthAssertions((current) => ({
+                        ...current,
+                        allTextChecked: event.target.checked,
+                      }))
+                    }
+                  />
+                  Tôi đã kiểm tra đủ chữ, dấu, số và field không có
+                </label>
+              </div>
+              <div className="ground-truth-review-actions">
+                <button
+                  className="save-review"
+                  type="button"
+                  onClick={saveGroundTruthReview}
+                  disabled={
+                    isSavingGroundTruth ||
+                    groundTruthDocumentExcluded ||
+                    groundTruthReview?.groundTruthStatus === "CONFIRMED" ||
+                    !groundTruthAssertions.comparedWithImage ||
+                    !groundTruthAssertions.allTextChecked
+                  }
+                >
+                  {isSavingGroundTruth ? "Đang lưu…" : "Lưu tài liệu đã review"}
+                </button>
+                <button
+                  className="challenger-ready"
+                  type="button"
+                  onClick={lockGroundTruthReview}
+                  disabled={
+                    isLockingGroundTruth ||
+                    !groundTruthReview?.canLock ||
+                    groundTruthReview?.groundTruthStatus === "CONFIRMED"
+                  }
+                >
+                  {isLockingGroundTruth ? "Đang khóa…" : "Khóa Ground Truth"}
+                </button>
+                <button
+                  className="save-review"
+                  type="button"
+                  onClick={evaluateGroundTruthOnce}
+                  disabled={isEvaluatingGroundTruth || !groundTruthReview?.canEvaluate}
+                >
+                  {isEvaluatingGroundTruth ? "Đang evaluate…" : "Evaluate once"}
+                </button>
+              </div>
+              {groundTruthEvaluation ? (
+                <div className="ground-truth-evaluation-result" data-testid="ground-truth-evaluation-result">
+                  <strong>{groundTruthEvaluation.promotionGate.status}</strong>
+                  <span>
+                    {groundTruthEvaluation.documentCount} tài liệu · strict exact không chứa PII
+                  </span>
+                  <small>
+                    {groundTruthEvaluation.promotionGate.exactRegressionCount ?? 0} regression · quyết định giữ/promotion theo gate
+                  </small>
+                </div>
+              ) : null}
+              {groundTruthReview?.evaluationStatus === "COMPLETE" ? (
+                <CccdEvaluationInspector
+                  detail={groundTruthEvaluationDetail}
+                  loading={isLoadingGroundTruthEvaluationDetail}
+                  error={groundTruthEvaluationDetailError}
+                />
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <section className="section explorer-section" id="explorer">
         <div className="section-heading">
           <div>
@@ -4462,6 +5178,16 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           >
             {reviewedCccdSessions.length} CCCD đã Ground Truth
           </button>
+          {SHOW_EXTERNAL_DATASET_REVIEW ? (
+            <button
+              className={evidenceMode === "external-dataset" ? "active" : ""}
+              onClick={() => setEvidenceMode("external-dataset")}
+              role="tab"
+              aria-selected={evidenceMode === "external-dataset"}
+            >
+              DATA-07 · 13 tài liệu review
+            </button>
+          ) : null}
         </div>
         {SHOW_HELDOUT && evidenceMode === "heldout" ? (
           <div className="heldout-evidence-grid">
@@ -4541,6 +5267,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               onViewChange={setEvidenceInspectorView}
             />
           </div>
+        ) : evidenceMode === "external-dataset" ? (
+          <ExternalDatasetReview />
         ) : evidenceMode === "templates" ? (
           <div className="heldout-evidence-grid">
             <div className="heldout-document-list" role="list">
@@ -4572,7 +5300,19 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               ))}
             </div>
             <div className="heldout-preview">
-              {activeTemplateSession ? (
+              {activeTemplateSession &&
+              (activeTemplateEvidenceIsImage || activeTemplateEvidenceIsPdf) ? (
+                // eslint-disable-next-line @next/next/no-img-element -- loopback-only preview is not an optimizable public asset.
+                <img
+                  src={activeTemplateEvidencePreviewUrl}
+                  alt={`Biểu mẫu HCNS ${activeTemplateSession.originalFileName}`}
+                  data-testid={
+                    activeTemplateEvidenceIsPdf
+                      ? "template-evidence-pdf"
+                      : "template-evidence-image"
+                  }
+                />
+              ) : activeTemplateSession ? (
                 <div className="native-heldout-file template-native-preview">
                   <span>{activeTemplateSession.sourceFormat}</span>
                   <strong>{activeTemplateSession.originalFileName}</strong>

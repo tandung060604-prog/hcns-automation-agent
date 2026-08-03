@@ -2,6 +2,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$DataRoot,
     [string]$HeldoutRoot = "",
+    [string]$ExternalDatasetRoot = "",
+    [string]$ExternalDatasetInventory = "",
+    [string]$ExternalDatasetGroundTruth = "",
     [string]$PythonPath = "D:\venv_paddle\Scripts\python.exe"
 )
 
@@ -20,8 +23,20 @@ if (-not (Test-Path -LiteralPath $DataRoot)) {
 if ($HeldoutRoot -and -not (Test-Path -LiteralPath $HeldoutRoot)) {
     throw "Held-out root not found: $HeldoutRoot"
 }
+if ($ExternalDatasetRoot -and -not (Test-Path -LiteralPath $ExternalDatasetRoot)) {
+    throw "External dataset root not found: $ExternalDatasetRoot"
+}
+if ($ExternalDatasetInventory -and -not (Test-Path -LiteralPath $ExternalDatasetInventory)) {
+    throw "External dataset inventory not found: $ExternalDatasetInventory"
+}
+if ($ExternalDatasetGroundTruth -and -not (Test-Path -LiteralPath $ExternalDatasetGroundTruth)) {
+    throw "External dataset Ground Truth draft not found: $ExternalDatasetGroundTruth"
+}
 
 $env:PYTHONPATH = Join-Path $repoRoot "src"
+if ($ExternalDatasetRoot) {
+    $env:VITE_SHOW_EXTERNAL_DATASET_REVIEW = "true"
+}
 
 $apiRunning = [bool](Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue)
 if (-not $apiRunning) {
@@ -37,6 +52,15 @@ if (-not $apiRunning) {
     )
     if ($HeldoutRoot) {
         $apiArguments += @("--heldout-root", "`"$HeldoutRoot`"")
+    }
+    if ($ExternalDatasetRoot) {
+        $apiArguments += @("--external-dataset-root", "`"$ExternalDatasetRoot`"")
+    }
+    if ($ExternalDatasetInventory) {
+        $apiArguments += @("--external-dataset-inventory", "`"$ExternalDatasetInventory`"")
+    }
+    if ($ExternalDatasetGroundTruth) {
+        $apiArguments += @("--external-dataset-ground-truth", "`"$ExternalDatasetGroundTruth`"")
     }
     Start-Process `
         -FilePath $PythonPath `

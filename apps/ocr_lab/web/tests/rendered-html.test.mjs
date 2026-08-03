@@ -154,6 +154,38 @@ test("hides held-out evidence by default behind a private local flag", async () 
   );
   assert.match(dashboard, /SHOW_HELDOUT && evidenceMode === "heldout"/);
   assert.match(envExample, /^VITE_SHOW_HELDOUT=false$/m);
+  assert.match(
+    dashboard,
+    /const SHOW_GROUND_TRUTH_REVIEW =\s+import\.meta\.env\.VITE_SHOW_GROUND_TRUTH_REVIEW === "true"/,
+  );
+  assert.match(envExample, /^VITE_SHOW_GROUND_TRUTH_REVIEW=false$/m);
+  assert.match(dashboard, /\/cccd-heldout\/review\/summary/);
+  assert.match(dashboard, /\/cccd-heldout\/review\/save\?id=/);
+  assert.match(dashboard, /\/cccd-heldout\/review\/disposition\?id=/);
+  assert.match(dashboard, /\/cccd-heldout\/review\/lock/);
+  assert.match(dashboard, /\/cccd-heldout\/review\/evaluate/);
+  assert.match(dashboard, /\/cccd-heldout\/review\/evaluation\?id=/);
+  assert.match(dashboard, /data-testid="ground-truth-source-preview"/);
+  assert.match(dashboard, /data-testid="ground-truth-evaluation-inspector"/);
+  assert.match(dashboard, /OUTPUT THẬT SAU EVALUATE-ONCE/);
+  assert.match(dashboard, /OUT_OF_SCOPE_BACK/);
+  assert.match(dashboard, /Prediction vẫn bị ẩn/);
+});
+
+test("exposes the DATA-07 local Ground Truth review panel behind a private flag", async () => {
+  const [dashboard, component, envExample] = await Promise.all([
+    readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/ExternalDatasetReview.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+  ]);
+  assert.match(dashboard, /VITE_SHOW_EXTERNAL_DATASET_REVIEW === "true"/);
+  assert.match(envExample, /^VITE_SHOW_EXTERNAL_DATASET_REVIEW=false$/m);
+  assert.match(dashboard, /<ExternalDatasetReview \/>/);
+  assert.match(component, /\/external-dataset\/review\/summary/);
+  assert.match(component, /\/external-dataset\/review\/save\?id=/);
+  assert.match(component, /\/external-dataset\/review\/lock/);
+  assert.match(component, /predictionsHiddenDuringReview/);
+  assert.match(component, /Không có \/ không đọc được/);
 });
 
 test("exposes one Template-first upload with source preview and structured results", async () => {
@@ -179,6 +211,14 @@ test("exposes one Template-first upload with source preview and structured resul
   assert.match(dashboard, /TemplateResultPanel/);
   assert.match(dashboard, /TemplateDocumentPreview/);
   assert.match(dashboard, /TemplateEvidenceInspector/);
+  assert.match(dashboard, /activeTemplateEvidencePreviewUrl/);
+  assert.match(dashboard, /\/api\/documents\/preview\?id=/);
+  assert.match(dashboard, /"template-evidence-image"/);
+  assert.match(dashboard, /"template-evidence-pdf"/);
+  assert.match(
+    dashboard,
+    /activeTemplateSession\?\.sourceFormat === "PDF_SCAN"/,
+  );
   assert.match(dashboard, /PaddleOCR local/);
   assert.match(
     dashboard,

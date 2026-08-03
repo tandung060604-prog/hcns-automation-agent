@@ -19,7 +19,10 @@ from hcns_agent.application.external_dataset import (
 from hcns_agent.bootstrap import build_default_intake
 from hcns_agent.domain.documents import DocumentType, SourceFormat
 from hcns_agent.ports.document_parser import DocumentSource
-from scripts.prepare_external_dataset_ground_truth import build_ground_truth_draft
+from scripts.prepare_external_dataset_ground_truth import (
+    build_ground_truth_draft,
+    preserve_non_contract_reviews,
+)
 
 
 class ExternalDatasetInventoryTests(TestCase):
@@ -109,7 +112,7 @@ class ExternalDatasetInventoryTests(TestCase):
         inventory = inventory_dataset(
             self.root,
             dataset_id="vuhocpublic-data",
-            version="2026-07-31-dec17acb",
+            version="2026-08-03-contract-probation",
             source_commit="dec17acbe2b409e0aa5daeb4db820d3e95d05bdf",
         )
         validate_mapping(inventory, mapping)
@@ -125,7 +128,7 @@ class ExternalDatasetInventoryTests(TestCase):
         inventory = inventory_dataset(
             self.root,
             dataset_id="vuhocpublic-data",
-            version="2026-07-31-dec17acb",
+            version="2026-08-03-contract-probation",
             source_commit="dec17acbe2b409e0aa5daeb4db820d3e95d05bdf",
         )
         draft = build_ground_truth_draft(inventory, mapping)
@@ -161,6 +164,14 @@ class ExternalDatasetInventoryTests(TestCase):
             [field["name"] for field in certificate_case["fields"]],
         )
         self.assertTrue(all(field["value"] is None for field in certificate_case["fields"]))
+        contract_case = next(
+            case for case in draft["cases"] if case["documentType"] == "EMPLOYMENT_CONTRACT"
+        )
+        self.assertEqual(14, len(contract_case["fields"]))
+        self.assertEqual(
+            "probation_salary_monthly",
+            contract_case["fields"][11]["name"],
+        )
         certificate_mapping = next(
             item for item in mapping["mappings"] if item["category"] == "ielts"
         )
@@ -168,6 +179,58 @@ class ExternalDatasetInventoryTests(TestCase):
             "schemas/hr_document_families/certificate.schema.json",
             certificate_mapping["schemaRef"],
         )
+
+        probation_schema = json.loads(
+            (
+                root
+                / "schemas"
+                / "hr_document_families"
+                / "probation_contract.schema.json"
+            ).read_text(encoding="utf-8")
+        )
+        Draft202012Validator.check_schema(probation_schema)
+        contract_mapping = next(
+            item for item in mapping["mappings"] if item["category"] == "contract"
+        )
+        self.assertEqual(
+            "schemas/hr_document_families/probation_contract.schema.json",
+            contract_mapping["schemaRef"],
+        )
+        self.assertIn("reduced 14-field", contract_mapping["mappingNote"])
+
+    def test_contract_replacement_preserves_non_contract_review_state(self) -> None:
+        root = Path(__file__).parents[1]
+        mapping = json.loads(
+            (root / "config" / "external_dataset_mapping.json").read_text(encoding="utf-8")
+        )
+        inventory = inventory_dataset(
+            self.root,
+            dataset_id="vuhocpublic-data",
+            version="2026-08-03-contract-probation",
+            source_commit="dec17acbe2b409e0aa5daeb4db820d3e95d05bdf",
+        )
+        previous = build_ground_truth_draft(inventory, mapping)
+        cv_case = next(case for case in previous["cases"] if case["caseId"] == "cv-001")
+        cv_case["fields"][0].update(value="reviewed", reviewStatus="CONFIRMED")
+        cv_case["reviewRequired"] = False
+        contract_case = next(
+            case for case in previous["cases"] if case["caseId"] == "contract-001"
+        )
+        contract_case["fields"][0].update(value="stale", reviewStatus="CONFIRMED")
+        previous["review"].update(status="CONFIRMED", reviewer="independent-reviewer")
+
+        updated = preserve_non_contract_reviews(
+            build_ground_truth_draft(inventory, mapping), previous
+        )
+        updated_cv = next(case for case in updated["cases"] if case["caseId"] == "cv-001")
+        updated_contract = next(
+            case for case in updated["cases"] if case["caseId"] == "contract-001"
+        )
+        self.assertEqual("reviewed", updated_cv["fields"][0]["value"])
+        self.assertFalse(updated_cv["reviewRequired"])
+        self.assertIsNone(updated_contract["fields"][0]["value"])
+        self.assertEqual("PENDING", updated_contract["fields"][0]["reviewStatus"])
+        self.assertEqual("IN_PROGRESS", updated["review"]["status"])
 
 
 class ExternalDatasetIntakeTests(TestCase):
