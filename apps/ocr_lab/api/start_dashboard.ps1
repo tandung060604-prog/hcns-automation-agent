@@ -6,6 +6,9 @@ param(
     [string]$ExternalDatasetRoot = "",
     [string]$ExternalDatasetInventory = "",
     [string]$ExternalDatasetGroundTruth = "",
+    [string]$ExternalDatasetTypedProjection = "",
+    [string]$ExternalDatasetTypedApproval = "",
+    [string]$ExternalDatasetTypedReport = "",
     [string]$PythonPath = "D:\venv_paddle\Scripts\python.exe"
 )
 
@@ -35,6 +38,15 @@ if ($ExternalDatasetInventory -and -not (Test-Path -LiteralPath $ExternalDataset
 }
 if ($ExternalDatasetGroundTruth -and -not (Test-Path -LiteralPath $ExternalDatasetGroundTruth)) {
     throw "External dataset Ground Truth draft not found: $ExternalDatasetGroundTruth"
+}
+if ($ExternalDatasetTypedProjection -and -not (Test-Path -LiteralPath $ExternalDatasetTypedProjection)) {
+    throw "External dataset typed projection not found: $ExternalDatasetTypedProjection"
+}
+if ($ExternalDatasetTypedApproval -and -not (Test-Path -LiteralPath $ExternalDatasetTypedApproval)) {
+    throw "External dataset typed approval not found: $ExternalDatasetTypedApproval"
+}
+if ($ExternalDatasetTypedReport -and -not (Test-Path -LiteralPath $ExternalDatasetTypedReport)) {
+    throw "External dataset typed report not found: $ExternalDatasetTypedReport"
 }
 
 $env:PYTHONPATH = Join-Path $repoRoot "src"
@@ -68,6 +80,15 @@ if (-not $apiRunning) {
     }
     if ($ExternalDatasetGroundTruth) {
         $apiArguments += @("--external-dataset-ground-truth", "`"$ExternalDatasetGroundTruth`"")
+    }
+    if ($ExternalDatasetTypedProjection) {
+        $apiArguments += @("--external-dataset-typed-projection", "`"$ExternalDatasetTypedProjection`"")
+    }
+    if ($ExternalDatasetTypedApproval) {
+        $apiArguments += @("--external-dataset-typed-approval", "`"$ExternalDatasetTypedApproval`"")
+    }
+    if ($ExternalDatasetTypedReport) {
+        $apiArguments += @("--external-dataset-typed-report", "`"$ExternalDatasetTypedReport`"")
     }
     Start-Process `
         -FilePath $PythonPath `

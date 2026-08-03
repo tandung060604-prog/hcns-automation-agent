@@ -50,6 +50,13 @@ from external_dataset_review import (
     resolve_review_source as resolve_external_review_source,
     save_review as save_external_review,
 )
+from external_dataset_typed import (
+    TypedDatasetError,
+    build_typed_export,
+    load_typed_document,
+    load_typed_summary,
+    resolve_typed_paths,
+)
 from document_route_safety import (
     safe_existing_document_route,
     selected_orientations_are_identity,
@@ -1238,6 +1245,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
     external_dataset_root: Path | None
     external_dataset_inventory: Path | None
     external_dataset_ground_truth: Path | None
+    external_dataset_typed_projection: Path | None
+    external_dataset_typed_approval: Path | None
+    external_dataset_typed_report: Path | None
     native_indexes: dict[str, dict[str, Path]]
     user_ocr: UserOCRService
     template_processor: TemplateProcessingService
@@ -1291,6 +1301,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path.startswith("/external-dataset/typed/"):
+            self.send_json(
+                {"error": "Typed canonical projection is read-only; use GET"},
+                HTTPStatus.METHOD_NOT_ALLOWED,
+            )
+            return
         if parsed.path == "/api/documents/process":
             upload = self._read_template_upload()
             if upload is None:
@@ -2064,6 +2080,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path.startswith("/external-dataset/typed/"):
+            self.send_json(
+                {"error": "Typed canonical projection is read-only; use GET"},
+                HTTPStatus.METHOD_NOT_ALLOWED,
+            )
+            return
         if parsed.path != "/user/session":
             self.send_json({"error": "Unknown endpoint"}, HTTPStatus.NOT_FOUND)
             return
@@ -2191,6 +2213,93 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self.send_json(
                     {"error": f"External dataset review unavailable: {exc}"},
                     HTTPStatus.NOT_FOUND,
+                )
+            return
+
+        if parsed.path == "/external-dataset/typed/summary":
+            if self.external_dataset_root is None:
+                self.send_json(
+                    {"error": "Typed canonical projection is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            try:
+                self.send_json(
+                    load_typed_summary(
+                        resolve_typed_paths(
+                            self.external_dataset_root,
+                            projection_path=self.external_dataset_typed_projection,
+                            approval_path=self.external_dataset_typed_approval,
+                            aggregate_report_path=self.external_dataset_typed_report,
+                        )
+                    )
+                )
+            except TypedDatasetError as exc:
+                self.send_json(
+                    {"error": f"Typed canonical projection unavailable: {exc}"},
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                )
+            return
+
+        if parsed.path == "/external-dataset/typed/document":
+            if self.external_dataset_root is None:
+                self.send_json(
+                    {"error": "Typed canonical projection is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            case_id = query.get("id", [""])[0]
+            include_source_value = query.get("includeSourceValue", ["false"])[0] == "true"
+            try:
+                self.send_json(
+                    load_typed_document(
+                        resolve_typed_paths(
+                            self.external_dataset_root,
+                            projection_path=self.external_dataset_typed_projection,
+                            approval_path=self.external_dataset_typed_approval,
+                            aggregate_report_path=self.external_dataset_typed_report,
+                        ),
+                        case_id,
+                        include_source_value=include_source_value,
+                    )
+                )
+            except FileNotFoundError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+            except TypedDatasetError as exc:
+                self.send_json(
+                    {"error": f"Typed canonical document unavailable: {exc}"},
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                )
+            return
+
+        if parsed.path == "/external-dataset/typed/export":
+            if self.external_dataset_root is None:
+                self.send_json(
+                    {"error": "Typed canonical projection is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            format_name = query.get("format", ["json"])[0].casefold()
+            try:
+                body, content_type, download_name = build_typed_export(
+                    resolve_typed_paths(
+                        self.external_dataset_root,
+                        projection_path=self.external_dataset_typed_projection,
+                        approval_path=self.external_dataset_typed_approval,
+                        aggregate_report_path=self.external_dataset_typed_report,
+                    ),
+                    format_name,
+                )
+                self.send_bytes(body, content_type, download_name)
+            except TypedDatasetError as exc:
+                status = (
+                    HTTPStatus.BAD_REQUEST
+                    if "format" in str(exc)
+                    else HTTPStatus.SERVICE_UNAVAILABLE
+                )
+                self.send_json(
+                    {"error": f"Typed canonical export unavailable: {exc}"},
+                    status,
                 )
             return
 
@@ -3083,6 +3192,21 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Private local Ground Truth draft JSON for the external dataset.",
     )
+    parser.add_argument(
+        "--external-dataset-typed-projection",
+        type=Path,
+        help="Private DATA-09 typed canonical projection JSON.",
+    )
+    parser.add_argument(
+        "--external-dataset-typed-approval",
+        type=Path,
+        help="Private DATA-10 typed projection approval marker JSON.",
+    )
+    parser.add_argument(
+        "--external-dataset-typed-report",
+        type=Path,
+        help="Private DATA-09 aggregate-only report JSON.",
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     return parser.parse_args()
@@ -3121,6 +3245,21 @@ def main() -> int:
     DashboardHandler.external_dataset_ground_truth = (
         args.external_dataset_ground_truth.expanduser().resolve()
         if args.external_dataset_ground_truth is not None
+        else None
+    )
+    DashboardHandler.external_dataset_typed_projection = (
+        args.external_dataset_typed_projection.expanduser().resolve()
+        if args.external_dataset_typed_projection is not None
+        else None
+    )
+    DashboardHandler.external_dataset_typed_approval = (
+        args.external_dataset_typed_approval.expanduser().resolve()
+        if args.external_dataset_typed_approval is not None
+        else None
+    )
+    DashboardHandler.external_dataset_typed_report = (
+        args.external_dataset_typed_report.expanduser().resolve()
+        if args.external_dataset_typed_report is not None
         else None
     )
     DashboardHandler.native_indexes = indexes
