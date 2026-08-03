@@ -96,6 +96,7 @@ OCR sai nhưng vẫn tự động đi tiếp.
 | Native parsing | Đọc trực tiếp nội dung DOCX/PDF có chữ, nên nhanh và ít sai hơn OCR |
 | EasyOCR `vi-greedy` | Đọc tiếng Việt trong ảnh và PDF scan; đây là lựa chọn mặc định hiện tại |
 | PaddleOCR | Phương án quay lại khi cần so sánh hoặc chẩn đoán, không phải backend mặc định |
+| VietOCR | Công cụ từng dùng trong luồng OCR cũ/CCCD; hiện giữ ở legacy và benchmark, không phải mặc định của MVP |
 | JSON Schema | Kiểm tra JSON (dữ liệu dạng máy đọc được) có đủ trường và đúng kiểu dữ liệu |
 | Provenance | Lưu dấu vết trường thông tin lấy từ trang, vùng ảnh hoặc nguồn nào để người duyệt đối chiếu |
 | Human-in-the-loop | Đưa trường thiếu hoặc chưa chắc chắn cho con người xác nhận |
@@ -118,20 +119,53 @@ OCR sai nhưng vẫn tự động đi tiếp.
 
 ## Luồng xử lý thực tế
 
-```text
-Tải hồ sơ
-  → kiểm tra file an toàn
-  → đọc trực tiếp hoặc OCR
-  → nhận diện mẫu hồ sơ
-  → lấy các trường thông tin
-  → kiểm tra dữ liệu và bằng chứng
-  → đủ tin cậy: tạo JSON / chưa chắc chắn: người dùng kiểm tra
-  → Camunda điều phối bước tiếp theo
+```mermaid
+flowchart TD
+    A["Người dùng tải hồ sơ"] --> B["Kiểm tra định dạng và an toàn file"]
+    B -->|"DOCX hoặc PDF có chữ"| C["Đọc trực tiếp nội dung"]
+    B -->|"Ảnh hoặc PDF scan"| D["OCR tiếng Việt tại máy local"]
+    C --> E["Chuẩn hóa nội dung và lưu nguồn của từng trường"]
+    D --> E
+    E --> F["Nhận diện mẫu hồ sơ"]
+    F -->|"Không thuộc hai mẫu hiện tại"| X["Từ chối và yêu cầu chọn đúng mẫu"]
+    F -->|"Đúng mẫu"| G["Lấy các trường thông tin"]
+    G --> H["Kiểm tra dữ liệu, cấu trúc và độ tin cậy"]
+    H -->|"DOCX/PDF native hợp lệ"| I["Tạo JSON kết quả"]
+    H -->|"Ảnh/PDF scan hoặc chưa đủ bằng chứng"| J["Người dùng kiểm tra"]
+    J -->|"Sửa hoặc xác nhận"| I
+    J -->|"Yêu cầu tải lại"| A
+    I --> K["Camunda điều phối bước tiếp theo"]
+    K --> L["Cập nhật trạng thái và tham chiếu kết quả"]
 ```
 
 Hệ thống không tự đoán trường bị thiếu. Với DOCX/PDF có chữ và dữ liệu hợp lệ, kết quả
 có thể đi tiếp theo quy định của mẫu. Với ảnh/PDF scan, kết quả hiện luôn cần người kiểm tra.
 Tài liệu không thuộc hai mẫu hiện tại bị từ chối thay vì bị đoán sang mẫu gần nhất.
+
+## Vì sao luồng MVP dùng EasyOCR thay VietOCR?
+
+Đây là quyết định theo phạm vi, dữ liệu và kết quả kiểm thử; không có nghĩa VietOCR bị
+xóa khỏi toàn bộ dự án.
+
+- **VietOCR thuộc luồng cũ/CCCD**: trước đây VietOCR được dùng làm bộ nhận dạng hoặc
+  bộ kiểm chứng trong pipeline OCR tổng quát. Luồng đó vẫn được giữ để benchmark và
+  review thủ công, nhưng các kết quả trước đây chưa đạt mức để tự động dùng trong môi
+  trường thật.
+- **EasyOCR được chọn riêng cho MVP hai biểu mẫu**: sau khi thử trên đúng bộ DOCX,
+  PDF native, ảnh và PDF scan của hai mẫu, EasyOCR `vi-greedy` đạt 86/90 trên ảnh và
+  82/90 trên PDF scan. Cả bốn định dạng đều nhận diện đúng 10/10; JSON Schema có 0 lỗi;
+  20/20 trường hợp OCR đều chuyển cho người kiểm tra và không có OCR sai nào tự động
+  đi tiếp.
+- **VietOCR chưa có kết quả được promote trong cùng route Template-first**: phép thử
+  VietOCR full-page trước đó làm metric giảm nên không đưa vào runtime Template-first.
+  Vì vậy chúng ta không thể tuyên bố VietOCR tốt hơn hoặc kém hơn EasyOCR một cách
+  tuyệt đối; chỉ có thể nói EasyOCR là lựa chọn có bằng chứng phù hợp nhất cho MVP hiện tại.
+- **Quyết định có thể mở lại**: nếu sau này có bộ dữ liệu, phiên bản model và phép thử
+  cùng điều kiện chứng minh VietOCR tốt hơn mà vẫn giữ được quality gate, chúng ta có thể
+  đánh giá lại. Hiện tại VietOCR không bị xóa, chỉ không phải backend mặc định.
+
+Chi tiết về các lần thử và promotion gate nằm trong [Evaluation](docs/EVALUATION.md) và
+[Project State](docs/PROJECT_STATE.md).
 
 ## Chạy thử trên máy local
 
