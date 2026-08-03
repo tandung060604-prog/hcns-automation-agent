@@ -210,8 +210,9 @@ External dataset DATA-07 checkpoint (2026-08-03):
   The prediction-blind draft remains `DRAFT` / `IN_PROGRESS`; no field values
   were copied from OCR output. Mock pilot processed 12/12 with 0 failures and
   decision `HOLD`.
-- Validation: targeted review tests 9 passed; full Python suite 248 passed plus
-  16 subtests; Ruff and mypy passed. The existing Dashboard lint error is
+- Validation: targeted review tests 10 passed; full Python suite 249 passed plus
+  16 subtests; Ruff and mypy passed. Web build/render tests pass; the existing
+  Dashboard lint error is
   unrelated WIP.
 - Runtime command: `apps/ocr_lab/api/start_dashboard.ps1 -DataRoot <data-root>
   -ExternalDatasetRoot C:\\tmp\\hcns-dataset-run-dec17acb` (inventory and draft
