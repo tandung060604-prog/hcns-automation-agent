@@ -218,6 +218,20 @@ External dataset DATA-07 checkpoint (2026-08-03):
   -ExternalDatasetRoot C:\\tmp\\hcns-dataset-run-dec17acb` (inventory and draft
   paths infer from the staging root name).
 
+External dataset DATA-08 checkpoint (2026-08-03):
+- Scope is limited to independent review of the four canonical contract cases:
+  two DOCX and two native-text PDF sources, 14 fields each (56 fields total).
+  The two full-document PNG previews remain excluded as derivative duplicates;
+  real-world contract image inputs are explicitly deferred.
+- The review UI now defaults to the contract scope, keeps CV/IELTS selectable
+  separately, renders PDF_TEXT and PDF_SCAN previews in an iframe, and labels
+  the gate as a whole-dataset `SEALED` action.
+- Current queue evidence: contract-001..004 are all `PENDING`, 0/56 reviewed;
+  predictions remain hidden, `groundTruthStatus=DRAFT`, `canLock=false`.
+- Web validation after the DATA-08 UI update: build plus rendered HTML 10/10;
+  targeted component lint has 0 errors. No source field values were entered by
+  the agent.
+
 OCR-HO-V2-001 checkpoint (2026-08-02):
 - From 89 file-level new candidates in the local CCCD test folder, 15 images
   were selected deterministically by SHA-256 after excluding the legacy 29 and

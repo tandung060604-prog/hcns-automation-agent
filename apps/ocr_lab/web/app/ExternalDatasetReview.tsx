@@ -44,6 +44,7 @@ type ReviewSummary = {
 };
 
 const TEXT_FORMATS = new Set(["PLAIN_TEXT", "TXT", "DOCX", "PPTX"]);
+type ReviewCategory = "contract" | "cv" | "ielts";
 const FIELD_LABELS: Record<string, string> = {
   full_name: "Họ và tên",
   skills: "Kỹ năng",
@@ -75,6 +76,7 @@ function categoryLabel(category: string): string {
 
 export default function ExternalDatasetReview() {
   const [summary, setSummary] = useState<ReviewSummary | null>(null);
+  const [reviewCategory, setReviewCategory] = useState<ReviewCategory>("contract");
   const [activeCaseId, setActiveCaseId] = useState("");
   const [document, setDocument] = useState<ReviewDocument | null>(null);
   const [values, setValues] = useState<Record<string, string | null>>({});
@@ -85,8 +87,20 @@ export default function ExternalDatasetReview() {
   const [locking, setLocking] = useState(false);
 
   const activeItem = useMemo(
-    () => summary?.documents.find((item) => item.caseId === activeCaseId) ?? null,
-    [summary, activeCaseId],
+    () =>
+      summary?.documents.find(
+        (item) => item.category === reviewCategory && item.caseId === activeCaseId,
+      ) ?? null,
+    [summary, reviewCategory, activeCaseId],
+  );
+  const scopedDocuments = useMemo(
+    () => summary?.documents.filter((item) => item.category === reviewCategory) ?? [],
+    [summary, reviewCategory],
+  );
+  const scopedFieldCount = scopedDocuments.reduce((total, item) => total + item.fieldCount, 0);
+  const scopedReviewedFieldCount = scopedDocuments.reduce(
+    (total, item) => total + item.reviewedFieldCount,
+    0,
   );
   const previewUrl = activeCaseId
     ? `${API_BASE}/external-dataset/review/document?id=${encodeURIComponent(
@@ -100,7 +114,11 @@ export default function ExternalDatasetReview() {
     if (!response.ok) throw new Error(payload.error ?? "Không đọc được queue review");
     setSummary(payload);
     if (selectFirst || !activeCaseId) {
-      setActiveCaseId(payload.documents?.[0]?.caseId ?? "");
+      setActiveCaseId(
+        payload.documents?.find(
+          (item: ReviewSummary["documents"][number]) => item.category === reviewCategory,
+        )?.caseId ?? "",
+      );
     }
   }
 
@@ -109,6 +127,12 @@ export default function ExternalDatasetReview() {
       setError(reason instanceof Error ? reason.message : "API review chưa sẵn sàng"),
     );
   }, []);
+
+  useEffect(() => {
+    if (!scopedDocuments.some((item) => item.caseId === activeCaseId)) {
+      setActiveCaseId(scopedDocuments[0]?.caseId ?? "");
+    }
+  }, [scopedDocuments, activeCaseId]);
 
   useEffect(() => {
     if (!activeCaseId) {
@@ -204,25 +228,39 @@ export default function ExternalDatasetReview() {
     <section className="external-review-panel" data-testid="external-dataset-review">
       <div className="external-review-header">
         <div>
-          <span className="eyebrow">DATA-07 · LOCAL GROUND TRUTH</span>
-          <h3>Review CV · Hợp đồng · IELTS</h3>
+          <span className="eyebrow">DATA-08 · INDEPENDENT CONTRACT REVIEW</span>
+          <h3>Review hợp đồng thử việc</h3>
           <p>
-            Mở từng file, đối chiếu nguồn và xác nhận 55 field. OCR/prediction bị ẩn trong suốt
-            review.
+            Mở từng DOCX/PDF, đối chiếu nguồn và xác nhận 14 field cho mỗi hợp đồng. Ảnh đời thực
+            sẽ được xử lý ở workstream sau; OCR/prediction bị ẩn trong suốt review.
           </p>
         </div>
         <div className="external-review-status">
           <strong>{summary?.groundTruthStatus ?? "CHƯA KẾT NỐI"}</strong>
           <span>
-            {summary?.documentCount ?? 0} tài liệu · {summary?.fieldCount ?? 0} field · local-only
+            {scopedDocuments.length} tài liệu · {scopedReviewedFieldCount}/{scopedFieldCount} field ·
+            local-only
           </span>
         </div>
+      </div>
+      <div className="external-review-scope">
+        <label>
+          Phạm vi review
+          <select
+            value={reviewCategory}
+            onChange={(event) => setReviewCategory(event.target.value as ReviewCategory)}
+          >
+            <option value="contract">Contract · 4 case / 56 field</option>
+            <option value="cv">CV · review riêng</option>
+            <option value="ielts">IELTS · review riêng</option>
+          </select>
+        </label>
       </div>
       {error ? <div className="ground-truth-review-error">{error}</div> : null}
       {message ? <div className="external-review-message">{message}</div> : null}
       <div className="external-review-grid">
         <div className="external-review-list" role="list">
-          {(summary?.documents ?? []).map((item) => (
+          {scopedDocuments.map((item) => (
             <button
               className={item.caseId === activeCaseId ? "active" : ""}
               key={item.caseId}
@@ -240,7 +278,7 @@ export default function ExternalDatasetReview() {
         </div>
         <div className="external-review-source">
           {activeItem && !TEXT_FORMATS.has(activeItem.sourceFormat) ? (
-            activeItem.sourceFormat === "PDF_SCAN" ? (
+            activeItem.sourceFormat === "PDF_SCAN" || activeItem.sourceFormat === "PDF_TEXT" ? (
               <iframe title={`Preview ${activeItem.caseId}`} src={previewUrl} />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element -- loopback-only source preview.
@@ -313,7 +351,7 @@ export default function ExternalDatasetReview() {
               Lưu xác nhận tài liệu
             </button>
             <button type="button" onClick={lock} disabled={!summary?.canLock || locking}>
-              {locking ? "Đang SEALED…" : "SEALED đủ 55 field"}
+              {locking ? "Đang SEALED…" : `SEALED đủ ${summary?.fieldCount ?? 0} field`}
             </button>
           </div>
         </div>

@@ -172,7 +172,7 @@ test("hides held-out evidence by default behind a private local flag", async () 
   assert.match(dashboard, /Prediction vẫn bị ẩn/);
 });
 
-test("exposes the DATA-07 local Ground Truth review panel behind a private flag", async () => {
+test("exposes the DATA-08 independent contract review panel behind a private flag", async () => {
   const [dashboard, component, envExample] = await Promise.all([
     readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/ExternalDatasetReview.tsx", import.meta.url), "utf8"),
@@ -185,6 +185,9 @@ test("exposes the DATA-07 local Ground Truth review panel behind a private flag"
   assert.match(component, /\/external-dataset\/review\/save\?id=/);
   assert.match(component, /\/external-dataset\/review\/lock/);
   assert.match(component, /predictionsHiddenDuringReview/);
+  assert.match(component, /DATA-08 · INDEPENDENT CONTRACT REVIEW/);
+  assert.match(component, /Contract · 4 case \/ 56 field/);
+  assert.match(component, /PDF_TEXT/);
   assert.match(component, /Không có \/ không đọc được/);
 });
 

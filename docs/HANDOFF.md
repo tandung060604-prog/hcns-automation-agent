@@ -296,6 +296,21 @@
   open each source, confirm the 56 contract fields (and any remaining CV/IELTS
   fields), and explicitly press `SEALED`.
 
+### DATA-08 — Independent contract review (IN_PROGRESS)
+
+- Review scope is the four canonical contract cases only: DOCX/PDF for the two
+  agreements, 14 fields per case, 56 fields total. The two full-document PNG
+  previews are derivative duplicates and real-world contract images are
+  deferred.
+- The DATA-08 panel defaults to `contract`, hides predictions, and supports
+  source preview for both native DOCX/PDF inputs. CV/IELTS remain selectable in
+  a separate scope and are not changed by contract review.
+- Queue snapshot: contract-001..004 are `PENDING`, 0/56 fields reviewed,
+  `DRAFT`, `IN_PROGRESS`, `canLock=false`.
+- Reviewer action: open each source, enter the source-document value or mark
+  `Không có / không đọc được`, save each case, then stop for the remaining
+  CV/IELTS fields. Do not press `SEALED` until all 86 fields are confirmed.
+
 ### OCR-HO-V2-001 — CCCD held-out prediction seal (REVIEW)
 
 - Fifteen file-level new CCCD images were selected from the Roboflow test set

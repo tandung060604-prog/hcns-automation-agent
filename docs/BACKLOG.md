@@ -33,7 +33,8 @@
 | DATA-04 | DONE (HOLD) | Run EasyOCR aggregate-only pilot over 13 documents / 17 pages | DATA-03 | P0 |
 | DATA-05 | DONE | Add synthetic inventory/mapping/parser regression coverage and checkpoint evidence | DATA-04 | P1 |
 | DATA-06 | IN_PROGRESS | Add certificate schema and prediction-blind Ground Truth review artifact | DATA-05 | P0 |
-| DATA-07 | IN_PROGRESS | Localhost review UI for source preview and independent confirmation of all 86 current external-dataset fields (56 contract fields in the reduced schema) | DATA-06 approved | P0 |
+| DATA-07 | DONE | Localhost review UI/API for source preview, prediction-blind editing and private Ground Truth persistence | DATA-06 approved | P0 |
+| DATA-08 | IN_PROGRESS | Independent review of 4 canonical contract DOCX/PDF cases (56 fields); defer real-world contract images | DATA-07 | P0 |
 
 ## DATA-00..DATA-05 acceptance criteria
 
@@ -61,6 +62,10 @@
   Git, and allow `SEALED` only after every current field is explicitly
   confirmed. The contract subset is four cases × 14 fields; CV/IELTS review
   state is preserved across the contract-source replacement.
+- `DATA-08`: an independent reviewer confirms the 56 contract fields from the
+  source DOCX/PDF files only, with predictions hidden; real-world image inputs
+  remain deferred to a later workstream. The overall dataset may be sealed only
+  after all 86 fields are confirmed.
 
 ## OCR-HO-V2-001 acceptance criteria
 
