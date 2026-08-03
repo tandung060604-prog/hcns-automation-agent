@@ -269,17 +269,22 @@
 
 - Mapping now references `schemas/hr_document_families/certificate.schema.json`;
   `groundTruthStatus` is `DRAFT`.
-- A prediction-blind review artifact was generated outside Git at
-  `C:\tmp\hcns-dataset-run-dec17acb-ground-truth-draft.json` for 13 cases / 17
-  pages. It contains 55 pending field labels, 0 field values, and reviewer
-  status `UNASSIGNED`.
+- The pre-replacement artifact covered 13 cases / 17 pages and 55 pending
+  fields. It is retained as a timestamped backup outside the staging root.
 - Next action: an independent reviewer fills and confirms the source-document
   fields, then seals the artifact before any field-level benchmark run.
 
 ### DATA-07 — Local external-dataset Ground Truth review UI (IN_PROGRESS)
 
 - DATA-07 was approved and implemented as a loopback-only review panel for the
-  13 synthetic `cv`/`contract`/`ielts` cases (55 fields / 17 pages).
+  current 12 synthetic `cv`/`contract`/`ielts` cases (86 fields / 16 pages).
+- The contract staging source was replaced from `D:\bo_mau_hop_dong_thu_viec`.
+  Four canonical cases remain (two contracts × DOCX/PDF); PNG full-document
+  previews are excluded as derivative files. Each contract has 14 review fields
+  through `schemas/hr_document_families/probation_contract.schema.json`.
+- CV/IELTS source files and review state are preserved; only the contract cases
+  were rebuilt. The old contract staging directory is recoverable at
+  `C:\tmp\hcns-dataset-run-dec17acb-contract-old-20260803`.
 - API routes are `/external-dataset/review/summary`, `/document`, `/save`, and
   `/lock`. The API reads only the staging source and the private Ground Truth
   draft; predictions are not exposed. Draft writes and the seal marker remain
@@ -288,7 +293,8 @@
   inventory/draft paths. Set `VITE_SHOW_EXTERNAL_DATASET_REVIEW=true` (the
   launcher sets it automatically when the external root is supplied).
 - DATA-07 is not a promotion approval: an independent reviewer still has to
-  open each source, confirm all 55 fields, and explicitly press `SEALED`.
+  open each source, confirm the 56 contract fields (and any remaining CV/IELTS
+  fields), and explicitly press `SEALED`.
 
 ### OCR-HO-V2-001 — CCCD held-out prediction seal (REVIEW)
 
