@@ -842,8 +842,13 @@ def _required_iso_timestamp(
     name: str,
 ) -> str:
     value = _required_reference(variables, name)
+    normalized = re.sub(
+        r"(\.\d{6})\d+(?=[+-]\d{2}:\d{2}$)",
+        r"\1",
+        value.replace("Z", "+00:00"),
+    )
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(normalized)
     except ValueError as error:
         raise _input_error("Review timestamp is invalid") from error
     if parsed.tzinfo is None:

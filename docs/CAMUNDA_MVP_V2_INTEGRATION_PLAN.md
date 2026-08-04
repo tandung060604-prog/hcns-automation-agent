@@ -1,8 +1,8 @@
 # Kế hoạch tích hợp Camunda cho đơn nghỉ phép và đơn tăng ca
 
-Trạng thái: `M4_CLOSED_SET_SHADOW_PLAN`.
-Task hoàn thành: `M4-CAM-004 DONE`.
-Task kế tiếp: `M4-CAM-005 READY`.
+Trạng thái: `M5_SHADOW_PILOT_AUTHORIZATION_READY`.
+Task hoàn thành: `M4-CAM-006 DONE`.
+Task kế tiếp: `M5-CAM-001 READY` — shadow-pilot authorization/runbook.
 
 Camunda Platform 7.13 và External Task REST API là mục tiêu đã khóa. Worker được
 tách theo topic; Camunda tiếp tục sở hữu process state, retry, incident, User
@@ -120,12 +120,10 @@ Trong M4, `hris_update_employee_record` và `hr_notify_processing_result` chỉ 
 mock handler, không tạo side effect thật. OCR Lab vẫn là công cụ benchmark;
 không sở hữu Camunda User Task hoặc review queue.
 
-## Khoảng trống còn lại sau M4-CAM-004
+## Trạng thái sau M4-CAM-005
 
-1. Correction hiện chỉ kiểm tra reference; chưa áp dụng payload sửa, ghi audit
-   hoặc validation lại.
-2. Chưa chạy correction/re-upload loop và reviewer audit end-to-end trên engine.
-3. Ma trận dry-run 10 scenario của M4-CAM-006 chưa hoàn tất.
+Correction/re-upload, reviewer audit và revalidation đã được đóng ở M4-CAM-005.
+Ma trận dry-run và quyết định shadow pilot được ghi ở M4-CAM-006 dưới đây.
 
 ## Kế hoạch task
 
@@ -135,8 +133,8 @@ không sở hữu Camunda User Task hoặc review queue.
 | M4-CAM-002 | DONE | Bind Template-first pipeline/result store vào External Task worker | M4-CAM-001 |
 | M4-CAM-003 | DONE | Tạo projection đủ DMN input và kiểm thử routing shadow | M4-CAM-002 |
 | M4-CAM-004 | DONE | Deploy BPMN/DMN lên Camunda 7.13 local và chạy smoke | M4-CAM-003, môi trường Camunda |
-| M4-CAM-005 | READY | Hoàn thiện User Task, correction và re-upload loop | M4-CAM-004 |
-| M4-CAM-006 | PLANNED | Chạy ma trận dry-run và quyết định shadow pilot | M4-CAM-005 |
+| M4-CAM-005 | DONE | Hoàn thiện User Task, correction, revalidation và re-upload loop | M4-CAM-004 |
+| M4-CAM-006 | DONE | Chạy ma trận dry-run và quyết định shadow pilot có điều kiện | M4-CAM-005 |
 
 ### M4-CAM-001 — Closed-set contract alignment (`DONE`)
 
@@ -296,20 +294,58 @@ Acceptance criteria:
 - approval gắn reviewer ID, timestamp, case version và payload hash;
 - quá SLA chỉ escalation, không auto-approve.
 
-### M4-CAM-006 — Dry-run và quyết định pilot
+Completion evidence (2026-08-04):
 
-Ma trận tối thiểu:
+- UserReview/HRReview có form context read-only cho source/result reference,
+  template/parser provenance, confidence, validation codes và review reason;
+- task listener bắt buộc task assignee, ghi reviewer ID + RFC3339 timestamp;
+  External Task audit ghi case version, payload hash, quyết định và opaque note/correction
+  references vào private store;
+- `UNRESOLVED` chuyển sang HRReview; `CORRECTED` chỉ nhận
+  `correctionsReference`, archive revision, tăng case version và chạy lại
+  template validator/DMN; stale correction bị fail-closed qua `CORRECTION_INVALID`;
+- `REQUEST_REUPLOAD` tăng `reuploadCount`/case version và quay lại UploadAgain;
+  boundary timer PT24H/PT8H chỉ escalation sang HR/FinalHR, không auto-approve;
+- Camunda 7.13 deploy version `2.3.0-shadow` thành công. Smoke synthetic
+  correction và re-upload đều hoàn tất; HRIS/notification history chỉ
+  `SIMULATED`. Private evidence ghi 5 audit artifacts, 1 correction artifact và
+  1 archived result revision;
+- validation: 36 targeted Camunda tests passed; Ruff và mypy đều pass; không
+  có production side effect, secret, PII hay raw payload trong Camunda variables.
 
-1. đơn nghỉ phép DOCX hợp lệ;
-2. đơn tăng ca DOCX hợp lệ;
-3. đơn nghỉ phép ảnh/PDF scan đi User Review;
-4. đơn tăng ca ảnh/PDF scan đi User Review;
-5. declared/detected type mismatch và Confirm Type;
-6. file hỏng/không hỗ trợ;
-7. thiếu required field;
-8. reviewer correction rồi validation lại;
-9. re-upload quá ba lần;
-10. technical failure, retry và idempotent replay không duplicate side effect.
+### M4-CAM-006 — Dry-run và quyết định pilot (`DONE`)
+
+Runner synthetic/local-only: `scripts/run_camunda_m4_dry_run.py` (hoặc
+`python -m hcns_agent.adapters.camunda7.dry_run`). Runner dùng private temp store,
+không gọi network/Camunda REST và chỉ in aggregate metadata.
+
+Kết quả chạy ngày 2026-08-04:
+
+| ID | Kịch bản | Expected = observed |
+|---|---|---|
+| CAM-006-01 | Leave DOCX hợp lệ | `USER_REVIEW` |
+| CAM-006-02 | Overtime DOCX hợp lệ | `USER_REVIEW` |
+| CAM-006-03 | Leave ảnh/PDF scan → Human Review | `HR_REVIEW` |
+| CAM-006-04 | Overtime ảnh/PDF scan → Human Review | `HR_REVIEW` |
+| CAM-006-05 | Declared/detected mismatch → Confirm Type | `CONFIRMED_AFTER_MISMATCH` |
+| CAM-006-06 | File không hỗ trợ/hỏng, fail-closed | `BPMN_ERROR+TECHNICAL_RETRY` |
+| CAM-006-07 | Thiếu required field | `REQUEST_REUPLOAD` |
+| CAM-006-08 | Reviewer correction → revalidation | `USER_REVIEW` |
+| CAM-006-09 | Re-upload lượt 4 | `FINAL_HR` |
+| CAM-006-10 | Technical retry → idempotent replay | `RETRY_THEN_IDEMPOTENT_COMPLETE` |
+
+Aggregate: **10/10 pass**, `falseAutoContinue=0`, duplicate result artifact `0`,
+technical retry `1`, `realSideEffectsEnabled=false`,
+`containsRawFieldValues=false`. Hai scenario OCR route `HR_REVIEW` theo DMN
+`sensitiveFieldNeedsReview=true`; đây là Human Review an toàn, không phải lệch
+workflow với baseline đã khóa.
+
+Quyết định: **APPROVE shadow pilot có điều kiện** cho đúng hai loại
+`LEAVE_REQUEST` và `OVERTIME_REQUEST`, trong localhost/isolated runtime, giữ
+`autoContinueEnabled=false`, User/HR Review bắt buộc, và HRIS/notification chỉ
+`SIMULATED`. Quyết định này chưa cấp quyền production, public endpoint, tự động
+phê duyệt hoặc side effect thật; các quyền đó là gate M5 cần business
+authorization, retention/audit trail và threat model.
 
 ## Nghiệm thu
 
@@ -337,17 +373,21 @@ python -m pytest -q tests/test_camunda_contract.py tests/test_camunda_assets.py 
 python -m ruff check src tests
 python -m mypy src
 python scripts/check_repository.py
+python scripts/run_camunda_m4_dry_run.py
 ```
 
 Unit test không gọi network hoặc phụ thuộc Camunda server. Smoke/dry-run chạy
 riêng sau khi môi trường được cấp quyền.
 
 Rollout theo thứ tự local dry-run rồi shadow pilot, vẫn chỉ cho hai loại tài
-liệu. Việc bật `AUTO_CONTINUE`, thêm loại tài liệu hoặc ghi HRIS thật là M5 riêng,
-cần authorization, retention, audit trail, threat model và phê duyệt nghiệp vụ.
+liệu. `M5-CAM-001` chỉ mở authorization/runbook; bật `AUTO_CONTINUE`, thêm loại
+tài liệu hoặc ghi HRIS thật chưa được task này phê duyệt và cần gate riêng về
+authorization, retention, audit trail, threat model và nghiệp vụ.
 
 ## Bước kế tiếp
 
-Chờ phê duyệt `M4-CAM-005`: triển khai correction/re-upload loop, reviewer audit
-và validation lại sau correction. Không mở rộng closed set hoặc bật side effect
-thật.
+`M4-CAM-006` đã DONE và shadow pilot được approve có điều kiện trong môi trường
+local/isolated. `M5-CAM-001` đã mở `READY`; runbook nằm tại
+[`CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md`](CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md).
+Chưa chạy cohort thật, chưa mở rộng closed set, chưa bật `AUTO_CONTINUE` hoặc
+side effect thật.

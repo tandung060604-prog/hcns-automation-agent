@@ -28,6 +28,10 @@ from hcns_agent.adapters.camunda7.handlers import (
     ReuploadControlHandler,
     build_m4_shadow_handlers,
 )
+from hcns_agent.adapters.camunda7.review import (
+    JsonFileCorrectionStore,
+    JsonFileReviewAuditStore,
+)
 from hcns_agent.adapters.camunda7.worker import (
     Camunda7ExternalTaskWorker,
     CamundaBusinessError,
@@ -48,6 +52,8 @@ __all__ = [
     "DMN_QUALITY_INPUT_VARIABLES",
     "ExternalTask",
     "JsonFileTemplateResultStore",
+    "JsonFileCorrectionStore",
+    "JsonFileReviewAuditStore",
     "LocalSessionDocumentSourceStore",
     "LockExtensionPolicy",
     "M4_SHADOW_POLICY",

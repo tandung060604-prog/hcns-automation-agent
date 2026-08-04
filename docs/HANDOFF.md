@@ -603,8 +603,58 @@
   available locally for inspection.
 - Verification: 60 targeted tests passed; Ruff passed; mypy reported no issues
   in 81 source files; repository hygiene and diff check passed.
-- M4-CAM-005 is READY: implement correction/re-upload, reviewer audit and
-  revalidation without enabling real side effects.
+- M4-CAM-005 is DONE: correction/re-upload, reviewer audit and revalidation
+  passed without enabling real side effects.
+
+### M4-CAM-005 — Human review, correction and re-upload (DONE)
+
+- BPMN `2.3.0-shadow` exposes sanitized source/result/provenance/confidence/
+  validation context on UserReview and HRReview, then records reviewer ID,
+  RFC3339 timestamp, case version and payload hash through an audit topic.
+- `CORRECTED` resolves only an opaque `correctionsReference`; the private store
+  checks the current payload hash, archives the prior result, increments the
+  case version and reruns template validation/DMN. Invalid or stale corrections
+  fail closed through `CORRECTION_INVALID`.
+- SLA timers escalate UserReview to HRReview and HRReview to FinalHR; neither
+  timer has an approval path. `REQUEST_REUPLOAD` increments the counter and
+  returns to UploadAgain.
+- Camunda 7.13 deploy version `2.3.0-shadow` succeeded. Synthetic smoke passed
+  both correction and re-upload loops, with mock-only HRIS/notification history.
+  Private evidence contains five audit artifacts, one correction and one result
+  revision; no private value is recorded here.
+- Verification: 36 targeted Camunda tests passed; Ruff and mypy passed; worker
+  smoke processes were stopped; Camunda remains available locally.
+
+### M4-CAM-006 — Dry-run 10 scenario và quyết định shadow pilot (DONE)
+
+- Runner: `scripts/run_camunda_m4_dry_run.py` / module
+  `hcns_agent.adapters.camunda7.dry_run`; synthetic/local-only, private temp
+  store, no network and aggregate-only output.
+- Result: 10/10 scenario pass; native DOCX routes `USER_REVIEW`, OCR image/scan
+  routes `HR_REVIEW` under the locked sensitive-field rule; mismatch confirmation,
+  fail-closed invalid input, missing field re-upload, correction/revalidation,
+  re-upload limit and retry/idempotent replay all match expected state.
+- Safety gates: false `AUTO_CONTINUE=0`, duplicate result artifacts `0`, one
+  technical retry, `realSideEffectsEnabled=false`,
+  `containsRawFieldValues=false`.
+- Decision: approve a gated shadow pilot for only leave/overtime in isolated/local
+  runtime. Keep `autoContinueEnabled=false` and mock HRIS/notification. M5
+  authorization is still required for production/public endpoint/real writes.
+- Verification: `tests/test_camunda_m4_dry_run.py` passed; no CCCD or private
+  dataset files were changed.
+
+### M5-CAM-001 — Shadow-pilot authorization (READY)
+
+- User confirmed opening M5. The task is authorization/runbook preparation only;
+  no real pilot cohort has run and no production permission was inferred.
+- Runbook: `docs/CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md`; scope is leave/overtime in
+  local/isolated Camunda 7.13 with `autoContinueEnabled=false` and simulated
+  HRIS/notification.
+- Before execution, the business owner must fill cohort, reviewer, time window,
+  retention and rollback authority. Raw values, credentials and private logs stay
+  outside Git.
+- First action after resume: read the runbook, complete the five gates, then run
+  the documented preflight; do not start a cohort before all gates pass.
 
 ## First command after resume
 

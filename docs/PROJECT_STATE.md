@@ -413,11 +413,54 @@ M4-CAM-004 checkpoint (2026-08-04):
   deployment/history inspection; no credential or private value was recorded.
 - Validation: 60 targeted tests passed; Ruff passed; mypy passed on 81 source
   files; repository hygiene and `git diff --check` passed.
-- Next READY task: M4-CAM-005 correction/re-upload loop and reviewer audit.
+- Superseded next-task marker: M4-CAM-005 is completed in the checkpoint below.
+
+M4-CAM-005 checkpoint (2026-08-04):
+- BPMN version `2.3.0-shadow` adds reviewer context, audit External Tasks,
+  correction invalid boundary and SLA-only escalation timers.
+- Private correction artifacts are content-addressed; corrected results retain
+  the prior revision, require the current payload hash, increment case version,
+  and rerun template validation plus DMN projection.
+- Synthetic Camunda smoke completed `UNRESOLVED -> HRReview -> CORRECTED ->
+  revalidation -> UserReview -> CONFIRMED` and
+  `REQUEST_REUPLOAD -> UploadAgain -> UserReview -> CONFIRMED`.
+- Five private audit artifacts, one correction artifact and one result revision
+  were produced; HRIS/notification remained `SIMULATED`. No raw values were
+  sent to Camunda.
+- Validation: 36 targeted Camunda tests passed; Ruff and mypy passed; Camunda
+  7.13 deployment succeeded; worker smoke processes were stopped.
+
+M4-CAM-006 checkpoint (2026-08-04):
+- Added `hcns_agent.adapters.camunda7.dry_run` and
+  `scripts/run_camunda_m4_dry_run.py`; the runner is synthetic/local-only,
+  uses a private temp store, makes no network call and emits aggregate metadata.
+- Ten scenarios passed: native leave/overtime → `USER_REVIEW`; OCR leave/overtime
+  → `HR_REVIEW` by the locked sensitive-field safety rule; mismatch/Confirm Type;
+  fail-closed invalid input; missing required field; correction/revalidation;
+  re-upload limit; technical retry/idempotent replay.
+- Aggregate: 10/10, false `AUTO_CONTINUE` 0, duplicate result artifacts 0,
+  technical retries 1, real side effects disabled and raw values absent.
+- Decision: shadow pilot APPROVED WITH CONDITIONS for only leave/overtime in an
+  isolated/local runtime. `autoContinueEnabled=false`; HRIS/notification remain
+  `SIMULATED`. Production/public endpoint/real writes require M5 authorization.
+- Verification: `tests/test_camunda_m4_dry_run.py` passed; Ruff and mypy passed
+  for the new runner. No CCCD or private dataset work was changed.
+
+M5-CAM-001 checkpoint (2026-08-04):
+- User confirmed opening M5 shadow-pilot authorization. Task is `READY`, not DONE;
+  no pilot cohort has been executed.
+- Added `docs/CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md` covering scope, business/privacy
+  gates, preflight, aggregate-only monitoring, rollback triggers and acceptance.
+- Scope remains only leave/overtime in local/isolated Camunda 7.13; keep
+  `autoContinueEnabled=false`, mock HRIS/notification and no CCCD/timesheet.
+- Blockers before execution: business owner must provide cohort, reviewers,
+  time window, retention and rollback authority. No raw value or credential is
+  recorded in Git.
 
 Next:
-- Không mở task deployment/production-readiness trong kế hoạch hiện tại; giữ
-  localhost/loopback là runtime target.
+- M5-CAM-001 is READY. Complete the runbook's Business scope, Privacy/Retention
+  and Rollback gates before executing any pilot cohort; keep localhost/loopback
+  and the two-document closed set as the runtime target.
 - Keep Paddle rollback and historical CCCD/held-out work outside the
   Template-first default unless a new evidence task is approved.
 

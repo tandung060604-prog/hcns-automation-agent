@@ -35,7 +35,9 @@
 | M4-CAM-002 | DONE | Bind Template-first pipeline/private idempotent store vào External Task worker local | M4-CAM-001 | P1 |
 | M4-CAM-003 | DONE | Projection đủ tám DMN input và routing shadow an toàn | M4-CAM-002 | P1 |
 | M4-CAM-004 | DONE | Deploy BPMN/DMN và smoke hai loại tài liệu trên Camunda 7.13 local | M4-CAM-003, môi trường/quyền deploy | P1 |
-| M4-CAM-005 | READY | Hoàn thiện User Task, correction/re-upload loop và reviewer audit | M4-CAM-004 | P1 |
+| M4-CAM-005 | DONE | Hoàn thiện User Task, correction/re-upload loop, revalidation và reviewer audit | M4-CAM-004 | P1 |
+| M4-CAM-006 | DONE | Dry-run 10/10 scenario; approve shadow pilot có điều kiện, giữ shadow routing và side effect giả lập | M4-CAM-005 | P1 |
+| M5-CAM-001 | READY | Shadow-pilot authorization/runbook cho leave/overtime, local/isolated và rollback/audit gates | M4-CAM-006, business authorization | P1 |
 | DATA-00 | DONE | Pin external source, isolate staging and reconcile dataset workstream | User-directed dataset commit | P0 |
 | DATA-01 | DONE (PUBLIC TEST PROFILE) | Record explicit public/synthetic classification; keep unknown/private sources fail-closed | DATA-00 | P0 |
 | DATA-02 | DONE | Build SHA-256/page-count inventory outside Git | DATA-01 | P0 |

@@ -11,8 +11,9 @@
 > Hệ thống đọc và xử lý hồ sơ hành chính nhân sự bằng AI, ưu tiên giữ dữ liệu trên
 > máy nội bộ, kiểm tra kết quả trước khi chuyển cho người duyệt và quy trình nghiệp vụ.
 
-Tính đến **03/08/2026**, luồng hai biểu mẫu HCNS đã chạy được trên máy local qua
-dashboard; công việc tiếp theo là hoàn thiện dữ liệu mở rộng và quy trình người duyệt.
+Tính đến **04/08/2026**, luồng hai biểu mẫu HCNS đã chạy qua Template-first và
+Camunda 7.13 local. M4 đã hoàn tất dry-run 10/10; M5 shadow-pilot authorization
+đã mở ở trạng thái `READY`, chưa có production side effect.
 
 ## Sản phẩm này làm gì?
 
@@ -64,7 +65,7 @@ OCR sai nhưng vẫn tự động đi tiếp.
 | Đọc nhiều định dạng | DOCX/PDF có chữ đọc trực tiếp; ảnh/PDF scan dùng OCR |
 | Kiểm tra chất lượng | Thiếu trường thông tin, sai mẫu, mâu thuẫn hoặc OCR chưa chắc chắn đều cần người kiểm tra |
 | Lưu trữ | File gốc, thông tin cá nhân, kết quả OCR và file mô hình nằm ngoài Git, trong vùng local/private |
-| Kết nối quy trình | Có sơ đồ quy trình và thành phần thực hiện từng việc cho Camunda; đang mô phỏng, chưa triển khai môi trường thật |
+| Kết nối quy trình | BPMN/DMN, External Task worker, User Task, correction/re-upload và audit đã smoke trên Camunda 7.13 local; M5 pilot còn chờ chốt gate |
 
 ## Tiến độ hiện tại
 
@@ -76,7 +77,21 @@ OCR sai nhưng vẫn tự động đi tiếp.
 | Màn hình người duyệt dữ liệu | Đã có màn hình local để mở nguồn và xác nhận từng trường, không hiển thị dự đoán OCR | **Hoàn tất** |
 | Rà soát hợp đồng | Đang rà soát 4 hồ sơ DOCX/PDF, tổng cộng 56 trường; hiện mới xác nhận 0/56 | **Đang làm** |
 | OCR CCCD | Đã đánh giá một lần trên 14 ảnh hợp lệ; độ khớp trường 50%, chưa đủ an toàn để tự động dùng | **Chỉ kiểm tra thủ công, chưa dùng trong môi trường thật** |
-| Điều phối quy trình nhân sự | Có thiết kế quy trình và thành phần Camunda mô phỏng | **Chưa triển khai môi trường thật** |
+| Điều phối quy trình nhân sự | M4 closed-set shadow đã pass 10/10 scenario; M5 có runbook authorization cho pilot local/isolated | **M5-CAM-001 READY** |
+
+### Trạng thái Camunda mới nhất
+
+- Closed set chỉ gồm `LEAVE_REQUEST` và `OVERTIME_REQUEST`; CCCD, bảng chấm công
+  và các loại hồ sơ khác chưa được mở trong workflow này.
+- M4-CAM-006 đạt 10/10 scenario: mismatch/Confirm Type, correction/revalidation,
+  re-upload limit, technical retry và idempotent replay đều pass.
+- Shadow routing giữ `autoContinueEnabled=false`; native hồ sơ hợp lệ đi
+  `USER_REVIEW`, OCR/sensitive-field đi Human Review, và HRIS/notification chỉ
+  `SIMULATED`.
+- M5-CAM-001 đang `READY`. Cohort, reviewer, time window, retention và rollback
+  authority phải được chốt trước khi chạy pilot.
+
+Runbook: [`docs/CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md`](docs/CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md).
 
 ### Cách hiểu các con số
 
@@ -205,8 +220,9 @@ python -m mypy src
 python scripts/check_repository.py
 ```
 
-Checkpoint gần nhất của màn hình kiểm tra dữ liệu ghi nhận 249 test Python và 16 subtests,
-cùng Ruff, mypy, compileall, repository hygiene và `git diff --check` pass. Đây là bằng
+Checkpoint Template-first trước đó ghi nhận 249 test Python và 16 subtests, cùng Ruff,
+mypy, compileall, repository hygiene và `git diff --check` pass. M4-CAM-006 bổ sung
+63 targeted Camunda tests pass, dry-run 10/10, Ruff/mypy và hygiene pass. Đây là bằng
 chứng cho chất lượng kỹ thuật của phiên bản hiện tại, không phải tuyên bố hệ thống đã
 sẵn sàng tự động hóa mọi loại hồ sơ trong môi trường thật.
 
@@ -235,7 +251,8 @@ sẵn sàng tự động hóa mọi loại hồ sơ trong môi trường thật.
 - Dữ liệu mở rộng CV/hợp đồng/chứng chỉ đang ở giai đoạn rà soát Ground Truth, chưa dùng
   để tuyên bố chất lượng trong môi trường thật.
 - OCR CCCD chưa đạt mức an toàn để tự động chấp nhận.
-- Camunda mới ở mức thiết kế/mô phỏng; chưa có Railway hay triển khai môi trường thật.
+- Camunda hiện chỉ được xác nhận ở local/isolated shadow runtime; chưa có public
+  endpoint, production deployment hoặc HRIS write thật.
 - Hệ thống không tự động quyết định tuyển dụng, sa thải, lương, kỷ luật hoặc phúc lợi.
 
 ## An toàn dữ liệu

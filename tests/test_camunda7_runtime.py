@@ -447,7 +447,7 @@ def test_review_audit_binds_reviewer_version_and_payload_hash(tmp_path: Path) ->
             "resultPayloadHash": payload_hash,
             "reviewStage": "USER",
             "reviewerId": "reviewer-synthetic",
-            "reviewedAt": "2026-08-04T10:00:00Z",
+            "reviewedAt": "2026-08-04T10:00:00.123456789Z",
             "caseVersion": 1,
             "idempotencyKey": idempotency_key,
             "userReviewDecision": "CONFIRMED",

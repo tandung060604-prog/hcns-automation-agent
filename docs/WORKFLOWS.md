@@ -68,3 +68,5 @@ handler trong M4, không tạo side effect thật.
 
 Chi tiết contract, gate và kịch bản dry-run tại
 [`CAMUNDA_MVP_V2_INTEGRATION_PLAN.md`](CAMUNDA_MVP_V2_INTEGRATION_PLAN.md).
+Runbook authorization cho shadow pilot M5 tại
+[`CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md`](CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md).
