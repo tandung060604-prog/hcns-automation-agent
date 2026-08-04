@@ -2,8 +2,8 @@
 
 ## Ownership
 
-Camunda BPMN là nguồn sự thật duy nhất cho onboarding, hồ sơ nhân viên, hợp
-đồng, nghỉ phép, chấm công, payroll và công văn. Camunda sở hữu Service/User
+Camunda BPMN là nguồn sự thật duy nhất cho sáu họ active: CV, IELTS, probation
+contract, nghỉ phép, tăng ca và CCCD mặt trước. Camunda sở hữu Service/User
 Task, timer, SLA, retry, escalation, assignment, incident, compensation,
 versioning và process state dài hạn.
 

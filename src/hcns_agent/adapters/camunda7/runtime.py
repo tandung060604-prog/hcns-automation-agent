@@ -24,6 +24,7 @@ from hcns_agent.adapters.camunda7.contract import (
     M4_SHADOW_POLICY,
     ProcessValue,
     ProcessVariables,
+    map_document_type,
     validate_dmn_quality_variables,
 )
 from hcns_agent.adapters.camunda7.handlers import (
@@ -42,6 +43,7 @@ from hcns_agent.adapters.camunda7.worker import (
     CamundaTechnicalError,
     LockExtensionPolicy,
 )
+from hcns_agent.domain.documents import DocumentType
 from hcns_agent.ports.document_parser import DocumentSource
 from hcns_agent.templates.model import RecommendedAction, TemplateProcessingResult
 from hcns_agent.templates.service import (
@@ -74,6 +76,18 @@ _SENSITIVE_FIELDS_BY_TEMPLATE = {
     ),
     "overtime-request-v1": frozenset(
         {"employeeName", "employeeId", "phone", "address", "reason"}
+    ),
+    "probation-contract-v1": frozenset(
+        {"employeeName", "employeeId", "salary", "effectiveDate", "employerName"}
+    ),
+    "cv-v1": frozenset(
+        {"fullName", "email", "phoneNumber", "address", "experience"}
+    ),
+    "ielts-certificate-v1": frozenset(
+        {"recipientName", "credentialId", "overallScore", "issueDate"}
+    ),
+    "vietnam-citizen-id-front-v1": frozenset(
+        {"idNumber", "fullName", "dateOfBirth", "placeOfOrigin", "placeOfResidence"}
     ),
 }
 M4_LONG_RUNNING_LOCK_POLICY = LockExtensionPolicy(
@@ -538,7 +552,9 @@ class M4TemplateStageOperations:
     def _detect_type(self, variables: Mapping[str, ProcessValue]) -> ProcessVariables:
         declared_type = _required_reference(variables, "declaredDocumentType")
         stored = self._load_result(_required_reference(variables, "resultReference"))
-        detected_type = _payload_string(stored.payload, "documentType")
+        detected_type = _workflow_document_type(
+            _payload_string(stored.payload, "documentType")
+        )
         if detected_type not in M4_CLOSED_SET_WORKFLOW_DOCUMENT_TYPES:
             raise _input_error("Detected document type is outside the M4 closed set")
         detection = _payload_mapping(stored.payload, "detection")
@@ -556,7 +572,9 @@ class M4TemplateStageOperations:
     def _extract(self, variables: Mapping[str, ProcessValue]) -> ProcessVariables:
         workflow_type = _required_reference(variables, "workflowDocumentType")
         stored = self._load_result(_required_reference(variables, "resultReference"))
-        detected_type = _payload_string(stored.payload, "documentType")
+        detected_type = _workflow_document_type(
+            _payload_string(stored.payload, "documentType")
+        )
         if workflow_type != detected_type:
             raise _input_error("Confirmed document type does not match the stored result")
         processing = _payload_mapping(stored.payload, "processing")
@@ -788,6 +806,13 @@ def _build_template_quality_projection(
     }
     validate_dmn_quality_variables(variables)
     return variables
+
+
+def _workflow_document_type(document_type: str) -> str:
+    try:
+        return map_document_type(DocumentType(document_type)).value
+    except ValueError:
+        return document_type
 
 
 def _stored_quality_projection(payload: Mapping[str, object]) -> ProcessVariables:

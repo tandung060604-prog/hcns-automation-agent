@@ -138,7 +138,7 @@ Giao diện hiện có một điểm upload mặc định, hiển thị bản xe
 1. Đo lỗi theo từng trường trên bộ phát triển ảnh/scan; không sử dụng đáp án chuẩn để điền dữ liệu khi hệ thống đang nhận dạng.
 2. Chỉ đọc lại vùng dữ liệu khi có nhãn/vị trí làm bằng chứng; mọi kết quả chưa chắc chắn vẫn cần người kiểm tra.
 3. Chạy lại gate multi-format. Chỉ xem xét promotion khi OCR field exact-match đạt ít nhất 44/54 và không làm mất trường đúng.
-4. Bổ sung thêm các loại tài liệu bằng cấp, chứng chỉ, bản chấm công,...
+4. Bổ sung template IELTS, hợp đồng thử việc, CV và CCCD mặt trước theo gate M5.
 5. Tích hợp với hệ thống Camunda đã dựng sẵn dưới dạng External Worker
 6. Tích hợp sử dụng với Camera điện thoại với tài liệu thật. Deploy local lên server.
 

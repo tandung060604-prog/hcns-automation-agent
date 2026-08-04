@@ -7,7 +7,7 @@ from synthetic_fixtures import (
     synthetic_contract_docx_bytes,
     synthetic_cv_pdf_bytes,
     synthetic_pptx_bytes,
-    synthetic_timesheet_xlsx_bytes,
+    synthetic_xlsx_bytes,
 )
 
 from hcns_agent.adapters.pdf import PyMuPdfInspector
@@ -55,7 +55,7 @@ class FormatDetectorTests(TestCase):
         )
         self.assertIs(
             SourceFormat.XLSX,
-            self.detect("upload.bin", synthetic_timesheet_xlsx_bytes()),
+            self.detect("upload.bin", synthetic_xlsx_bytes()),
         )
         self.assertIs(
             SourceFormat.PPTX,

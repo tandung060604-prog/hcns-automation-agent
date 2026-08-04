@@ -16,7 +16,6 @@ HR_DOCUMENT_TYPES = (
     "HR_DECISION",
     "LEAVE_REQUEST",
     "EMPLOYEE_INFORMATION_FORM",
-    "TIMESHEET",
     "GENERIC_DOCUMENT",
 )
 
@@ -68,13 +67,6 @@ TYPE_RULES: dict[str, tuple[tuple[str, float], ...]] = {
         ("phong ban", 1.0),
         ("ngay sinh", 1.0),
     ),
-    "TIMESHEET": (
-        ("bang cham cong", 6.0),
-        ("ky cham cong", 2.5),
-        ("ngay cong", 2.0),
-        ("gio tang ca", 2.0),
-        ("nghi phep", 1.0),
-    ),
 }
 
 FIELD_SCHEMAS: dict[str, tuple[str, ...]] = {
@@ -113,11 +105,6 @@ FIELD_SCHEMAS: dict[str, tuple[str, ...]] = {
         "phoneNumber",
         "address",
     ),
-    "TIMESHEET": (
-        "timesheetPeriod",
-        "totalEmployees",
-        "companyName",
-    ),
 }
 
 CAMUNDA_PROCESS_KEYS = {
@@ -127,7 +114,6 @@ CAMUNDA_PROCESS_KEYS = {
     "HR_DECISION": "hr-decision-review",
     "LEAVE_REQUEST": "hr-leave-request",
     "EMPLOYEE_INFORMATION_FORM": "hr-employee-onboarding",
-    "TIMESHEET": "hr-timesheet-review",
     "GENERIC_DOCUMENT": "hr-document-review",
 }
 
@@ -204,9 +190,6 @@ def classify_hr_document(
             scores.get("EMPLOYEE_INFORMATION_FORM", 0.0),
             2.4,
         )
-    if canonical.get("sourceFormat") == "XLSX":
-        scores["TIMESHEET"] = scores.get("TIMESHEET", 0.0) + 2.5
-        evidence.setdefault("TIMESHEET", []).append("format:xlsx")
     ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
     selected, best_score = ranked[0] if ranked else ("GENERIC_DOCUMENT", 0.0)
     second_score = ranked[1][1] if len(ranked) > 1 else 0.0
@@ -245,6 +228,17 @@ def _blocks(canonical: dict[str, Any]) -> list[dict[str, Any]]:
         for block in page.get("blocks", [])
         if block.get("text")
     ]
+
+
+def _box_bounds(box: Any) -> tuple[float, float, float, float] | None:
+    if not isinstance(box, list) or len(box) < 2:
+        return None
+    try:
+        xs = [float(point[0]) for point in box]
+        ys = [float(point[1]) for point in box]
+    except (TypeError, ValueError, IndexError):
+        return None
+    return min(xs), min(ys), max(xs), max(ys)
 
 
 def _normalized_date(value: str) -> str | None:
@@ -673,322 +667,12 @@ def _employee_form_gender(
     )
 
 
-TIMESHEET_HEADERS = {
-    "employeeId": ("ma nv", "ma nhan vien"),
-    "employeeName": ("ho va ten", "ho ten"),
-    "department": ("phong ban", "bo phan", "chuc vu bo phan", "chuc vu"),
-    "workDays": (
-        "ngay cong",
-        "so ngay cong",
-        "tong cong ngay cong",
-        "tong ngay cong",
-    ),
-    "leaveDays": ("nghi phep", "ngay nghi"),
-    "overtimeHours": ("gio tang ca", "tang ca"),
-    "status": ("trang thai",),
-}
-
-
-def _header_mapping(columns: list[dict[str, Any]]) -> dict[str, int]:
-    mapping: dict[str, int] = {}
-    for column in columns:
-        key = accent_key(column.get("name"))
-        for field_name, labels in TIMESHEET_HEADERS.items():
-            if any(label == key or label in key for label in labels):
-                mapping[field_name] = int(column["columnIndex"])
-    return mapping
-
-
-def _box_bounds(box: Any) -> tuple[float, float, float, float] | None:
-    if not isinstance(box, list) or len(box) < 2:
-        return None
-    try:
-        xs = [float(point[0]) for point in box]
-        ys = [float(point[1]) for point in box]
-    except (TypeError, ValueError, IndexError):
-        return None
-    return min(xs), min(ys), max(xs), max(ys)
-
-
-def _ocr_table(canonical: dict[str, Any]) -> dict[str, Any] | None:
-    candidates = [
-        block
-        for page in canonical.get("pages", [])
-        for block in page.get("ocrBlocks", [])
-        if _box_bounds((block.get("evidence") or {}).get("bbox"))
-    ]
-    if not candidates:
-        return None
-    heights = [
-        bounds[3] - bounds[1]
-        for block in candidates
-        for bounds in [_box_bounds((block.get("evidence") or {}).get("bbox"))]
-        if bounds
-    ]
-    tolerance = max(8.0, sorted(heights)[len(heights) // 2] * 0.65)
-    rows: list[list[dict[str, Any]]] = []
-    for block in sorted(
-        candidates,
-        key=lambda item: (
-            _box_bounds((item.get("evidence") or {}).get("bbox"))[1],
-            _box_bounds((item.get("evidence") or {}).get("bbox"))[0],
-        ),
-    ):
-        bounds = _box_bounds((block.get("evidence") or {}).get("bbox"))
-        center_y = (bounds[1] + bounds[3]) / 2
-        target = None
-        for row in rows:
-            row_bounds = _box_bounds(
-                (row[0].get("evidence") or {}).get("bbox")
-            )
-            row_y = (row_bounds[1] + row_bounds[3]) / 2
-            if abs(center_y - row_y) <= tolerance:
-                target = row
-                break
-        if target is None:
-            target = []
-            rows.append(target)
-        target.append(block)
-    ordered_rows = [
-        sorted(
-            row,
-            key=lambda item: _box_bounds(
-                (item.get("evidence") or {}).get("bbox")
-            )[0],
-        )
-        for row in rows
-    ]
-    header_index = -1
-    header_mapping: dict[str, int] = {}
-    header_centers: list[float] = []
-    for index, row in enumerate(ordered_rows):
-        columns = [
-            {"columnIndex": column, "name": block["text"]}
-            for column, block in enumerate(row)
-        ]
-        mapping = _header_mapping(columns)
-        if len(mapping) >= 4:
-            header_index = index
-            header_mapping = mapping
-            header_centers = [
-                sum(_box_bounds((block.get("evidence") or {}).get("bbox"))[::2])
-                / 2
-                for block in row
-            ]
-            break
-    if header_index < 0:
-        return None
-    table_rows: list[dict[str, Any]] = []
-    for source_row in ordered_rows[header_index + 1 :]:
-        if any("tong cong" in accent_key(block["text"]) for block in source_row):
-            break
-        values = [""] * len(header_centers)
-        cells: list[dict[str, Any]] = [
-            {
-                "columnIndex": index,
-                "value": "",
-                "status": "not_found",
-                "evidence": None,
-            }
-            for index in range(len(header_centers))
-        ]
-        for block in source_row:
-            bounds = _box_bounds((block.get("evidence") or {}).get("bbox"))
-            center = (bounds[0] + bounds[2]) / 2
-            column = min(
-                range(len(header_centers)),
-                key=lambda item: abs(header_centers[item] - center),
-            )
-            values[column] = block["text"]
-            cells[column] = {
-                "columnIndex": column,
-                "value": block["text"],
-                "status": (
-                    "accepted"
-                    if float(block.get("confidence", 0)) >= 0.94
-                    else "needs_review"
-                ),
-                "evidence": block.get("evidence"),
-            }
-        table_rows.append(
-            {
-                "rowIndex": len(table_rows),
-                "values": values,
-                "cells": cells,
-            }
-        )
-    columns = [
-        {
-            "columnIndex": index,
-            "name": ordered_rows[header_index][index]["text"],
-        }
-        for index in range(len(ordered_rows[header_index]))
-    ]
-    return {
-        "tableIndex": 0,
-        "pageIndex": 0,
-        "sourceKind": "ocr_coordinate_table",
-        "columns": columns,
-        "rows": table_rows,
-        "headerMapping": header_mapping,
-    }
-
-
-def parse_timesheet(canonical: dict[str, Any]) -> dict[str, Any]:
-    table_candidates = list(canonical.get("tables", []))
-    coordinate_table = _ocr_table(canonical)
-    if coordinate_table:
-        table_candidates.append(coordinate_table)
-    selected: dict[str, Any] | None = None
-    mapping: dict[str, int] = {}
-    for candidate in table_candidates:
-        current = _header_mapping(candidate.get("columns", []))
-        if len(current) > len(mapping):
-            selected = candidate
-            mapping = current
-    normalized_rows: list[dict[str, Any]] = []
-    if selected and len(mapping) >= 4:
-        id_column = mapping.get("employeeId")
-        for row in selected.get("rows", []):
-            values = row.get("values", [])
-            if id_column is None or id_column >= len(values):
-                continue
-            employee_id = str(values[id_column] or "").strip()
-            if not _employee_id(employee_id):
-                continue
-            fields: dict[str, Any] = {}
-            for field_name, column_index in mapping.items():
-                cell = (
-                    row.get("cells", [])[column_index]
-                    if column_index < len(row.get("cells", []))
-                    else None
-                )
-                value = (
-                    values[column_index]
-                    if column_index < len(values)
-                    else None
-                )
-                normalized = value
-                if field_name in {
-                    "workDays",
-                    "leaveDays",
-                    "overtimeHours",
-                }:
-                    try:
-                        normalized = int(float(value))
-                    except (TypeError, ValueError):
-                        normalized = None
-                source_kind = selected.get("sourceKind", "")
-                evidence_block = {
-                    "sourceKind": source_kind,
-                    "confidence": (
-                        1.0
-                        if source_kind in {"xlsx_cells", "docx_table"}
-                        else 0.0
-                    ),
-                    "evidence": (cell or {}).get("evidence"),
-                }
-                fields[field_name] = _field(
-                    value,
-                    evidence_block,
-                    data_type=(
-                        "integer"
-                        if field_name
-                        in {"workDays", "leaveDays", "overtimeHours"}
-                        else "string"
-                    ),
-                    normalized_value=normalized,
-                    valid=normalized is not None and str(normalized) != "",
-                    method="table_header_coordinate",
-                )
-            normalized_rows.append(
-                {
-                    "rowIndex": len(normalized_rows),
-                    "values": list(values[id_column:]),
-                    "fields": fields,
-                    "status": (
-                        "accepted"
-                        if fields
-                        and all(
-                            field["status"] == "accepted"
-                            for field in fields.values()
-                        )
-                        else "needs_review"
-                    ),
-                }
-            )
-    period = _labeled(
-        canonical,
-        ("Kỳ chấm công", "Tháng chấm công"),
-    )
-    if period["value"] is None:
-        period = _regex_field(
-            canonical,
-            (
-                r"bảng\s+chấm\s+công\s+tháng\s+"
-                r"(\d{1,2}[/-]\d{4})",
-            ),
-            method="timesheet_title_period",
-        )
-    company = _regex_field(
-        canonical,
-        (
-            r"((?:CÔNG TY|Công ty)\s+.+)$",
-        ),
-    )
-    table_evidence = None
-    if selected:
-        table_evidence = {
-            "sourceKind": selected.get("sourceKind"),
-            "confidence": (
-                1.0 if selected.get("sourceKind") == "xlsx_cells" else 0.0
-            ),
-            "evidence": {
-                "pageIndex": selected.get("pageIndex"),
-                "sheetName": selected.get("sheetName"),
-                "tableIndex": selected.get("tableIndex"),
-            },
-        }
-    total_employees = _field(
-        len(normalized_rows) if normalized_rows else None,
-        table_evidence,
-        data_type="integer",
-        valid=bool(normalized_rows),
-        method="table_row_count",
-    )
-    fields = {
-        "timesheetPeriod": period,
-        "totalEmployees": total_employees,
-        "companyName": company,
-    }
-    output_table = {
-        "tableIndex": 0,
-        "tableType": "TIMESHEET_EMPLOYEES",
-        "sourceKind": selected.get("sourceKind") if selected else None,
-        "columnMapping": mapping,
-        "columns": (
-            list(selected.get("columns", []))[id_column:]
-            if selected and id_column is not None
-            else []
-        ),
-        "rows": normalized_rows,
-        "summary": {
-            "rowCount": len(normalized_rows),
-            "acceptedRowCount": sum(
-                row["status"] == "accepted" for row in normalized_rows
-            ),
-            "columnCount": len(mapping),
-        },
-    }
-    return _schema_output("TIMESHEET", fields, [output_table])
-
 
 PARSERS = {
     "LEAVE_REQUEST": parse_leave_request,
     "EMPLOYMENT_CONTRACT": parse_employment_contract,
     "HR_DECISION": parse_hr_decision,
     "EMPLOYEE_INFORMATION_FORM": parse_employee_information_form,
-    "TIMESHEET": parse_timesheet,
 }
 
 

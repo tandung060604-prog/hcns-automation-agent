@@ -30,6 +30,7 @@ def build_aggregate_report(projection: dict[str, object]) -> dict[str, object]:
         document for document in documents if document.get("scopeStatus") == "ACTIVE"
     ]
     status_counts: Counter[str] = Counter()
+    completeness_counts: Counter[str] = Counter()
     data_type_counts: Counter[str] = Counter()
     category_counts: dict[str, dict[str, object]] = defaultdict(
         lambda: {
@@ -48,6 +49,8 @@ def build_aggregate_report(projection: dict[str, object]) -> dict[str, object]:
             status = _string(field, "normalizationStatus")
             data_type = _string(field, "dataType")
             status_counts[status] += 1
+            if "completenessStatus" in field:
+                completeness_counts[str(field["completenessStatus"])] += 1
             data_type_counts[data_type] += 1
             category_counts[category]["normalizationStatusCounts"][status] += 1
             category_counts[category]["dataTypeCounts"][data_type] += 1
@@ -55,6 +58,30 @@ def build_aggregate_report(projection: dict[str, object]) -> dict[str, object]:
     normalized_count = status_counts.get("NORMALIZED", 0)
     missing_count = status_counts.get("MISSING", 0)
     needs_review_count = status_counts.get("NEEDS_REVIEW", 0)
+    partial_count = completeness_counts.get("PARTIAL", 0)
+    normalization = {
+        "statusCounts": dict(sorted(status_counts.items())),
+        "dataTypeCounts": dict(sorted(data_type_counts.items())),
+        "normalizedFieldCount": normalized_count,
+        "missingFieldCount": missing_count,
+        "needsReviewFieldCount": needs_review_count,
+        "byCategory": {
+            category: {
+                "documentCount": int(values["documentCount"]),
+                "fieldCount": int(values["fieldCount"]),
+                "normalizationStatusCounts": dict(
+                    sorted(values["normalizationStatusCounts"].items())
+                ),
+                "dataTypeCounts": dict(sorted(values["dataTypeCounts"].items())),
+            }
+            for category, values in sorted(category_counts.items())
+        },
+    }
+    if completeness_counts:
+        normalization.update(
+            completenessStatusCounts=dict(sorted(completeness_counts.items())),
+            partialFieldCount=partial_count,
+        )
     return {
         "schemaVersion": "1.0.0",
         "pilot": "DATA-09",
@@ -67,24 +94,7 @@ def build_aggregate_report(projection: dict[str, object]) -> dict[str, object]:
                 len(_objects(document, "fields")) for document in active_documents
             ),
         },
-        "normalization": {
-            "statusCounts": dict(sorted(status_counts.items())),
-            "dataTypeCounts": dict(sorted(data_type_counts.items())),
-            "normalizedFieldCount": normalized_count,
-            "missingFieldCount": missing_count,
-            "needsReviewFieldCount": needs_review_count,
-            "byCategory": {
-                category: {
-                    "documentCount": int(values["documentCount"]),
-                    "fieldCount": int(values["fieldCount"]),
-                    "normalizationStatusCounts": dict(
-                        sorted(values["normalizationStatusCounts"].items())
-                    ),
-                    "dataTypeCounts": dict(sorted(values["dataTypeCounts"].items())),
-                }
-                for category, values in sorted(category_counts.items())
-            },
-        },
+        "normalization": normalization,
         "reportPolicy": {
             "aggregateOnly": True,
             "containsRawFieldValues": False,

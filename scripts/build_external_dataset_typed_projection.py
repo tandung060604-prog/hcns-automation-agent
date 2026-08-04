@@ -41,8 +41,8 @@ FIELD_SPECS: dict[str, dict[str, dict[str, object]]] = {
             "unit": "VND",
             "currency": "VND",
         },
-        "allowances_summary": {"dataType": "string"},
-        "salary_payment_schedule": {"dataType": "string"},
+        "allowances_summary": {"dataType": "string", "completeness": "PARTIAL"},
+        "salary_payment_schedule": {"dataType": "string", "completeness": "PARTIAL"},
     },
     "cv": {
         "full_name": {"dataType": "string"},
@@ -52,9 +52,9 @@ FIELD_SPECS: dict[str, dict[str, dict[str, object]]] = {
         "address": {"dataType": "string"},
         "desired_role": {"dataType": "string"},
         "years_experience": {"dataType": "number", "unit": "years"},
-        "experience": {"dataType": "string"},
-        "skills": {"dataType": "string"},
-        "education": {"dataType": "string"},
+        "experience": {"dataType": "string", "completeness": "PARTIAL"},
+        "skills": {"dataType": "string", "completeness": "PARTIAL"},
+        "education": {"dataType": "string", "completeness": "PARTIAL"},
     },
     "ielts": {
         "recipient_name": {
@@ -73,6 +73,15 @@ FIELD_SPECS: dict[str, dict[str, dict[str, object]]] = {
         },
         "issue_date": {"dataType": "date"},
     },
+}
+
+# Long narrative fields are useful even when the reviewer cannot recover the
+# whole paragraph.  Keep their source text, but let DATA-09 mark a non-empty
+# value as partial instead of failing the typed projection.
+PARTIAL_TEXT_FIELDS: dict[str, frozenset[str]] = {
+    "contract": frozenset({"allowances_summary", "salary_payment_schedule"}),
+    "cv": frozenset({"experience", "skills", "education"}),
+    "ielts": frozenset(),
 }
 
 
@@ -177,6 +186,14 @@ def build_typed_projection(
             "sourceValuesPreserved": True,
             "predictionsOpened": False,
             "predictionBlind": True,
+            "completenessPolicy": {
+                "mode": "FIELD_LEVEL",
+                "partialTextFields": {
+                    category: sorted(fields) for category, fields in PARTIAL_TEXT_FIELDS.items()
+                },
+                "partialGate": "NON_EMPTY_TEXT",
+                "emptyValuesRemainMissing": True,
+            },
         },
         "documents": documents,
     }
@@ -233,6 +250,7 @@ def _typed_field(
         "reviewStatus": review_status,
         "sourceValue": source_value,
         "dataType": spec["dataType"],
+        "completenessStatus": "NOT_APPLICABLE",
     }
     for key in ("unit", "currency", "semantic", "scale", "minimum", "maximum", "step"):
         if key in spec:
@@ -241,7 +259,11 @@ def _typed_field(
         entry.update(normalizedValue=None, normalizationStatus="OUT_OF_SCOPE")
         return entry
     if source_value is None or (isinstance(source_value, str) and not source_value.strip()):
-        entry.update(normalizedValue=None, normalizationStatus="MISSING")
+        entry.update(
+            normalizedValue=None,
+            normalizationStatus="MISSING",
+            completenessStatus="MISSING",
+        )
         return entry
     try:
         normalized = _normalize_value(str(spec["dataType"]), source_value, name)
@@ -252,7 +274,11 @@ def _typed_field(
             normalizationReason=str(error),
         )
         return entry
-    entry.update(normalizedValue=normalized, normalizationStatus="NORMALIZED")
+    entry.update(
+        normalizedValue=normalized,
+        normalizationStatus="NORMALIZED",
+        completenessStatus="PARTIAL" if spec.get("completeness") == "PARTIAL" else "FULL",
+    )
     return entry
 
 

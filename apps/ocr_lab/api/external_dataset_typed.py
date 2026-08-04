@@ -24,6 +24,7 @@ APPROVAL_SCHEMA_VERSION = "external-dataset-typed-approval/1.0.0"
 EXPORT_SCHEMA_VERSION = "external-dataset-typed-export/1.0.0"
 SUPPORTED_DATA_TYPES = frozenset({"string", "number", "integer", "date"})
 SUPPORTED_STATUSES = frozenset({"NORMALIZED", "MISSING", "NEEDS_REVIEW", "OUT_OF_SCOPE"})
+SUPPORTED_COMPLETENESS = frozenset({"FULL", "PARTIAL", "MISSING", "NOT_APPLICABLE"})
 
 
 class TypedDatasetError(ValueError):
@@ -202,6 +203,7 @@ def build_typed_export(paths: TypedDatasetPaths, format_name: str) -> tuple[byte
                 "unit",
                 "currency",
                 "normalizationStatus",
+                "completenessStatus",
             ]
         )
         for document in active_documents:
@@ -219,6 +221,7 @@ def build_typed_export(paths: TypedDatasetPaths, format_name: str) -> tuple[byte
                         field.get("unit", ""),
                         field.get("currency", ""),
                         field["normalizationStatus"],
+                        field.get("completenessStatus", ""),
                     ]
                 )
         return (
@@ -231,10 +234,14 @@ def build_typed_export(paths: TypedDatasetPaths, format_name: str) -> tuple[byte
 
 def _document_summary(document: dict[str, Any]) -> dict[str, Any]:
     counts: dict[str, int] = {}
+    completeness_counts: dict[str, int] = {}
     for field in document["fields"]:
         status = str(field["normalizationStatus"])
         counts[status] = counts.get(status, 0) + 1
-    return {
+        completeness = field.get("completenessStatus")
+        if completeness is not None:
+            completeness_counts[completeness] = completeness_counts.get(completeness, 0) + 1
+    result = {
         "caseId": document["caseId"],
         "category": document["category"],
         "documentType": document["documentType"],
@@ -244,6 +251,9 @@ def _document_summary(document: dict[str, Any]) -> dict[str, Any]:
         "fieldCount": len(document["fields"]),
         "normalizationStatusCounts": dict(sorted(counts.items())),
     }
+    if completeness_counts:
+        result["completenessStatusCounts"] = dict(sorted(completeness_counts.items()))
+    return result
 
 
 def _public_field(field: dict[str, Any], include_source_value: bool) -> dict[str, Any]:
@@ -285,6 +295,19 @@ def _validate_projection(projection: dict[str, Any]) -> None:
         )
     ):
         raise TypedDatasetError("Typed projection source policy is unsafe")
+    completeness_policy = policy.get("completenessPolicy")
+    if completeness_policy is not None and (
+        not isinstance(completeness_policy, dict)
+        or any(
+            completeness_policy.get(key) != expected
+            for key, expected in (
+                ("mode", "FIELD_LEVEL"),
+                ("partialGate", "NON_EMPTY_TEXT"),
+                ("emptyValuesRemainMissing", True),
+            )
+        )
+    ):
+        raise TypedDatasetError("Typed completeness policy is unsafe")
     documents = _objects(projection, "documents")
     if not documents:
         raise TypedDatasetError("Typed projection has no documents")
@@ -319,6 +342,11 @@ def _validate_field(field: dict[str, Any], scope: str) -> None:
         raise TypedDatasetError("Typed field dataType is invalid")
     if field.get("normalizationStatus") not in SUPPORTED_STATUSES:
         raise TypedDatasetError("Typed field normalizationStatus is invalid")
+    if (
+        "completenessStatus" in field
+        and field.get("completenessStatus") not in SUPPORTED_COMPLETENESS
+    ):
+        raise TypedDatasetError("Typed field completenessStatus is invalid")
     if field.get("reviewStatus") not in {"PENDING", "CONFIRMED"}:
         raise TypedDatasetError("Typed field reviewStatus is invalid")
     if scope == "OUT_OF_SCOPE" and field.get("normalizationStatus") != "OUT_OF_SCOPE":
@@ -376,10 +404,16 @@ def _validate_report(projection: dict[str, Any], report: dict[str, Any]) -> None
     ]
     active_fields = sum(len(document["fields"]) for document in active_documents)
     status_counts: dict[str, int] = {}
+    completeness_counts: dict[str, int] = {}
     for document in active_documents:
         for field in document["fields"]:
             status = str(field["normalizationStatus"])
             status_counts[status] = status_counts.get(status, 0) + 1
+            completeness = field.get("completenessStatus")
+            if completeness is not None:
+                completeness_counts[str(completeness)] = completeness_counts.get(
+                    str(completeness), 0
+                ) + 1
     scope = _object(report, "scope")
     if (
         scope.get("activeDocumentCount") != len(active_documents)
@@ -388,6 +422,11 @@ def _validate_report(projection: dict[str, Any], report: dict[str, Any]) -> None
         raise TypedDatasetError("Aggregate scope counts drifted from projection")
     if _object(report, "normalization").get("statusCounts") != dict(sorted(status_counts.items())):
         raise TypedDatasetError("Aggregate normalization counts drifted from projection")
+    reported_completeness = _object(report, "normalization").get("completenessStatusCounts")
+    if completeness_counts and reported_completeness is not None and reported_completeness != dict(
+        sorted(completeness_counts.items())
+    ):
+        raise TypedDatasetError("Aggregate completeness counts drifted from projection")
 
 
 def _sha256(path: Path) -> str:

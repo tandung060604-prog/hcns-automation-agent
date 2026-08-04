@@ -96,7 +96,6 @@
         "LEAVE_REQUEST",
         "OVERTIME_REQUEST",
         "HANDOVER_RECORD",
-        "TIMESHEET",
         "OTHER_HR_DOCUMENT"
       ]
     }

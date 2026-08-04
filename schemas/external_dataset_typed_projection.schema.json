@@ -31,12 +31,29 @@
     "sourcePolicy": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["localOnly", "sourceValuesPreserved", "predictionsOpened", "predictionBlind"],
+      "required": ["localOnly", "sourceValuesPreserved", "predictionsOpened", "predictionBlind", "completenessPolicy"],
       "properties": {
         "localOnly": {"const": true},
         "sourceValuesPreserved": {"const": true},
         "predictionsOpened": {"const": false},
-        "predictionBlind": {"const": true}
+        "predictionBlind": {"const": true},
+        "completenessPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "partialTextFields", "partialGate", "emptyValuesRemainMissing"],
+          "properties": {
+            "mode": {"const": "FIELD_LEVEL"},
+            "partialTextFields": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1}
+              }
+            },
+            "partialGate": {"const": "NON_EMPTY_TEXT"},
+            "emptyValuesRemainMissing": {"const": true}
+          }
+        }
       }
     },
     "document": {
@@ -60,7 +77,7 @@
     "field": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "reviewStatus", "sourceValue", "dataType", "normalizedValue", "normalizationStatus"],
+      "required": ["name", "reviewStatus", "sourceValue", "dataType", "normalizedValue", "normalizationStatus", "completenessStatus"],
       "properties": {
         "name": {"type": "string", "minLength": 1},
         "reviewStatus": {"enum": ["PENDING", "CONFIRMED"]},
@@ -68,6 +85,7 @@
         "dataType": {"enum": ["string", "number", "integer", "date"]},
         "normalizedValue": {"type": ["string", "number", "integer", "null"]},
         "normalizationStatus": {"enum": ["NORMALIZED", "MISSING", "NEEDS_REVIEW", "OUT_OF_SCOPE"]},
+        "completenessStatus": {"enum": ["FULL", "PARTIAL", "MISSING", "NOT_APPLICABLE"]},
         "normalizationReason": {"type": "string", "minLength": 1},
         "unit": {"type": "string", "minLength": 1},
         "currency": {"type": "string", "minLength": 1},

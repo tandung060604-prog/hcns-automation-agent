@@ -55,8 +55,12 @@ def test_template_endpoints_process_docx_without_ocr(tmp_path: Path) -> None:
         templates_payload = json.loads(response.read().decode("utf-8"))
         assert response.status == 200
         assert [item["templateId"] for item in templates_payload["templates"]] == [
+            "cv-v1",
+            "ielts-certificate-v1",
             "leave-request-v1",
             "overtime-request-v1",
+            "probation-contract-v1",
+            "vietnam-citizen-id-front-v1",
         ]
 
         boundary = "synthetic-template-boundary"

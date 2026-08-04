@@ -2,8 +2,8 @@
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:modeler="http://camunda.org/schema/modeler/1.0" xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Definitions_HR_Document_Agent_MVP_V2" targetNamespace="http://example.com/hr-document-agent-mvp-v2" exporter="OpenAI BPMN Review" exporterVersion="2.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.13.0">
   <bpmn:error id="Error_Document_Input_Invalid" name="Document input invalid" errorCode="DOCUMENT_INPUT_INVALID"/>
   <bpmn:error id="Error_Correction_Invalid" name="Correction invalid" errorCode="CORRECTION_INVALID"/>
-  <bpmn:process id="hr_document_agent_mvp_v2" name="HR Document Processing and Onboarding Agent MVP V2" isExecutable="true" camunda:versionTag="2.3.0-shadow">
-    <bpmn:documentation>Camunda 7 closed-set shadow workflow for leave and overtime requests, OCR orchestration, quality routing, human review, controlled reupload, mock HRIS update and mock result notification. Raw files, raw OCR text and full PII remain outside Camunda. External workers must use complete for successful/business-quality results, bpmnError with DOCUMENT_INPUT_INVALID for invalid input, and failure for technical timeout/crash so retries and incidents remain operationally visible.</bpmn:documentation>
+  <bpmn:process id="hr_document_agent_mvp_v2" name="HR Document Processing and Onboarding Agent MVP V2" isExecutable="true" camunda:versionTag="2.4.0-shadow">
+    <bpmn:documentation>Camunda 7 M5 review-first closed set for six HR document types: leave, overtime, CV, IELTS certificate, probation contract and front-side Vietnamese citizen ID. Raw files, OCR text and full PII remain outside Camunda; autoContinueEnabled=false and HRIS/notification side effects are simulated.</bpmn:documentation>
     <bpmn:startEvent id="Start" name="Bắt đầu">
       <bpmn:documentation>Khởi tạo reuploadCount=0, maxReuploadAttempts=3 và autoContinueEnabled=false trong engine; người nộp không được sửa chính sách này.</bpmn:documentation>
       <bpmn:extensionElements>
@@ -37,6 +37,10 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
           <camunda:formField id="declaredDocumentType" label="Loại tài liệu khai báo" type="enum">
             <camunda:value id="LEAVE_REQUEST" name="Đơn nghỉ phép"/>
             <camunda:value id="OVERTIME_REQUEST" name="Đơn tăng ca"/>
+            <camunda:value id="CV" name="CV"/>
+            <camunda:value id="CERTIFICATE" name="IELTS certificate"/>
+            <camunda:value id="EMPLOYMENT_CONTRACT" name="Probation contract"/>
+            <camunda:value id="IDENTITY_DOCUMENT" name="Citizen ID front"/>
             <camunda:validation>
               <camunda:constraint name="required"/>
             </camunda:validation>
@@ -77,6 +81,10 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
           <camunda:formField id="confirmedDocumentType" label="Loại tài liệu xác nhận" type="enum">
             <camunda:value id="LEAVE_REQUEST" name="Đơn nghỉ phép"/>
             <camunda:value id="OVERTIME_REQUEST" name="Đơn tăng ca"/>
+            <camunda:value id="CV" name="CV"/>
+            <camunda:value id="CERTIFICATE" name="IELTS certificate"/>
+            <camunda:value id="EMPLOYMENT_CONTRACT" name="Probation contract"/>
+            <camunda:value id="IDENTITY_DOCUMENT" name="Citizen ID front"/>
             <camunda:validation>
               <camunda:constraint name="required"/>
             </camunda:validation>
@@ -288,6 +296,10 @@ task.setVariable('reviewStage', 'HR');</camunda:script>
           <camunda:formField id="declaredDocumentType" label="Loại tài liệu" type="enum">
             <camunda:value id="LEAVE_REQUEST" name="Đơn nghỉ phép"/>
             <camunda:value id="OVERTIME_REQUEST" name="Đơn tăng ca"/>
+            <camunda:value id="CV" name="CV"/>
+            <camunda:value id="CERTIFICATE" name="IELTS certificate"/>
+            <camunda:value id="EMPLOYMENT_CONTRACT" name="Probation contract"/>
+            <camunda:value id="IDENTITY_DOCUMENT" name="Citizen ID front"/>
             <camunda:validation>
               <camunda:constraint name="required"/>
             </camunda:validation>

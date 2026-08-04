@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hcns.local/schemas/templates/ielts_certificate_v1.schema.json",
+  "title": "Review-first IELTS certificate v1",
+  "type": "object",
+  "required": ["documentId", "documentType", "templateId", "templateVersion"],
+  "properties": {
+    "documentId": {"type": "string", "minLength": 1},
+    "documentType": {"const": "CERTIFICATE"},
+    "templateId": {"const": "ielts-certificate-v1"},
+    "templateVersion": {"const": "1.0"}
+  }
+}

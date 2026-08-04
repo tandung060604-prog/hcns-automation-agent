@@ -7,7 +7,6 @@ from pathlib import Path
 from synthetic_fixtures import (
     synthetic_contract_docx_bytes,
     synthetic_cv_pdf_bytes,
-    synthetic_timesheet_xlsx_bytes,
 )
 
 from apps.ocr_lab.api.phase12_ingestion import ingest_document
@@ -18,7 +17,7 @@ from apps.ocr_lab.api.phase15_idp import (
 
 
 class Phase15NativeIntakeTests(unittest.TestCase):
-    def test_native_pdf_docx_and_xlsx_use_the_unified_pipeline(self) -> None:
+    def test_native_pdf_and_docx_use_the_unified_pipeline(self) -> None:
         fixtures = (
             (
                 "synthetic-cv.pdf",
@@ -35,14 +34,6 @@ class Phase15NativeIntakeTests(unittest.TestCase):
                 "NATIVE",
                 "EMPLOYMENT_CONTRACT",
                 "CONTRACT_DECISION",
-            ),
-            (
-                "synthetic-timesheet.xlsx",
-                synthetic_timesheet_xlsx_bytes(),
-                "XLSX",
-                "NATIVE",
-                "TIMESHEET",
-                "EMPLOYEE_FORM_TABLE",
             ),
         )
 

@@ -20,7 +20,8 @@ issues.
 2. Baseline đầu tiên là deterministic local rules có tên/version, candidates,
    confidence và source-location evidence. Nó chưa phải model production.
 3. `FieldExtractorRegistry` đăng ký một extractor cho mỗi `DocumentType` và từ
-   chối duplicate. M2 hỗ trợ CV, hợp đồng lao động, đơn nghỉ phép và chấm công.
+   chối duplicate. M5 hỗ trợ sáu template review-first: CV, IELTS, hợp đồng thử việc,
+   đơn nghỉ, tăng ca và CCCD mặt trước.
 4. Field giữ value, confidence, sensitivity, extractor name/version và source
    evidence. Không lưu object parser/model.
 5. Quality gate kiểm tra required field, confidence, sensitivity, duplicate

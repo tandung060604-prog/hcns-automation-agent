@@ -38,8 +38,6 @@ Prediction được tạo và giữ ẩn trước khi Ground Truth được xác
 | CER | **95,70%** |
 | WER | **99,19%** |
 | DER | **0,85%** |
-| TIMESHEET exact rows | **0/34** |
-| TIMESHEET exact cells | **0/1.146** |
 
 Kết quả theo nhóm:
 
@@ -94,7 +92,8 @@ Kết quả end-to-end 18 tài liệu còn cho thấy lỗi nằm ở nhiều t�
 3. reading order sai trên layout nhiều cột;
 4. classifier chọn sai family ở một số hồ sơ;
 5. parser không ghép đúng nhãn–giá trị và block nhiều dòng;
-6. contract TIMESHEET cũ không giữ bảng, làm 1.146 ô bị thiếu hoàn toàn.
+6. Artifact bảng synthetic/Timesheet cũ đã retired, không thuộc scope sản phẩm và
+   không được tính vào gate hoặc tiến độ Camunda M5.
 
 Vì vậy chỉ đổi model nhận dạng không thể tự nó nâng Field Exact Match từ 13% lên
 mức production.

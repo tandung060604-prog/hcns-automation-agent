@@ -8,6 +8,7 @@
 | OCR-HO-V2-011 | REVIEW | Deterministic address ROI replay failed exact-improvement/DER gate; keep shadow-only and restore secondary recognizer runtime before next replay | OCR-HO-V2-009 | P0 |
 | OCR-HO-V2-012 | REVIEW | Restored full secondary recognizers; v11.9.1 passes development gate but remains shadow-only pending explicit promotion decision | OCR-HO-V2-011 | P0 |
 | OCR-HO-V2-013 | REVIEW | Promotion review and localhost canary for v11.9.1; no primary-runtime promotion until all 15 local shadow decisions are recorded | OCR-HO-V2-012 | P0 |
+| OCR-EVIDENCE-LOCAL-001 | DONE (LOCAL HOLD) | Unified localhost evidence view for real prediction vs Ground Truth; keep Camunda closed until prediction artifacts and OCR gates are complete | OCR-HO-V2-013, DATA-10-R1 | P0 |
 | OCR-HO-V2-007 | REVIEW | Tinh chinh ROI que quan/noi thuong tru va Unicode; replay development khong co exact improvement nen giu shadow | OCR-HO-V2-006 | P0 |
 | OCR-HO-V2-008 | DONE | Token-alignment cho address đạt development gate; giữ shadow-only, chưa promote hoặc đổi held-out | OCR-HO-V2-007 | P0 |
 | OCR-HO-V2-001 | REVIEW | Đã seal prediction ẩn trên 15 CCCD held-out; chờ xác nhận Ground Truth để evaluate-once | Manifest v2, policy 11.6 | P0 |
@@ -37,7 +38,8 @@
 | M4-CAM-004 | DONE | Deploy BPMN/DMN và smoke hai loại tài liệu trên Camunda 7.13 local | M4-CAM-003, môi trường/quyền deploy | P1 |
 | M4-CAM-005 | DONE | Hoàn thiện User Task, correction/re-upload loop, revalidation và reviewer audit | M4-CAM-004 | P1 |
 | M4-CAM-006 | DONE | Dry-run 10/10 scenario; approve shadow pilot có điều kiện, giữ shadow routing và side effect giả lập | M4-CAM-005 | P1 |
-| M5-CAM-001 | READY | Shadow-pilot authorization/runbook cho leave/overtime, local/isolated và rollback/audit gates | M4-CAM-006, business authorization | P1 |
+| M5-CAM-001 | READY | Mở closed set đúng sáu loại, thêm bốn template review-first, gỡ Timesheet, giữ shadow-only và gate business/privacy/rollback | M4-CAM-006 | P0 |
+| M5-CAM-002 | PLANNED | Hoàn tất Ground Truth/cohort được cấp quyền cho CV, IELTS, probation contract và CCCD mặt trước; evaluate-once aggregate-only | M5-CAM-001 | P0 |
 | DATA-00 | DONE | Pin external source, isolate staging and reconcile dataset workstream | User-directed dataset commit | P0 |
 | DATA-01 | DONE (PUBLIC TEST PROFILE) | Record explicit public/synthetic classification; keep unknown/private sources fail-closed | DATA-00 | P0 |
 | DATA-02 | DONE | Build SHA-256/page-count inventory outside Git | DATA-01 | P0 |
@@ -48,7 +50,9 @@
 | DATA-07 | DONE | Localhost review UI/API for source preview, prediction-blind editing and private Ground Truth persistence | DATA-06 approved | P0 |
 | DATA-08 | DONE | Independent review and SEALED Ground Truth for active contract/CV/IELTS scope; defer CV text/PPTX and real-world contract images | DATA-07 | P0 |
 | DATA-09 | DONE (HOLD) | Normalize typed HR fields and run post-seal aggregate pilot without opening predictions | DATA-06, DATA-08 | P0 |
+| DATA-09-R1 | DONE (HOLD) | Rebuild typed projection and aggregate-only pilot for the sealed 2026-08-04 image expansion | DATA-08 sealed expansion | P0 |
 | DATA-10 | APPROVED | Approve typed canonical projection for read-only downstream use; keep model/promotion gates disabled | DATA-09 | P0 |
+| DATA-10-R1 | DONE (APPROVED, READ-ONLY) | Freeze the DATA-09-R1 typed projection for read-only downstream use; keep promotion disabled | DATA-09-R1 | P0 |
 | DATA-11 | DONE (READ-ONLY) | Expose approved typed projection through loopback GET-only API and JSON/CSV export | DATA-10 | P0 |
 
 ## DATA-00..DATA-05 acceptance criteria

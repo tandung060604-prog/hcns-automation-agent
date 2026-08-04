@@ -4,7 +4,7 @@
 
 - Public: tài liệu dự án và dữ liệu synthetic.
 - Internal: policy, metric tổng hợp, cấu hình không secret.
-- Confidential: CV, hợp đồng, chấm công, quyết định.
+- Confidential: CV, IELTS, hợp đồng thử việc, đơn nghỉ/tăng ca và CCCD mặt trước.
 - Restricted: CCCD/hộ chiếu, tài khoản, lương, dữ liệu sức khỏe.
 
 ## Quy tắc lưu trữ

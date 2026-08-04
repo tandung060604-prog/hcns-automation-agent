@@ -79,19 +79,16 @@ OCR sai nhưng vẫn tự động đi tiếp.
 | OCR CCCD | Đã đánh giá một lần trên 14 ảnh hợp lệ; độ khớp trường 50%, chưa đủ an toàn để tự động dùng | **Chỉ kiểm tra thủ công, chưa dùng trong môi trường thật** |
 | Điều phối quy trình nhân sự | M4 closed-set shadow đã pass 10/10 scenario; M5 có runbook authorization cho pilot local/isolated | **M5-CAM-001 READY** |
 
-### Trạng thái Camunda mới nhất
+### Trạng thái Camunda M5
 
-- Closed set chỉ gồm `LEAVE_REQUEST` và `OVERTIME_REQUEST`; CCCD, bảng chấm công
-  và các loại hồ sơ khác chưa được mở trong workflow này.
-- M4-CAM-006 đạt 10/10 scenario: mismatch/Confirm Type, correction/revalidation,
-  re-upload limit, technical retry và idempotent replay đều pass.
-- Shadow routing giữ `autoContinueEnabled=false`; native hồ sơ hợp lệ đi
-  `USER_REVIEW`, OCR/sensitive-field đi Human Review, và HRIS/notification chỉ
-  `SIMULATED`.
-- M5-CAM-001 đang `READY`. Cohort, reviewer, time window, retention và rollback
-  authority phải được chốt trước khi chạy pilot.
+- Closed set đúng sáu loại: `LEAVE_REQUEST`, `OVERTIME_REQUEST`, `CV`, `CERTIFICATE`, `EMPLOYMENT_CONTRACT`, `IDENTITY_DOCUMENT` (CCCD mặt trước).
+- Template mới: `probation-contract-v1`, `cv-v1`, `ielts-certificate-v1`, `vietnam-citizen-id-front-v1`; tất cả review-first và fail-closed.
+- Timesheet đã gỡ khỏi code, schema, API, dashboard và active tests; artifact private cũ chỉ giữ ngoài manifest active.
+- M4 dry-run 10/10 và test Camunda 37/37 là bằng chứng kỹ thuật lịch sử; chưa có cohort thật, auto-decision hoặc HRIS write.
+- Safety giữ `autoContinueEnabled=false`, raw-value exposure 0, side effect thật 0, duplicate result 0; HRIS/notification chỉ `SIMULATED`.
+- Chạy shadow leave/overtime ngay sau khi owner chốt cohort/retention/rollback. Bốn family mới chỉ mở sau gate >=15 tài liệu (CCCD front hiện 14).
 
-Runbook: [`docs/CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md`](docs/CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md).
+Runbook: [docs/CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md](docs/CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md).
 
 ### Cách hiểu các con số
 

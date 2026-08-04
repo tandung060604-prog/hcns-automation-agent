@@ -22,10 +22,7 @@ chắn sang Human Review và chỉ cho side effect sau policy/approval.
 
 ## Phạm vi tài liệu
 
-CV, hồ sơ nhân viên, CCCD/hộ chiếu, hợp đồng/phụ lục, quyết định, đơn nghỉ/công
-tác/đề nghị, chấm công/lương, chứng chỉ/bằng cấp, quy chế/quy trình, công văn,
-thông báo, biểu mẫu và tài liệu chưa xác định đều là input hợp lệ. CCCD không
-phải trung tâm sản phẩm.
+The active M5 product scope is CV, IELTS, probation contract, leave, overtime and front-side citizen ID; legacy synthetic table material is archived only.
 
 ## Ranh giới quyết định
 

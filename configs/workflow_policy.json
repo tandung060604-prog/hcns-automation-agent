@@ -13,8 +13,7 @@
   "alwaysReviewDocumentTypes": [
     "IDENTITY_CARD",
     "PASSPORT",
-    "EMPLOYMENT_CONTRACT",
-    "TIMESHEET"
+    "EMPLOYMENT_CONTRACT"
   ],
   "allowedAutomaticActions": [
     "CREATE_REVIEW_TASK",
@@ -29,4 +28,3 @@
     "SYNC_RESTRICTED_FIELDS"
   ]
 }
-

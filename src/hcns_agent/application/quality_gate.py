@@ -27,7 +27,6 @@ def _required_fields() -> dict[DocumentType, frozenset[str]]:
         DocumentType.LEAVE_REQUEST: frozenset(
             {"employee_name", "start_date", "end_date", "reason"}
         ),
-        DocumentType.TIMESHEET: frozenset({"employee_codes", "entry_count"}),
     }
 
 

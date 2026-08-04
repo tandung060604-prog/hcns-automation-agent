@@ -354,6 +354,31 @@
   when omitted, paths are inferred beside the external dataset staging root.
 - Validation: 22 API/external-data regression tests passed; module Ruff passed.
 
+### DATA-09-R1 — Sealed image-expansion typed projection (DONE, HOLD)
+
+- Rebuilt the private projection from the sealed
+  `2026-08-04-image-expansion` inventory/Ground Truth: 20 active documents /
+  202 active fields, with `predictionsOpened=false`.
+- Projection artifact:
+  `C:\tmp\hcns-dataset-run-dec17acb-image-expansion-20260804-typed-canonical.json`
+  (`sha256:2d06eb14bc744873362252b548aca03d2f900611a4cedd7dc40bda2fa787036e`).
+- Aggregate-only artifact:
+  `C:\tmp\hcns-dataset-run-dec17acb-image-expansion-20260804-data09-aggregate-pilot.json`
+  (`sha256:71518b77da548be98be67bf13464f2aa482c1de6b4d46f48bdb296e52ac0db69`).
+  Aggregate counts: 186 normalized, 16 missing, 27 partial, 0 requiring
+  review; decision is `HOLD`, with no raw values, OCR text or predictions.
+- Validation passed: 6 targeted tests, Ruff, schema validation, DATA-11
+  semantic validation, mypy for `src`, and repository hygiene.
+
+### DATA-10-R1 — Read-only approval (DONE)
+
+- User-directed approval is recorded at
+  `C:\tmp\hcns-dataset-run-dec17acb-image-expansion-20260804-typed-canonical-APPROVED.json`.
+  The marker is bound to the DATA-09-R1 projection/report hashes and keeps
+  `predictionsOpened=false` and `promotionAllowed=false`.
+- DATA-11 bundle validation passed. This is read-only approval only; it does
+  not open predictions, promote a model or enable HR side effects.
+
 ### OCR-HO-V2-001 — CCCD held-out prediction seal (REVIEW)
 
 - Fifteen file-level new CCCD images were selected from the Roboflow test set
@@ -647,14 +672,33 @@
 
 - User confirmed opening M5. The task is authorization/runbook preparation only;
   no real pilot cohort has run and no production permission was inferred.
-- Runbook: `docs/CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md`; scope is leave/overtime in
-  local/isolated Camunda 7.13 with `autoContinueEnabled=false` and simulated
-  HRIS/notification.
+- Runbook: `docs/CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md`; scope is the six-type
+  review-first closed set in local/isolated Camunda 7.13 with
+  `autoContinueEnabled=false` and simulated HRIS/notification. Leave/overtime
+  remain the first eligible shadow cohort; the four new families require their
+  own gates.
 - Before execution, the business owner must fill cohort, reviewer, time window,
   retention and rollback authority. Raw values, credentials and private logs stay
   outside Git.
 - First action after resume: read the runbook, complete the five gates, then run
   the documented preflight; do not start a cohort before all gates pass.
+
+### OCR-EVIDENCE-LOCAL-001 — Unified local prediction versus Ground Truth (DONE, HOLD)
+
+- The localhost workspace now has a single `TỔNG QUAN ĐỐI CHIẾU LOCAL` tab. It
+  reuses the existing loopback summaries and links back to the field/session
+  inspectors; it does not fabricate predictions for DATA-10 or expose raw PII.
+- Runtime handoff: web `http://localhost:3000/workspace`, API
+  `http://127.0.0.1:8765`. The current local process uses the private CCCD
+  shadow archive and the image-expansion typed dataset roots documented in the
+  previous checkpoint.
+- Evidence decision: `NO_CAMUNDA`. Template-first is usable for its native
+  and OCR review flow, while CCCD and broad HCNS held-out remain below the
+  prediction gate. DATA-10-R1 is prediction-blind Ground Truth normalization.
+- Next READY task should create/run a prediction artifact for the active
+  CV/IELTS/contract dataset and use the unified tab for one aggregate-only
+  comparison. Keep Camunda untouched until that evidence and the CCCD gate
+  are approved.
 
 ## First command after resume
 

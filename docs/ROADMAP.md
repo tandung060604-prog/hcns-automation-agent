@@ -16,7 +16,7 @@
 ## M2 — Classification and extraction (completed)
 
 - DocumentType classifier độc lập SourceFormat, có confidence/provenance.
-- Extractor CV, hợp đồng lao động, đơn nghỉ phép và chấm công.
+- Template/parser review-first cho CV, IELTS, probation contract, leave, overtime và CCCD mặt trước.
 - Required/conflict/date/sensitivity validation và quality gate.
 - Business JSON 2.0.0; Camunda summary có type/quality/review flag.
 
@@ -38,6 +38,8 @@
 
 ## M5 — Controlled integration
 
+- Camunda M5 review-first cho đúng sáu loại; Timesheet không còn là capability.
+- Bổ sung Ground Truth/cohort gates trước mọi shadow pilot; không auto-approval.
 - Result/object storage production, retention, authorization và audit.
 - HRM/BPM connector giả lập trước; idempotency/replay/incident tests.
 - Side effect thật chỉ bật từng action sau threat model, DPIA và approval.

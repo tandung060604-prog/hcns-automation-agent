@@ -40,8 +40,8 @@ storage được kiểm soát; Camunda chỉ nhận reference và biến routing
 
 - `SourceFormat` chọn parser kỹ thuật: PLAIN_TEXT, IMAGE, PDF_TEXT, PDF_SCAN,
   DOCX, XLSX, PPTX, LEGACY_DOC, LEGACY_XLS hoặc UNKNOWN.
-- `DocumentType` chọn extractor nghiệp vụ, ví dụ CV, hợp đồng, đơn nghỉ hoặc
-  bảng chấm công.
+- `DocumentType` chọn extractor nghiệp vụ trong sáu họ active: CV, IELTS,
+  probation contract, leave, overtime và CCCD mặt trước.
 - `WorkflowType` là context quy trình do Camunda điều phối.
 
 Format detection không suy ra `DocumentType`. `DocumentType` không tự quyết
@@ -73,7 +73,7 @@ DOCX -> safety -> native OOXML -> CanonicalDocument
      -> AUTO_CONTINUE | MANUAL_REVIEW | REJECT_UNSUPPORTED
 ```
 
-Registry mặc định chỉ chứa `leave-request-v1` và `overtime-request-v1`. Pipeline
+Registry mặc định chứa đúng sáu template versioned của M5. Pipeline
 classifier/extractor generic vẫn tồn tại để tương thích, nhưng endpoint
 `/api/documents/process` không dùng nó làm fallback cho tài liệu ngoài closed set.
 Quyết định này được ghi tại
@@ -84,8 +84,8 @@ business type và không thay đổi parser. Baseline local deterministic trả
 candidate, confidence, rule version và source-location evidence. Accuracy
 production phải qua Ground Truth/promotion gate.
 
-`FieldExtractorRegistry` map `DocumentType` sang extractor nghiệp vụ. M2 có
-extractor cho CV, hợp đồng lao động, đơn nghỉ phép và bảng chấm công. Field giữ
+`FieldExtractorRegistry` map `DocumentType` sang extractor nghiệp vụ. M5 có
+template/parser review-first cho CV, IELTS, probation contract, leave, overtime và CCCD mặt trước. Field giữ
 value, confidence, sensitivity, extractor name/version và page/block hoặc
 sheet/cell provenance.
 

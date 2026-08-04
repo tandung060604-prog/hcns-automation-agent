@@ -15,6 +15,7 @@ from hcns_agent.templates.leave_request.validator import LeaveRequestValidator
 from hcns_agent.templates.model import TemplateDefinition, TemplateDetection
 from hcns_agent.templates.overtime_request.parser import OvertimeRequestParser
 from hcns_agent.templates.overtime_request.validator import OvertimeRequestValidator
+from hcns_agent.templates.review_only import ReviewOnlyParser, ReviewOnlyValidator
 
 
 class TemplateRegistry:
@@ -40,6 +41,14 @@ class TemplateRegistry:
         }
         candidates: list[TemplateDetection] = []
         for definition in self._definitions.values():
+            if (
+                definition.template_id == "vietnam-citizen-id-front-v1"
+                and any(
+                    marker in normalized
+                    for marker in ("back", "mat sau", "dac diem nhan dang")
+                )
+            ):
+                continue
             matched = tuple(
                 anchor
                 for anchor in definition.anchors
@@ -166,6 +175,123 @@ def build_default_template_registry() -> TemplateRegistry:
             minimum_anchor_matches=3,
             parser=OvertimeRequestParser(),
             validator=OvertimeRequestValidator(),
+        )
+    )
+    def review_template(
+        *,
+        template_id: str,
+        document_type: DocumentType,
+        supported_file_types: tuple[str, ...],
+        required_fields: tuple[str, ...],
+        schema_ref: str,
+        anchors: tuple[str, ...],
+        minimum_anchor_matches: int,
+        field_labels: dict[str, tuple[str, ...]],
+    ) -> TemplateDefinition:
+        return TemplateDefinition(
+            template_id=template_id,
+            document_type=document_type,
+            version="1.0",
+            supported_file_types=supported_file_types,
+            required_fields=required_fields,
+            optional_fields=(),
+            schema_ref=schema_ref,
+            parser_version="1.0.0",
+            anchors=anchors,
+            minimum_anchor_matches=minimum_anchor_matches,
+            parser=ReviewOnlyParser(field_labels),
+            validator=ReviewOnlyValidator(),
+        )
+
+    registry.register(
+        review_template(
+            template_id="probation-contract-v1",
+            document_type=DocumentType.EMPLOYMENT_CONTRACT,
+            supported_file_types=("docx", "pdf", "png", "jpg", "jpeg"),
+            required_fields=(
+                "employeeName", "employeeId", "jobTitle", "salary",
+                "effectiveDate", "probationEndDate", "employerName",
+            ),
+            schema_ref="schemas/templates/probation_contract_v1.schema.json",
+            anchors=("probation", "thoi gian thu viec", "muc luong"),
+            minimum_anchor_matches=2,
+            field_labels={
+                "employeeName": ("employee name", "nguoi lao dong", "ho va ten"),
+                "employeeId": ("employee id", "ma nhan vien", "so cccd"),
+                "jobTitle": ("job title", "chuc danh", "vi tri cong viec"),
+                "salary": ("salary", "muc luong", "luong thu viec"),
+                "effectiveDate": ("effective date", "ngay hieu luc"),
+                "probationEndDate": ("probation end", "ket thuc thu viec"),
+                "employerName": ("employer", "nguoi su dung lao dong"),
+            },
+        )
+    )
+    registry.register(
+        review_template(
+            template_id="cv-v1",
+            document_type=DocumentType.CV,
+            supported_file_types=("docx", "pdf", "png", "jpg", "jpeg"),
+            required_fields=(
+                "fullName", "headline", "email", "phoneNumber", "address",
+                "education", "experience", "skills",
+            ),
+            schema_ref="schemas/templates/cv_v1.schema.json",
+            anchors=("curriculum vitae", "kinh nghiem", "ky nang"),
+            minimum_anchor_matches=2,
+            field_labels={
+                "fullName": ("full name", "ho va ten", "name"),
+                "headline": ("headline", "muc tieu nghe nghiep", "position"),
+                "email": ("email", "thu dien tu"),
+                "phoneNumber": ("phone", "dien thoai", "so dien thoai"),
+                "address": ("address", "dia chi"),
+                "education": ("education", "hoc van"),
+                "experience": ("experience", "kinh nghiem"),
+                "skills": ("skills", "ky nang"),
+            },
+        )
+    )
+    registry.register(
+        review_template(
+            template_id="ielts-certificate-v1",
+            document_type=DocumentType.CERTIFICATE,
+            supported_file_types=("pdf", "png", "jpg", "jpeg"),
+            required_fields=(
+                "recipientName", "credentialId", "credentialType",
+                "overallScore", "issueDate",
+            ),
+            schema_ref="schemas/templates/ielts_certificate_v1.schema.json",
+            anchors=("ielts", "test report form", "overall band score"),
+            minimum_anchor_matches=2,
+            field_labels={
+                "recipientName": ("recipient name", "candidate name", "name"),
+                "credentialId": ("credential id", "test report form number", "trf number"),
+                "credentialType": ("test type", "credential type", "ielts"),
+                "overallScore": ("overall band score", "overall score"),
+                "issueDate": ("issue date", "test date", "date of test"),
+            },
+        )
+    )
+    registry.register(
+        review_template(
+            template_id="vietnam-citizen-id-front-v1",
+            document_type=DocumentType.IDENTITY_CARD,
+            supported_file_types=("pdf", "png", "jpg", "jpeg"),
+            required_fields=(
+                "idNumber", "fullName", "dateOfBirth", "sex", "nationality",
+                "placeOfOrigin", "placeOfResidence",
+            ),
+            schema_ref="schemas/templates/vietnam_citizen_id_front_v1.schema.json",
+            anchors=("can cuoc cong dan", "date of birth", "nationality", "front"),
+            minimum_anchor_matches=3,
+            field_labels={
+                "idNumber": ("id number", "so cccd", "so dinh danh ca nhan"),
+                "fullName": ("full name", "ho va ten"),
+                "dateOfBirth": ("date of birth", "ngay sinh"),
+                "sex": ("sex", "gioi tinh"),
+                "nationality": ("nationality", "quoc tich"),
+                "placeOfOrigin": ("place of origin", "que quan"),
+                "placeOfResidence": ("place of residence", "noi thuong tru"),
+            },
         )
     )
     return registry

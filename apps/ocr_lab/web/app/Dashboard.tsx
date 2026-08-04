@@ -1,11 +1,11 @@
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
 import {
   pendingReviewCases,
   resumePendingReview,
 } from "./review-queue.mjs";
 import ExternalDatasetReview from "./ExternalDatasetReview";
+import LocalEvidenceOverview from "./LocalEvidenceOverview";
 
 const SHOW_HELDOUT = import.meta.env.VITE_SHOW_HELDOUT === "true";
 const SHOW_GROUND_TRUTH_REVIEW =
@@ -1074,7 +1074,6 @@ const typeLabels: Record<string, string> = {
   ONBOARDING_CHECKLIST: "Checklist tiếp nhận",
   TRAINING_ATTENDANCE: "Danh sách đào tạo",
   HR_DECISION: "Quyết định",
-  TIMESHEET: "Bảng chấm công",
   LEAVE_REQUEST: "Đơn nghỉ phép",
   OVERTIME_REQUEST: "Phiếu làm thêm giờ",
   BUSINESS_TRIP_REQUEST: "Đề nghị công tác",
@@ -2138,7 +2137,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [heldoutEvidenceLoading, setHeldoutEvidenceLoading] = useState(false);
   const [heldoutEvidenceError, setHeldoutEvidenceError] = useState("");
   const [evidenceMode, setEvidenceMode] =
-    useState<"heldout" | "templates" | "cccd" | "external-dataset" | "ocr-ho-v2-shadow">(
+    useState<"overview" | "heldout" | "templates" | "cccd" | "external-dataset" | "ocr-ho-v2-shadow">(
       // Legacy default: SHOW_HELDOUT ? "heldout" : "templates"
       SHOW_OCR_HO_SHADOW_UAT
         ? "ocr-ho-v2-shadow"
@@ -5563,6 +5562,14 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           </p>
         </div>
         <div className="evidence-switch" role="tablist">
+          <button
+            className={evidenceMode === "overview" ? "active" : ""}
+            onClick={() => setEvidenceMode("overview")}
+            role="tab"
+            aria-selected={evidenceMode === "overview"}
+          >
+            TỔNG QUAN ĐỐI CHIẾU LOCAL
+          </button>
           {SHOW_OCR_HO_SHADOW_UAT ? (
             <button
               className={evidenceMode === "ocr-ho-v2-shadow" ? "active" : ""}
@@ -5610,7 +5617,11 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             </button>
           ) : null}
         </div>
-        {SHOW_OCR_HO_SHADOW_UAT && evidenceMode === "ocr-ho-v2-shadow" ? (
+        {evidenceMode === "overview" ? (
+          <LocalEvidenceOverview
+            onOpen={(mode) => setEvidenceMode(mode)}
+          />
+        ) : SHOW_OCR_HO_SHADOW_UAT && evidenceMode === "ocr-ho-v2-shadow" ? (
           <div className="heldout-evidence-grid shadow-uat-grid">
             <div className="heldout-document-list" role="list">
               {(ocrHoShadow?.documents ?? []).map((document) => (

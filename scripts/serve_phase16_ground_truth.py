@@ -11,7 +11,6 @@ import ipaddress
 import json
 import mimetypes
 import threading
-import unicodedata
 import urllib.parse
 import uuid
 from datetime import datetime, timezone
@@ -23,8 +22,6 @@ from hcns_agent.application.phase16_heldout import (
     CONFIRMED,
     PENDING,
     SKIPPED,
-    TIMESHEET_FIELDS,
-    TIMESHEET_REVIEW_PROFILE,
     validate_review_queue,
 )
 
@@ -70,8 +67,8 @@ main{max-width:1500px;margin:auto;padding:20px}.toolbar,.panel{background:#fff;b
   <section class="panel results" id="resultsPanel" hidden><h2>Kết quả held-out Phase 16</h2><div class="muted">Báo cáo aggregate sau khi Ground Truth 18/18 được khóa; không hiển thị raw prediction hoặc PII.</div><div class="metric-grid" id="resultMetrics"></div></section>
 </main>
 <script>
-const labels={fullName:'Họ và tên',headline:'Tiêu đề nghề nghiệp',email:'Email',phoneNumber:'Số điện thoại',address:'Địa chỉ',documentTitle:'Tên tài liệu',requestNumber:'Số đơn',employeeName:'Tên nhân viên',employeeId:'Mã nhân viên',department:'Phòng ban',jobTitle:'Chức danh/vị trí công việc',reason:'Lý do',startDate:'Ngày bắt đầu',endDate:'Ngày kết thúc',documentNumber:'Số văn bản',action:'Loại/Nội dung văn bản',salary:'Mức lương',effectiveDate:'Ngày hiệu lực',credentialName:'Tên bằng/chứng chỉ',major:'Chuyên ngành',institution:'Đơn vị cấp',issueDate:'Ngày cấp',graduationYear:'Năm tốt nghiệp',classification:'Xếp loại',tableTitle:'Tên bảng',period:'Kỳ dữ liệu',rowCount:'Số dòng',columnCount:'Số cột',timesheetPeriod:'Kỳ chấm công',organization:'Tổ chức/Công ty',attendanceLegend:'Ký hiệu chấm công'};
-const familyGuides={CONTRACT_DECISION:'Với hợp đồng, “Loại/Nội dung văn bản” là tiêu đề hoặc loại hợp đồng nhìn thấy trực tiếp. Chỉ nhập chức danh khi tài liệu nêu rõ vị trí/chức vụ làm việc; trình độ học vấn hoặc chuyên môn không phải chức danh. Ngày ở phần đầu văn bản không tự động là ngày bắt đầu hay ngày hiệu lực.',TIMESHEET:'Đây là bảng chấm công nhiều nhân viên. Không lấy một nhân viên để điền vào form hồ sơ đơn. Điền thông tin cấp tài liệu, sau đó dán vùng dữ liệu nhân viên từ Excel vào bảng bên dưới.'};
+const labels={fullName:'Họ và tên',headline:'Tiêu đề nghề nghiệp',email:'Email',phoneNumber:'Số điện thoại',address:'Địa chỉ',documentTitle:'Tên tài liệu',requestNumber:'Số đơn',employeeName:'Tên nhân viên',employeeId:'Mã nhân viên',department:'Phòng ban',jobTitle:'Chức danh/vị trí công việc',reason:'Lý do',startDate:'Ngày bắt đầu',endDate:'Ngày kết thúc',documentNumber:'Số văn bản',action:'Loại/Nội dung văn bản',salary:'Mức lương',effectiveDate:'Ngày hiệu lực',credentialName:'Tên bằng/chứng chỉ',major:'Chuyên ngành',institution:'Đơn vị cấp',issueDate:'Ngày cấp',graduationYear:'Năm tốt nghiệp',classification:'Xếp loại',tableTitle:'Tên bảng',period:'Kỳ dữ liệu',rowCount:'Số dòng',columnCount:'Số cột',organization:'Tổ chức/Công ty'};
+const familyGuides={CONTRACT_DECISION:'Với hợp đồng, “Loại/Nội dung văn bản” là tiêu đề hoặc loại hợp đồng nhìn thấy trực tiếp. Chỉ nhập chức danh khi tài liệu nêu rõ vị trí/chức vụ làm việc; trình độ học vấn hoặc chuyên môn không phải chức danh. Ngày ở phần đầu văn bản không tự động là ngày bắt đầu hay ngày hiệu lực.'};
 let state={documents:[]},index=0,current=null;
 const $=id=>document.getElementById(id);
 async function json(url,options){const r=await fetch(url,options);const v=await r.json();if(!r.ok)throw new Error(v.error||'Lỗi máy chủ');return v}
@@ -83,11 +80,9 @@ async function load(){if(!state.documents.length)return;current=await json('/api
  if(['.jpg','.jpeg','.png','.pdf'].includes(ext)){const el=document.createElement(ext==='.pdf'?'iframe':'img');el.id='preview';el.src=url;el.alt='Tài liệu nguồn';viewer.appendChild(el)}
  else{viewer.innerHTML=`<div class="native"><div><b>Định dạng ${ext.slice(1).toUpperCase()}</b><p>Mở file gốc bằng ứng dụng local để đối chiếu.</p><a href="${url}">Mở / tải tài liệu nguồn</a></div></div>`}
  const fields=$('fields');fields.innerHTML='';Object.entries(current.fields).forEach(([name,field])=>{const row=document.createElement('div');row.className='field';row.innerHTML=`<label>${labels[name]||name}</label><input type="text" data-name="${name}"><label class="skip"><input type="checkbox" data-skip="${name}"> Không có</label>`;const input=row.querySelector('input[type=text]'),skip=row.querySelector('input[type=checkbox]');input.value=field.value||'';skip.checked=field.status==='SKIPPED';input.disabled=skip.checked;skip.onchange=()=>{input.disabled=skip.checked;if(skip.checked)input.value=''};fields.appendChild(row)});
- if(current.reviewProfile==='TIMESHEET'){const editor=document.createElement('div');editor.className='table-editor';const rows=(current.tables?.attendance?.rows||[]).map(row=>(row.values||row).join('\\t')).join('\\n');const help=current.sourceExtension.toLowerCase()==='.xlsx'?'Trong Excel, chọn vùng bắt đầu từ <b>Mã NV</b>, gồm Họ tên, Chức vụ/Bộ phận và toàn bộ cột ngày; không gồm TT, dòng tổng hoặc bảng ký hiệu. Nhấn Ctrl+C rồi dán vào đây.':'Đối chiếu trực tiếp với ảnh. Nhập mỗi nhân viên trên một dòng theo thứ tự <b>Mã NV → Họ tên → Chức vụ/Bộ phận → ngày 1…n → tổng công</b>; các cột cách nhau bằng phím Tab. Không nhập cột TT, dòng Tổng số hoặc chữ ký.';editor.innerHTML=`<b>Bảng nhân viên và chấm công</b><div class="table-help">${help}</div><textarea id="attendanceRows" placeholder="NV001[TAB]Nguyễn Văn Mẫu[TAB]Chức vụ / Bộ phận[TAB]X[TAB]..."></textarea><div class="table-help" id="tableSummary"></div>`;fields.appendChild(editor);$('attendanceRows').value=rows;$('attendanceRows').oninput=updateTableSummary;updateTableSummary()}
+
  $('message').textContent='';$('message').className=''}
-function attendanceRows(){const area=$('attendanceRows');if(!area)return[];return area.value.trim().split(/\\r?\\n/).filter(Boolean).map(line=>line.split('\\t').map(value=>value.trim()))}
-function updateTableSummary(){const rows=attendanceRows(),widths=[...new Set(rows.map(row=>row.length))];$('tableSummary').textContent=!rows.length?'Chưa có dòng dữ liệu.':widths.length===1?`${rows.length} nhân viên · ${widths[0]} cột mỗi dòng`:'Các dòng đang có số cột không đồng nhất.'}
-async function save(){try{const fields={},skipped=[];document.querySelectorAll('[data-name]').forEach(el=>fields[el.dataset.name]=el.value);document.querySelectorAll('[data-skip]:checked').forEach(el=>skipped.push(el.dataset.skip));const payload={documentId:current.documentId,fields,skipped};if(current.reviewProfile==='TIMESHEET')payload.tableRows=attendanceRows();await json('/api/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});$('message').textContent='Đã lưu cục bộ';$('message').className='done';await loadState()}catch(e){$('message').textContent=e.message}}
+async function save(){try{const fields={},skipped=[];document.querySelectorAll('[data-name]').forEach(el=>fields[el.dataset.name]=el.value);document.querySelectorAll('[data-skip]:checked').forEach(el=>skipped.push(el.dataset.skip));const payload={documentId:current.documentId,fields,skipped};await json('/api/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});$('message').textContent='Đã lưu cục bộ';$('message').className='done';await loadState()}catch(e){$('message').textContent=e.message}}
 $('prev').onclick=()=>{index=(index-1+state.documents.length)%state.documents.length;load()};$('next').onclick=()=>{index=(index+1)%state.documents.length;load()};$('save').onclick=save;loadState().catch(e=>$('message').textContent=e.message);
 </script>
 </body></html>"""
@@ -129,8 +124,6 @@ class ReviewStore:
 
     def verify(self) -> None:
         queue = self.read_json(self.queue_path)
-        if self.upgrade_timesheet_review(queue):
-            atomic_write_json(self.queue_path, queue)
         validate_review_queue(queue)
         status = self.read_json(self.status_path)
         if status.get("status") != "BLINDED_PREDICTIONS_READY":
@@ -139,48 +132,6 @@ class ReviewStore:
             raise ValueError("Predictions are not marked hidden")
         if status.get("datasetDigest") != queue.get("datasetDigest"):
             raise ValueError("Ground Truth queue and predictions do not match")
-
-    @staticmethod
-    def upgrade_timesheet_review(queue: dict[str, Any]) -> bool:
-        """Migrate only pending native timesheets from the legacy scalar form."""
-        changed = False
-        for document in queue.get("documents", []):
-            source_path = str(document.get("sourcePath") or "")
-            folded_name = "".join(
-                character
-                for character in unicodedata.normalize("NFKD", source_path)
-                if not unicodedata.combining(character)
-            ).casefold()
-            normalized_name = folded_name.replace("-", "_").replace(" ", "_")
-            is_timesheet = (
-                document.get("documentFamily") == "EMPLOYEE_FORM_TABLE"
-                and "cham_cong" in normalized_name
-                and Path(source_path).suffix.casefold()
-                in {".xlsx", ".pdf", ".png", ".jpg", ".jpeg"}
-            )
-            if (
-                not is_timesheet
-                or document.get("reviewProfile") == TIMESHEET_REVIEW_PROFILE
-            ):
-                continue
-            if document.get("status") == CONFIRMED:
-                raise ValueError(
-                    "A confirmed legacy timesheet requires explicit migration"
-                )
-            document["documentType"] = "TIMESHEET"
-            document["reviewProfile"] = TIMESHEET_REVIEW_PROFILE
-            document["fields"] = {
-                name: {"status": PENDING, "value": ""}
-                for name in TIMESHEET_FIELDS
-            }
-            document["tables"] = {
-                "attendance": {
-                    "status": PENDING,
-                    "rows": [],
-                }
-            }
-            changed = True
-        return changed
 
     def state(self) -> dict[str, Any]:
         with self._lock:
@@ -285,38 +236,6 @@ class ReviewStore:
                     raise ValueError(
                         f"Field {name} requires a value or 'Không có'"
                     )
-            if document.get("reviewProfile") == TIMESHEET_REVIEW_PROFILE:
-                rows = payload.get("tableRows")
-                if not isinstance(rows, list) or not rows:
-                    raise ValueError(
-                        "Bảng chấm công cần ít nhất một dòng nhân viên"
-                    )
-                normalized_rows: list[dict[str, list[str]]] = []
-                expected_width: int | None = None
-                for row in rows:
-                    if (
-                        not isinstance(row, list)
-                        or len(row) < 4
-                        or any(not isinstance(value, str) for value in row)
-                    ):
-                        raise ValueError(
-                            "Mỗi dòng chấm công cần Mã NV, Họ tên, "
-                            "Chức vụ/Bộ phận và ít nhất một cột ngày"
-                        )
-                    values_row = [value.strip() for value in row]
-                    if not values_row[0] or not values_row[1]:
-                        raise ValueError("Mã NV và Họ tên không được để trống")
-                    if expected_width is None:
-                        expected_width = len(values_row)
-                    elif len(values_row) != expected_width:
-                        raise ValueError(
-                            "Các dòng chấm công phải có cùng số cột"
-                        )
-                    normalized_rows.append({"values": values_row})
-                document["tables"]["attendance"] = {
-                    "status": CONFIRMED,
-                    "rows": normalized_rows,
-                }
             document["status"] = CONFIRMED
             document["reviewedAt"] = utc_now()
             if all(item["status"] == CONFIRMED for item in queue["documents"]):

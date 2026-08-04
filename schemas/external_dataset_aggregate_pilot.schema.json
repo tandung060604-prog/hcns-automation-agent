@@ -63,6 +63,8 @@
         "normalizedFieldCount": {"type": "integer", "minimum": 0},
         "missingFieldCount": {"type": "integer", "minimum": 0},
         "needsReviewFieldCount": {"type": "integer", "minimum": 0},
+        "completenessStatusCounts": {"$ref": "#/$defs/counts"},
+        "partialFieldCount": {"type": "integer", "minimum": 0},
         "byCategory": {
           "type": "object",
           "minProperties": 1,

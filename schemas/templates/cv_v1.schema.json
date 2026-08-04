@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hcns.local/schemas/templates/cv_v1.schema.json",
+  "title": "Review-first CV v1",
+  "type": "object",
+  "required": ["documentId", "documentType", "templateId", "templateVersion"],
+  "properties": {
+    "documentId": {"type": "string", "minLength": 1},
+    "documentType": {"const": "CV"},
+    "templateId": {"const": "cv-v1"},
+    "templateVersion": {"const": "1.0"}
+  }
+}

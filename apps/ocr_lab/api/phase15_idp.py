@@ -17,7 +17,6 @@ try:
         _schema_output,
         accent_key,
         classify_hr_document,
-        parse_timesheet,
     )
 except ImportError:  # Direct script execution used by the local OCR server.
     from phase12_idp import (
@@ -29,7 +28,6 @@ except ImportError:  # Direct script execution used by the local OCR server.
         _schema_output,
         accent_key,
         classify_hr_document,
-        parse_timesheet,
     )
 
 
@@ -54,10 +52,10 @@ DOCUMENT_FAMILY_BY_TYPE = {
     "PROBATION_AGREEMENT": "CONTRACT_DECISION",
     "HR_DECISION": "CONTRACT_DECISION",
     "DEGREE_CERTIFICATE": "DEGREE_CERTIFICATE",
+    "CERTIFICATE": "DEGREE_CERTIFICATE",
     "EMPLOYEE_INFORMATION_FORM": "EMPLOYEE_FORM_TABLE",
     "ONBOARDING_CHECKLIST": "EMPLOYEE_FORM_TABLE",
     "EMPLOYEE_MASTER_LIST": "EMPLOYEE_FORM_TABLE",
-    "TIMESHEET": "EMPLOYEE_FORM_TABLE",
     "TRAINING_ATTENDANCE": "EMPLOYEE_FORM_TABLE",
 }
 
@@ -65,11 +63,12 @@ WORKFLOW_TYPE_BY_DOCUMENT_TYPE = {
     "IDENTITY_DOCUMENT": "IDENTITY_DOCUMENT",
     "CV": "CV",
     "LEAVE_REQUEST": "LEAVE_REQUEST",
+    "OVERTIME_REQUEST": "OVERTIME_REQUEST",
     "EMPLOYMENT_CONTRACT": "EMPLOYMENT_CONTRACT",
     "PROBATION_AGREEMENT": "EMPLOYMENT_CONTRACT",
     "HR_DECISION": "HR_DECISION",
     "DEGREE_CERTIFICATE": "DEGREE",
-    "TIMESHEET": "TIMESHEET",
+    "CERTIFICATE": "CERTIFICATE",
 }
 
 BUSINESS_SCHEMA_BY_FAMILY = {
@@ -90,9 +89,7 @@ BUSINESS_SCHEMA_BY_FAMILY = {
     "OTHER_HR_DOCUMENT": "schemas/business_document.schema.json",
 }
 
-BUSINESS_SCHEMA_BY_TYPE = {
-    "TIMESHEET": "schemas/hr_document_families/timesheet.schema.json",
-}
+BUSINESS_SCHEMA_BY_TYPE: dict[str, str] = {}
 
 FAMILY_FIELD_SCHEMAS: dict[str, tuple[str, ...]] = {
     "CV": (
@@ -235,11 +232,6 @@ _TYPE_RULES: dict[str, tuple[tuple[str, float], ...]] = {
     "EMPLOYEE_MASTER_LIST": (
         ("danh sach nhan su", 7.0),
         ("danh sach nhan vien", 6.0),
-    ),
-    "TIMESHEET": (
-        ("bang cham cong", 7.0),
-        ("ky cham cong", 2.0),
-        ("ngay cong", 1.5),
     ),
     "TRAINING_ATTENDANCE": (
         ("danh sach tham du va ket qua dao tao", 7.0),
@@ -840,19 +832,6 @@ _TABLE_HEADER_MARKERS: dict[str, tuple[str, ...]] = {
         "loai hd",
         "trang thai",
     ),
-    "TIMESHEET": (
-        "tt",
-        "ma nv",
-        "ma nhan vien",
-        "ho va ten",
-        "chuc vu",
-        "bo phan",
-        "ngay trong thang",
-        "tong cong",
-        "cong",
-        "phep",
-        "ot",
-    ),
     "TRAINING_ATTENDANCE": (
         "stt",
         "ma nv",
@@ -1418,8 +1397,6 @@ def extract_phase15_document(
         extraction = _schema_output(document_type, {})
     elif document_type == "CV":
         extraction = parse_cv(canonical)
-    elif document_type == "TIMESHEET":
-        extraction = parse_timesheet(canonical)
     elif family == "ADMINISTRATIVE_REQUEST":
         extraction = parse_administrative_request(canonical, document_type)
     elif family == "CONTRACT_DECISION":

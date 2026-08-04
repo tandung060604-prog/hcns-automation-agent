@@ -8,6 +8,9 @@ Completed:
 - Generic multi-family pipeline retained as legacy-compatible behavior
 - Camunda 7 worker/assets and process-variable whitelist
 - Registered `leave-request-v1` and `overtime-request-v1`
+- Employee-fillable DOCX masters (leave, overtime, CV and employment contract) are in
+  `hcns format/`; they contain no PII and are intended as the approved source for a later
+  synthetic-image benchmark phase.
 - Content detection is normalized, filename-independent and closed-set
 - DOCX/native PDF parse without OCR; image/PDF scan use a local, explicitly selected OCR backend
 - Per-template extraction, validation, JSON Schema and quality routing
@@ -440,9 +443,9 @@ M4-CAM-006 checkpoint (2026-08-04):
   re-upload limit; technical retry/idempotent replay.
 - Aggregate: 10/10, false `AUTO_CONTINUE` 0, duplicate result artifacts 0,
   technical retries 1, real side effects disabled and raw values absent.
-- Decision: shadow pilot APPROVED WITH CONDITIONS for only leave/overtime in an
-  isolated/local runtime. `autoContinueEnabled=false`; HRIS/notification remain
-  `SIMULATED`. Production/public endpoint/real writes require M5 authorization.
+- Decision: M4 shadow pilot is technically approved with conditions for leave/overtime;
+  M5 expands the closed set to six review-first families in an isolated/local runtime.
+  `autoContinueEnabled=false`; HRIS/notification remain `SIMULATED`.
 - Verification: `tests/test_camunda_m4_dry_run.py` passed; Ruff and mypy passed
   for the new runner. No CCCD or private dataset work was changed.
 
@@ -451,8 +454,9 @@ M5-CAM-001 checkpoint (2026-08-04):
   no pilot cohort has been executed.
 - Added `docs/CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md` covering scope, business/privacy
   gates, preflight, aggregate-only monitoring, rollback triggers and acceptance.
-- Scope remains only leave/overtime in local/isolated Camunda 7.13; keep
-  `autoContinueEnabled=false`, mock HRIS/notification and no CCCD/timesheet.
+- Scope is now six types in local/isolated Camunda 7.13: leave, overtime, CV,
+  IELTS, probation contract and front-side CCCD; keep `autoContinueEnabled=false`
+  and mock HRIS/notification.
 - Blockers before execution: business owner must provide cohort, reviewers,
   time window, retention and rollback authority. No raw value or credential is
   recorded in Git.
@@ -460,7 +464,7 @@ M5-CAM-001 checkpoint (2026-08-04):
 Next:
 - M5-CAM-001 is READY. Complete the runbook's Business scope, Privacy/Retention
   and Rollback gates before executing any pilot cohort; keep localhost/loopback
-  and the two-document closed set as the runtime target.
+  and the six-document closed set as the runtime target.
 - Keep Paddle rollback and historical CCCD/held-out work outside the
   Template-first default unless a new evidence task is approved.
 
@@ -634,16 +638,62 @@ Next:
   synthetic inventory plus 10 new PNGs supplied in `D:\bo_10_anh_tai_lieu_gia_lap`:
   4 contract, 3 CV and 3 IELTS images.
 - Inventory `2026-08-04-image-expansion` verifies 22 documents / 26 pages.
-  Existing case IDs and review state were preserved; the 10 new image cases
-  remain `PENDING` in a new Ground Truth draft.
-- EasyOCR aggregate-only pilot completed 22/22 cases with 0 failures using
-  `easyocr/vi-greedy` 1.7.2. Report contains no raw OCR text or field values;
-  promotion remains `HOLD` because Ground Truth is not sealed and page count
-  is below the benchmark minimum.
+  Existing case IDs and review state were preserved; the expanded Ground Truth
+  was subsequently confirmed and sealed with 222 fields and
+  `predictionsOpened=false`.
+- The pre-seal EasyOCR aggregate-only pilot completed 22/22 cases with 0
+  failures using `easyocr/vi-greedy` 1.7.2. Its report contains no raw OCR
+  text or field values and remains a historical `HOLD` snapshot.
 - Local API now serves the expanded review dataset at `127.0.0.1:8765`:
   active review is 20 documents / 202 fields (contract 8/112, CV 6/60,
   IELTS 6/30). New image preview/source smoke tests returned HTTP 200 with
   `image/png`; predictions remain hidden during review.
 - Review scope labels are now computed from API metadata instead of the old
-  fixed case counts. DATA-11 typed projection is intentionally not attached to
-  this unsealed expansion; the prior approved projection remains private-only.
+  fixed case counts. After DATA-10-R1 approval, the new DATA-11 typed bundle is
+  served from the inferred private artifact paths; the summary endpoint returns
+  HTTP 200 with read-only/prediction-blind policy.
+
+## DATA-09-R1 checkpoint (2026-08-04)
+
+- Rebuilt the private typed projection from the sealed image-expansion Ground
+  Truth and matching inventory. The projection covers 20 active documents /
+  202 active fields; `predictionsOpened=false`.
+- Projection: `C:\tmp\hcns-dataset-run-dec17acb-image-expansion-20260804-typed-canonical.json`
+  (`sha256:2d06eb14bc744873362252b548aca03d2f900611a4cedd7dc40bda2fa787036e`).
+- Aggregate-only report:
+  `C:\tmp\hcns-dataset-run-dec17acb-image-expansion-20260804-data09-aggregate-pilot.json`
+  (`sha256:71518b77da548be98be67bf13464f2aa482c1de6b4d46f48bdb296e52ac0db69`).
+  Counts are 186 normalized, 16 missing, 27 partial, and 0 requiring review;
+  promotion is `HOLD`.
+- Schema validation, DATA-11 semantic validation, targeted pytest, Ruff,
+  mypy for `src`, and repository hygiene checks passed. No DATA-10-R1 approval
+  marker was created.
+
+## DATA-10-R1 checkpoint (APPROVED, READ-ONLY)
+
+- User-directed approval is recorded at
+  `C:\tmp\hcns-dataset-run-dec17acb-image-expansion-20260804-typed-canonical-APPROVED.json`.
+  The marker is bound to the DATA-09-R1 projection/report hashes above and
+  keeps `predictionsOpened=false` and `promotionAllowed=false`.
+- DATA-11 bundle validation passed against the new projection, approval marker
+  and aggregate report. This approval permits read-only downstream use only;
+  it does not open predictions, promote a model or enable HR side effects.
+
+## OCR-EVIDENCE-LOCAL-001 checkpoint (2026-08-04)
+
+- Added the unified local-only evidence tab at `TỔNG QUAN ĐỐI CHIẾU LOCAL`.
+  It aggregates the existing HCNS held-out, CCCD evaluate-once, OCR-HO shadow,
+  DATA-10 typed projection and Template-first session endpoints without adding
+  a second prediction store.
+- The localhost canary is running at `http://localhost:3000/workspace` with
+  the evidence flags enabled in the ignored `.env.local`; the API is loopback
+  only at `http://127.0.0.1:8765`. The tab was opened and smoke-checked in the
+  local browser. Raw PII and private artifacts remain outside Git.
+- Current verdict is `NO_CAMUNDA`: Template-first has its own format gate, but
+  CCCD remains at 50.00% strict exact with `placeOfOrigin` and
+  `placeOfResidence` at 0.00%; the broad HCNS held-out is 13.00% field exact.
+  DATA-10-R1 is typed Ground Truth only (186/202 normalized), not OCR accuracy,
+  and OCR-HO v11.9.1 remains shadow-only with Ground Truth unloaded.
+- Validation: web build, web tests (11), lint (0 errors, existing warnings),
+  targeted Python tests (14), API health and all five evidence summary routes
+  passed. No Camunda source, deployment or workflow state was changed.

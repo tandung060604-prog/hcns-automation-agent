@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hcns.local/schemas/templates/vietnam_citizen_id_front_v1.schema.json",
+  "title": "Review-first Vietnam citizen ID front v1",
+  "type": "object",
+  "required": ["documentId", "documentType", "templateId", "templateVersion"],
+  "properties": {
+    "documentId": {"type": "string", "minLength": 1},
+    "documentType": {"const": "IDENTITY_CARD"},
+    "templateId": {"const": "vietnam-citizen-id-front-v1"},
+    "templateVersion": {"const": "1.0"}
+  }
+}

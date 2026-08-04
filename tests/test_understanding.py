@@ -6,7 +6,7 @@ from synthetic_fixtures import (
     synthetic_contract_docx_bytes,
     synthetic_cv_pdf_bytes,
     synthetic_leave_request_docx_bytes,
-    synthetic_timesheet_xlsx_bytes,
+    synthetic_xlsx_bytes,
 )
 
 from hcns_agent.adapters.classification import RuleBasedDocumentClassifier
@@ -84,24 +84,16 @@ class DocumentUnderstandingTests(TestCase):
             fields["reason"].value,
         )
 
-    def test_timesheet_native_extraction_can_pass_quality_gate(self) -> None:
+    def test_spreadsheet_without_approved_document_type_stays_reviewable(self) -> None:
         result = self.parse(
-            "SYNTHETIC-TIMESHEET-M2",
-            "timesheet.xlsx",
-            synthetic_timesheet_xlsx_bytes(),
+            "SYNTHETIC-SPREADSHEET-M2",
+            "spreadsheet.xlsx",
+            synthetic_xlsx_bytes(),
         )
 
-        self.assertIs(DocumentType.TIMESHEET, result.classification.document_type)
-        fields = {field.name: field for field in result.fields}
-        self.assertEqual("EMP_SYNTHETIC_A", fields["employee_codes"].value)
-        self.assertEqual(1, fields["entry_count"].value)
-        self.assertEqual("=SUM(B2:C2)", fields["total_hours_formulas"].value)
-        self.assertEqual(
-            "ChamCongSynthetic",
-            fields["employee_codes"].evidence[0].source.sheet_name,
-        )
-        self.assertIs(QualityStatus.PASS, result.quality.status)
-        self.assertFalse(result.quality.review_required)
+        self.assertIs(DocumentType.UNKNOWN, result.classification.document_type)
+        self.assertEqual((), result.fields)
+        self.assertIs(QualityStatus.REVIEW_REQUIRED, result.quality.status)
 
     def test_supported_format_does_not_imply_supported_document_type(self) -> None:
         result = self.parse(

@@ -8,7 +8,7 @@ from datetime import date
 from io import BytesIO
 from pathlib import Path
 
-from synthetic_fixtures import synthetic_timesheet_xlsx_bytes
+from synthetic_fixtures import synthetic_cv_pdf_bytes
 
 from hcns_agent.adapters.benchmark_json import (
     BenchmarkJsonError,
@@ -128,8 +128,8 @@ class BenchmarkHarnessTests(unittest.TestCase):
         result = build_default_pipeline(DeterministicMockOcrEngine()).execute(
             DocumentSource(
                 document_id="SYN-M3-IDP",
-                filename="timesheet.xlsx",
-                content=synthetic_timesheet_xlsx_bytes(),
+                filename="unsupported.pdf",
+                content=synthetic_cv_pdf_bytes(),
                 source_reference="object://synthetic/SYN-M3-IDP",
             )
         )
@@ -293,15 +293,15 @@ class BenchmarkJsonTests(unittest.TestCase):
 
 class BenchmarkRunnerTests(unittest.TestCase):
     def test_runner_verifies_authorization_digest_hash_and_page_count(self) -> None:
-        content = synthetic_timesheet_xlsx_bytes()
+        content = synthetic_cv_pdf_bytes()
         source_digest = "sha256:" + hashlib.sha256(content).hexdigest()
         ground_truth = (
             GroundTruthCase(
                 case_id="SYN-RUN-001",
-                source_relative_path="sources/timesheet.xlsx",
+                source_relative_path="sources/unsupported.pdf",
                 source_sha256=source_digest,
                 page_count=30,
-                document_type=DocumentType.TIMESHEET,
+                document_type=DocumentType.UNKNOWN,
                 fields=(ExpectedField("entry_count", 8),),
                 expected_quality_status=QualityStatus.PASS,
                 review_required=False,
@@ -311,7 +311,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
         backend = _FakeBenchmarkBackend()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            source_path = root / "sources" / "timesheet.xlsx"
+            source_path = root / "sources" / "unsupported.pdf"
             source_path.parent.mkdir()
             source_path.write_bytes(content)
 
@@ -443,10 +443,10 @@ def _ground_truth() -> tuple[GroundTruthCase, ...]:
         ),
         GroundTruthCase(
             case_id="SYN-M3-002",
-            source_relative_path="sources/synthetic-timesheet.xlsx",
+            source_relative_path="sources/synthetic-unsupported.pdf",
             source_sha256=_SOURCE_DIGEST_2,
             page_count=20,
-            document_type=DocumentType.TIMESHEET,
+            document_type=DocumentType.EMPLOYEE_PROFILE,
             fields=(ExpectedField("entry_count", 8),),
             expected_quality_status=QualityStatus.PASS,
             review_required=False,
@@ -523,7 +523,7 @@ def _challenger_submission(*, accept_sensitive: bool = False) -> BenchmarkSubmis
             ),
             PredictionCase(
                 case_id="SYN-M3-002",
-                document_type=DocumentType.TIMESHEET,
+                document_type=DocumentType.EMPLOYEE_PROFILE,
                 fields=(
                     PredictedField("entry_count", 8, FieldStatus.ACCEPTED, False),
                 ),

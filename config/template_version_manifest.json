@@ -41,6 +41,58 @@
         "totalOvertimeHours",
         "workContent"
       ]
+    },
+    {
+      "templateId": "probation-contract-v1",
+      "documentType": "EMPLOYMENT_CONTRACT",
+      "version": "1.0",
+      "schemaRef": "schemas/templates/probation_contract_v1.schema.json",
+      "parserVersion": "1.0.0",
+      "lifecycle": "FROZEN",
+      "supportedFileTypes": ["docx", "pdf", "png", "jpg", "jpeg"],
+      "requiredFields": [
+        "employeeName", "employeeId", "jobTitle", "salary",
+        "effectiveDate", "probationEndDate", "employerName"
+      ]
+    },
+    {
+      "templateId": "cv-v1",
+      "documentType": "CV",
+      "version": "1.0",
+      "schemaRef": "schemas/templates/cv_v1.schema.json",
+      "parserVersion": "1.0.0",
+      "lifecycle": "FROZEN",
+      "supportedFileTypes": ["docx", "pdf", "png", "jpg", "jpeg"],
+      "requiredFields": [
+        "fullName", "headline", "email", "phoneNumber", "address",
+        "education", "experience", "skills"
+      ]
+    },
+    {
+      "templateId": "ielts-certificate-v1",
+      "documentType": "CERTIFICATE",
+      "version": "1.0",
+      "schemaRef": "schemas/templates/ielts_certificate_v1.schema.json",
+      "parserVersion": "1.0.0",
+      "lifecycle": "FROZEN",
+      "supportedFileTypes": ["pdf", "png", "jpg", "jpeg"],
+      "requiredFields": [
+        "recipientName", "credentialId", "credentialType", "overallScore",
+        "issueDate"
+      ]
+    },
+    {
+      "templateId": "vietnam-citizen-id-front-v1",
+      "documentType": "IDENTITY_CARD",
+      "version": "1.0",
+      "schemaRef": "schemas/templates/vietnam_citizen_id_front_v1.schema.json",
+      "parserVersion": "1.0.0",
+      "lifecycle": "FROZEN",
+      "supportedFileTypes": ["pdf", "png", "jpg", "jpeg"],
+      "requiredFields": [
+        "idNumber", "fullName", "dateOfBirth", "sex", "nationality",
+        "placeOfOrigin", "placeOfResidence"
+      ]
     }
   ],
   "uat": {
@@ -53,6 +105,13 @@
       "falseAutoContinueCount": 0,
       "ocrReviewRouting": "MANUAL_REVIEW"
     },
-    "reportContainsRawFieldValues": false
+    "reportContainsRawFieldValues": false,
+    "reviewFirst": {
+      "manualReviewRequired": true,
+      "classificationHeldOutMinimum": 0.95,
+      "authorizedDocumentsPerFamilyMinimum": 15,
+      "cccdFrontEligibleDocumentsMinimum": 15,
+      "sensitiveFieldsAutoAccepted": false
+    }
   }
 }

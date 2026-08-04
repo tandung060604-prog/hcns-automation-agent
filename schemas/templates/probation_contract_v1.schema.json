@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hcns.local/schemas/templates/probation_contract_v1.schema.json",
+  "title": "Review-first probation contract v1",
+  "type": "object",
+  "required": ["documentId", "documentType", "templateId", "templateVersion"],
+  "properties": {
+    "documentId": {"type": "string", "minLength": 1},
+    "documentType": {"const": "EMPLOYMENT_CONTRACT"},
+    "templateId": {"const": "probation-contract-v1"},
+    "templateVersion": {"const": "1.0"}
+  }
+}

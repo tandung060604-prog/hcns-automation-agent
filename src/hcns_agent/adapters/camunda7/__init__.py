@@ -10,6 +10,7 @@ from hcns_agent.adapters.camunda7.client import (
 from hcns_agent.adapters.camunda7.contract import (
     DMN_QUALITY_INPUT_VARIABLES,
     M4_SHADOW_POLICY,
+    M5_SHADOW_POLICY,
     CamundaQualityAction,
     CamundaRolloutPolicy,
     CamundaWorkflowDocumentType,
@@ -57,6 +58,7 @@ __all__ = [
     "LocalSessionDocumentSourceStore",
     "LockExtensionPolicy",
     "M4_SHADOW_POLICY",
+    "M5_SHADOW_POLICY",
     "M4CamundaRuntimeConfig",
     "M4TemplateStageOperations",
     "MockSideEffectHandler",

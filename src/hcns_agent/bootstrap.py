@@ -9,7 +9,6 @@ from hcns_agent.adapters.extractors import (
     CvFieldExtractor,
     EmploymentContractFieldExtractor,
     LeaveRequestFieldExtractor,
-    TimesheetFieldExtractor,
 )
 from hcns_agent.adapters.image_inspection import PillowImageInspector
 from hcns_agent.adapters.image_parser import ImageDocumentParser
@@ -65,7 +64,6 @@ def build_default_understanding() -> DocumentUnderstandingService:
     extractors.register(EmploymentContractFieldExtractor())
     extractors.register(CertificateFieldExtractor())
     extractors.register(LeaveRequestFieldExtractor())
-    extractors.register(TimesheetFieldExtractor())
     return DocumentUnderstandingService(
         classifier=RuleBasedDocumentClassifier(),
         extractors=extractors,

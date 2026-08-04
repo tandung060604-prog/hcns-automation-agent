@@ -121,16 +121,16 @@ def synthetic_leave_request_docx_bytes() -> bytes:
     )
 
 
-def synthetic_timesheet_xlsx_bytes() -> bytes:
+def synthetic_xlsx_bytes() -> bytes:
     from openpyxl import Workbook
 
     workbook = Workbook()
     worksheet = workbook.active
-    worksheet.title = "ChamCongSynthetic"
+    worksheet.title = "SyntheticSheet"
     worksheet.append(["MA_SYNTHETIC", "GioSang", "GioChieu", "TongGio"])
     worksheet.append(["EMP_SYNTHETIC_A", 4, 4, "=SUM(B2:C2)"])
     worksheet.merge_cells("A4:D4")
-    worksheet["A4"] = "DU LIEU SYNTHETIC"
+    worksheet["A4"] = "SYNTHETIC DATA"
     output = BytesIO()
     workbook.save(output)
     workbook.close()

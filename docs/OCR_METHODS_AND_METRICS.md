@@ -227,10 +227,10 @@ production. Parser Phase 16 cải thiện kết quả mà không chạy lại re
 Điều này cho thấy parser có thể phục hồi coverage/CER nhưng không chứng minh recognizer
 đã đạt gate. Phase 16 held-out evaluate-once trên 18 tài liệu đạt classification
 `77,78%`, Field EM `13,00%`, completeness `28,00%` và sensitive-field false acceptance
-`2`; quyết định `NOT_PROMOTED`. Một phần lỗi đến từ prediction TIMESHEET thiếu bảng,
+Legacy synthetic table/Phase 17 artifact was retired and is excluded from M5 OCR or Camunda promotion metrics.
 không được quy toàn bộ cho OCR.
 
-Phase 17 khóa lại contract TIMESHEET ở cấp row/cell và giữ sensitive OCR field ở
+M5 keeps sensitive OCR fields in `needs_review`; the retired Phase 17 table contract is not an active capability.
 `needs_review`. Local live-v5 replay ghi nhận **15 tài liệu, Field EM 14,63%,
 completeness 24,39%**; vẫn là `SHADOW_REVIEW_ONLY`.
 

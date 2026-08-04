@@ -25,7 +25,6 @@ class CamundaWorkflowDocumentType(str, Enum):
     LEAVE_REQUEST = "LEAVE_REQUEST"
     OVERTIME_REQUEST = "OVERTIME_REQUEST"
     HANDOVER_RECORD = "HANDOVER_RECORD"
-    TIMESHEET = "TIMESHEET"
     OTHER_HR_DOCUMENT = "OTHER_HR_DOCUMENT"
 
 
@@ -38,10 +37,17 @@ class CamundaQualityAction(str, Enum):
 
 M4_CLOSED_SET_WORKFLOW_DOCUMENT_TYPES = frozenset(
     {
+        CamundaWorkflowDocumentType.IDENTITY_DOCUMENT.value,
+        CamundaWorkflowDocumentType.CV.value,
+        CamundaWorkflowDocumentType.CERTIFICATE.value,
+        CamundaWorkflowDocumentType.EMPLOYMENT_CONTRACT.value,
         CamundaWorkflowDocumentType.LEAVE_REQUEST.value,
         CamundaWorkflowDocumentType.OVERTIME_REQUEST.value,
     }
 )
+
+# M5 keeps the same six-value Camunda contract while adding four frozen templates.
+M5_CLOSED_SET_WORKFLOW_DOCUMENT_TYPES = M4_CLOSED_SET_WORKFLOW_DOCUMENT_TYPES
 
 DMN_QUALITY_INPUT_VARIABLES = frozenset(
     {
@@ -76,6 +82,14 @@ class CamundaRolloutPolicy:
 
 M4_SHADOW_POLICY = CamundaRolloutPolicy(
     policy_id="camunda-m4-shadow",
+    version="1.0.0",
+    mode="SHADOW",
+    auto_continue_enabled=False,
+    real_side_effects_enabled=False,
+)
+
+M5_SHADOW_POLICY = CamundaRolloutPolicy(
+    policy_id="camunda-m5-shadow",
     version="1.0.0",
     mode="SHADOW",
     auto_continue_enabled=False,
@@ -183,7 +197,6 @@ def map_document_type(document_type: DocumentType) -> CamundaWorkflowDocumentTyp
         DocumentType.HR_DECISION: CamundaWorkflowDocumentType.HR_DECISION,
         DocumentType.LEAVE_REQUEST: CamundaWorkflowDocumentType.LEAVE_REQUEST,
         DocumentType.OVERTIME_REQUEST: CamundaWorkflowDocumentType.OVERTIME_REQUEST,
-        DocumentType.TIMESHEET: CamundaWorkflowDocumentType.TIMESHEET,
     }
     return mapping.get(document_type, CamundaWorkflowDocumentType.OTHER_HR_DOCUMENT)
 

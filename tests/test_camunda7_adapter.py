@@ -362,7 +362,7 @@ class Camunda7WorkerTests(TestCase):
             extract_handler.handle(
                 {
                     **base_variables,
-                    "workflowDocumentType": "TIMESHEET",
+                    "workflowDocumentType": "OTHER_HR_DOCUMENT",
                 }
             )
 

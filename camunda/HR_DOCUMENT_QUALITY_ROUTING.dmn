@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:camunda="http://camunda.org/schema/1.0/dmn" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_HR_Document_Quality" name="HR Document Quality Routing" namespace="http://example.com/hr-document-agent-mvp-v2/dmn" exporter="Camunda Modeler" exporterVersion="5.49.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.13.0">
-  <decision id="hr-document-quality-routing" name="HR Document Quality Routing" camunda:versionTag="2.1.0-shadow">
-    <description>Routes sanitized quality metadata only. FIRST hit policy applies safety rules before automation. No raw PII or extracted field values are inputs.</description>
+  <decision id="hr-document-quality-routing" name="HR Document Quality Routing" camunda:versionTag="2.2.0-shadow">
+    <description>M5 routes sanitized quality metadata for the six-type review-first closed set. FIRST hit policy applies safety rules before automation; no raw PII or extracted field values are inputs.</description>
     <decisionTable id="DecisionTable_HR_Document_Quality" hitPolicy="FIRST">
       <input id="Input_qualityStatus" label="qualityStatus">
         <inputExpression id="Input_qualityStatus_expr" typeRef="string">

@@ -64,7 +64,7 @@ class CamundaContractTests(TestCase):
         self.assertEqual("CONFIRMED", classification_status("CV", DocumentType.CV))
         self.assertEqual(
             "MISMATCH",
-            classification_status("TIMESHEET", DocumentType.CV),
+            classification_status("OTHER_HR_DOCUMENT", DocumentType.CV),
         )
         self.assertEqual(
             "UNKNOWN",

@@ -1,0 +1,18 @@
+{
+  "policyId": "camunda-m5-shadow",
+  "version": "1.0.0",
+  "camundaPlatform": "7.13",
+  "mode": "SHADOW",
+  "autoContinueEnabled": false,
+  "realSideEffectsEnabled": false,
+  "rawValueExposure": false,
+  "duplicateResultTolerance": 0,
+  "closedSet": [
+    "LEAVE_REQUEST",
+    "OVERTIME_REQUEST",
+    "CV",
+    "CERTIFICATE",
+    "EMPLOYMENT_CONTRACT",
+    "IDENTITY_DOCUMENT"
+  ]
+}

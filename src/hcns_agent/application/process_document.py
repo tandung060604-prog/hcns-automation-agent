@@ -27,7 +27,6 @@ class ProcessingPolicy:
             DocumentType.IDENTITY_CARD,
             DocumentType.PASSPORT,
             DocumentType.EMPLOYMENT_CONTRACT,
-            DocumentType.TIMESHEET,
         }
     )
 

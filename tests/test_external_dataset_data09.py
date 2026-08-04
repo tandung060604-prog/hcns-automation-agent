@@ -41,10 +41,17 @@ class ExternalDatasetData09Tests(TestCase):
         self.assertEqual(40, fields["weekly_hours"]["normalizedValue"])
         self.assertEqual(12750000, fields["probation_salary_monthly"]["normalizedValue"])
         self.assertEqual("NORMALIZED", fields["probation_salary_monthly"]["normalizationStatus"])
+        self.assertEqual("PARTIAL", fields["allowances_summary"]["completenessStatus"])
+        self.assertEqual("MISSING", fields["salary_payment_schedule"]["completenessStatus"])
+        self.assertEqual(
+            ["allowances_summary", "salary_payment_schedule"],
+            projection["sourcePolicy"]["completenessPolicy"]["partialTextFields"]["contract"],
+        )
 
         cv = next(document for document in projection["documents"] if document["category"] == "cv")
         cv_fields = {field["name"]: field for field in cv["fields"]}
         self.assertEqual(2.5, cv_fields["years_experience"]["normalizedValue"])
+        self.assertEqual("PARTIAL", cv_fields["skills"]["completenessStatus"])
 
         ielts = next(
             document for document in projection["documents"] if document["category"] == "ielts"
@@ -85,6 +92,7 @@ class ExternalDatasetData09Tests(TestCase):
         self.assertEqual(3, report["scope"]["activeDocumentCount"])
         self.assertEqual(29, report["scope"]["activeFieldCount"])
         self.assertEqual(1, report["scope"]["outOfScopeDocumentCount"])
+        self.assertEqual(2, report["normalization"]["partialFieldCount"])
         self.assertFalse(report["reportPolicy"]["containsRawFieldValues"])
         self.assertNotIn("Synthetic Candidate", json.dumps(report, ensure_ascii=False))
         self.assertNotIn("sourceValue", report)
@@ -132,10 +140,12 @@ def _fixture() -> tuple[dict[str, object], dict[str, object]]:
             "weekly_hours": "40 giờ/tuần",
             "probation_salary_monthly": "12,75 triệu đồng/tháng",
             "employee_name": "Synthetic Candidate",
+            "allowances_summary": "Lunch allowance",
         }),
         _case("cv-001", "cv", "DOCX", "CV", {
             "full_name": "Synthetic Candidate",
             "years_experience": "2 năm 6 tháng",
+            "skills": "Python; SQL",
         }),
         _case("cv-002", "cv", "PLAIN_TEXT", "CV", {}),
         _case("ielts-001", "ielts", "IMAGE", "CERTIFICATE", {

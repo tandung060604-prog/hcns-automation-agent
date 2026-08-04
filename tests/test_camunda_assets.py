@@ -41,7 +41,7 @@ class CamundaAssetContractTests(TestCase):
         self.assertEqual(set(ALL_EXTERNAL_TASK_TOPICS), topics)
         process = root.find(".//bpmn:process", _BPMN_NS)
         self.assertIsNotNone(process)
-        self.assertEqual("2.3.0-shadow", process.attrib[_CAMUNDA_VERSION_TAG])
+        self.assertEqual("2.4.0-shadow", process.attrib[_CAMUNDA_VERSION_TAG])
 
     def test_bpmn_reads_content_before_business_classification_and_extraction(self) -> None:
         root = ElementTree.parse(_BPMN).getroot()
@@ -186,7 +186,7 @@ class CamundaAssetContractTests(TestCase):
         self.assertIsNotNone(decision_table)
         decision = root.find(".//dmn:decision", _DMN_NS)
         self.assertIsNotNone(decision)
-        self.assertEqual("2.1.0-shadow", decision.attrib[_CAMUNDA_DMN_VERSION_TAG])
+        self.assertEqual("2.2.0-shadow", decision.attrib[_CAMUNDA_DMN_VERSION_TAG])
         self.assertEqual("FIRST", decision_table.attrib["hitPolicy"])
         inputs = {
             item.find("dmn:inputExpression/dmn:text", _DMN_NS).text

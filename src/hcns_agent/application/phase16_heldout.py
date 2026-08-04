@@ -95,15 +95,6 @@ FAMILY_SPECS: dict[str, dict[str, Any]] = {
     },
 }
 
-TIMESHEET_REVIEW_PROFILE = "TIMESHEET"
-TIMESHEET_FIELDS = (
-    "documentTitle",
-    "timesheetPeriod",
-    "organization",
-    "department",
-    "attendanceLegend",
-)
-
 SUPPORTED_EXTENSIONS = frozenset({".pdf", ".png", ".jpg", ".jpeg", ".docx", ".xlsx"})
 SENSITIVE_FIELDS = frozenset(
     {
@@ -395,26 +386,11 @@ def validate_review_queue(queue: Mapping[str, Any]) -> None:
             raise ValueError("Ground Truth queue contains an unsupported family")
         document_ids.add(document_id)
         fields = document.get("fields")
-        review_profile = str(document.get("reviewProfile") or "")
-        expected = set(
-            TIMESHEET_FIELDS
-            if review_profile == TIMESHEET_REVIEW_PROFILE
-            else FAMILY_SPECS[family]["fields"]
-        )
+        expected = set(FAMILY_SPECS[family]["fields"])
         if not isinstance(fields, dict) or set(fields) != expected:
             raise ValueError("Ground Truth field set does not match the family")
         tables = document.get("tables")
-        if review_profile == TIMESHEET_REVIEW_PROFILE:
-            if family != "EMPLOYEE_FORM_TABLE":
-                raise ValueError("TIMESHEET review profile uses the wrong family")
-            if (
-                not isinstance(tables, dict)
-                or set(tables) != {"attendance"}
-                or not isinstance(tables["attendance"], dict)
-                or not isinstance(tables["attendance"].get("rows"), list)
-            ):
-                raise ValueError("TIMESHEET Ground Truth table is invalid")
-        elif tables is not None:
+        if tables is not None:
             raise ValueError("Unexpected Ground Truth table")
 
 
@@ -434,25 +410,10 @@ def confirmed_ground_truth(queue: Mapping[str, Any]) -> dict[str, Any]:
                 "status": status,
                 "value": value if status == CONFIRMED else "",
             }
-        if document.get("reviewProfile") == TIMESHEET_REVIEW_PROFILE:
-            attendance = document["tables"]["attendance"]
-            if attendance.get("status") != CONFIRMED or not attendance.get("rows"):
-                raise ValueError(
-                    "TIMESHEET Ground Truth table must be confirmed"
-                )
         documents.append(
             {
                 "documentId": document["documentId"],
                 "documentFamily": document["documentFamily"],
-                **(
-                    {
-                        "documentType": "TIMESHEET",
-                        "reviewProfile": TIMESHEET_REVIEW_PROFILE,
-                        "tables": document["tables"],
-                    }
-                    if document.get("reviewProfile") == TIMESHEET_REVIEW_PROFILE
-                    else {}
-                ),
                 "sourceSha256": document["sourceSha256"],
                 "fields": confirmed_fields,
             }

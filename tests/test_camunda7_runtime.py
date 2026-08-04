@@ -626,6 +626,103 @@ def test_business_inconsistency_routes_to_hr_review(tmp_path: Path) -> None:
     assert _routing_action(corrected_projection) is CamundaQualityAction.USER_REVIEW
 
 
+def test_probation_template_is_review_first_and_routes_to_hr_review(
+    tmp_path: Path,
+) -> None:
+    document_reference = "SESSION-PROBATION"
+    _create_session_source(
+        tmp_path,
+        document_reference,
+        content=docx_bytes(
+            [
+                "PROBATION CONTRACT",
+                "Thoi gian thu viec",
+                "Muc luong",
+                "Employee Name: Alice",
+                "Employee ID: E-1",
+                "Job Title: Analyst",
+                "Salary: 1000",
+                "Effective Date: 2026-01-01",
+                "Probation End: 2026-04-01",
+                "Employer: ACME",
+            ]
+        ),
+    )
+    operations, _ = _build_operations(
+        tmp_path,
+        _CountingPipeline(build_default_template_processing_service()),
+    )
+    parsed = operations.as_mapping()["document_parse_content"](
+        {
+            "documentReference": document_reference,
+            "idempotencyKey": "IDEMPOTENCY-PROBATION",
+        }
+    )
+    reference = parsed["resultReference"]
+    assert isinstance(reference, str)
+
+    projection = operations.as_mapping()["document_normalize_validate"](
+        {"resultReference": reference, "idempotencyKey": "IDEMPOTENCY-PROBATION"}
+    )
+
+    assert projection["businessInconsistency"] is True
+    assert projection["autoContinueEnabled"] is False
+    assert _routing_action(projection) is CamundaQualityAction.HR_REVIEW
+
+
+def test_citizen_id_template_maps_domain_type_to_camunda_identity_document(
+    tmp_path: Path,
+) -> None:
+    document_reference = "SESSION-CCCD-FRONT"
+    _create_session_source(
+        tmp_path,
+        document_reference,
+        filename="document.png",
+        content=administrative_image_bytes(),
+    )
+    ocr = DeterministicMockOcrEngine(
+        text="\n".join(
+            [
+                "CAN CUOC CONG DAN FRONT",
+                "DATE OF BIRTH: 01/01/1990",
+                "NATIONALITY: VIETNAM",
+                "ID NUMBER: 012345678901",
+                "FULL NAME: ALICE",
+                "SEX: F",
+                "PLACE OF ORIGIN: HANOI",
+                "PLACE OF RESIDENCE: HANOI",
+            ]
+        ),
+        confidence=0.95,
+    )
+    service = TemplateProcessingService(
+        intake=build_default_intake(ocr),
+        registry=build_default_template_registry(),
+        ocr_engine=ocr,
+    )
+    operations, _ = _build_operations(tmp_path, _CountingPipeline(service))
+    mapping = operations.as_mapping()
+    parsed = mapping["document_parse_content"](
+        {
+            "documentReference": document_reference,
+            "idempotencyKey": "IDEMPOTENCY-CCCD-FRONT",
+        }
+    )
+    reference = parsed["resultReference"]
+    assert isinstance(reference, str)
+
+    detected = mapping["document_detect_type"](
+        {
+            "resultReference": reference,
+            "declaredDocumentType": "IDENTITY_DOCUMENT",
+            "idempotencyKey": "IDEMPOTENCY-CCCD-FRONT",
+        }
+    )
+
+    assert detected["detectedDocumentType"] == "IDENTITY_DOCUMENT"
+    assert detected["classificationStatus"] == "CONFIRMED"
+
+
 def test_invalid_input_uses_bpmn_error_and_technical_failure_decrements_retry(
     tmp_path: Path,
 ) -> None:

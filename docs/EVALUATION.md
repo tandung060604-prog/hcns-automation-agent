@@ -8,7 +8,7 @@ review cho từng workflow HCNS trên phần cứng mục tiêu?”.
 ## Dataset tối thiểu
 
 - 30–50 trang thật được cấp quyền hoặc đã ẩn danh;
-- CV, định danh, hợp đồng, quyết định, đơn và chấm công;
+- CV, IELTS, CCCD mặt trước, hợp đồng thử việc, đơn nghỉ và tăng ca;
 - ảnh rõ, mờ, nghiêng, nhiều cột, bảng và tài liệu nhiều trang;
 - Ground Truth do người dùng duyệt, có version.
 
@@ -18,7 +18,7 @@ Milestone Universal Document Intake có bốn fixture regression synthetic:
 
 - CV dạng PDF text;
 - hợp đồng dạng DOCX có heading/list/table;
-- bảng chấm công XLSX có formula và merged range;
+- các định dạng native/OCR của sáu template active;
 - biểu mẫu hành chính dạng ảnh, cộng một PDF scan sinh từ ảnh đó.
 
 Fixture này chỉ chứng minh contract/routing/safety, không chứng minh accuracy
@@ -428,19 +428,6 @@ model bất đồng 261 dòng và các dòng này tiếp tục mang `needs_revie
 Ground Truth được xác nhận 18/18 khi prediction còn ẩn. `evaluate-once` đã chạy đúng
 một lần: classification accuracy 77,78%, Field Exact Match 13,00%, field completeness
 28,00% và sensitive-field false acceptance bằng 2. Quyết định là `NOT_PROMOTED`.
-Prediction TIMESHEET đã khóa không chứa `tables`, nên 1.146 ô Ground Truth đều không có
-candidate. Đây là lỗi contract của pipeline, không được diễn giải là lỗi recognition
-thuần túy. Phase 16 đã tiêu thụ và không được dùng để retune hoặc chạy lại.
-
-### Phase 17 — TIMESHEET contract và safety lock
-
-Parser `phase17-structured-hr-parser/2.0.0` tách `TIMESHEET` khỏi form nhân viên đơn,
-giữ bảng trong prediction contract và đo Exact Match/Completeness ở cấp row/cell.
-Trường nhạy cảm chỉ có evidence OCR luôn mang `needs_review`; chỉ native source được
-tin cậy hoặc human review mới có thể `accepted`.
-
-`config/phase17_parser_lock.json` khóa SHA-256 của parser, prediction adapter, schema
-TIMESHEET, Ground Truth schema và RecognitionPolicy. Hidden prediction runner gọi
-`validate_phase17_parser_lock.py` trước khi chạy. Intake
-`paddleocr-hr-heldout-v2` là tập mới, không được trùng SHA-256 với Phase 16 và vẫn
-tuân thủ prediction ẩn → Ground Truth → evaluate-once.
+Artifact bảng synthetic/Phase 17 đã retired khỏi sản phẩm và không được tính vào
+tiến độ Camunda M5. Chỉ sáu họ active trong template manifest và các cohort được
+cấp quyền mới được dùng cho evaluate-once hoặc promotion gate.

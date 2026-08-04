@@ -7,7 +7,7 @@ from synthetic_fixtures import (
     synthetic_contract_docx_bytes,
     synthetic_cv_pdf_bytes,
     synthetic_pptx_bytes,
-    synthetic_timesheet_xlsx_bytes,
+    synthetic_xlsx_bytes,
 )
 
 from hcns_agent.adapters.docx import DocxDocumentParser
@@ -129,16 +129,16 @@ class DocumentParserContractTests(TestCase):
 
     def test_xlsx_preserves_sheet_cell_formula_and_merged_range(self) -> None:
         document = self.parse(
-            "SYNTHETIC-TIMESHEET",
-            "timesheet.xlsx",
-            synthetic_timesheet_xlsx_bytes(),
+            "SYNTHETIC-SPREADSHEET",
+            "spreadsheet.xlsx",
+            synthetic_xlsx_bytes(),
         )
 
         workbook = document.content.workbook
         self.assertIsNotNone(workbook)
         sheet = workbook.sheets[0]
         cells = {cell.coordinate: cell for row in sheet.rows for cell in row.cells}
-        self.assertEqual("ChamCongSynthetic", sheet.name)
+        self.assertEqual("SyntheticSheet", sheet.name)
         self.assertEqual("=SUM(B2:C2)", cells["D2"].formula)
         self.assertIn("A4:D4", sheet.merged_ranges)
         self.assertEqual([], self.ocr.calls)
@@ -169,8 +169,8 @@ class DocumentParserContractTests(TestCase):
     def test_canonical_output_contains_no_vendor_objects(self) -> None:
         document = self.parse(
             "SYNTHETIC-VENDOR-BOUNDARY",
-            "timesheet.xlsx",
-            synthetic_timesheet_xlsx_bytes(),
+            "spreadsheet.xlsx",
+            synthetic_xlsx_bytes(),
         )
         _assert_no_vendor_objects(self, document)
 

@@ -120,18 +120,19 @@ def process(lines: list[str], filename: str = "opaque-upload.docx") -> dict[str,
     ).public_dict()
 
 
-def test_registry_lists_only_two_approved_templates() -> None:
+def test_registry_lists_six_approved_templates() -> None:
     templates = build_default_template_processing_service().list_templates()
 
     assert [template["templateId"] for template in templates] == [
+        "cv-v1",
+        "ielts-certificate-v1",
         "leave-request-v1",
         "overtime-request-v1",
+        "probation-contract-v1",
+        "vietnam-citizen-id-front-v1",
     ]
-    assert all(
-        template["supportedFileTypes"]
-        == ["docx", "pdf", "png", "jpg", "jpeg"]
-        for template in templates
-    )
+    assert templates[0]["supportedFileTypes"] == ["docx", "pdf", "png", "jpg", "jpeg"]
+    assert templates[1]["supportedFileTypes"] == ["pdf", "png", "jpg", "jpeg"]
     assert all(template["lifecycle"] == "FROZEN" for template in templates)
     assert all(template["parserVersion"] == "1.0.0" for template in templates)
 
@@ -157,6 +158,32 @@ def test_leave_template_is_filename_independent_and_schema_valid() -> None:
     validate(data, schema)
 
 
+def test_cv_template_is_review_first_and_keeps_values_private_from_camunda() -> None:
+    response = process(
+        [
+            "CURRICULUM VITAE",
+            "Full name: Candidate Synthetic",
+            "Kinh nghiem: QA",
+            "Ky nang: Python",
+        ]
+    )
+
+    assert response["templateId"] == "cv-v1"
+    assert response["quality"]["recommendedAction"] == "MANUAL_REVIEW"
+    assert response["data"]["fullName"] == "Candidate Synthetic"
+    assert "fullName" not in response["camundaVariables"]
+
+
+def test_id_front_template_rejects_back_side() -> None:
+    service = build_default_template_processing_service()
+    with pytest.raises(TemplateUnsupportedError):
+        service.process(
+            DocumentSource(
+                document_id="SYNTHETIC-ID-BACK",
+                filename="id.jpg",
+                content=docx_bytes(["CAN CUOC CONG DAN", "BACK", "ID NUMBER: 1"]),
+            )
+        )
 def test_overtime_template_parses_and_normalizes_time() -> None:
     response = process(overtime_lines())
     data = response["data"]

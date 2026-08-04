@@ -50,14 +50,6 @@ _RULES: dict[DocumentType, tuple[_Marker, ...]] = {
         _Marker("nghi phep", 2.0),
         _Marker("ly do nghi", 1.0),
     ),
-    DocumentType.TIMESHEET: (
-        _Marker("bang cham cong", 3.0),
-        _Marker("timesheet", 3.0),
-        _Marker("cham cong", 2.0),
-        _Marker("chamcong", 2.0),
-        _Marker("tong gio", 1.0),
-        _Marker("tonggio", 1.0),
-    ),
     DocumentType.ADMINISTRATIVE_FORM: (
         _Marker("bieu mau hanh chinh", 3.0),
         _Marker("administrative form", 3.0),

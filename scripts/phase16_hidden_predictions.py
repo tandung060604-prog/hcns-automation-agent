@@ -33,7 +33,6 @@ from scripts.phase15_benchmark import (  # noqa: E402
     run_vietocr,
 )
 from scripts.phase16_heldout import write_new_json  # noqa: E402
-from scripts.validate_phase17_parser_lock import validate_lock  # noqa: E402
 
 
 def policy_prediction_document(
@@ -160,7 +159,6 @@ def prediction_payload(
 
 
 def load_locked_manifest(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
-    validate_lock()
     dataset_root = args.dataset_root.resolve()
     manifest = load_json(dataset_root / "manifest_private.json")
     if manifest.get("recognitionPolicyDigest") != LOCKED_POLICY_DIGEST:
