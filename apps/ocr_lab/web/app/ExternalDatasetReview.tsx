@@ -95,6 +95,16 @@ function categoryLabel(category: string): string {
   return { cv: "CV", contract: "Hợp đồng", ielts: "IELTS" }[category] ?? category;
 }
 
+function categoryScopeLabel(
+  summary: ReviewSummary | null,
+  category: ReviewCategory,
+): string {
+  const documents =
+    summary?.documents.filter((item) => item.category === category && item.reviewable) ?? [];
+  const fields = documents.reduce((total, item) => total + item.fieldCount, 0);
+  return `${categoryLabel(category)} · ${documents.length} case / ${fields} field`;
+}
+
 function draftStorageKey(caseId: string): string {
   return `${DRAFT_STORAGE_PREFIX}:${caseId}`;
 }
@@ -481,9 +491,9 @@ export default function ExternalDatasetReview() {
             value={reviewCategory}
             onChange={(event) => selectCategory(event.target.value as ReviewCategory)}
           >
-            <option value="contract">Contract · 4 case / 56 field</option>
-            <option value="cv">CV · 3 case / 10 field</option>
-            <option value="ielts">IELTS · 3 case / 5 field</option>
+            <option value="contract">{categoryScopeLabel(summary, "contract")}</option>
+            <option value="cv">{categoryScopeLabel(summary, "cv")}</option>
+            <option value="ielts">{categoryScopeLabel(summary, "ielts")}</option>
           </select>
         </label>
       </div>
