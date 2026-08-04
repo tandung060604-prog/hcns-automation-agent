@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Evaluate OCR-HO-V2-004 field recovery on the old development set.
+"""Evaluate the guarded OCR-HO-V2-005 candidate on development evidence.
 
-The script reuses only already-sealed OCR pages and the user-confirmed
-development Ground Truth. It writes aggregate metrics without raw OCR text or
-PII. The report is explicitly development-only; it cannot change the consumed
-held-out evaluate-once report.
+The evaluator consumes only the already-sealed Phase 11.5 OCR evidence and
+the user-reviewed development Ground Truth for scoring. Ground Truth is never
+passed to the candidate selector and no raw field values are written to the
+aggregate report. The official held-out evaluate-once artifact is out of scope.
 """
 
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import sys
 from collections import Counter
@@ -21,11 +22,14 @@ sys.path.insert(0, str(REPO_ROOT / "apps" / "ocr_lab" / "api"))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from evaluate_cccd_phase11_5 import evaluate_variant, value  # noqa: E402
-from phase11_cccd import (  # noqa: E402
-    FIELD_ORDER,
-    OCR_HO_V2_VERSION,
-    ORIENTATION_POLICY,
-    extract_cccd_fields,
+from phase11_5_cccd import FIELD_ORDER  # noqa: E402
+from phase11_5_cccd_v2 import (  # noqa: E402
+    OCR_HO_V2_005_ORIENTATION_POLICY,
+    OCR_HO_V2_005_POLICY_ID,
+    OCR_HO_V2_005_SCOPE,
+    OCR_HO_V2_005_VERSION,
+    build_shadow_fields,
+    summarize_recovery,
 )
 
 
@@ -37,21 +41,28 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _session_root(data_root: Path) -> Path:
+    sessions = data_root / "user_uploads" / "sessions"
+    if sessions.is_dir():
+        return sessions
+    sessions = data_root / "user_uploads-sessions"
+    if sessions.is_dir():
+        return sessions
+    raise RuntimeError("No development session root found")
+
+
 def load_documents(
     data_root: Path,
     manifest: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], int, int]:
+    """Load only complete, reviewed, fixed-0-degree development sessions."""
+
     documents: list[dict[str, Any]] = []
     out_of_scope_rotations = 0
     skipped_documents = 0
-    sessions = data_root / "user_uploads" / "sessions"
-    # The archived development snapshot uses a hyphenated directory name;
-    # support it without copying or mutating the private dataset.
-    if not sessions.is_dir():
-        sessions = data_root / "user_uploads-sessions"
+    sessions = _session_root(data_root)
     for record in manifest.get("records", []):
-        session_id = str(record.get("sessionId", ""))
-        session = sessions / session_id
+        session = sessions / str(record.get("sessionId", ""))
         ground_truth_path = session / "phase10" / "ground_truth.json"
         baseline_path = session / "phase11_5" / "identity_card.json"
         result_path = session / "result.json"
@@ -62,7 +73,9 @@ def load_documents(
         ):
             skipped_documents += 1
             continue
-
+        if int(record.get("selectedRotationDegrees") or 0) != 0:
+            out_of_scope_rotations += 1
+            continue
         ground_truth = json.loads(ground_truth_path.read_text(encoding="utf-8"))
         assertions = ground_truth.get("verificationAssertions", {})
         if not (
@@ -71,35 +84,24 @@ def load_documents(
         ):
             skipped_documents += 1
             continue
-
-        result = json.loads(result_path.read_text(encoding="utf-8"))
-        rotation = int(record.get("selectedRotationDegrees") or 0)
-        if rotation != 0:
-            out_of_scope_rotations += 1
-            continue
-        pages = result.get("phase11", {}).get("pages") or []
-        if not pages:
-            skipped_documents += 1
-            continue
-
         baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
-        candidate = extract_cccd_fields(
-            pages,
-            engine="PaddleOCR/PP-OCRv5",
-        )
-        if set(candidate.get("fields", {})) != set(FIELD_ORDER):
+        baseline_fields = baseline.get("fields") or {}
+        if set(baseline_fields) != set(FIELD_ORDER):
             skipped_documents += 1
             continue
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+        candidate_fields = build_shadow_fields(copy.deepcopy(baseline_fields))
         documents.append(
             {
                 "documentIndex": int(record.get("documentIndex", 0)),
                 "groundTruth": ground_truth.get("identityFields", {}),
-                "phase11_5": baseline.get("fields", {}),
-                "phase11_6": candidate.get("fields", {}),
+                "phase11_5": baseline_fields,
+                "ocr_ho_v2_005": candidate_fields,
                 "durations": {
                     "phase11_5": result.get("phase11_5", {}).get("durationMs") or 0.0,
-                    "phase11_6": result.get("phase11", {}).get("durationMs") or 0.0,
+                    "ocr_ho_v2_005": result.get("phase11_5", {}).get("durationMs") or 0.0,
                 },
+                "recovery": summarize_recovery(candidate_fields),
             }
         )
     return documents, out_of_scope_rotations, skipped_documents
@@ -108,29 +110,59 @@ def load_documents(
 def exact_delta(
     documents: list[dict[str, Any]],
 ) -> tuple[int, int, dict[str, int], dict[str, int]]:
-    regressions = 0
     improvements = 0
-    regression_by_field: Counter[str] = Counter()
-    improvement_by_field: Counter[str] = Counter()
+    regressions = 0
+    improved_by_field: Counter[str] = Counter()
+    regressed_by_field: Counter[str] = Counter()
     for document in documents:
         for field_name in FIELD_ORDER:
             expected = value(document["groundTruth"].get(field_name))
             if not expected:
                 continue
             before = value(document["phase11_5"].get(field_name)) == expected
-            after = value(document["phase11_6"].get(field_name)) == expected
-            if before and not after:
-                regressions += 1
-                regression_by_field[field_name] += 1
-            elif after and not before:
+            after = value(document["ocr_ho_v2_005"].get(field_name)) == expected
+            if after and not before:
                 improvements += 1
-                improvement_by_field[field_name] += 1
+                improved_by_field[field_name] += 1
+            elif before and not after:
+                regressions += 1
+                regressed_by_field[field_name] += 1
     return (
         improvements,
         regressions,
-        dict(sorted(improvement_by_field.items())),
-        dict(sorted(regression_by_field.items())),
+        dict(sorted(improved_by_field.items())),
+        dict(sorted(regressed_by_field.items())),
     )
+
+
+def aggregate_recovery(documents: list[dict[str, Any]]) -> dict[str, Any]:
+    totals = Counter()
+    by_field: dict[str, Counter[str]] = {
+        field_name: Counter() for field_name in FIELD_ORDER
+    }
+    for document in documents:
+        recovery = document["recovery"]
+        totals.update(
+            {
+                key: int(recovery.get(key) or 0)
+                for key in (
+                    "candidateAvailableCount",
+                    "guardedRecoveryAppliedCount",
+                    "baselineRecoveryRequiredCount",
+                )
+            }
+        )
+        for field_name, row in recovery["byField"].items():
+            by_field[field_name].update(row)
+    return {
+        "candidateAvailableCount": totals["candidateAvailableCount"],
+        "guardedRecoveryAppliedCount": totals["guardedRecoveryAppliedCount"],
+        "baselineRecoveryRequiredCount": totals["baselineRecoveryRequiredCount"],
+        "byField": {
+            field_name: dict(sorted(counter.items()))
+            for field_name, counter in by_field.items()
+        },
+    }
 
 
 def build_gate(
@@ -140,6 +172,15 @@ def build_gate(
 ) -> dict[str, Any]:
     improvements, regressions, improved_by_field, regressed_by_field = exact_delta(
         documents
+    )
+    schema_errors = sum(
+        int(set(document["ocr_ho_v2_005"]) != set(FIELD_ORDER))
+        for document in documents
+    )
+    manual_review = all(
+        field.get("status") != "accepted"
+        for document in documents
+        for field in document["ocr_ho_v2_005"].values()
     )
     checks = {
         "strictExactMatchNotWorse": candidate["strictFieldExactMatch"]
@@ -151,11 +192,8 @@ def build_gate(
         "fieldPresenceNotWorse": candidate["fieldPresence"]
         >= baseline["fieldPresence"],
         "noExactRegression": regressions == 0,
-        "schemaErrorsZero": all(
-            set(document["phase11_6"]) == set(FIELD_ORDER)
-            for document in documents
-        ),
-        "manualReviewPolicy": True,
+        "schemaErrorsZero": schema_errors == 0,
+        "manualReviewPolicy": manual_review,
     }
     return {
         "status": "DEVELOPMENT_PASS" if all(checks.values()) else "DEVELOPMENT_FAIL",
@@ -165,29 +203,36 @@ def build_gate(
         "exactRegressionCount": regressions,
         "exactImprovementByField": improved_by_field,
         "exactRegressionByField": regressed_by_field,
+        "schemaErrorCount": schema_errors,
+        "manualReviewFieldCount": sum(
+            field.get("status") != "accepted"
+            for document in documents
+            for field in document["ocr_ho_v2_005"].values()
+        ),
     }
 
 
 def markdown(report: dict[str, Any]) -> str:
     baseline = report["metrics"]["baseline_phase11_5"]
-    candidate = report["metrics"]["ocr_ho_v2_004"]
+    candidate = report["metrics"]["ocr_ho_v2_005"]
 
-    def row(label: str, key: str, inverse: bool = False) -> str:
+    def row(label: str, key: str) -> str:
         return f"| {label} | {baseline[key]:.2%} | {candidate[key]:.2%} |"
 
     lines = [
-        "# OCR-HO-V2-004 Development Comparison",
+        "# OCR-HO-V2-005 Development Comparison",
         "",
         f"- Development documents in scope: {report['documentCount']}",
-        f"- Out-of-scope rotations: {report['outOfScopeRotationDocumentCount']}",
-        f"- Candidate: OCR-HO-V2 v{report['candidateVersion']} ({report['orientationPolicy']})",
+        f"- Candidate: OCR-HO-V2 v{report['candidateVersion']} ({report['policyId']})",
+        f"- Orientation policy: `{report['orientationPolicy']}`",
         f"- Decision: **{report['promotionGate']['status']}**",
+        "- Production promotion: **not allowed**; this is a shadow development evaluation.",
         (
-            "- This is development evidence only; the consumed held-out "
-            "evaluate-once report is unchanged."
+            "- Candidate selector input: sealed Phase 11.5 OCR evidence only; "
+            "Ground Truth is scoring-only."
         ),
         "",
-        "| Metric | Baseline Phase 11.5 | OCR-HO-V2 v1.1 |",
+        "| Metric | Baseline Phase 11.5 | OCR-HO-V2-005 |",
         "|---|---:|---:|",
         row("Strict Field Exact Match", "strictFieldExactMatch"),
         row("ASCII Field Exact Match", "asciiFieldExactMatch"),
@@ -202,6 +247,12 @@ def markdown(report: dict[str, Any]) -> str:
             f"{report['promotionGate']['exactImprovementCount']}/"
             f"{report['promotionGate']['exactRegressionCount']}."
         ),
+        (
+            "- Guarded recoveries applied: "
+            f"{report['recovery']['guardedRecoveryAppliedCount']} of "
+            f"{report['recovery']['baselineRecoveryRequiredCount']} baseline-risk fields."
+        ),
+        "- OCR output remains `MANUAL_REVIEW`; no candidate is auto-accepted.",
         "- No raw OCR text, Ground Truth value, or PII is included in this report.",
         "",
     ]
@@ -211,8 +262,8 @@ def markdown(report: dict[str, Any]) -> str:
 def main() -> int:
     args = parse_args()
     report_dir = args.data_root / "output" / "phase11" / "reports"
-    json_path = report_dir / "CCCD_OCR_HO_V2_004_DEVELOPMENT_COMPARISON.json"
-    md_path = report_dir / "CCCD_OCR_HO_V2_004_DEVELOPMENT_COMPARISON.md"
+    json_path = report_dir / "CCCD_OCR_HO_V2_005_DEVELOPMENT_COMPARISON.json"
+    md_path = report_dir / "CCCD_OCR_HO_V2_005_DEVELOPMENT_COMPARISON.md"
     if (json_path.is_file() or md_path.is_file()) and not args.overwrite:
         raise FileExistsError("Report exists; pass --overwrite")
 
@@ -226,20 +277,23 @@ def main() -> int:
             "No eligible development documents found; refusing to emit a vacuous pass"
         )
     baseline = evaluate_variant(documents, "phase11_5")
-    candidate = evaluate_variant(documents, "phase11_6")
+    candidate = evaluate_variant(documents, "ocr_ho_v2_005")
     report = {
-        "schemaVersion": "ocr-ho-v2-004-evaluation/1.0.0",
+        "schemaVersion": "ocr-ho-v2-005-evaluation/1.0.0",
         "containsRawPII": False,
         "datasetRole": "DEVELOPMENT_REGRESSION",
-        "candidateVersion": OCR_HO_V2_VERSION,
-        "orientationPolicy": ORIENTATION_POLICY,
+        "candidateVersion": OCR_HO_V2_005_VERSION,
+        "policyId": OCR_HO_V2_005_POLICY_ID,
+        "scope": OCR_HO_V2_005_SCOPE,
+        "orientationPolicy": OCR_HO_V2_005_ORIENTATION_POLICY,
         "documentCount": len(documents),
         "outOfScopeRotationDocumentCount": out_of_scope_rotations,
         "skippedDocumentCount": skipped_documents,
         "metrics": {
             "baseline_phase11_5": baseline,
-            "ocr_ho_v2_004": candidate,
+            "ocr_ho_v2_005": candidate,
         },
+        "recovery": aggregate_recovery(documents),
         "promotionGate": build_gate(baseline, candidate, documents),
     }
     report_dir.mkdir(parents=True, exist_ok=True)

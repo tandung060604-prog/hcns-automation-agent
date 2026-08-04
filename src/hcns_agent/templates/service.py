@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping
 from pathlib import PurePath
+from typing import cast
 
 from hcns_agent.adapters.camunda7.contract import (
     ProcessVariables,
@@ -19,7 +21,9 @@ from hcns_agent.domain.errors import DocumentIntakeError, IntakeErrorCode
 from hcns_agent.ports.document_parser import DocumentSource
 from hcns_agent.ports.ocr import OcrEngine, OcrResult
 from hcns_agent.templates.model import (
+    ParsedTemplate,
     RecommendedAction,
+    TemplateDetection,
     TemplateProcessingResult,
     TemplateValidation,
 )
@@ -193,6 +197,117 @@ class TemplateProcessingService:
             processing=_processing_metadata(canonical, ocr_confidence),
         )
 
+    def apply_corrections(
+        self,
+        stored_payload: Mapping[str, object],
+        corrections: Mapping[str, object],
+    ) -> TemplateProcessingResult:
+        """Apply private field corrections and rerun the frozen template validator."""
+
+        template_id = _required_payload_string(stored_payload, "templateId")
+        template_version = _required_payload_string(stored_payload, "templateVersion")
+        definition = self._registry.get(template_id)
+        if definition is None or definition.version != template_version:
+            raise TemplateTechnicalError("STORED_TEMPLATE_VERSION_UNAVAILABLE")
+
+        allowed_fields = frozenset(
+            (*definition.required_fields, *definition.optional_fields)
+        )
+        if not corrections or not set(corrections).issubset(allowed_fields):
+            raise TemplateUnsupportedError("Correction contains unsupported fields")
+        if any(not _is_correction_value(value) for value in corrections.values()):
+            raise TemplateUnsupportedError("Correction values must be scalar")
+
+        original_data = _required_payload_mapping(stored_payload, "data")
+        corrected_data = {
+            key: value
+            for key, value in original_data.items()
+            if key
+            not in {
+                "missingFields",
+                "validationErrors",
+                "confidence",
+                "recommendedAction",
+            }
+        }
+        corrected_data.update(corrections)
+
+        detection_payload = _required_payload_mapping(stored_payload, "detection")
+        matched_anchors = detection_payload.get("matchedAnchors")
+        confidence = detection_payload.get("detectionConfidence")
+        if (
+            not isinstance(matched_anchors, list)
+            or any(not isinstance(item, str) for item in matched_anchors)
+            or isinstance(confidence, bool)
+            or not isinstance(confidence, (int, float))
+        ):
+            raise TemplateTechnicalError("STORED_TEMPLATE_RESULT_INCONSISTENT")
+        detection = TemplateDetection(
+            definition=definition,
+            matched_anchors=tuple(cast(list[str], matched_anchors)),
+            confidence=float(confidence),
+        )
+
+        quality_payload = _required_payload_mapping(stored_payload, "quality")
+        validation_errors = quality_payload.get("validationErrors")
+        if not isinstance(validation_errors, list) or any(
+            not isinstance(item, str) for item in validation_errors
+        ):
+            raise TemplateTechnicalError("STORED_TEMPLATE_RESULT_INCONSISTENT")
+        corrected_fields = set(corrections)
+        remaining_conflicts = tuple(
+            error.partition(":")[2]
+            for error in cast(list[str], validation_errors)
+            if error.startswith("MULTIPLE_CANDIDATES:")
+            and error.partition(":")[2] not in corrected_fields
+        )
+        validation = definition.validator.validate(
+            ParsedTemplate(
+                data=corrected_data,
+                conflicting_fields=remaining_conflicts,
+            ),
+            detection,
+            definition.required_fields,
+        )
+
+        processing = dict(_required_payload_mapping(stored_payload, "processing"))
+        uses_ocr = processing.get("usesOcr")
+        if type(uses_ocr) is not bool:
+            raise TemplateTechnicalError("STORED_TEMPLATE_RESULT_INCONSISTENT")
+        if uses_ocr:
+            ocr_confidence = processing.get("ocrConfidence")
+            if isinstance(ocr_confidence, bool) or not isinstance(
+                ocr_confidence, (int, float)
+            ):
+                raise TemplateTechnicalError("STORED_TEMPLATE_RESULT_INCONSISTENT")
+            validation = _require_ocr_review(validation, float(ocr_confidence))
+
+        corrected_data.update(
+            {
+                "missingFields": list(validation.missing_fields),
+                "validationErrors": list(validation.validation_errors),
+                "confidence": validation.confidence,
+                "recommendedAction": validation.recommended_action.value,
+            }
+        )
+        variables = dict(
+            _required_payload_mapping(stored_payload, "camundaVariables")
+        )
+        variables.update(
+            {
+                "missingFields": ",".join(validation.missing_fields),
+                "validationErrors": ",".join(validation.validation_errors),
+                "recommendedAction": validation.recommended_action.value,
+            }
+        )
+        return TemplateProcessingResult(
+            detection=detection,
+            data=corrected_data,
+            validation=validation,
+            camunda_variables=variables,
+            processing=processing,
+        )
+
 
 def build_default_template_processing_service() -> TemplateProcessingService:
     ocr_engine = _ForbiddenTemplateOcrEngine()
@@ -284,3 +399,27 @@ def _processing_metadata(
                 if isinstance(item, dict)
             ]
     return metadata
+
+
+def _required_payload_mapping(
+    payload: Mapping[str, object],
+    name: str,
+) -> Mapping[str, object]:
+    value = payload.get(name)
+    if not isinstance(value, dict):
+        raise TemplateTechnicalError("STORED_TEMPLATE_RESULT_INCONSISTENT")
+    return cast(Mapping[str, object], value)
+
+
+def _required_payload_string(payload: Mapping[str, object], name: str) -> str:
+    value = payload.get(name)
+    if not isinstance(value, str) or not value:
+        raise TemplateTechnicalError("STORED_TEMPLATE_RESULT_INCONSISTENT")
+    return value
+
+
+def _is_correction_value(value: object) -> bool:
+    return value is None or (
+        isinstance(value, (str, int, float, bool))
+        and not (isinstance(value, str) and len(value) > 16_384)
+    )

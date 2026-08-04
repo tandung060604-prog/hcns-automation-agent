@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Protocol
 
 from hcns_agent.adapters.camunda7.client import (
@@ -52,6 +53,23 @@ class ExternalTaskHandler(Protocol):
         """Execute one bounded task and return sanitized variables."""
 
 
+@dataclass(frozen=True, slots=True)
+class LockExtensionPolicy:
+    topic_names: frozenset[str]
+    new_duration_ms: int
+
+    def __post_init__(self) -> None:
+        if not self.topic_names:
+            raise ValueError("Lock-extension topics must not be empty")
+        if any(not topic.strip() for topic in self.topic_names):
+            raise ValueError("Lock-extension topic names must not be empty")
+        if self.new_duration_ms <= 0:
+            raise ValueError("Lock-extension duration must be positive")
+
+    def applies_to(self, topic_name: str) -> bool:
+        return topic_name in self.topic_names
+
+
 class Camunda7ExternalTaskWorker:
     def __init__(
         self,
@@ -60,6 +78,7 @@ class Camunda7ExternalTaskWorker:
         *,
         default_retries: int = 3,
         retry_timeout_ms: int = 5_000,
+        lock_extension_policy: LockExtensionPolicy | None = None,
     ) -> None:
         if default_retries <= 0:
             raise ValueError("default_retries must be positive")
@@ -69,6 +88,7 @@ class Camunda7ExternalTaskWorker:
         self._handlers = _handler_registry(handlers)
         self._default_retries = default_retries
         self._retry_timeout_ms = retry_timeout_ms
+        self._lock_extension_policy = lock_extension_policy
 
     def run_once(self, *, max_tasks: int = 1) -> int:
         subscriptions = tuple(
@@ -85,6 +105,14 @@ class Camunda7ExternalTaskWorker:
             self._report_failure(task, "No handler is registered for this topic")
             return
         try:
+            if (
+                self._lock_extension_policy is not None
+                and self._lock_extension_policy.applies_to(task.topic_name)
+            ):
+                self._client.extend_lock(
+                    task.task_id,
+                    self._lock_extension_policy.new_duration_ms,
+                )
             result = handler.handle(task.variables)
             validate_process_variables(result)
             self._client.complete(task.task_id, result)

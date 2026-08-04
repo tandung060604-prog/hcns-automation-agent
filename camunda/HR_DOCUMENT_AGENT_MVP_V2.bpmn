@@ -1,8 +1,9 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:modeler="http://camunda.org/schema/modeler/1.0" xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Definitions_HR_Document_Agent_MVP_V2" targetNamespace="http://example.com/hr-document-agent-mvp-v2" exporter="OpenAI BPMN Review" exporterVersion="2.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.13.0">
   <bpmn:error id="Error_Document_Input_Invalid" name="Document input invalid" errorCode="DOCUMENT_INPUT_INVALID"/>
-  <bpmn:process id="hr_document_agent_mvp_v2" name="HR Document Processing and Onboarding Agent MVP V2" isExecutable="true" camunda:versionTag="2.1.0-shadow">
-    <bpmn:documentation>Camunda 7 workflow for HR document intake, OCR orchestration, quality routing, human review, controlled reupload, HRIS update and result notification. Raw files, raw OCR text and full PII remain outside Camunda. External workers must use complete for successful/business-quality results, bpmnError with DOCUMENT_INPUT_INVALID for invalid input, and failure for technical timeout/crash so retries and incidents remain operationally visible.</bpmn:documentation>
+  <bpmn:error id="Error_Correction_Invalid" name="Correction invalid" errorCode="CORRECTION_INVALID"/>
+  <bpmn:process id="hr_document_agent_mvp_v2" name="HR Document Processing and Onboarding Agent MVP V2" isExecutable="true" camunda:versionTag="2.3.0-shadow">
+    <bpmn:documentation>Camunda 7 closed-set shadow workflow for leave and overtime requests, OCR orchestration, quality routing, human review, controlled reupload, mock HRIS update and mock result notification. Raw files, raw OCR text and full PII remain outside Camunda. External workers must use complete for successful/business-quality results, bpmnError with DOCUMENT_INPUT_INVALID for invalid input, and failure for technical timeout/crash so retries and incidents remain operationally visible.</bpmn:documentation>
     <bpmn:startEvent id="Start" name="Bắt đầu">
       <bpmn:documentation>Khởi tạo reuploadCount=0, maxReuploadAttempts=3 và autoContinueEnabled=false trong engine; người nộp không được sửa chính sách này.</bpmn:documentation>
       <bpmn:extensionElements>
@@ -10,6 +11,7 @@
           <camunda:script scriptFormat="javascript">var Long = Java.type('java.lang.Long');
 execution.setVariable('reuploadCount', Long.valueOf(0));
 execution.setVariable('maxReuploadAttempts', Long.valueOf(3));
+execution.setVariable('caseVersion', Long.valueOf(1));
 execution.setVariable('autoContinueEnabled', false);</camunda:script>
         </camunda:executionListener>
       </bpmn:extensionElements>
@@ -33,17 +35,8 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
             </camunda:validation>
           </camunda:formField>
           <camunda:formField id="declaredDocumentType" label="Loại tài liệu khai báo" type="enum">
-            <camunda:value id="IDENTITY_DOCUMENT" name="Giấy tờ định danh"/>
-            <camunda:value id="EMPLOYEE_INFORMATION_FORM" name="Phiếu thông tin nhân viên"/>
-            <camunda:value id="CV" name="Hồ sơ ứng viên / CV"/>
-            <camunda:value id="DEGREE" name="Bằng cấp"/>
-            <camunda:value id="CERTIFICATE" name="Chứng chỉ"/>
-            <camunda:value id="EMPLOYMENT_CONTRACT" name="Hợp đồng/phụ lục lao động"/>
-            <camunda:value id="HR_DECISION" name="Quyết định nhân sự"/>
             <camunda:value id="LEAVE_REQUEST" name="Đơn nghỉ phép"/>
-            <camunda:value id="HANDOVER_RECORD" name="Biên bản bàn giao"/>
-            <camunda:value id="TIMESHEET" name="Bảng chấm công"/>
-            <camunda:value id="OTHER_HR_DOCUMENT" name="Tài liệu HCNS khác"/>
+            <camunda:value id="OVERTIME_REQUEST" name="Đơn tăng ca"/>
             <camunda:validation>
               <camunda:constraint name="required"/>
             </camunda:validation>
@@ -82,17 +75,8 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
         </camunda:executionListener>
         <camunda:formData>
           <camunda:formField id="confirmedDocumentType" label="Loại tài liệu xác nhận" type="enum">
-            <camunda:value id="IDENTITY_DOCUMENT" name="Giấy tờ định danh"/>
-            <camunda:value id="EMPLOYEE_INFORMATION_FORM" name="Phiếu thông tin nhân viên"/>
-            <camunda:value id="CV" name="Hồ sơ ứng viên / CV"/>
-            <camunda:value id="DEGREE" name="Bằng cấp"/>
-            <camunda:value id="CERTIFICATE" name="Chứng chỉ"/>
-            <camunda:value id="EMPLOYMENT_CONTRACT" name="Hợp đồng/phụ lục lao động"/>
-            <camunda:value id="HR_DECISION" name="Quyết định nhân sự"/>
             <camunda:value id="LEAVE_REQUEST" name="Đơn nghỉ phép"/>
-            <camunda:value id="HANDOVER_RECORD" name="Biên bản bàn giao"/>
-            <camunda:value id="TIMESHEET" name="Bảng chấm công"/>
-            <camunda:value id="OTHER_HR_DOCUMENT" name="Tài liệu HCNS khác"/>
+            <camunda:value id="OVERTIME_REQUEST" name="Đơn tăng ca"/>
             <camunda:validation>
               <camunda:constraint name="required"/>
             </camunda:validation>
@@ -146,7 +130,36 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
     </bpmn:exclusiveGateway>
     <bpmn:userTask camunda:candidateGroups="employees,new-hires" id="UserReview" name="Người nộp xác nhận dữ liệu">
       <bpmn:extensionElements>
+        <camunda:taskListener event="complete">
+          <camunda:script scriptFormat="javascript">var assignee = task.getAssignee();
+if (assignee == null || String(assignee).trim().length == 0) { throw 'REVIEWER_ASSIGNMENT_REQUIRED'; }
+var Instant = Java.type('java.time.Instant');
+task.setVariable('reviewerId', String(assignee));
+task.setVariable('reviewedAt', String(Instant.now()));
+task.setVariable('reviewStage', 'USER');</camunda:script>
+        </camunda:taskListener>
         <camunda:formData>
+          <camunda:formField id="documentReference" label="Mã tham chiếu nguồn" type="string" defaultValue="${documentReference}">
+            <camunda:properties><camunda:property id="readonly" value="true"/></camunda:properties>
+          </camunda:formField>
+          <camunda:formField id="resultReference" label="Mã tham chiếu kết quả" type="string" defaultValue="${resultReference}">
+            <camunda:properties><camunda:property id="readonly" value="true"/></camunda:properties>
+          </camunda:formField>
+          <camunda:formField id="templateId" label="Template/provenance" type="string" defaultValue="${templateId}">
+            <camunda:properties><camunda:property id="readonly" value="true"/></camunda:properties>
+          </camunda:formField>
+          <camunda:formField id="parserVersion" label="Phiên bản parser" type="string" defaultValue="${parserVersion}">
+            <camunda:properties><camunda:property id="readonly" value="true"/></camunda:properties>
+          </camunda:formField>
+          <camunda:formField id="overallConfidence" label="Confidence" type="string" defaultValue="${overallConfidence}">
+            <camunda:properties><camunda:property id="readonly" value="true"/></camunda:properties>
+          </camunda:formField>
+          <camunda:formField id="validationErrors" label="Mã validation" type="string" defaultValue="${validationErrors}">
+            <camunda:properties><camunda:property id="readonly" value="true"/></camunda:properties>
+          </camunda:formField>
+          <camunda:formField id="reviewReasonCodes" label="Lý do review" type="string" defaultValue="${reviewReasonCodes}">
+            <camunda:properties><camunda:property id="readonly" value="true"/></camunda:properties>
+          </camunda:formField>
           <camunda:formField id="userReviewDecision" label="Kết quả xác nhận" type="enum">
             <camunda:value id="CONFIRMED" name="Thông tin chính xác"/>
             <camunda:value id="CORRECTED" name="Đã sửa trong hệ thống riêng"/>
@@ -160,8 +173,13 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
         </camunda:formData>
       </bpmn:extensionElements>
       <bpmn:incoming>F_QUser</bpmn:incoming>
-      <bpmn:outgoing>F_UserGateway</bpmn:outgoing>
+      <bpmn:outgoing>F_UserAudit</bpmn:outgoing>
     </bpmn:userTask>
+    <bpmn:serviceTask camunda:type="external" camunda:topic="document_record_review_audit" id="RecordUserReviewAudit" name="Lưu audit người xác nhận">
+      <bpmn:documentation>Worker chỉ lưu reviewer ID, timestamp, case version, payload hash, quyết định và opaque references; không lưu field value vào Camunda.</bpmn:documentation>
+      <bpmn:incoming>F_UserAudit</bpmn:incoming>
+      <bpmn:outgoing>F_UserGateway</bpmn:outgoing>
+    </bpmn:serviceTask>
     <bpmn:exclusiveGateway default="F_UserUnresolved" id="GUserReview" name="Kết quả người nộp">
       <bpmn:incoming>F_UserGateway</bpmn:incoming>
       <bpmn:outgoing>F_UserConfirmed</bpmn:outgoing>
@@ -171,7 +189,36 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
     </bpmn:exclusiveGateway>
     <bpmn:userTask camunda:candidateGroups="hr-reviewers" id="HRReview" name="HCNS kiểm tra dữ liệu">
       <bpmn:extensionElements>
+        <camunda:taskListener event="complete">
+          <camunda:script scriptFormat="javascript">var assignee = task.getAssignee();
+if (assignee == null || String(assignee).trim().length == 0) { throw 'REVIEWER_ASSIGNMENT_REQUIRED'; }
+var Instant = Java.type('java.time.Instant');
+task.setVariable('reviewerId', String(assignee));
+task.setVariable('reviewedAt', String(Instant.now()));
+task.setVariable('reviewStage', 'HR');</camunda:script>
+        </camunda:taskListener>
         <camunda:formData>
+          <camunda:formField id="documentReference" label="Mã tham chiếu nguồn" type="string" defaultValue="${documentReference}">
+            <camunda:properties><camunda:property id="readonly" value="true"/></camunda:properties>
+          </camunda:formField>
+          <camunda:formField id="resultReference" label="Mã tham chiếu kết quả" type="string" defaultValue="${resultReference}">
+            <camunda:properties><camunda:property id="readonly" value="true"/></camunda:properties>
+          </camunda:formField>
+          <camunda:formField id="templateId" label="Template/provenance" type="string" defaultValue="${templateId}">
+            <camunda:properties><camunda:property id="readonly" value="true"/></camunda:properties>
+          </camunda:formField>
+          <camunda:formField id="parserVersion" label="Phiên bản parser" type="string" defaultValue="${parserVersion}">
+            <camunda:properties><camunda:property id="readonly" value="true"/></camunda:properties>
+          </camunda:formField>
+          <camunda:formField id="overallConfidence" label="Confidence" type="string" defaultValue="${overallConfidence}">
+            <camunda:properties><camunda:property id="readonly" value="true"/></camunda:properties>
+          </camunda:formField>
+          <camunda:formField id="validationErrors" label="Mã validation" type="string" defaultValue="${validationErrors}">
+            <camunda:properties><camunda:property id="readonly" value="true"/></camunda:properties>
+          </camunda:formField>
+          <camunda:formField id="reviewReasonCodes" label="Lý do review" type="string" defaultValue="${reviewReasonCodes}">
+            <camunda:properties><camunda:property id="readonly" value="true"/></camunda:properties>
+          </camunda:formField>
           <camunda:formField id="hrReviewDecision" label="Kết quả kiểm tra" type="enum">
             <camunda:value id="CONFIRMED" name="Chấp nhận dữ liệu"/>
             <camunda:value id="CORRECTED" name="Đã sửa trong hệ thống riêng"/>
@@ -188,8 +235,15 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
       <bpmn:incoming>F_QHR</bpmn:incoming>
       <bpmn:incoming>F_QDefaultHR</bpmn:incoming>
       <bpmn:incoming>F_UserUnresolved</bpmn:incoming>
-      <bpmn:outgoing>F_HRGateway</bpmn:outgoing>
+      <bpmn:incoming>F_UserSlaEscalation</bpmn:incoming>
+      <bpmn:incoming>F_CorrectionInvalidHR</bpmn:incoming>
+      <bpmn:outgoing>F_HRAudit</bpmn:outgoing>
     </bpmn:userTask>
+    <bpmn:serviceTask camunda:type="external" camunda:topic="document_record_review_audit" id="RecordHRReviewAudit" name="Lưu audit HCNS">
+      <bpmn:documentation>Worker kiểm tra payload hash/case version trước khi lưu audit bất biến; quyết định CORRECTED bắt buộc có correctionsReference.</bpmn:documentation>
+      <bpmn:incoming>F_HRAudit</bpmn:incoming>
+      <bpmn:outgoing>F_HRGateway</bpmn:outgoing>
+    </bpmn:serviceTask>
     <bpmn:exclusiveGateway default="F_HRRejected" id="GHRReview" name="Kết quả HCNS">
       <bpmn:incoming>F_HRGateway</bpmn:incoming>
       <bpmn:outgoing>F_HRConfirmed</bpmn:outgoing>
@@ -232,17 +286,8 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
             </camunda:validation>
           </camunda:formField>
           <camunda:formField id="declaredDocumentType" label="Loại tài liệu" type="enum">
-            <camunda:value id="IDENTITY_DOCUMENT" name="Giấy tờ định danh"/>
-            <camunda:value id="EMPLOYEE_INFORMATION_FORM" name="Phiếu thông tin nhân viên"/>
-            <camunda:value id="CV" name="Hồ sơ ứng viên / CV"/>
-            <camunda:value id="DEGREE" name="Bằng cấp"/>
-            <camunda:value id="CERTIFICATE" name="Chứng chỉ"/>
-            <camunda:value id="EMPLOYMENT_CONTRACT" name="Hợp đồng/phụ lục lao động"/>
-            <camunda:value id="HR_DECISION" name="Quyết định nhân sự"/>
             <camunda:value id="LEAVE_REQUEST" name="Đơn nghỉ phép"/>
-            <camunda:value id="HANDOVER_RECORD" name="Biên bản bàn giao"/>
-            <camunda:value id="TIMESHEET" name="Bảng chấm công"/>
-            <camunda:value id="OTHER_HR_DOCUMENT" name="Tài liệu HCNS khác"/>
+            <camunda:value id="OVERTIME_REQUEST" name="Đơn tăng ca"/>
             <camunda:validation>
               <camunda:constraint name="required"/>
             </camunda:validation>
@@ -266,6 +311,7 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
         </camunda:formData>
       </bpmn:extensionElements>
       <bpmn:incoming>F_ReuploadLimit</bpmn:incoming>
+      <bpmn:incoming>F_HRSlaEscalation</bpmn:incoming>
       <bpmn:outgoing>F_FinalGateway</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:exclusiveGateway default="F_FinalRejected" id="GFinal" name="Quyết định cuối">
@@ -314,10 +360,18 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
       <bpmn:outgoing>F_OCRErrorReupload</bpmn:outgoing>
       <bpmn:errorEventDefinition errorRef="Error_Document_Input_Invalid"/>
     </bpmn:boundaryEvent>
-    <bpmn:textAnnotation id="TechnicalFailureNote">
-      <bpmn:text>Lỗi kỹ thuật (timeout, worker crash, OCR engine unavailable): worker gọi /failure, giảm retries và tạo incident khi retries=0. Không dùng BPMN Error để che lỗi kỹ thuật.</bpmn:text>
-    </bpmn:textAnnotation>
-    <bpmn:association id="Association_TechnicalFailure" sourceRef="OCR" targetRef="TechnicalFailureNote"/>
+    <bpmn:boundaryEvent attachedToRef="ApplyCorrections" cancelActivity="true" id="CorrectionInvalid" name="Correction không hợp lệ">
+      <bpmn:outgoing>F_CorrectionInvalidHR</bpmn:outgoing>
+      <bpmn:errorEventDefinition errorRef="Error_Correction_Invalid"/>
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent attachedToRef="UserReview" cancelActivity="true" id="UserReviewSla" name="Quá SLA xác nhận">
+      <bpmn:outgoing>F_UserSlaEscalation</bpmn:outgoing>
+      <bpmn:timerEventDefinition><bpmn:timeDuration>PT24H</bpmn:timeDuration></bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent attachedToRef="HRReview" cancelActivity="true" id="HRReviewSla" name="Quá SLA HCNS">
+      <bpmn:outgoing>F_HRSlaEscalation</bpmn:outgoing>
+      <bpmn:timerEventDefinition><bpmn:timeDuration>PT8H</bpmn:timeDuration></bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
     <bpmn:sequenceFlow id="F_StartSubmit" sourceRef="Start" targetRef="Submit"/>
     <bpmn:sequenceFlow id="F_SubmitValidate" sourceRef="Submit" targetRef="Validate"/>
     <bpmn:sequenceFlow id="F_ValidateGateway" sourceRef="Validate" targetRef="GFileValid"/>
@@ -357,7 +411,8 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${recommendedAction == 'REQUEST_REUPLOAD'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F_QDefaultHR" sourceRef="GQuality" targetRef="HRReview" name="UNKNOWN → HR REVIEW"/>
-    <bpmn:sequenceFlow id="F_UserGateway" sourceRef="UserReview" targetRef="GUserReview"/>
+    <bpmn:sequenceFlow id="F_UserAudit" sourceRef="UserReview" targetRef="RecordUserReviewAudit"/>
+    <bpmn:sequenceFlow id="F_UserGateway" sourceRef="RecordUserReviewAudit" targetRef="GUserReview"/>
     <bpmn:sequenceFlow id="F_UserConfirmed" sourceRef="GUserReview" targetRef="GApprovedMerge" name="CONFIRMED">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${userReviewDecision == 'CONFIRMED'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
@@ -368,7 +423,8 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${userReviewDecision == 'REQUEST_REUPLOAD'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F_UserUnresolved" sourceRef="GUserReview" targetRef="HRReview" name="UNRESOLVED"/>
-    <bpmn:sequenceFlow id="F_HRGateway" sourceRef="HRReview" targetRef="GHRReview"/>
+    <bpmn:sequenceFlow id="F_HRAudit" sourceRef="HRReview" targetRef="RecordHRReviewAudit"/>
+    <bpmn:sequenceFlow id="F_HRGateway" sourceRef="RecordHRReviewAudit" targetRef="GHRReview"/>
     <bpmn:sequenceFlow id="F_HRConfirmed" sourceRef="GHRReview" targetRef="GApprovedMerge" name="CONFIRMED">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${hrReviewDecision == 'CONFIRMED'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
@@ -380,6 +436,9 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F_HRRejected" sourceRef="GHRReview" targetRef="GRejectedMerge" name="REJECTED"/>
     <bpmn:sequenceFlow id="F_CorrectionsNormalize" sourceRef="ApplyCorrections" targetRef="Normalize"/>
+    <bpmn:sequenceFlow id="F_CorrectionInvalidHR" sourceRef="CorrectionInvalid" targetRef="HRReview" name="CORRECTION_INVALID"/>
+    <bpmn:sequenceFlow id="F_UserSlaEscalation" sourceRef="UserReviewSla" targetRef="HRReview" name="SLA → HR REVIEW"/>
+    <bpmn:sequenceFlow id="F_HRSlaEscalation" sourceRef="HRReviewSla" targetRef="FinalHR" name="SLA → FINAL HR"/>
     <bpmn:sequenceFlow id="F_RegGateway" sourceRef="RegisterReupload" targetRef="GReupload"/>
     <bpmn:sequenceFlow id="F_ReuploadAllowed" sourceRef="GReupload" targetRef="UploadAgain" name="Còn lượt">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${reuploadCount &lt;= maxReuploadAttempts}</bpmn:conditionExpression>
@@ -396,6 +455,10 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
     <bpmn:sequenceFlow id="F_NotifySuccessEnd" sourceRef="NotifySuccess" targetRef="EndSuccess"/>
     <bpmn:sequenceFlow id="F_RejectedNotify" sourceRef="GRejectedMerge" targetRef="NotifyRejected"/>
     <bpmn:sequenceFlow id="F_NotifyRejectedEnd" sourceRef="NotifyRejected" targetRef="EndRejected"/>
+    <bpmn:textAnnotation id="TechnicalFailureNote">
+      <bpmn:text>Lỗi kỹ thuật (timeout, worker crash, OCR engine unavailable): worker gọi /failure, giảm retries và tạo incident khi retries=0. Không dùng BPMN Error để che lỗi kỹ thuật.</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_TechnicalFailure" sourceRef="OCR" targetRef="TechnicalFailureNote"/>
     <bpmn:group id="GroupAuto" categoryValueRef="CVAuto"/>
     <bpmn:group id="GroupHuman" categoryValueRef="CVHuman"/>
     <bpmn:group id="GroupReupload" categoryValueRef="CVReupload"/>

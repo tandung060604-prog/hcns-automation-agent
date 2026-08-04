@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import importlib
 import json
+import os
 import subprocess
 import sys
 import time
@@ -44,6 +45,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--secondary-python", type=Path, required=True)
+    parser.add_argument(
+        "--secondary-pythonpath",
+        type=Path,
+        action="append",
+        default=[],
+        help="Additional site-package roots visible only to the secondary worker.",
+    )
     parser.add_argument("--runtime-root", type=Path, required=True)
     parser.add_argument(
         "--policy",
@@ -56,6 +64,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--phase-root", default="phase11_5")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--prepare-only", action="store_true")
+    parser.add_argument(
+        "--paddle-only",
+        action="store_true",
+        help="Publish the primary Paddle candidates without optional secondary OCR.",
+    )
     parser.add_argument("--document-index", type=int, action="append", default=[])
     return parser.parse_args()
 
@@ -81,6 +94,18 @@ def write_json(path: Path, payload: Any) -> None:
         json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+
+
+def session_root(data_root: Path) -> Path:
+    """Resolve normal or archived development session layout."""
+
+    archived = data_root / "user_uploads-sessions"
+    if archived.is_dir():
+        return archived
+    normal = data_root / "user_uploads" / "sessions"
+    if normal.is_dir():
+        return normal
+    raise FileNotFoundError(f"No CCCD session root under {data_root}")
 
 
 def sha256(path: Path) -> str:
@@ -157,7 +182,7 @@ def prepare(
     service = UserOCRService(args.data_root)
     jobs: list[dict[str, Any]] = []
     documents: list[dict[str, Any]] = []
-    sessions_root = args.data_root / "user_uploads" / "sessions"
+    sessions_root = session_root(args.data_root)
     for record in records:
         session_id = str(record["sessionId"])
         session_dir = sessions_root / session_id
@@ -268,7 +293,7 @@ def publish(
     work_root: Path,
 ) -> list[dict[str, Any]]:
     sanitized: list[dict[str, Any]] = []
-    sessions_root = args.data_root / "user_uploads" / "sessions"
+    sessions_root = session_root(args.data_root)
     policy = json.loads(
         args.policy.read_text(encoding="utf-8")
     )
@@ -326,12 +351,16 @@ def publish(
                 "strategy",
                 "normalized_roi_four_recognizer_consensus",
             ),
-            "recognizers": [
-                "paddle_ppocrv5",
-                "easyocr_vi",
-                "vietocr_vgg_seq2seq",
-                "vietocr_vgg_transformer",
-            ],
+            "recognizers": (
+                ["paddle_ppocrv5"]
+                if args.paddle_only
+                else [
+                    "paddle_ppocrv5",
+                    "easyocr_vi",
+                    "vietocr_vgg_seq2seq",
+                    "vietocr_vgg_transformer",
+                ]
+            ),
             "cropProfiles": [
                 "color_original",
                 "grayscale_clahe",
@@ -422,7 +451,9 @@ def main() -> int:
         return 0
     if not job_path.is_file():
         write_json(job_path, {"items": jobs})
-    if not secondary_path.is_file() or args.overwrite:
+    if args.paddle_only:
+        secondary = {"results": {}}
+    elif not secondary_path.is_file() or args.overwrite:
         command = [
             str(args.secondary_python),
             str(REPO_ROOT / "scripts" / "phase11_5_secondary_worker.py"),
@@ -435,9 +466,20 @@ def main() -> int:
             "--policy",
             str(args.policy),
         ]
-        subprocess.run(command, check=True)
-    secondary = json.loads(secondary_path.read_text(encoding="utf-8"))
-    merge_secondary(documents, secondary)
+        secondary_env = None
+        if args.secondary_pythonpath:
+            secondary_env = os.environ.copy()
+            extra_path = os.pathsep.join(
+                str(path.resolve()) for path in args.secondary_pythonpath
+            )
+            inherited = secondary_env.get("PYTHONPATH")
+            secondary_env["PYTHONPATH"] = (
+                extra_path + os.pathsep + inherited if inherited else extra_path
+            )
+        subprocess.run(command, check=True, env=secondary_env)
+        secondary = json.loads(secondary_path.read_text(encoding="utf-8"))
+    if not args.paddle_only:
+        merge_secondary(documents, secondary)
     records_out = publish(args, documents, work_root)
     summary = {
         "documentCount": len(records_out),

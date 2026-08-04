@@ -90,6 +90,12 @@ from phase11_cccd import (
     prepare_identity_card_page,
     rotate_image,
 )
+from phase11_8_shadow_uat import (
+    load_shadow_document,
+    load_shadow_summary,
+    resolve_shadow_source,
+    save_shadow_review,
+)
 from phase12_ingestion import (
     ingest_document,
     render_native_previews,
@@ -1242,6 +1248,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
     data_root: Path
     heldout_root: Path | None
     cccd_heldout_root: Path | None
+    ocr_ho_shadow_root: Path | None
     external_dataset_root: Path | None
     external_dataset_inventory: Path | None
     external_dataset_ground_truth: Path | None
@@ -1386,6 +1393,36 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     },
                     HTTPStatus.INTERNAL_SERVER_ERROR,
                 )
+            return
+        if parsed.path == "/ocr-ho-v2/shadow/review":
+            if self.ocr_ho_shadow_root is None:
+                self.send_json(
+                    {"error": "OCR-HO-V2 shadow UAT is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            document_id = parse_qs(parsed.query).get("id", [""])[0]
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                content_length = 0
+            if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                self.send_json(
+                    {"error": "Shadow UAT payload is empty or too large"},
+                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                )
+                return
+            try:
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                if not isinstance(payload, dict):
+                    raise ValueError("Shadow UAT payload must be an object")
+                self.send_json(
+                    save_shadow_review(self.ocr_ho_shadow_root, document_id, payload)
+                )
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
         if parsed.path == "/cccd-heldout/review/save":
             if self.cccd_heldout_root is None:
@@ -2124,6 +2161,64 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/documents/sessions":
             self.send_json({"sessions": self.user_ocr.list_template_sessions()})
+            return
+
+        if parsed.path == "/ocr-ho-v2/shadow/summary":
+            if self.ocr_ho_shadow_root is None:
+                self.send_json(
+                    {"error": "OCR-HO-V2 shadow UAT is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            try:
+                self.send_json(load_shadow_summary(self.ocr_ho_shadow_root))
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+                self.send_json(
+                    {"error": f"OCR-HO-V2 shadow UAT unavailable: {exc}"},
+                    HTTPStatus.NOT_FOUND,
+                )
+            return
+
+        if parsed.path == "/ocr-ho-v2/shadow/document":
+            if self.ocr_ho_shadow_root is None:
+                self.send_json(
+                    {"error": "OCR-HO-V2 shadow UAT is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            document_id = query.get("id", [""])[0]
+            mode = query.get("mode", ["detail"])[0]
+            try:
+                source = resolve_shadow_source(self.ocr_ho_shadow_root, document_id)
+                if mode == "preview":
+                    self.send_file(
+                        source,
+                        mimetypes.guess_type(source.name)[0] or "application/octet-stream",
+                    )
+                elif mode == "source":
+                    self.send_file(
+                        source,
+                        mimetypes.guess_type(source.name)[0] or "application/octet-stream",
+                        f"{document_id}{source.suffix.lower()}",
+                    )
+                elif mode == "detail":
+                    self.send_json(load_shadow_document(self.ocr_ho_shadow_root, document_id))
+                else:
+                    self.send_json(
+                        {"error": "Invalid shadow document mode"},
+                        HTTPStatus.BAD_REQUEST,
+                    )
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            except (OSError, FileNotFoundError, KeyError, json.JSONDecodeError):
+                self.send_json(
+                    {"error": "OCR-HO-V2 shadow document is unavailable"},
+                    HTTPStatus.NOT_FOUND,
+                )
             return
 
         if parsed.path == "/api/documents/result":
@@ -3178,6 +3273,14 @@ def parse_args() -> argparse.Namespace:
         help="Authorized local CCCD Phase 11.6 Ground Truth review root.",
     )
     parser.add_argument(
+        "--ocr-ho-shadow-root",
+        type=Path,
+        help=(
+            "Private local development archive for the OCR-HO-V2-009 shadow UAT. "
+            "Defaults to --data-root."
+        ),
+    )
+    parser.add_argument(
         "--external-dataset-root",
         type=Path,
         help="Local staging root for the synthetic external dataset review UI.",
@@ -3232,6 +3335,8 @@ def main() -> int:
         if args.cccd_heldout_root is not None
         else None
     )
+    shadow_root = args.ocr_ho_shadow_root or args.data_root
+    DashboardHandler.ocr_ho_shadow_root = shadow_root.expanduser().resolve()
     DashboardHandler.external_dataset_root = (
         args.external_dataset_root.expanduser().resolve()
         if args.external_dataset_root is not None
@@ -3270,6 +3375,7 @@ def main() -> int:
         f"Local dashboard API ready: http://{args.host}:{args.port} "
         f"(baseline={len(indexes['baseline'])}, phase7={len(indexes['phase7'])}, "
         f"real-heldout={'on' if DashboardHandler.heldout_root else 'off'}, "
+        f"ocr-ho-shadow={'on' if DashboardHandler.ocr_ho_shadow_root else 'off'}, "
         f"external-review={'on' if DashboardHandler.external_dataset_root else 'off'})"
     )
     try:

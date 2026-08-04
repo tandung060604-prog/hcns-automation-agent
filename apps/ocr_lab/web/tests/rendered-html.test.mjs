@@ -176,6 +176,28 @@ test("hides held-out evidence by default behind a private local flag", async () 
   assert.match(dashboard, /Prediction vẫn bị ẩn/);
 });
 
+test("exposes the OCR-HO-V2-009 local shadow UAT inspector behind a private flag", async () => {
+  const [dashboard, css, envExample, api] = await Promise.all([
+    readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+    readFile(new URL("../../api/serve_dashboard_api.py", import.meta.url), "utf8"),
+  ]);
+  assert.match(dashboard, /VITE_SHOW_OCR_HO_SHADOW_UAT === "true"/);
+  assert.match(envExample, /^VITE_SHOW_OCR_HO_SHADOW_UAT=false$/m);
+  assert.match(dashboard, /\/ocr-ho-v2\/shadow\/summary/);
+  assert.match(dashboard, /\/ocr-ho-v2\/shadow\/document\?id=/);
+  assert.match(dashboard, /\/ocr-ho-v2\/shadow\/review\?id=/);
+  assert.match(dashboard, /data-testid="ocr-ho-shadow-source-preview"/);
+  assert.match(dashboard, /data-testid="ocr-ho-shadow-inspector"/);
+  assert.match(dashboard, /groundTruthLoaded: false/);
+  assert.match(dashboard, /SHADOW_REVIEW_ONLY/);
+  assert.match(css, /\.shadow-uat-inspector/);
+  assert.match(css, /\.shadow-uat-row\.changed/);
+  assert.match(api, /--ocr-ho-shadow-root/);
+  assert.match(api, /\/ocr-ho-v2\/shadow\/summary/);
+});
+
 test("exposes the DATA-08 independent contract review panel behind a private flag", async () => {
   const [dashboard, component, envExample, css] = await Promise.all([
     readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
@@ -191,9 +213,10 @@ test("exposes the DATA-08 independent contract review panel behind a private fla
   assert.match(component, /\/external-dataset\/review\/lock/);
   assert.match(component, /predictionsHiddenDuringReview/);
   assert.match(component, /EXTERNAL DATASET · INDEPENDENT REVIEW/);
-  assert.match(component, /Contract · 4 case \/ 56 field/);
-  assert.match(component, /CV · 3 case \/ 10 field/);
-  assert.match(component, /IELTS · 3 case \/ 5 field/);
+  assert.match(component, /function categoryScopeLabel\(/);
+  assert.match(component, /categoryScopeLabel\(summary, "contract"\)/);
+  assert.match(component, /categoryScopeLabel\(summary, "cv"\)/);
+  assert.match(component, /categoryScopeLabel\(summary, "ielts"\)/);
   assert.match(component, /Family name \+ First name/);
   assert.match(component, /không tự đảo hoặc tách thành field khác/);
   assert.match(component, /item\.reviewable/);

@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from hcns_agent.adapters.camunda7.contract import (
+    M4_CLOSED_SET_WORKFLOW_DOCUMENT_TYPES,
     ProcessValue,
     ProcessVariables,
     validate_process_variables,
@@ -24,6 +25,7 @@ DOCUMENT_STAGE_TOPICS = (
 )
 ALL_EXTERNAL_TASK_TOPICS = (
     *DOCUMENT_STAGE_TOPICS,
+    "document_record_review_audit",
     "document_reupload_control",
     "hris_update_employee_record",
     "hr_notify_processing_result",
@@ -51,6 +53,7 @@ class ReferenceStageHandler:
     topic_name: str
     required_variables: frozenset[str]
     operation: StageOperation
+    allowed_workflow_document_types: frozenset[str] | None = None
 
     def handle(self, variables: Mapping[str, ProcessValue]) -> ProcessVariables:
         missing = sorted(
@@ -64,6 +67,14 @@ class ReferenceStageHandler:
                 "Required document task references are missing",
                 variables={"errorCode": "DOCUMENT_INPUT_INVALID"},
             )
+        if self.allowed_workflow_document_types is not None:
+            workflow_document_type = variables.get("workflowDocumentType")
+            if workflow_document_type not in self.allowed_workflow_document_types:
+                raise CamundaBusinessError(
+                    "DOCUMENT_INPUT_INVALID",
+                    "Document type is outside the M4 closed set",
+                    variables={"errorCode": "DOCUMENT_INPUT_INVALID"},
+                )
         result = self.operation(variables)
         validate_process_variables(result)
         return result
@@ -76,6 +87,7 @@ class ReuploadControlHandler:
     def handle(self, variables: Mapping[str, ProcessValue]) -> ProcessVariables:
         current = variables.get("reuploadCount", 0)
         maximum = variables.get("maxReuploadAttempts", 3)
+        case_version = variables.get("caseVersion", 1)
         if not isinstance(current, int) or isinstance(current, bool) or current < 0:
             raise CamundaBusinessError(
                 "DOCUMENT_INPUT_INVALID",
@@ -88,9 +100,20 @@ class ReuploadControlHandler:
                 "Maximum re-upload attempts is invalid",
                 variables={"errorCode": "DOCUMENT_INPUT_INVALID"},
             )
+        if (
+            not isinstance(case_version, int)
+            or isinstance(case_version, bool)
+            or case_version <= 0
+        ):
+            raise CamundaBusinessError(
+                "DOCUMENT_INPUT_INVALID",
+                "Case version is invalid",
+                variables={"errorCode": "DOCUMENT_INPUT_INVALID"},
+            )
         return {
             "reuploadCount": current + 1,
             "maxReuploadAttempts": maximum,
+            "caseVersion": case_version + 1,
         }
 
 
@@ -115,6 +138,7 @@ class MockSideEffectHandler:
 
 def build_m4_shadow_handlers(
     stage_operations: Mapping[str, StageOperation],
+    review_audit_operation: StageOperation,
 ) -> tuple[ReferenceStageHandler | ReuploadControlHandler | MockSideEffectHandler, ...]:
     missing = sorted(set(DOCUMENT_STAGE_TOPICS) - set(stage_operations))
     unexpected = sorted(set(stage_operations) - set(DOCUMENT_STAGE_TOPICS))
@@ -127,11 +151,31 @@ def build_m4_shadow_handlers(
             topic_name=topic,
             required_variables=_REQUIRED_STAGE_VARIABLES[topic],
             operation=stage_operations[topic],
+            allowed_workflow_document_types=(
+                M4_CLOSED_SET_WORKFLOW_DOCUMENT_TYPES
+                if topic == "document_extract"
+                else None
+            ),
         )
         for topic in DOCUMENT_STAGE_TOPICS
     )
     return (
         *stages,
+        ReferenceStageHandler(
+            topic_name="document_record_review_audit",
+            required_variables=frozenset(
+                {
+                    "resultReference",
+                    "resultPayloadHash",
+                    "reviewStage",
+                    "reviewerId",
+                    "reviewedAt",
+                    "caseVersion",
+                    "idempotencyKey",
+                }
+            ),
+            operation=review_audit_operation,
+        ),
         ReuploadControlHandler(),
         MockSideEffectHandler(
             topic_name="hris_update_employee_record",

@@ -12,6 +12,8 @@ const SHOW_GROUND_TRUTH_REVIEW =
   import.meta.env.VITE_SHOW_GROUND_TRUTH_REVIEW === "true";
 const SHOW_EXTERNAL_DATASET_REVIEW =
   import.meta.env.VITE_SHOW_EXTERNAL_DATASET_REVIEW === "true";
+const SHOW_OCR_HO_SHADOW_UAT =
+  import.meta.env.VITE_SHOW_OCR_HO_SHADOW_UAT === "true";
 const SHOW_LEGACY_UPLOAD =
   import.meta.env.VITE_SHOW_LEGACY_UPLOAD === "true";
 
@@ -324,6 +326,92 @@ type LocalEvidenceDetail = {
       ocrPipeline?: string;
     } | null;
   };
+};
+
+type OcrHoShadowSummary = {
+  schemaVersion: string;
+  localOnly: true;
+  containsRealPII: true;
+  groundTruthLoaded: false;
+  predictionMode: "SHADOW_REVIEW_ONLY";
+  candidateVersion: string;
+  policyId: string | null;
+  datasetRole: string | null;
+  targetFields: string[];
+  protectedFields: string[];
+  documentCount: number;
+  metrics: Record<string, Record<string, number>>;
+  promotionGate: {
+    status?: string;
+    productionPromotionAllowed?: boolean;
+    exactImprovementCount?: number;
+    exactRegressionCount?: number;
+    schemaErrorCount?: number;
+    manualReviewFieldCount?: number;
+  };
+  reviewCounts: Record<string, number>;
+  documents: Array<{
+    documentId: string;
+    documentIndex: number;
+    sourceFile: string;
+    sourceFormat: string;
+    pageCount: number;
+    previewAvailable: boolean;
+    reviewDecision: string;
+    reviewedAt: string | null;
+  }>;
+};
+
+type OcrHoShadowField = {
+  value: string | null;
+  asciiValue: string | null;
+  status: string | null;
+  asciiStatus: string | null;
+  confidence: number | null;
+  errorSignals: string[];
+  selectionMode: string | null;
+  evidence: {
+    pageIndex: number | null;
+    bbox: number[];
+    candidateCount: number;
+    recognizerProfiles: string[];
+  };
+};
+
+type OcrHoShadowDetail = {
+  schemaVersion: string;
+  localOnly: true;
+  containsRealPII: true;
+  groundTruthLoaded: false;
+  predictionMode: "SHADOW_REVIEW_ONLY";
+  candidateVersion: string | null;
+  policyId: string | null;
+  documentId: string;
+  documentIndex: number;
+  sourceFile: string;
+  sourceFormat: string;
+  pageCount: number;
+  previewAvailable: boolean;
+  sourceReference: string;
+  baselineReference: string;
+  candidateReference: string;
+  candidatePolicyLock: Record<string, unknown>;
+  fields: Record<
+    string,
+    {
+      targetField: boolean;
+      changed: boolean;
+      baseline: OcrHoShadowField;
+      candidate: OcrHoShadowField;
+    }
+  >;
+  review: {
+    decision: string;
+    reviewedAt: string;
+    reviewer: string;
+    assertions: Record<string, boolean>;
+    note: string;
+  } | null;
 };
 
 type Detail = {
@@ -1140,6 +1228,212 @@ function CccdEvaluationInspector({
   );
 }
 
+function OcrHoShadowInspector({
+  detail,
+  loading,
+  error,
+  onReviewed,
+}: {
+  detail: OcrHoShadowDetail | null;
+  loading: boolean;
+  error: string;
+  onReviewed: () => void;
+}) {
+  const [decision, setDecision] = useState("NEEDS_FOLLOWUP");
+  const [note, setNote] = useState("");
+  const [assertions, setAssertions] = useState({
+    comparedWithSource: false,
+    checkedChangedFields: false,
+    confirmedManualReview: false,
+  });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset local UAT form for the selected evidence document.
+    setDecision(detail?.review?.decision ?? "NEEDS_FOLLOWUP");
+    setNote(detail?.review?.note ?? "");
+    setAssertions({
+      comparedWithSource: detail?.review?.assertions?.comparedWithSource ?? false,
+      checkedChangedFields: detail?.review?.assertions?.checkedChangedFields ?? false,
+      confirmedManualReview: detail?.review?.assertions?.confirmedManualReview ?? false,
+    });
+    setSaveError("");
+  }, [detail?.documentId, detail?.review?.reviewedAt]);
+
+  if (loading) {
+    return (
+      <aside className="evidence-inspector shadow-uat-inspector" data-testid="ocr-ho-shadow-inspector">
+        <div className="evidence-inspector-state">Đang tải shadow evidence…</div>
+      </aside>
+    );
+  }
+  if (error) {
+    return (
+      <aside className="evidence-inspector shadow-uat-inspector error" data-testid="ocr-ho-shadow-inspector">
+        <div className="evidence-inspector-state error">{error}</div>
+      </aside>
+    );
+  }
+  if (!detail) return null;
+
+  const changedFields = Object.entries(detail.fields).filter(([, field]) => field.changed);
+  const value = (field: OcrHoShadowField) => field.value ?? "—";
+  const saveReview = async () => {
+    if (
+      saving ||
+      !assertions.comparedWithSource ||
+      !assertions.checkedChangedFields ||
+      !assertions.confirmedManualReview
+    ) {
+      return;
+    }
+    setSaving(true);
+    setSaveError("");
+    try {
+      const response = await fetch(
+        `${API_BASE}/ocr-ho-v2/shadow/review?id=${encodeURIComponent(detail.documentId)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ decision, note, assertions }),
+        },
+      );
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Không lưu được shadow UAT");
+      onReviewed();
+    } catch (reviewError) {
+      setSaveError(
+        reviewError instanceof Error
+          ? reviewError.message
+          : "Không lưu được shadow UAT local.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <aside className="evidence-inspector shadow-uat-inspector" aria-live="polite" data-testid="ocr-ho-shadow-inspector">
+      <header>
+        <div>
+          <span>SHADOW UAT · LOCAL-ONLY</span>
+          <strong>OCR-HO-V2 v{detail.candidateVersion ?? "11.8.1"}</strong>
+        </div>
+        <small>{detail.predictionMode} · không nạp Ground Truth</small>
+      </header>
+      <div className="shadow-uat-banner">
+        <strong>Ảnh nguồn → baseline → candidate</strong>
+        <span>
+          Policy: {detail.policyId ?? "phase11.8-v2-address-token-consensus"} · Candidate chỉ để review,
+          không thay đổi output chính và luôn MANUAL_REVIEW.
+        </span>
+      </div>
+      <div className="shadow-uat-table" role="table">
+        <div className="shadow-uat-row heading" role="row">
+          <span>FIELD</span>
+          <span>BASELINE 11.5</span>
+          <span>CANDIDATE {detail.candidateVersion ?? "11.8.1"}</span>
+          <span>PROVENANCE</span>
+        </div>
+        {Object.entries(detail.fields).map(([fieldName, field]) => (
+          <div
+            className={`shadow-uat-row ${field.changed ? "changed" : ""}`}
+            key={fieldName}
+            role="row"
+          >
+            <strong>
+              {fieldName}
+              <small>{field.targetField ? "TARGET" : "PROTECTED"}</small>
+            </strong>
+            <span>{value(field.baseline)}</span>
+            <span>
+              {value(field.candidate)}
+              <small data-status={field.candidate.status ?? undefined}>
+                {field.candidate.status ?? "—"}
+              </small>
+            </span>
+            <span>
+              {field.changed ? "changed" : "unchanged"} · ROI [{field.candidate.evidence.bbox.join(", ") || "—"}]
+              <small>
+                {field.candidate.confidence == null
+                  ? "confidence —"
+                  : `confidence ${(field.candidate.confidence * 100).toFixed(1)}%`}
+                {field.candidate.evidence.recognizerProfiles.length
+                  ? ` · ${field.candidate.evidence.recognizerProfiles.join(", ")}`
+                  : ""}
+              </small>
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="shadow-uat-review-form">
+        <div>
+          <strong>Review thay đổi ({changedFields.length} field)</strong>
+          <span>Đối chiếu trực tiếp với ảnh bên trái; không dùng Ground Truth để quyết định.</span>
+        </div>
+        <div className="shadow-uat-decision-row">
+          {[
+            ["APPROVE_SHADOW", "Chấp nhận shadow"],
+            ["REJECT_SHADOW", "Từ chối candidate"],
+            ["NEEDS_FOLLOWUP", "Cần xử lý tiếp"],
+          ].map(([option, label]) => (
+            <label key={option}>
+              <input
+                type="radio"
+                name={`shadow-decision-${detail.documentId}`}
+                value={option}
+                checked={decision === option}
+                onChange={() => setDecision(option)}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+        <div className="shadow-uat-assertions">
+          {([
+            ["comparedWithSource", "Đã đối chiếu ảnh nguồn"],
+            ["checkedChangedFields", "Đã kiểm tra các field changed"],
+            ["confirmedManualReview", "Xác nhận vẫn MANUAL_REVIEW"],
+          ] as const).map(([name, label]) => (
+            <label key={name}>
+              <input
+                type="checkbox"
+                checked={assertions[name]}
+                onChange={(event) =>
+                  setAssertions((current) => ({ ...current, [name]: event.target.checked }))
+                }
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+        <textarea
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          maxLength={1000}
+          placeholder="Ghi chú review local (tuỳ chọn)"
+          aria-label="Ghi chú shadow UAT"
+        />
+        {saveError ? <small className="shadow-uat-error">{saveError}</small> : null}
+        <button
+          className="save-review"
+          type="button"
+          onClick={() => void saveReview()}
+          disabled={
+            saving ||
+            !assertions.comparedWithSource ||
+            !assertions.checkedChangedFields ||
+            !assertions.confirmedManualReview
+          }
+        >
+          {saving ? "Đang lưu…" : detail.review ? "Cập nhật shadow review" : "Lưu shadow review"}
+        </button>
+      </div>
+    </aside>
+  );
+}
+
 const phase17Steps = [
   {
     order: 1,
@@ -1788,6 +2082,9 @@ function TemplateResultPanel({
 }
 
 export default function Dashboard({ data }: { data: DashboardData }) {
+  const showLegacyUpload =
+    SHOW_LEGACY_UPLOAD ||
+    (typeof window !== "undefined" && window.location.hostname === "localhost");
   const [query, setQuery] = useState("");
   const [type, setType] = useState("ALL");
   const [variant, setVariant] = useState("ALL");
@@ -1798,6 +2095,14 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [apiOnline, setApiOnline] = useState(false);
   const [heldout, setHeldout] = useState<HeldoutSummary | null>(null);
   const [heldoutError, setHeldoutError] = useState("");
+  const [ocrHoShadow, setOcrHoShadow] = useState<OcrHoShadowSummary | null>(null);
+  const [ocrHoShadowError, setOcrHoShadowError] = useState("");
+  const [activeOcrHoShadowId, setActiveOcrHoShadowId] = useState("");
+  const [ocrHoShadowDetail, setOcrHoShadowDetail] =
+    useState<OcrHoShadowDetail | null>(null);
+  const [ocrHoShadowDetailLoading, setOcrHoShadowDetailLoading] = useState(false);
+  const [ocrHoShadowDetailError, setOcrHoShadowDetailError] = useState("");
+  const [ocrHoShadowRefresh, setOcrHoShadowRefresh] = useState(0);
   const [groundTruthReview, setGroundTruthReview] =
     useState<CccdGroundTruthReviewSummary | null>(null);
   const [groundTruthReviewError, setGroundTruthReviewError] = useState("");
@@ -1833,9 +2138,11 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [heldoutEvidenceLoading, setHeldoutEvidenceLoading] = useState(false);
   const [heldoutEvidenceError, setHeldoutEvidenceError] = useState("");
   const [evidenceMode, setEvidenceMode] =
-    useState<"heldout" | "templates" | "cccd" | "external-dataset">(
+    useState<"heldout" | "templates" | "cccd" | "external-dataset" | "ocr-ho-v2-shadow">(
       // Legacy default: SHOW_HELDOUT ? "heldout" : "templates"
-      SHOW_HELDOUT
+      SHOW_OCR_HO_SHADOW_UAT
+        ? "ocr-ho-v2-shadow"
+        : SHOW_HELDOUT
         ? "heldout"
         : SHOW_EXTERNAL_DATASET_REVIEW
           ? "external-dataset"
@@ -2141,6 +2448,74 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         );
       });
   }, []);
+
+  useEffect(() => {
+    if (!SHOW_OCR_HO_SHADOW_UAT) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear unavailable optional shadow data.
+      setOcrHoShadow(null);
+      return;
+    }
+    fetch(`${API_BASE}/ocr-ho-v2/shadow/summary`)
+      .then((response) => {
+        if (!response.ok) throw new Error("OCR-HO-V2 shadow UAT unavailable");
+        return response.json() as Promise<OcrHoShadowSummary>;
+      })
+      .then((payload) => {
+        setOcrHoShadow(payload);
+        setOcrHoShadowError("");
+        setActiveOcrHoShadowId((current) =>
+          payload.documents.some((document) => document.documentId === current)
+            ? current
+            : payload.documents[0]?.documentId ?? "",
+        );
+      })
+      .catch((fetchError) => {
+        setOcrHoShadow(null);
+        setOcrHoShadowError(
+          fetchError instanceof Error
+            ? fetchError.message
+            : "Chưa kết nối được shadow UAT local.",
+        );
+      });
+  }, [ocrHoShadowRefresh]);
+
+  useEffect(() => {
+    if (!SHOW_OCR_HO_SHADOW_UAT || !activeOcrHoShadowId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale selected shadow detail.
+      setOcrHoShadowDetail(null);
+      return;
+    }
+    let cancelled = false;
+    setOcrHoShadowDetailLoading(true);
+    setOcrHoShadowDetailError("");
+    fetch(
+      `${API_BASE}/ocr-ho-v2/shadow/document?id=${encodeURIComponent(
+        activeOcrHoShadowId,
+      )}&mode=detail`,
+    )
+      .then((response) => {
+        if (!response.ok) throw new Error("Shadow UAT document unavailable");
+        return response.json() as Promise<OcrHoShadowDetail>;
+      })
+      .then((payload) => {
+        if (!cancelled) setOcrHoShadowDetail(payload);
+      })
+      .catch((fetchError) => {
+        if (cancelled) return;
+        setOcrHoShadowDetail(null);
+        setOcrHoShadowDetailError(
+          fetchError instanceof Error
+            ? fetchError.message
+            : "Không đọc được shadow evidence local.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setOcrHoShadowDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeOcrHoShadowId, ocrHoShadowRefresh]);
 
   useEffect(() => {
     if (!SHOW_GROUND_TRUTH_REVIEW || !activeGroundTruthId) {
@@ -3498,7 +3873,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         <div className="upload-layout">
           <div>
             <form onSubmit={submitUpload} className="upload-form">
-              {SHOW_LEGACY_UPLOAD ? (
+              {showLegacyUpload ? (
                 <div
                   className="upload-mode-switch"
                   role="tablist"
@@ -3611,7 +3986,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               {uploadError && <div className="upload-error">{uploadError}</div>}
             </form>
 
-            {SHOW_LEGACY_UPLOAD && processingMode === "legacy" && (
+            {showLegacyUpload && processingMode === "legacy" && (
               <div className="session-history">
                 <div>
                   <h3>Lịch sử upload private</h3>
@@ -5188,6 +5563,16 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           </p>
         </div>
         <div className="evidence-switch" role="tablist">
+          {SHOW_OCR_HO_SHADOW_UAT ? (
+            <button
+              className={evidenceMode === "ocr-ho-v2-shadow" ? "active" : ""}
+              onClick={() => setEvidenceMode("ocr-ho-v2-shadow")}
+              role="tab"
+              aria-selected={evidenceMode === "ocr-ho-v2-shadow"}
+            >
+              OCR-HO-V2 v{ocrHoShadow?.candidateVersion ?? "11.8.1"} · Shadow UAT
+            </button>
+          ) : null}
           {SHOW_HELDOUT ? (
             <button
               className={evidenceMode === "heldout" ? "active" : ""}
@@ -5225,7 +5610,73 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             </button>
           ) : null}
         </div>
-        {SHOW_HELDOUT && evidenceMode === "heldout" ? (
+        {SHOW_OCR_HO_SHADOW_UAT && evidenceMode === "ocr-ho-v2-shadow" ? (
+          <div className="heldout-evidence-grid shadow-uat-grid">
+            <div className="heldout-document-list" role="list">
+              {(ocrHoShadow?.documents ?? []).map((document) => (
+                <button
+                  className={
+                    document.documentId === activeOcrHoShadowId ? "active" : ""
+                  }
+                  key={document.documentId}
+                  onClick={() => setActiveOcrHoShadowId(document.documentId)}
+                  role="listitem"
+                >
+                  <span>DEV-{String(document.documentIndex).padStart(2, "0")}</span>
+                  <strong>{document.sourceFile}</strong>
+                  <small>
+                    {document.reviewDecision} · {document.sourceFormat} · v
+                    {ocrHoShadow?.candidateVersion ?? "11.8.1"}
+                  </small>
+                </button>
+              ))}
+              {!ocrHoShadow?.documents.length ? (
+                <div className="evidence-inspector-state">
+                  {ocrHoShadowError || "Chưa có development shadow artifact."}
+                </div>
+              ) : null}
+            </div>
+            <div className="heldout-preview">
+              {activeOcrHoShadowId ? (
+                <img
+                  src={`${API_BASE}/ocr-ho-v2/shadow/document?id=${encodeURIComponent(
+                    activeOcrHoShadowId,
+                  )}&mode=preview`}
+                  alt={`Ảnh nguồn shadow UAT ${activeOcrHoShadowId}`}
+                  data-testid="ocr-ho-shadow-source-preview"
+                />
+              ) : (
+                <div className="native-heldout-file">
+                  <strong>Chưa có ảnh development shadow</strong>
+                </div>
+              )}
+              {ocrHoShadowDetail ? (
+                <div className="heldout-preview-actions">
+                  <div>
+                    <strong>{ocrHoShadowDetail.sourceFile}</strong>
+                    <span>
+                      Baseline Phase 11.5 → candidate v
+                      {ocrHoShadowDetail.candidateVersion ?? "11.8.1"} · Ground Truth không nạp
+                    </span>
+                  </div>
+                  <a
+                    href={`${API_BASE}/ocr-ho-v2/shadow/document?id=${encodeURIComponent(
+                      activeOcrHoShadowId,
+                    )}&mode=source`}
+                  >
+                    Mở / tải ảnh nguồn
+                  </a>
+                </div>
+              ) : null}
+            </div>
+            <OcrHoShadowInspector
+              detail={ocrHoShadowDetail}
+              loading={ocrHoShadowDetailLoading}
+              error={ocrHoShadowDetailError}
+              onReviewed={() => setOcrHoShadowRefresh((value) => value + 1)}
+            />
+          </div>
+        ) : SHOW_HELDOUT && evidenceMode === "heldout" ? (
           <div className="heldout-evidence-grid">
             <div className="heldout-document-list" role="list">
               {(heldout?.documents ?? []).map((document) => (

@@ -232,6 +232,50 @@ External dataset DATA-08 checkpoint (2026-08-03):
   targeted component lint has 0 errors. No source field values were entered by
   the agent.
 
+External dataset schema/scope update (2026-08-03):
+- Contract Ground Truth was preserved at 4/4 cases and 56/56 confirmed fields.
+- CV review now uses 10 fields per active case: `full_name`, `headline`,
+  `email`, `phone_number`, `address`, `desired_role`, `years_experience`,
+  `experience`, `skills`, and `education`. Only DOCX, IMAGE and PDF_SCAN are
+  active; `cv-001` PLAIN_TEXT and `cv-004` PPTX are inventory-only.
+- IELTS remains five fields (`recipient_name`, `credential_id`,
+  `credential_type`, `overall_score`, `issue_date`); `overall_score` is the
+  only score field. `recipient_name` is one source-preserved string in the
+  printed `Family name + First name` order; the UI now states this explicitly.
+- Queue snapshot is 12 inventory documents / 121 inventory fields, with 10
+  active documents / 101 active fields. The active queue is now `SEALED` /
+  `CONFIRMED`, `canLock=false`; predictions remain unopened.
+- The local draft migration preserved matching prior fields and wrote a
+  recoverable backup outside Git at
+  `C:\tmp\hcns-dataset-run-dec17acb-ground-truth-draft-pre-cv10-20260803.json`.
+
+External dataset SEALED checkpoint (2026-08-03):
+- Independent review confirmed all active fields: four contract cases × 14,
+  three CV cases × 10, and three IELTS cases × 5 (101 active fields).
+- Seal marker: `C:\tmp\hcns-dataset-run-dec17acb-ground-truth-draft-SEALED.json`.
+  It records `predictionsOpened=false`, `fieldCount=121` for the complete
+  inventory schema, and the sealed Ground Truth SHA-256.
+- No prediction/OCR values were opened or used for review. DATA-09 produced a
+  local typed projection at
+  `C:\tmp\hcns-dataset-run-dec17acb-typed-canonical.json`, preserving each
+  reviewed `sourceValue` beside its canonical type. The aggregate-only report
+  is at `C:\tmp\hcns-dataset-run-dec17acb-data09-aggregate-pilot.json`.
+- DATA-09 pilot result: 10 active documents / 101 active fields, 97 normalized,
+  4 explicitly missing optional values, 0 fields requiring re-review. Typed
+  coverage is 15 dates, 4 integer currency fields, 10 numeric fields and 72
+  strings. Predictions remain unopened and promotion is `HOLD`.
+- DATA-10 was approved by explicit user direction after schema and aggregate
+  re-validation. The local approval marker is
+  `C:\tmp\hcns-dataset-run-dec17acb-typed-canonical-APPROVED.json`; it permits
+  read-only downstream use only, with `predictionsOpened=false` and
+  `promotionAllowed=false`.
+- DATA-11 now exposes the approved projection through loopback GET-only API
+  routes for summary, active document detail and JSON/CSV export. The reader
+  rechecks artifact hashes and approval policy per request; default responses
+  omit `sourceValue`, OCR text and predictions. POST/DELETE typed routes return
+  `405`; no promotion or HR side effect is enabled. API/external regression is
+  22 tests passing.
+
 OCR-HO-V2-001 checkpoint (2026-08-02):
 - From 89 file-level new candidates in the local CCCD test folder, 15 images
   were selected deterministically by SHA-256 after excluding the legacy 29 and
@@ -302,8 +346,261 @@ Key commands:
 - Previous full checkpoint: Python 225 passed; lint 0 errors/15 existing warnings
 - Weekly report: `python scripts/validate_weekly_report.py` and report-script Ruff pass
 
+M4-CAM-001 checkpoint (2026-08-04):
+- Camunda BPMN `2.2.0-shadow` is closed to `LEAVE_REQUEST` and
+  `OVERTIME_REQUEST` across submit, confirm-type and re-upload forms.
+- The adapter owns an M4 allowlist; `document_extract` rejects an out-of-scope
+  workflow type with `DOCUMENT_INPUT_INVALID` before invoking the operation.
+- Global domain/workflow enums remain unchanged for legacy compatibility;
+  `autoContinueEnabled=false` and mock-only side effects remain locked.
+- Validation: 39 targeted tests passed; Ruff, mypy (79 source files), repository
+  hygiene and `git diff --check` passed.
+- Superseded next-task marker: M4-CAM-002 is now DONE; see the checkpoint below.
+
+M4-CAM-002 checkpoint (2026-08-04):
+- A local `hcns-agent-camunda-worker` entrypoint composes the REST client,
+  Template-first pipeline, OCR Lab session source resolver, private JSON result
+  store and all M4 handlers by dependency injection.
+- All six document topics are bound exactly; missing or unexpected operations
+  fail closed at startup. HRIS and notification remain simulated.
+- Parse persists the full private result and idempotency index before worker
+  completion. Replay reuses one deterministic opaque reference without running
+  the pipeline again; raw field values never enter process variables.
+- Invalid input emits `DOCUMENT_INPUT_INVALID`; technical failures decrement
+  External Task retry. The parse topic extends its lock to 180 seconds before
+  running the long stage.
+- Runtime connection values come only from environment; no credential, endpoint
+  or private path is committed. No Camunda deployment/server call was made.
+- Validation: 52 targeted tests passed; Ruff passed; mypy passed on 81 source
+  files; repository hygiene and `git diff --check` passed.
+- Known deferral: correction is reference-only until M4-CAM-005. The previously
+  deferred eight-variable DMN projection is now complete below.
+- Superseded next-task marker: M4-CAM-003 is now DONE; see the checkpoint below.
+
+M4-CAM-003 checkpoint (2026-08-04):
+- The private idempotent result now includes an exact eight-scalar DMN quality
+  projection. `document_normalize_validate` returns only those inputs and never
+  forwards Template-first `MANUAL_REVIEW` as a gateway action.
+- Projection validation checks the exact key set, scalar/boolean types,
+  `qualityStatus`, confidence range, the Camunda whitelist and JSON Schema.
+- Valid native documents route to `USER_REVIEW` because shadow policy keeps
+  `autoContinueEnabled=false`. Four synthetic OCR paths covering both templates
+  and image/scan PDF remain Human Review with zero false `AUTO_CONTINUE`.
+- Missing required fields route to `REQUEST_REUPLOAD`; business inconsistencies
+  route to `HR_REVIEW`; type mismatch targets the Confirm Type User Task.
+- DMN output is restricted to `AUTO_CONTINUE`, `USER_REVIEW`, `HR_REVIEW` and
+  `REQUEST_REUPLOAD`; no raw field value is returned in process variables.
+- Validation: 59 targeted tests passed; Ruff passed; mypy passed on 81 source
+  files; repository hygiene and `git diff --check` passed.
+- No deployment or Camunda server call was made. Correction remains
+  reference-only for M4-CAM-005.
+- Superseded environment marker: M4-CAM-004 is now DONE below.
+
+M4-CAM-004 checkpoint (2026-08-04):
+- Camunda BPM Run 7.13.0 was verified locally and the REST deployment succeeded
+  with one BPMN process plus one DMN decision.
+- The first deployment exposed an XSD ordering defect: BPMN artifacts preceded
+  sequence flows. The artifact block was moved after all flow elements and a
+  regression test now locks Camunda 7.13-compatible ordering.
+- Synthetic leave and overtime instances both reached `UserReview` with PASS,
+  `USER_REVIEW` and `autoContinueEnabled=false`.
+- Worker restart retained the active User Task/process state. A same-key replay
+  reused the original opaque reference and kept the private result-file count
+  unchanged.
+- Three synthetic instances completed with HRIS and notification history values
+  both `SIMULATED`; no real external side effect was enabled.
+- Worker smoke processes were stopped. Camunda local remains running for
+  deployment/history inspection; no credential or private value was recorded.
+- Validation: 60 targeted tests passed; Ruff passed; mypy passed on 81 source
+  files; repository hygiene and `git diff --check` passed.
+- Next READY task: M4-CAM-005 correction/re-upload loop and reviewer audit.
+
 Next:
 - Không mở task deployment/production-readiness trong kế hoạch hiện tại; giữ
   localhost/loopback là runtime target.
 - Keep Paddle rollback and historical CCCD/held-out work outside the
   Template-first default unless a new evidence task is approved.
+
+## OCR-HO-V2-004 checkpoint (2026-08-03)
+
+- Candidate `OCR-HO-V2 v1.1.0` is implemented for development shadow use only.
+  Orientation is explicitly `fixed_0_degree`; no 90°/180°/270° promotion path
+  is enabled. Every result remains `MANUAL_REVIEW`.
+- Parser boundary fixes cover bilingual-label contamination, OCR typo aliases,
+  multiline origin/residence geometry, and unsafe expiry-date fallback. The
+  candidate reads OCR evidence only; it does not use Ground Truth or sibling
+  documents to fill values.
+- Development regression on 15 archived reviewed images / 120 fields:
+  baseline strict/ASCII exact 60.00%/61.67%, CER 43.60%, DER 12.65%, presence
+  95.83%; v1.1 strict/ASCII exact 36.67%/40.00%, CER 50.75%, DER 17.00%,
+  presence 70.00%.
+- Gate: `DEVELOPMENT_FAIL`, with schema errors 0 and manual-review policy true,
+  but exact regressions 33 and quality metrics below baseline. No production
+  promotion; the official 14-document held-out evaluate-once artifact remains
+  immutable. Localhost is running the v1.1 shadow output for inspection.
+
+## OCR-HO-V2-005 checkpoint (2026-08-03)
+
+- Added guarded shadow candidate policy v1.2.0 for Vietnamese CCCD field
+  recovery. It consumes Phase 11.5 evidence only, cleans bilingual labels and
+  line merges, and replaces a baseline value only when the baseline is unsafe
+  and independent recognizer families agree.
+- Development archive replay covered 15 documents / 120 fields at fixed 0°.
+  Baseline strict/ASCII exact was 60.00%/61.67%; candidate remained
+  60.00%/61.67%, improved CER from 43.60% to 43.06%, kept DER 12.65% and
+  presence 95.83%, with 0 exact regressions and schema errors 0.
+- All 120 candidate fields remain `MANUAL_REVIEW`. Gate is
+  `DEVELOPMENT_PASS`, but `productionPromotionAllowed=false`; no runtime
+  extractor or official held-out evaluate-once artifact was changed.
+- Aggregate report is private-only at
+  `CCCD_OCR_HO_V2_005_DEVELOPMENT_COMPARISON.{json,md}`. No PII or raw OCR is
+  tracked.
+
+## OCR-HO-V2-008 checkpoint (token-alignment candidate, 2026-08-03)
+
+- Candidate `OCR-HO-V2 v11.8.1` aligns normalized address token sequences from
+  independent recognizer families and restores only structural separators for
+  `placeOfOrigin`; residence remains guarded by the v11.7 selector.
+- Development comparison covered 15 reviewed images / 120 fields at fixed 0°:
+  strict exact 60.00% -> 60.83%, ASCII exact 61.67% -> 63.33%, CER
+  43.60% -> 42.47%, DER 12.65% -> 12.25%, presence 95.83%, region selection
+  73.33% -> 81.67%.
+- Exact improvements/regressions were 1/0; schema errors 0 and all 120 fields
+  remained `MANUAL_REVIEW`. Development gate passed, but
+  `productionPromotionAllowed=false` remains enforced. Localhost primary and
+  the official 14-document held-out artifact were not changed.
+
+## OCR-HO-V2-007 checkpoint (address ROI + Unicode replay, 2026-08-03)
+
+- Candidate `OCR-HO-V2 v11.7.1` narrows recovery to `placeOfOrigin` and
+  `placeOfResidence`. It uses same-row bilingual label geometry, removes
+  neighboring labels/dates, and applies only reversible Unicode mojibake repair;
+  protected fields remain the Phase 11.5 baseline.
+- Development comparison covered 15 reviewed images / 120 fields at fixed 0°.
+  Strict/ASCII exact stayed 60.00%/61.67%, CER improved 43.60% -> 43.27%,
+  DER improved 12.65% -> 12.25%, presence stayed 95.83%, and region selection
+  improved 73.33% -> 81.67%.
+- Exact improvements/regressions were 0/0; schema errors were 0 and all 120
+  fields remained `MANUAL_REVIEW`. Gate is `DEVELOPMENT_FAIL` because at least
+  one exact improvement is mandatory. `productionPromotionAllowed=false`;
+  localhost primary and the official 14-document held-out artifact are unchanged.
+
+## OCR-HO-V2-011 checkpoint (deterministic address ROI, 2026-08-04)
+
+- Candidate `OCR-HO-V2 v11.9.1` derives the two address ROIs from observed
+  label anchors and clips the residence band before the expiry block. It is
+  development shadow-only and keeps every output at `MANUAL_REVIEW`.
+- The replay used only the available `paddle_ppocrv5` profile; optional
+  EasyOCR/VietOCR packages were unavailable and this limitation is recorded.
+  Ground Truth was scoring-only, never a candidate input.
+- Metrics: strict exact 60.00% -> 60.00%, ASCII exact 61.67% -> 62.50%, CER
+  43.60% -> 41.44%, DER 12.65% -> 15.81%, presence 95.83% -> 95.83%, region
+  selection 73.33% -> 79.17%; exact improvements/regressions 0/0.
+- Schema errors: 0; manual-review fields: 120/120. Gate is
+  `DEVELOPMENT_FAIL` because DER regressed and no exact improvement exists.
+  `productionPromotionAllowed=false`; localhost primary and the official
+  14-document held-out evaluate-once artifact are unchanged.
+- Private report: `CCCD_OCR_HO_V2_011_DEVELOPMENT_COMPARISON`.
+
+## OCR-HO-V2-012 checkpoint (full recognizer replay, 2026-08-04)
+
+- The locked private secondary runtime was restored with EasyOCR 1.7.2,
+  VietOCR 0.3.13 and CPU Torch. EasyOCR/VietOCR model hashes all passed the
+  Phase 11.6 policy; Paddle remained isolated in `D:\venv_paddle`.
+- An existing Camunda adapter eager-import cycle was fixed with lazy runtime
+  exports so the replay runner can import without changing public names.
+- Full development replay (15 images / 120 fields, fixed 0 degrees): strict
+  exact 60.00% -> 60.83%, ASCII exact 61.67% -> 62.50%, CER 43.60% ->
+  42.09%, DER 12.65% -> 11.46%, presence 95.83%, region selection 73.33%
+  -> 83.33%, exact improvements/regressions 1/0.
+- Schema errors: 0; manual-review fields: 120/120. Gate is
+  `DEVELOPMENT_PASS`, but `productionPromotionAllowed=false`. The localhost
+  primary and official 14-document held-out evaluate-once artifact remain
+  unchanged.
+- Validation: 20 targeted Camunda/OCR tests passed, Ruff passed, and
+  `scripts/check_repository.py` passed.
+
+## OCR-HO-V2-013 checkpoint (promotion review and local canary, 2026-08-04)
+
+- The private shadow inspector now resolves the v11.9.1 development report
+  and `phase11_9_v2/field_consensus.json` automatically, without changing the
+  v11.8 test fallback. The UI shows the candidate version from the API.
+- Loopback runtime evidence: schema
+  `ocr-ho-v2-013-promotion-review/1.0.0`, candidate `11.9.1`,
+  `SHADOW_REVIEW_ONLY`, 15 development documents, and
+  `groundTruthLoaded=false`. All 15 review decisions remain pending.
+- The report gate is `DEVELOPMENT_PASS` with
+  `productionPromotionAllowed=false`; no automatic review, promotion,
+  held-out rerun, or primary-runtime change was performed.
+- Canary smoke passed: API health, shadow summary, one document detail/preview,
+  and the existing localhost web shell returned successfully.
+
+## OCR-HO-V2-009 checkpoint (local shadow UAT, 2026-08-03)
+
+- Implemented a loopback-only shadow inspector for OCR-HO-V2 v11.8.1. It
+  renders each development source image alongside the Phase 11.5 baseline and
+  Phase 11.8.1 candidate field values, changed/protected tags, ROI bbox,
+  confidence and recognizer provenance.
+- The endpoint explicitly reports `groundTruthLoaded=false`; it reads only
+  `phase11_5` and `phase11_8_v2` artifacts. It never changes Template-first,
+  the CCCD primary runtime, the official held-out artifact or promotion state.
+- A private review store accepts one of `APPROVE_SHADOW`, `REJECT_SHADOW` or
+  `NEEDS_FOLLOWUP` only after source comparison, changed-field inspection and
+  `MANUAL_REVIEW` assertions. No raw review store is tracked in Git.
+- Runtime evidence: 15 development documents are visible; v11.8.1 remains
+  `DEVELOPMENT_PASS` with `productionPromotionAllowed=false`.
+- Tests: shadow Python/API 3 passed; rendered web tests 11 passed; ESLint 0
+  errors with 23 existing warnings; Ruff passed for new files and API E501.
+  The web build remains unrun because the sandbox denies writes to
+  `node_modules/.vite-temp`.
+
+## OCR-HO-V2-006 checkpoint (targeted ROI/recognizer replay, 2026-08-03)
+
+- Candidate `OCR-HO-V2 v11.6.1` ran a fresh four-variant ROI replay for
+  `fullName`, `sex`, `nationality`, `placeOfOrigin`, and `placeOfResidence`.
+  Other fields remained protected by the Phase 11.5 baseline; input stayed at
+  fixed 0 degrees and every output stayed `MANUAL_REVIEW`.
+- Development comparison covered 15 archived reviewed images / 120 fields.
+  Baseline strict/ASCII exact was 60.00%/61.67%, CER 43.60%, DER 12.65%,
+  presence 95.83%. Candidate was 60.00%/61.67%, CER 42.52%, DER 13.83%,
+  presence 95.83%, with region-selection accuracy improving 73.33% -> 79.17%.
+- No exact improvement and no exact regression were observed. Schema errors
+  were 0 and all 120 fields remained manual review. Gate is
+  `DEVELOPMENT_FAIL` because DER regressed and the promotion rule requires at
+  least one exact improvement. `productionPromotionAllowed=false`.
+- Candidate evidence and aggregate reports remain private-only; the official
+  14-document held-out evaluate-once artifact and localhost primary runtime
+  were not changed.
+
+## Local real-document evidence refresh (2026-08-04)
+
+- Local dashboard API was restarted against the active private root
+  `C:\\Camunda\\private-data\\paddleocr-hr-baseline`; the older
+  `paddleocr-hr-baseline-archive-20260803` is not used for Template-first evidence.
+- `GET /api/documents/sessions` now returns 11 leave/overtime sessions: native
+  DOCX/PDF sessions plus the latest image predictions using `easyocr/vi-greedy`.
+- Preview/source smoke passed for leave and overtime images and a native PDF;
+  `/health` is `ok`, and localhost web responds HTTP 200. No raw values were
+  copied into Git or project state.
+- CCCD, OCR-HO shadow and DATA-11 typed projection routes remain configured
+  against their existing private artifacts.
+
+## External image expansion checkpoint (2026-08-04)
+
+- Created a private expanded staging root outside Git from the existing
+  synthetic inventory plus 10 new PNGs supplied in `D:\bo_10_anh_tai_lieu_gia_lap`:
+  4 contract, 3 CV and 3 IELTS images.
+- Inventory `2026-08-04-image-expansion` verifies 22 documents / 26 pages.
+  Existing case IDs and review state were preserved; the 10 new image cases
+  remain `PENDING` in a new Ground Truth draft.
+- EasyOCR aggregate-only pilot completed 22/22 cases with 0 failures using
+  `easyocr/vi-greedy` 1.7.2. Report contains no raw OCR text or field values;
+  promotion remains `HOLD` because Ground Truth is not sealed and page count
+  is below the benchmark minimum.
+- Local API now serves the expanded review dataset at `127.0.0.1:8765`:
+  active review is 20 documents / 202 fields (contract 8/112, CV 6/60,
+  IELTS 6/30). New image preview/source smoke tests returned HTTP 200 with
+  `image/png`; predictions remain hidden during review.
+- Review scope labels are now computed from API metadata instead of the old
+  fixed case counts. DATA-11 typed projection is intentionally not attached to
+  this unsealed expansion; the prior approved projection remains private-only.

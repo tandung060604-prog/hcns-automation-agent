@@ -3,6 +3,7 @@ param(
     [string]$DataRoot,
     [string]$HeldoutRoot = "",
     [string]$CccdHeldoutRoot = "",
+    [string]$OcrHoShadowRoot = "",
     [string]$ExternalDatasetRoot = "",
     [string]$ExternalDatasetInventory = "",
     [string]$ExternalDatasetGroundTruth = "",
@@ -71,6 +72,9 @@ if (-not $apiRunning) {
     }
     if ($CccdHeldoutRoot) {
         $apiArguments += @("--cccd-heldout-root", "`"$CccdHeldoutRoot`"")
+    }
+    if ($OcrHoShadowRoot) {
+        $apiArguments += @("--ocr-ho-shadow-root", "`"$OcrHoShadowRoot`"")
     }
     if ($ExternalDatasetRoot) {
         $apiArguments += @("--external-dataset-root", "`"$ExternalDatasetRoot`"")

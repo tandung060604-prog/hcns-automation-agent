@@ -36,6 +36,27 @@ class CamundaQualityAction(str, Enum):
     REQUEST_REUPLOAD = "REQUEST_REUPLOAD"
 
 
+M4_CLOSED_SET_WORKFLOW_DOCUMENT_TYPES = frozenset(
+    {
+        CamundaWorkflowDocumentType.LEAVE_REQUEST.value,
+        CamundaWorkflowDocumentType.OVERTIME_REQUEST.value,
+    }
+)
+
+DMN_QUALITY_INPUT_VARIABLES = frozenset(
+    {
+        "qualityStatus",
+        "reviewRequired",
+        "sensitiveFieldNeedsReview",
+        "missingCriticalField",
+        "businessInconsistency",
+        "requiredFieldsComplete",
+        "overallConfidence",
+        "autoContinueEnabled",
+    }
+)
+
+
 @dataclass(frozen=True, slots=True)
 class CamundaRolloutPolicy:
     policy_id: str
@@ -86,6 +107,7 @@ PROCESS_VARIABLE_WHITELIST = frozenset(
         "requiredFieldsComplete",
         "overallConfidence",
         "resultReference",
+        "resultPayloadHash",
         "schemaVersion",
         "errorCode",
         "idempotencyKey",
@@ -94,6 +116,13 @@ PROCESS_VARIABLE_WHITELIST = frozenset(
         "correctionsReference",
         "hrReviewDecision",
         "hrReviewNoteReference",
+        "reviewStage",
+        "reviewerId",
+        "reviewedAt",
+        "caseVersion",
+        "reviewAuditReference",
+        "reviewedPayloadHash",
+        "reviewReasonCodes",
         "reuploadCount",
         "maxReuploadAttempts",
         "finalHrDecision",
@@ -101,6 +130,9 @@ PROCESS_VARIABLE_WHITELIST = frozenset(
         "recommendedAction",
         "templateId",
         "templateVersion",
+        "parserName",
+        "parserVersion",
+        "ocrEngine",
         "extractionStatus",
         "extractedDataReference",
         "autoContinueEnabled",
@@ -232,3 +264,29 @@ def validate_process_variables(variables: dict[str, ProcessValue]) -> None:
             raise ValueError(f"Process variable {name} exceeds the string length limit")
         if value is not None and not isinstance(value, (str, int, float, bool)):
             raise TypeError(f"Process variable {name} must contain a scalar value")
+
+
+def validate_dmn_quality_variables(variables: ProcessVariables) -> None:
+    missing = DMN_QUALITY_INPUT_VARIABLES - set(variables)
+    unexpected = set(variables) - DMN_QUALITY_INPUT_VARIABLES
+    if missing or unexpected:
+        raise ValueError(
+            f"DMN quality variable mismatch; missing={sorted(missing)}, "
+            f"unexpected={sorted(unexpected)}"
+        )
+    validate_process_variables(variables)
+    if variables["qualityStatus"] not in {status.value for status in QualityStatus}:
+        raise ValueError("DMN qualityStatus is not supported")
+    boolean_names = DMN_QUALITY_INPUT_VARIABLES - {
+        "qualityStatus",
+        "overallConfidence",
+    }
+    if any(type(variables[name]) is not bool for name in boolean_names):
+        raise TypeError("DMN quality flags must be booleans")
+    confidence = variables["overallConfidence"]
+    if (
+        isinstance(confidence, bool)
+        or not isinstance(confidence, (int, float))
+        or not 0.0 <= float(confidence) <= 1.0
+    ):
+        raise ValueError("DMN overallConfidence must be between 0 and 1")

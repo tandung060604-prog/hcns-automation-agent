@@ -5,9 +5,15 @@
 
 | ID | Trạng thái | Mục tiêu | Phụ thuộc | Ưu tiên |
 |---|---|---|---|---|
+| OCR-HO-V2-011 | REVIEW | Deterministic address ROI replay failed exact-improvement/DER gate; keep shadow-only and restore secondary recognizer runtime before next replay | OCR-HO-V2-009 | P0 |
+| OCR-HO-V2-012 | REVIEW | Restored full secondary recognizers; v11.9.1 passes development gate but remains shadow-only pending explicit promotion decision | OCR-HO-V2-011 | P0 |
+| OCR-HO-V2-013 | REVIEW | Promotion review and localhost canary for v11.9.1; no primary-runtime promotion until all 15 local shadow decisions are recorded | OCR-HO-V2-012 | P0 |
+| OCR-HO-V2-007 | REVIEW | Tinh chinh ROI que quan/noi thuong tru va Unicode; replay development khong co exact improvement nen giu shadow | OCR-HO-V2-006 | P0 |
+| OCR-HO-V2-008 | DONE | Token-alignment cho address đạt development gate; giữ shadow-only, chưa promote hoặc đổi held-out | OCR-HO-V2-007 | P0 |
 | OCR-HO-V2-001 | REVIEW | Đã seal prediction ẩn trên 15 CCCD held-out; chờ xác nhận Ground Truth để evaluate-once | Manifest v2, policy 11.6 | P0 |
 | OCR-HO-V2-002 | DONE | Review Ground Truth độc lập, loại ảnh mặt sau, khóa queue và evaluate đúng một lần trên 14 ảnh | OCR-HO-V2-001 | P0 |
 | OCR-HO-V2-003 | DONE | Local inspector đối chiếu Ground Truth và output Phase 11.5/11.6 sau evaluate-once | OCR-HO-V2-002 | P1 |
+| OCR-HO-V2-004 | REVIEW | OCR-HO v1.1 fixed-0° parser boundary fixes; development regression gate failed, so not promoted | OCR-HO-V2-003 | P0 |
 | TF-P1-001 | DONE | Template-first cho đơn nghỉ phép và tăng ca DOCX | 14 mẫu synthetic local | P0 |
 | TF-P1-002 | DONE | Commit/push Template-first, chạy API local và live smoke hai DOCX gốc | TF-P1-001 | P0 |
 | TF-P1-003 | DONE | Tích hợp Template-first vào OCR Lab localhost và hiển thị kết quả trích xuất | TF-P1-002 | P0 |
@@ -25,16 +31,23 @@
 | TF-P2-005 | DONE | Evidence-driven OCR Backend Selection và controlled EasyOCR promotion | TF-P2-004 candidate evidence | P0 |
 | WEEKLY-REPORT-2026-W31 | DONE | Audit và báo cáo mentor đã khử định danh | Evidence local được cấp quyền | P1 |
 | TF-P2-003 | BLOCKED | UAT và quản trị phiên bản hai biểu mẫu | TF-P2-002 đạt gate | P1 |
-| M4-CAM-001 | PLANNED | Dry-run Camunda 7.13 với External Task workers | OCR quality gate, mock HRIS | P1 |
+| M4-CAM-001 | DONE | Khóa closed-set Camunda cho đơn nghỉ phép/tăng ca; đồng bộ BPMN, allowlist và guard trước extraction | TF-P2-005 | P1 |
+| M4-CAM-002 | DONE | Bind Template-first pipeline/private idempotent store vào External Task worker local | M4-CAM-001 | P1 |
+| M4-CAM-003 | DONE | Projection đủ tám DMN input và routing shadow an toàn | M4-CAM-002 | P1 |
+| M4-CAM-004 | DONE | Deploy BPMN/DMN và smoke hai loại tài liệu trên Camunda 7.13 local | M4-CAM-003, môi trường/quyền deploy | P1 |
+| M4-CAM-005 | READY | Hoàn thiện User Task, correction/re-upload loop và reviewer audit | M4-CAM-004 | P1 |
 | DATA-00 | DONE | Pin external source, isolate staging and reconcile dataset workstream | User-directed dataset commit | P0 |
 | DATA-01 | DONE (PUBLIC TEST PROFILE) | Record explicit public/synthetic classification; keep unknown/private sources fail-closed | DATA-00 | P0 |
 | DATA-02 | DONE | Build SHA-256/page-count inventory outside Git | DATA-01 | P0 |
 | DATA-03 | DONE | Map CV/contract/certificate to generic IDP; add native TXT and versioned drift checks | DATA-02 | P0 |
 | DATA-04 | DONE (HOLD) | Run EasyOCR aggregate-only pilot over 13 documents / 17 pages | DATA-03 | P0 |
 | DATA-05 | DONE | Add synthetic inventory/mapping/parser regression coverage and checkpoint evidence | DATA-04 | P1 |
-| DATA-06 | IN_PROGRESS | Add certificate schema and prediction-blind Ground Truth review artifact | DATA-05 | P0 |
+| DATA-06 | DONE | Add certificate schema and prediction-blind Ground Truth review artifact | DATA-05 | P0 |
 | DATA-07 | DONE | Localhost review UI/API for source preview, prediction-blind editing and private Ground Truth persistence | DATA-06 approved | P0 |
-| DATA-08 | IN_PROGRESS | Independent review of 4 canonical contract DOCX/PDF cases (56 fields); defer real-world contract images | DATA-07 | P0 |
+| DATA-08 | DONE | Independent review and SEALED Ground Truth for active contract/CV/IELTS scope; defer CV text/PPTX and real-world contract images | DATA-07 | P0 |
+| DATA-09 | DONE (HOLD) | Normalize typed HR fields and run post-seal aggregate pilot without opening predictions | DATA-06, DATA-08 | P0 |
+| DATA-10 | APPROVED | Approve typed canonical projection for read-only downstream use; keep model/promotion gates disabled | DATA-09 | P0 |
+| DATA-11 | DONE (READ-ONLY) | Expose approved typed projection through loopback GET-only API and JSON/CSV export | DATA-10 | P0 |
 
 ## DATA-00..DATA-05 acceptance criteria
 
@@ -64,8 +77,25 @@
   state is preserved across the contract-source replacement.
 - `DATA-08`: an independent reviewer confirms the 56 contract fields from the
   source DOCX/PDF files only, with predictions hidden; real-world image inputs
-  remain deferred to a later workstream. The overall dataset may be sealed only
-  after all 86 fields are confirmed.
+  remain deferred to a later workstream. CV active review is limited to DOCX,
+  IMAGE and PDF_SCAN (10 fields/case); CV PLAIN_TEXT/PPTX remain inventory-only.
+  IELTS keeps five identity/date fields with only `overall_score` as a score.
+  The 101-field active queue is now SEALED after independent confirmation;
+  predictions remain unopened. Typed normalization and aggregate pilot are
+  deferred to DATA-09.
+
+- `DATA-09`: derive typed canonical values from the sealed source-preserved
+  fields, retain the original strings, run aggregate-only evaluation, and keep
+  promotion disabled until a separate approval. The pilot completed on 10
+  active documents / 101 fields: 97 normalized, 4 missing optional values and
+  0 fields requiring re-review; the private artifacts remain outside Git.
+- `DATA-10`: user-directed approval freezes the typed projection for read-only
+  downstream consumption. The approval marker remains outside Git, predictions
+  stay unopened, and `promotionAllowed=false` remains enforced.
+- `DATA-11`: loopback API serves typed summary/document/export routes only via
+  `GET`; each request revalidates projection, approval marker, aggregate report
+  and SHA-256. JSON/CSV exports omit `sourceValue`, OCR text and predictions;
+  write methods return `405`, and promotion remains disabled.
 
 ## OCR-HO-V2-001 acceptance criteria
 
@@ -283,3 +313,169 @@
 - Validation: targeted review tests 5 passed, full Python suite 248 passed / 16
   subtests, web build + rendered HTML 10 passed, module Ruff/compileall passed,
   repository hygiene passed.
+
+## OCR-HO-V2-004 checkpoint (development regression, 2026-08-03)
+
+- OCR-HO v1.1 keeps the orientation policy at `fixed_0_degree`; 90°/180°/270°
+  variants are not selected or evaluated. Output carries schema/recognizer
+  version `1.1.0`, `DEVELOPMENT_ONLY`, and always requires `MANUAL_REVIEW`.
+- Parser changes add bounded bilingual-label cleanup, typo aliases for origin,
+  residence, and expiry labels, geometry-aware multiline address selection, and
+  remove the unsafe whole-page expiry-date fallback. No Ground Truth or sibling
+  document is used to fill a value.
+- Development comparison uses the archived, user-reviewed 15-document dataset
+  (120 fields; all selected rotations were 0°). Baseline Phase 11.5: strict
+  exact 60.00%, ASCII exact 61.67%, CER 43.60%, DER 12.65%, field presence
+  95.83%. OCR-HO v1.1: strict exact 36.67%, ASCII exact 40.00%, CER 50.75%,
+  DER 17.00%, field presence 70.00%.
+- Gate decision is `DEVELOPMENT_FAIL`: schema errors 0 and manual-review policy
+  passed, but exact regression (33 fields), presence, CER/DER, and no-regression
+  gates failed. `productionPromotionAllowed=false`; the official 14-document
+  held-out evaluate-once report remains immutable and was not rerun.
+- Localhost smoke output is available as OCR-HO v1.1 with `fixed 0°`; this is a
+  shadow development build, not a production promotion.
+
+## OCR-HO-V2-005 checkpoint (guarded candidate recovery, 2026-08-03)
+
+- Candidate policy `ocr-ho-v2-005-guarded-vietnamese-candidate-recovery` v1.2.0
+  ranks only sealed Phase 11.5 OCR evidence. It removes bilingual-label and
+  neighboring-line contamination, then applies a recovery only when the
+  baseline is field-locally unsafe and at least two recognizer families agree.
+- Orientation remains `fixed_0_degree`; every candidate field is forced to
+  `MANUAL_REVIEW`, schema errors are 0, and no Ground Truth/native twin is
+  passed to the selector. The official 14-document evaluate-once artifact was
+  not read or mutated.
+- Development replay: 15 archived reviewed images / 120 fields. Baseline
+  strict/ASCII exact 60.00%/61.67%, CER 43.60%, DER 12.65%, presence 95.83%.
+  Guarded candidate strict/ASCII exact remains 60.00%/61.67%, CER improves to
+  43.06%, DER remains 12.65%, presence remains 95.83%; exact improvements and
+  regressions are both 0.
+- Gate is `DEVELOPMENT_PASS` with `productionPromotionAllowed=false`: the
+  result is a non-regressing shadow checkpoint, not a production promotion.
+  Only 1 guarded recovery was applied; 12 of 13 baseline-risk fields remain
+  review-only because candidate evidence is insufficient or unsafe.
+- Validation: targeted OCR-HO-V2-005 tests 5 passed; evaluator completed on
+  the 15-document archive; report is aggregate-only and stored outside Git.
+- Next task should add fresh field-level ROI/recognizer evidence for the
+  unresolved names, sex/nationality, and origin/residence fields before any
+  runtime promotion or held-out reevaluation.
+
+## OCR-HO-V2-008 checkpoint (token-alignment candidate, 2026-08-03)
+
+- Candidate `OCR-HO-V2 v11.8.1` group token sequence sau label/Unicode cleanup,
+  yêu cầu hỗ trợ từ ít nhất hai recognizer family và khôi phục separator cấu trúc
+  cho `placeOfOrigin`; `placeOfResidence` vẫn dùng guarded v11.7 selector.
+- Development replay 15 ảnh / 120 field, fixed 0°: strict exact 60.00% ->
+  60.83%, ASCII exact 61.67% -> 63.33%, CER 43.60% -> 42.47%, DER
+  12.65% -> 12.25%, presence 95.83% và region selection 81.67%.
+- Exact improvement/regression là 1/0, schema errors 0, manual review 120/120.
+  Gate `DEVELOPMENT_PASS`, nhưng `productionPromotionAllowed=false` theo yêu
+  cầu; không promote, không đổi localhost primary và không chạy held-out.
+- Aggregate report private-only: `CCCD_OCR_HO_V2_008_DEVELOPMENT_COMPARISON`.
+
+## OCR-HO-V2-007 checkpoint (address ROI + Unicode replay, 2026-08-03)
+
+- Candidate `OCR-HO-V2 v11.7.1` chi thay the co dieu kien hai field
+  `placeOfOrigin` va `placeOfResidence`; cac field con lai duoc giu tu Phase
+  11.5. ROI bat dau tu cung dong label, dung truoc label ke tiep, lam sach label
+  song ngu/ngay het han va chi sua mojibake Unicode co the dao nguoc.
+- Replay development tren 15 anh / 120 field, co dinh 0° va `MANUAL_REVIEW`
+  100%: strict/ASCII exact giu 60.00%/61.67%; CER giam 43.60% -> 43.27%;
+  DER giam 12.65% -> 12.25%; presence giu 95.83%; region selection tang
+  73.33% -> 81.67%.
+- Exact improvement/regression la 0/0, schema errors 0. Gate la
+  `DEVELOPMENT_FAIL` vi policy yeu cau toi thieu mot exact improvement. Khong
+  promote candidate, khong doi localhost primary, khong doc hoac sua held-out
+  evaluate-once. Bao cao aggregate private-only.
+
+## OCR-HO-V2-011 checkpoint (deterministic address ROI, 2026-08-04)
+
+- Implemented `phase11_9_cccd_v2.py` as a shadow-only candidate. It derives
+  `placeOfOrigin`/`placeOfResidence` crops from residence/expiry label geometry
+  and never reads Ground Truth for candidate selection.
+- The replay runner now supports explicit `--paddle-only`; this run used only
+  `paddle_ppocrv5` because optional EasyOCR/VietOCR packages were unavailable.
+- Development replay covered 15 reviewed images / 120 fields at fixed 0
+  degrees. Strict exact stayed 60.00%, ASCII exact moved 61.67% -> 62.50%,
+  CER improved 43.60% -> 41.44%, but DER regressed 12.65% -> 15.81% and no
+  exact improvement was observed (0 improvements / 0 regressions).
+- Schema errors were 0 and all 120 fields stayed `MANUAL_REVIEW`. Gate is
+  `DEVELOPMENT_FAIL`; `productionPromotionAllowed=false`. Do not promote,
+  change localhost primary, or reopen the held-out evaluate-once artifact.
+- Aggregate report is private-only:
+  `CCCD_OCR_HO_V2_011_DEVELOPMENT_COMPARISON.{json,md}`.
+
+## OCR-HO-V2-012 checkpoint (full recognizer replay, 2026-08-04)
+
+- Reused the locked private secondary runtime with EasyOCR 1.7.2, VietOCR
+  0.3.13 and CPU Torch; all four EasyOCR/VietOCR model hashes passed the
+  policy lock. The old venv launcher was bypassed with the current Python
+  runtime and an isolated secondary `PYTHONPATH`; Paddle primary remained in
+  `D:\venv_paddle`.
+- Fixed an existing Camunda adapter eager-import cycle with lazy runtime
+  exports; this preserves the public adapter names and lets the OCR runner
+  import safely.
+- Full replay covered 15 reviewed images / 120 fields at fixed 0 degrees:
+  strict exact 60.00% -> 60.83%, ASCII exact 61.67% -> 62.50%, CER 43.60%
+  -> 42.09%, DER 12.65% -> 11.46%, presence 95.83%, region selection
+  73.33% -> 83.33%, exact improvements/regressions 1/0.
+- Schema errors were 0 and all 120 fields stayed `MANUAL_REVIEW`.
+  `DEVELOPMENT_PASS` is recorded, but `productionPromotionAllowed=false`;
+  no localhost primary or held-out evaluate-once artifact was changed.
+- Aggregate report remains private-only:
+  `CCCD_OCR_HO_V2_011_DEVELOPMENT_COMPARISON.{json,md}`.
+
+## OCR-HO-V2-013 checkpoint (promotion review and local canary, 2026-08-04)
+
+- The shadow API now selects the newest private v11.9.1 development artifact
+  when `CCCD_OCR_HO_V2_011_DEVELOPMENT_COMPARISON.json` is present, while
+  retaining the v11.8 fallback for older synthetic/test roots.
+- Localhost canary is exposed through the existing shadow routes with schema
+  `ocr-ho-v2-013-promotion-review/1.0.0`, candidate `11.9.1`, policy
+  `phase11.9-v2-deterministic-address-roi`, 15 development images, and
+  `groundTruthLoaded=false`. The browser label is versioned dynamically.
+- The development gate remains `DEVELOPMENT_PASS`, but
+  `productionPromotionAllowed=false`; review counts are `PENDING=15` and no
+  review decision was written automatically. The primary runtime and official
+  held-out evaluate-once artifact are unchanged.
+- Local smoke: `GET /health`, `GET /ocr-ho-v2/shadow/summary`, and one detail
+  preview all returned successfully on loopback API port 8765; the web shell
+  returned HTTP 200 on `http://localhost:3000/`.
+
+## OCR-HO-V2-009 checkpoint (local shadow UAT, 2026-08-03)
+
+- Added a private-only inspector for candidate `OCR-HO-V2 v11.8.1` over the
+  existing 15-document development archive. The UI shows the source image,
+  Phase 11.5 baseline, Phase 11.8.1 candidate, changed/protected field tags,
+  ROI bbox, confidence and recognizer profiles.
+- The inspector reads `phase11_5/identity_card.json` and
+  `phase11_8_v2/field_consensus.json` only; it does not load Ground Truth and
+  does not alter the Template-first or CCCD primary runtime.
+- Local reviews are persisted outside Git in
+  `output/phase11/OCR_HO_V2_009_SHADOW_UAT_REVIEWS.json`. Each document
+  requires source comparison, changed-field inspection and confirmation that
+  the result remains `MANUAL_REVIEW` before a decision is saved.
+- API endpoints: `GET /ocr-ho-v2/shadow/summary`,
+  `GET /ocr-ho-v2/shadow/document?id=...&mode=detail|preview|source`, and
+  `POST /ocr-ho-v2/shadow/review?id=...`.
+- Status remains `REVIEW`: development gate is still
+  `DEVELOPMENT_PASS`, but `productionPromotionAllowed=false`; no held-out
+  evaluate-once was rerun and no promotion was performed.
+- Validation: Python shadow UAT/API tests 3 passed; rendered web tests 11
+  passed; web ESLint 0 errors (23 pre-existing warnings); Ruff passed for new
+  module/tests and `E501` passed for the API changes. Web build was not run
+  because the sandbox denies writes to `node_modules/.vite-temp`.
+
+## OCR-HO-V2-006 checkpoint (targeted ROI/recognizer replay)
+
+- Candidate `OCR-HO-V2 v11.6.1` chạy ROI/recognizer mới cho năm field mục tiêu:
+  `fullName`, `sex`, `nationality`, `placeOfOrigin`, `placeOfResidence`; ba field
+  còn lại được bảo vệ bằng Phase 11.5. Chính sách vẫn cố định 0 độ và
+  `MANUAL_REVIEW` 100%.
+- Replay development trên 15 ảnh / 120 field: strict/ASCII exact giữ
+  60.00%/61.67%; CER giảm 43.60% -> 42.52%; presence giữ 95.83%; DER tăng
+  12.65% -> 13.83%. Không có exact improvement hoặc exact regression; schema
+  error 0.
+- Gate `DEVELOPMENT_FAIL` vì DER tăng và chưa có exact improvement. Không
+  promote runtime, không đọc/sửa held-out evaluate-once, không đưa raw PII vào
+  Git. Báo cáo aggregate chỉ nằm ở private output.

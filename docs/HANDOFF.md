@@ -296,7 +296,7 @@
   open each source, confirm the 56 contract fields (and any remaining CV/IELTS
   fields), and explicitly press `SEALED`.
 
-### DATA-08 — Independent contract review (IN_PROGRESS)
+### DATA-08 — Independent contract review (DONE)
 
 - Review scope is the four canonical contract cases only: DOCX/PDF for the two
   agreements, 14 fields per case, 56 fields total. The two full-document PNG
@@ -305,11 +305,54 @@
 - The DATA-08 panel defaults to `contract`, hides predictions, and supports
   source preview for both native DOCX/PDF inputs. CV/IELTS remain selectable in
   a separate scope and are not changed by contract review.
-- Queue snapshot: contract-001..004 are `PENDING`, 0/56 fields reviewed,
-  `DRAFT`, `IN_PROGRESS`, `canLock=false`.
-- Reviewer action: open each source, enter the source-document value or mark
-  `Không có / không đọc được`, save each case, then stop for the remaining
-  CV/IELTS fields. Do not press `SEALED` until all 86 fields are confirmed.
+- Queue snapshot after contract completion: contract-001..004 are `CONFIRMED`,
+  56/56 fields reviewed. The remaining active queue is three CV cases × 10
+  fields and three IELTS cases × 5 fields (101 active fields total).
+- CV `PLAIN_TEXT` (`cv-001`) and `PPTX` (`cv-004`) remain in inventory for
+  traceability but are marked `OUT_OF_SCOPE` and excluded from active review and
+  the seal gate. IELTS has no component scores; `overall_score` is the only
+  score field. `recipient_name` is stored as one source-preserved string in
+  `Family name + First name` order.
+- The private draft was migrated outside Git with matching values preserved;
+  the pre-migration artifact is recoverable at
+  `C:\tmp\hcns-dataset-run-dec17acb-ground-truth-draft-pre-cv10-20260803.json`.
+- The active Ground Truth is now `SEALED` / `CONFIRMED`; `canLock=false` because
+  the queue is already locked. The seal marker is
+  `C:\tmp\hcns-dataset-run-dec17acb-ground-truth-draft-SEALED.json` and records
+  `predictionsOpened=false`.
+- DATA-09 completed the typed canonical projection at
+  `C:\tmp\hcns-dataset-run-dec17acb-typed-canonical.json`; it retains each
+  reviewed source string/value beside its canonical type. The aggregate-only
+  report is at `C:\tmp\hcns-dataset-run-dec17acb-data09-aggregate-pilot.json`:
+  10 active documents / 101 active fields, 97 normalized, 4 missing optional
+  values and 0 fields requiring re-review. Predictions remain unopened and
+  promotion is `HOLD`.
+
+### DATA-10 — Typed canonical projection approval (APPROVED)
+
+- User-directed approval was recorded at
+  `C:\tmp\hcns-dataset-run-dec17acb-typed-canonical-APPROVED.json` after
+  re-validating both DATA-09 artifacts against their JSON Schemas.
+- Approval covers read-only downstream use of the typed projection only. It
+  does not open predictions, promote a recognizer, or enable automatic HR
+  decisions; `promotionAllowed=false` remains locked.
+- Approval snapshot: 10 active documents / 101 fields, 97 normalized, 4
+  missing optional values and 0 fields requiring re-review.
+
+### DATA-11 — Typed projection API/export (DONE — READ-ONLY)
+
+- Added loopback GET-only endpoints: `/external-dataset/typed/summary`,
+  `/external-dataset/typed/document?id=...` and
+  `/external-dataset/typed/export?format=json|csv`.
+- Each request verifies the DATA-10 approval marker, projection/report hashes,
+  sealed Ground Truth metadata and aggregate counts before serving data. POST
+  and DELETE on the typed route return `405`; no write path was added.
+- Default document/export responses omit `sourceValue`; an explicit localhost
+  document query may request source values for local inspection only. No OCR,
+  prediction or promotion data is exposed.
+- Startup accepts optional typed artifact paths through `start_dashboard.ps1`;
+  when omitted, paths are inferred beside the external dataset staging root.
+- Validation: 22 API/external-data regression tests passed; module Ruff passed.
 
 ### OCR-HO-V2-001 — CCCD held-out prediction seal (REVIEW)
 
@@ -349,6 +392,219 @@
   engine output, not Ground Truth.
 - Safe website screenshots were captured with no document selected. Run
   `python scripts/validate_weekly_report.py` before changing the report.
+
+### OCR-HO-V2-004 — development shadow v1.1 (REVIEW)
+
+- The parser is versioned `1.1.0`, fixed to 0° input, and always returns
+  `MANUAL_REVIEW`; the local API/UI shows the version and orientation policy.
+- Development regression used 15 archived reviewed images / 120 fields. The
+  v1.1 candidate scored 36.67% strict exact, 40.00% ASCII exact, 50.75% CER,
+  17.00% DER, and 70.00% field presence versus the 60.00%/61.67%/43.60%/
+  12.65%/95.83% Phase 11.5 baseline.
+- Decision is `DEVELOPMENT_FAIL` with 33 exact regressions. No production
+  promotion and no mutation of the official 14-document held-out report.
+- Next recommended task: evaluate a Vietnamese OCR/ROI candidate against this
+  development gate; keep OCR-HO-V2-004 in REVIEW until a non-regressing build.
+
+### OCR-HO-V2-005 — guarded candidate recovery (REVIEW)
+
+- Implemented `phase11_5_cccd_v2.py` and
+  `scripts/evaluate_cccd_ocr_ho_v2_005.py` for a shadow-only, fixed-0-degree
+  candidate policy. Selection uses sealed Phase 11.5 OCR evidence only and
+  forces every candidate field to `MANUAL_REVIEW`.
+- Development result on 15 archived reviewed images / 120 fields: strict and
+  ASCII exact remain 60.00%/61.67%; CER improves 43.60% → 43.06%; DER and
+  presence do not regress; exact regression count 0; schema errors 0.
+- Gate: `DEVELOPMENT_PASS`, with production promotion explicitly disabled.
+  This preserves the current runtime and the official held-out evaluate-once
+  result. Only one guarded recovery was applied; unresolved OCR evidence still
+  needs a fresh ROI/recognizer run.
+- New targeted tests: `tests/test_ocr_ho_v2_005.py` (5 passed).
+
+### OCR-HO-V2-008 - token-alignment candidate (DONE, shadow-only)
+
+- `phase11_8_cccd_v2.py` and `evaluate_cccd_ocr_ho_v2_008.py` implement the
+  approved token-alignment candidate. Selection uses OCR ROI evidence only,
+  requires independent family support, and never receives Ground Truth.
+- Development replay: 15 documents / 120 fields, fixed 0°. Strict/ASCII exact
+  60.00% -> 60.83% / 61.67% -> 63.33%; CER 43.60% -> 42.47%; DER 12.65%
+  -> 12.25%; presence 95.83%; region selection 73.33% -> 81.67%.
+- Exact improvements/regressions are 1/0; schema errors 0; all fields remain
+  manual review. Gate is `DEVELOPMENT_PASS`, while production promotion stays
+  disabled by policy. Do not alter localhost primary or rerun held-out without
+  a separately approved promotion task.
+
+### OCR-HO-V2-007 - address ROI + Unicode replay (REVIEW)
+
+- `phase11_7_cccd_v2.py` and `evaluate_cccd_ocr_ho_v2_007.py` implement a
+  shadow-only v11.7.1 candidate for `placeOfOrigin` and `placeOfResidence`.
+  Label-aware same-row ROI, neighboring-label cleanup, and reversible Unicode
+  repair are used; no Ground Truth or sibling document can fill a value.
+- Development replay: 15 documents / 120 fields, fixed 0°, strict/ASCII exact
+  60.00%/61.67%, CER 43.27%, DER 12.25%, presence 95.83%, region selection
+  81.67%. Exact improvements/regressions are 0/0; schema errors 0; all fields
+  remain manual review.
+- Decision is `DEVELOPMENT_FAIL` because the gate requires an exact improvement,
+  despite CER/DER/region metrics improving. Keep the candidate shadow-only;
+  localhost primary and the official 14-document held-out evaluate-once result
+  remain unchanged. Next task must provide a genuinely exact address recovery
+  without regression before any promotion or held-out rerun.
+
+### OCR-HO-V2-011 - deterministic address ROI (REVIEW)
+
+- Added `phase11_9_cccd_v2.py` and a development evaluator for deterministic
+  address crops: the origin band is bounded by the residence label and the
+  residence band is bounded before expiry. Ground Truth remains scoring-only.
+- Replay covered 15 reviewed images / 120 fields at fixed 0 degrees. The
+  current machine lacks optional EasyOCR/VietOCR packages, so the runner
+  explicitly recorded a Paddle-only replay rather than claiming secondary OCR.
+- Result: strict exact 60.00% -> 60.00%, ASCII exact 61.67% -> 62.50%, CER
+  43.60% -> 41.44%, DER 12.65% -> 15.81%, region selection 73.33% -> 79.17%,
+  exact improvement/regression 0/0, schema errors 0, manual review 120/120.
+- Decision: `DEVELOPMENT_FAIL`; do not promote, do not change localhost
+  primary, and do not rerun the official held-out evaluate-once. The next
+  candidate needs verified secondary-recognizer runtime (or a tighter
+  Paddle-only rule) that produces an exact address recovery without DER
+  regression.
+
+### OCR-HO-V2-012 - full secondary recognizer replay (REVIEW)
+
+- Restored the locked private EasyOCR 1.7.2 / VietOCR 0.3.13 / CPU Torch
+  runtime and verified all EasyOCR/VietOCR model hashes. The replay runner
+  now passes the secondary site-package path only to its subprocess, keeping
+  Paddle's environment isolated.
+- Fixed a pre-existing eager-import cycle in the Camunda adapter package with
+  lazy runtime exports; public adapter imports remain available.
+- Replay covered 15 development images / 120 fields at fixed 0 degrees:
+  strict exact 60.00% -> 60.83%, ASCII exact 61.67% -> 62.50%, CER 43.60%
+  -> 42.09%, DER 12.65% -> 11.46%, region selection 73.33% -> 83.33%,
+  exact improvement/regression 1/0, schema errors 0, manual review 120/120.
+- Decision: `DEVELOPMENT_PASS`, but still shadow-only with
+  `productionPromotionAllowed=false`. Do not rerun held-out or promote until
+  the separate promotion task is explicitly approved. Tests: 20 pass, Ruff
+  pass, repository hygiene pass.
+
+### OCR-HO-V2-013 - promotion review and localhost canary (REVIEW)
+
+- `phase11_8_shadow_uat.py` now selects the private v11.9.1 artifact
+  (`phase11_9_v2/field_consensus.json`) when the 012 development report is
+  present; its old v11.8 path remains the fallback for existing tests.
+- The loopback API reports schema
+  `ocr-ho-v2-013-promotion-review/1.0.0`, candidate `11.9.1`,
+  `SHADOW_REVIEW_ONLY`, `groundTruthLoaded=false`, and 15 pending documents.
+  The web shadow tab displays the candidate version dynamically.
+- Canary evidence is read-only until a human records each local decision.
+  `DEVELOPMENT_PASS` is not a production promotion: the gate still has
+  `productionPromotionAllowed=false`, and neither the primary runtime nor the
+  official held-out evaluate-once artifact changed.
+- Verification: targeted shadow/API tests 4 passed; live loopback health,
+  summary and detail preview returned successfully; localhost web shell HTTP
+  200.
+
+### OCR-HO-V2-009 - local shadow UAT (REVIEW)
+
+- Added `phase11_8_shadow_uat.py` plus local API routes for inspecting the
+  v11.8.1 development candidate without opening Ground Truth. The UI is gated
+  by `VITE_SHOW_OCR_HO_SHADOW_UAT=true` and shows the source image, baseline,
+  candidate, changed/protected fields and provenance.
+- Review decisions are local-only and stored in the private archive at
+  `output/phase11/OCR_HO_V2_009_SHADOW_UAT_REVIEWS.json`. Every save requires
+  source comparison, changed-field inspection and confirmation that the
+  candidate remains `MANUAL_REVIEW`.
+- The candidate is still shadow-only: development gate `DEVELOPMENT_PASS`,
+  `productionPromotionAllowed=false`, no held-out rerun and no primary runtime
+  promotion. The next human action is to review the 15 images in the new tab.
+- Verification: `tests/test_phase11_8_shadow_uat.py` 3 passed and rendered web
+  tests 11 passed. ESLint reports 0 errors and 23 existing warnings. Web build
+  was blocked by the sandbox refusing `node_modules/.vite-temp` writes.
+
+### OCR-HO-V2-006 - targeted ROI/recognizer replay (REVIEW)
+
+- `phase11_6_cccd_v2.py` and `evaluate_cccd_ocr_ho_v2_006.py` implement a
+  shadow candidate v11.6.1. The candidate evaluates five unresolved fields
+  with fresh ROI crops and keeps the other fields at the Phase 11.5 baseline.
+- Replay result: 15 documents / 120 fields, strict/ASCII 60.00%/61.67%,
+  CER 42.52%, DER 13.83%, presence 95.83%. Exact improvements/regressions are
+  0/0; schema errors are 0; all 120 fields require manual review.
+- Decision is `DEVELOPMENT_FAIL`: DER regressed and no exact improvement met
+  the promotion gate. Keep the candidate shadow-only and leave the official
+  14-document held-out report plus localhost primary runtime unchanged.
+- Next investigation should narrow the origin/residence ROI and address
+  Unicode/diacritic handling before another candidate replay; do not promote
+  or rerun held-out evaluate-once without a new approved task.
+
+### M4-CAM-001 — Camunda closed-set contract alignment (DONE)
+
+- BPMN was bumped to `2.2.0-shadow`; submit, confirm-type and re-upload forms
+  expose only `LEAVE_REQUEST` and `OVERTIME_REQUEST`.
+- `M4_CLOSED_SET_WORKFLOW_DOCUMENT_TYPES` is enforced by the M4 extract handler.
+  An out-of-scope type raises `DOCUMENT_INPUT_INVALID` before the operation runs.
+- Asset tests compare all three form enums with the M4 allowlist and verify that
+  the allowlist remains a valid subset of the global JSON Schema enum.
+- Shadow locks remain unchanged: `autoContinueEnabled=false`, real side effects
+  disabled and HRIS/notification handlers simulated.
+- Validation: 39 targeted tests passed in 1.74s; Ruff passed; mypy reported no
+  issues in 79 source files; repository hygiene and diff check passed.
+- Next READY task is M4-CAM-002. It requires explicit approval before binding a
+  runnable worker; no Camunda deployment was performed in M4-CAM-001.
+
+### M4-CAM-002 — Worker composition and idempotent result (DONE)
+
+- `hcns-agent-camunda-worker` is the local runner. It reads Camunda connection
+  data from environment and composes the REST client, Template-first pipeline,
+  OCR Lab session source resolver, private result store and M4 handlers.
+- `M4TemplateStageOperations` binds exactly six document topics. The registry
+  rejects missing or unexpected operations before polling.
+- `document_parse_content` writes the private result plus idempotency index
+  before `complete`; replay uses the original deterministic reference and does
+  not invoke the pipeline again.
+- Invalid input maps to `DOCUMENT_INPUT_INVALID`; technical failures map to
+  External Task failure with decremented retry. Parse extends its lock to
+  180 seconds before processing.
+- Worker output is scalar/reference-only. The private JSON result may contain
+  extracted values but stays under `HCNS_CAMUNDA_PRIVATE_ROOT/camunda_m4`.
+- Verification: 52 targeted tests passed in 2.60s; Ruff passed; mypy reported no
+  issues in 81 source files; repository hygiene and diff check passed.
+- No BPMN/DMN deployment or Camunda server call was made. Correction remains
+  reference-only pending M4-CAM-005.
+- Superseded next-task marker: M4-CAM-003 is now DONE in the checkpoint below.
+
+### M4-CAM-003 — Template result to DMN projection (DONE)
+
+- The private result store persists `_m4DmnQualityVariables` with exactly eight
+  scalar DMN inputs. Normalize returns that projection only; it does not expose
+  raw values or use `MANUAL_REVIEW` as a gateway output.
+- Native PASS stays `USER_REVIEW` under the locked shadow policy. Synthetic
+  leave/overtime image and scan-PDF cases remain Human Review with
+  `autoContinueEnabled=false` and zero false `AUTO_CONTINUE`.
+- Missing required fields route to `REQUEST_REUPLOAD`; business inconsistencies
+  route to `HR_REVIEW`; mismatch is verified against the BPMN Confirm Type path.
+- DMN output is restricted to four workflow actions and the projection is
+  checked against the exact Python contract, whitelist and JSON Schema.
+- Verification: 59 targeted tests passed; Ruff passed; mypy reported no issues
+  in 81 source files; repository hygiene and diff check passed.
+- No Camunda deployment/server call was made. Correction remains reference-only
+  and belongs to M4-CAM-005.
+- Superseded environment marker: M4-CAM-004 is now DONE in the checkpoint below.
+
+### M4-CAM-004 — Local deploy and smoke (DONE)
+
+- Local Camunda BPM Run was verified at 7.13.0. Deployment now succeeds with
+  one process definition and one decision definition.
+- The initial HTTP 400 identified invalid BPMN XSD ordering. Moving
+  `textAnnotation`/`association` after every `sequenceFlow` fixed deployment;
+  an asset regression prevents recurrence.
+- Synthetic leave and overtime instances reached `UserReview` with shadow
+  routing locked off from auto-continue.
+- Restart evidence retained the first active User Task. Same-key replay reused
+  the original result reference and created no additional result file.
+- Three synthetic instances completed with `SIMULATED` HRIS and notification
+  history values only. Worker smoke processes were stopped; Camunda remains
+  available locally for inspection.
+- Verification: 60 targeted tests passed; Ruff passed; mypy reported no issues
+  in 81 source files; repository hygiene and diff check passed.
+- M4-CAM-005 is READY: implement correction/re-upload, reviewer audit and
+  revalidation without enabling real side effects.
 
 ## First command after resume
 

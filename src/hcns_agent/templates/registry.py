@@ -79,6 +79,11 @@ class TemplateRegistry:
             self._definitions[key].public_dict() for key in sorted(self._definitions)
         )
 
+    def get(self, template_id: str) -> TemplateDefinition | None:
+        """Return one frozen template definition by its stable identifier."""
+
+        return self._definitions.get(template_id)
+
 
 def build_default_template_registry() -> TemplateRegistry:
     registry = TemplateRegistry()

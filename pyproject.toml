@@ -39,6 +39,7 @@ dev = [
 hcns-agent-demo = "hcns_agent.demo:main"
 hcns-agent-benchmark = "hcns_agent.benchmark_cli:main"
 hcns-agent-recognition = "hcns_agent.recognition_cli:main"
+hcns-agent-camunda-worker = "hcns_agent.camunda_worker_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

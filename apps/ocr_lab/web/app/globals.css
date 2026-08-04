@@ -1340,6 +1340,34 @@ section[id] { scroll-margin-top: 72px; }
   font-weight: 750;
   text-decoration: none;
 }
+.shadow-uat-inspector { max-height: 720px; }
+.shadow-uat-inspector > header { background: #f7fbf8; }
+.shadow-uat-inspector.error { border-color: #e1b3a4; background: #fff3ef; }
+.shadow-uat-banner { display: grid; gap: 4px; padding: 10px 13px; border-bottom: 1px solid #c7ddd0; background: #edf8f1; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.shadow-uat-banner strong { color: var(--green); font-size: 11px; }
+.shadow-uat-table { flex: 1; min-height: 0; overflow: auto; background: #fff; }
+.shadow-uat-row { display: grid; grid-template-columns: minmax(90px, .65fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(150px, 1.15fr); gap: 9px; min-width: 610px; padding: 10px 12px; border-bottom: 1px solid #eceee9; align-items: start; color: var(--ink); font-size: 10px; line-height: 1.4; }
+.shadow-uat-row.heading { position: sticky; top: 0; z-index: 1; color: var(--muted); background: #f7f8f5; font: 700 8px/1.2 var(--font-geist-mono), monospace; letter-spacing: .04em; text-transform: uppercase; }
+.shadow-uat-row.changed { background: #fffaf0; box-shadow: inset 3px 0 #b77525; }
+.shadow-uat-row > span, .shadow-uat-row > strong { min-width: 0; overflow-wrap: anywhere; }
+.shadow-uat-row > strong { color: var(--green); font: 700 9px/1.3 var(--font-geist-mono), monospace; }
+.shadow-uat-row > strong small { display: block; margin-top: 3px; color: #8a5a16; font-size: 7px; letter-spacing: .05em; }
+.shadow-uat-row > span small { display: block; margin-top: 5px; color: #8a5a16; font: 700 8px/1.25 var(--font-geist-mono), monospace; }
+.shadow-uat-row > span small[data-status="accepted"] { color: var(--green); }
+.shadow-uat-review-form { display: grid; gap: 9px; padding: 12px 13px; border-top: 1px solid var(--line); background: #fbfdfb; }
+.shadow-uat-review-form > div:first-child { display: grid; gap: 3px; }
+.shadow-uat-review-form > div:first-child strong { color: var(--green); font-size: 11px; }
+.shadow-uat-review-form > div:first-child span { color: var(--muted); font-size: 9px; line-height: 1.4; }
+.shadow-uat-decision-row { display: grid; gap: 5px; }
+.shadow-uat-decision-row label, .shadow-uat-assertions label { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 9px; }
+.shadow-uat-decision-row input, .shadow-uat-assertions input { accent-color: var(--green); }
+.shadow-uat-assertions { display: grid; gap: 5px; padding: 8px 9px; border: 1px solid #d4e1d8; border-radius: 6px; background: #f5faf6; }
+.shadow-uat-review-form textarea { width: 100%; min-height: 50px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; padding: 7px 8px; color: var(--ink); font: 10px/1.4 var(--font-geist-sans), sans-serif; }
+.shadow-uat-review-form button { min-height: 34px; border: 0; border-radius: 6px; background: var(--green); color: #fff; font-size: 10px; font-weight: 750; cursor: pointer; }
+.shadow-uat-review-form button:disabled { cursor: not-allowed; opacity: .5; }
+.shadow-uat-error { color: #9a3412; font-size: 9px; }
+.shadow-uat-grid .heldout-document-list { max-height: 720px; }
+.shadow-uat-grid .heldout-preview > img { min-height: 560px; }
 .privacy-boundary {
   margin-top: 18px;
   padding: 18px 20px;

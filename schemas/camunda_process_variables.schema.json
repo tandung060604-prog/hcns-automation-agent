@@ -26,6 +26,7 @@
     "requiredFieldsComplete": {"type": "boolean"},
     "overallConfidence": {"$ref": "#/$defs/confidence"},
     "resultReference": {"$ref": "#/$defs/reference"},
+    "resultPayloadHash": {"$ref": "#/$defs/sha256"},
     "schemaVersion": {"type": "string", "minLength": 1, "maxLength": 64},
     "errorCode": {"type": "string", "minLength": 1, "maxLength": 128},
     "idempotencyKey": {"$ref": "#/$defs/reference"},
@@ -34,6 +35,13 @@
     "correctionsReference": {"$ref": "#/$defs/reference"},
     "hrReviewDecision": {"enum": ["CONFIRMED", "CORRECTED", "REQUEST_REUPLOAD", "REJECTED"]},
     "hrReviewNoteReference": {"$ref": "#/$defs/reference"},
+    "reviewStage": {"enum": ["USER", "HR"]},
+    "reviewerId": {"$ref": "#/$defs/reference"},
+    "reviewedAt": {"type": "string", "format": "date-time", "maxLength": 64},
+    "caseVersion": {"type": "integer", "minimum": 1},
+    "reviewAuditReference": {"$ref": "#/$defs/reference"},
+    "reviewedPayloadHash": {"$ref": "#/$defs/sha256"},
+    "reviewReasonCodes": {"type": "string", "maxLength": 4096},
     "reuploadCount": {"type": "integer", "minimum": 0},
     "maxReuploadAttempts": {"type": "integer", "minimum": 1},
     "finalHrDecision": {"enum": ["APPROVED", "REJECTED"]},
@@ -51,6 +59,9 @@
     },
     "templateId": {"type": "string", "minLength": 1, "maxLength": 128},
     "templateVersion": {"type": "string", "minLength": 1, "maxLength": 64},
+    "parserName": {"type": "string", "minLength": 1, "maxLength": 128},
+    "parserVersion": {"type": "string", "minLength": 1, "maxLength": 64},
+    "ocrEngine": {"type": "string", "minLength": 1, "maxLength": 128},
     "extractionStatus": {"enum": ["SUCCESS", "MANUAL_REVIEW", "REJECT_UNSUPPORTED", "TECHNICAL_ERROR"]},
     "extractedDataReference": {"$ref": "#/$defs/reference"},
     "autoContinueEnabled": {"type": "boolean"},
@@ -68,6 +79,10 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 4096
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
     },
     "workflowDocumentType": {
       "enum": [

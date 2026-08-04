@@ -3,6 +3,7 @@ from unittest import TestCase
 from synthetic_fixtures import synthetic_cv_pdf_bytes
 
 from hcns_agent.adapters.camunda7.contract import (
+    DMN_QUALITY_INPUT_VARIABLES,
     CamundaQualityAction,
     CamundaRolloutPolicy,
     CamundaWorkflowDocumentType,
@@ -11,6 +12,7 @@ from hcns_agent.adapters.camunda7.contract import (
     classification_status,
     map_document_type,
     route_quality,
+    validate_dmn_quality_variables,
     validate_process_variables,
 )
 from hcns_agent.adapters.mock_ocr import DeterministicMockOcrEngine
@@ -154,3 +156,26 @@ class CamundaContractTests(TestCase):
             validate_process_variables({"rawOcrText": "forbidden"})
         with self.assertRaises(TypeError):
             validate_process_variables({"resultReference": {"uri": "forbidden"}})  # type: ignore[dict-item]
+
+    def test_dmn_quality_contract_requires_exactly_eight_typed_inputs(self) -> None:
+        variables = {
+            "qualityStatus": "REVIEW_REQUIRED",
+            "reviewRequired": True,
+            "sensitiveFieldNeedsReview": False,
+            "missingCriticalField": False,
+            "businessInconsistency": False,
+            "requiredFieldsComplete": True,
+            "overallConfidence": 0.85,
+            "autoContinueEnabled": False,
+        }
+
+        self.assertEqual(DMN_QUALITY_INPUT_VARIABLES, frozenset(variables))
+        validate_dmn_quality_variables(variables)
+        with self.assertRaises(ValueError):
+            validate_dmn_quality_variables(
+                {name: value for name, value in variables.items() if name != "reviewRequired"}
+            )
+        with self.assertRaises(TypeError):
+            validate_dmn_quality_variables({**variables, "reviewRequired": 1})
+        with self.assertRaises(ValueError):
+            validate_dmn_quality_variables({**variables, "overallConfidence": 1.1})

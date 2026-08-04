@@ -4,6 +4,8 @@ from unittest import TestCase
 from xml.etree import ElementTree
 
 from hcns_agent.adapters.camunda7.contract import (
+    DMN_QUALITY_INPUT_VARIABLES,
+    M4_CLOSED_SET_WORKFLOW_DOCUMENT_TYPES,
     M4_SHADOW_POLICY,
     PROCESS_VARIABLE_WHITELIST,
 )
@@ -39,7 +41,7 @@ class CamundaAssetContractTests(TestCase):
         self.assertEqual(set(ALL_EXTERNAL_TASK_TOPICS), topics)
         process = root.find(".//bpmn:process", _BPMN_NS)
         self.assertIsNotNone(process)
-        self.assertEqual("2.1.0-shadow", process.attrib[_CAMUNDA_VERSION_TAG])
+        self.assertEqual("2.3.0-shadow", process.attrib[_CAMUNDA_VERSION_TAG])
 
     def test_bpmn_reads_content_before_business_classification_and_extraction(self) -> None:
         root = ElementTree.parse(_BPMN).getroot()
@@ -52,7 +54,17 @@ class CamundaAssetContractTests(TestCase):
         self.assertEqual(("OCR", "Detect"), flows["F_OCRExtract"])
         self.assertEqual(("Detect", "GClass"), flows["F_DetectClass"])
         self.assertEqual(("GClass", "Extract"), flows["F_ClassConfirmed"])
+        self.assertEqual(("GClass", "ConfirmType"), flows["F_ClassNeedsConfirm"])
         self.assertEqual(("GType", "Extract"), flows["F_TypeConfirmed"])
+
+        mismatch_flow = root.find(
+            ".//bpmn:sequenceFlow[@id='F_ClassNeedsConfirm']",
+            _BPMN_NS,
+        )
+        self.assertIsNotNone(mismatch_flow)
+        mismatch_condition = mismatch_flow.find("bpmn:conditionExpression", _BPMN_NS)
+        self.assertIsNotNone(mismatch_condition)
+        self.assertIn("classificationStatus == 'MISMATCH'", mismatch_condition.text)
 
         parse_task = root.find(".//bpmn:serviceTask[@id='OCR']", _BPMN_NS)
         self.assertIsNotNone(parse_task)
@@ -75,10 +87,48 @@ class CamundaAssetContractTests(TestCase):
             for outgoing in element.findall("bpmn:outgoing", _BPMN_NS):
                 self.assertEqual(element_id, flows[outgoing.text][0])
 
-    def test_bpmn_forms_include_cv_and_store_note_references_only(self) -> None:
+    def test_bpmn_flow_elements_precede_artifacts_for_camunda_713_xsd(self) -> None:
         root = ElementTree.parse(_BPMN).getroot()
-        cv_values = root.findall(".//camunda:value[@id='CV']", _BPMN_NS)
-        self.assertEqual(3, len(cv_values))
+        process = root.find(".//bpmn:process", _BPMN_NS)
+        self.assertIsNotNone(process)
+        child_names = [child.tag.rsplit("}", 1)[-1] for child in process]
+        sequence_indexes = [
+            index for index, name in enumerate(child_names) if name == "sequenceFlow"
+        ]
+        artifact_indexes = [
+            index
+            for index, name in enumerate(child_names)
+            if name in {"association", "group", "textAnnotation"}
+        ]
+
+        self.assertTrue(sequence_indexes)
+        self.assertTrue(artifact_indexes)
+        self.assertLess(max(sequence_indexes), min(artifact_indexes))
+
+    def test_bpmn_forms_match_m4_closed_set_and_store_note_references_only(self) -> None:
+        root = ElementTree.parse(_BPMN).getroot()
+        schema = json.loads(_VARIABLE_SCHEMA.read_text(encoding="utf-8"))
+        schema_types = set(schema["$defs"]["workflowDocumentType"]["enum"])
+        expected_types = set(M4_CLOSED_SET_WORKFLOW_DOCUMENT_TYPES)
+        self.assertLessEqual(expected_types, schema_types)
+
+        type_fields = [
+            field
+            for field in root.findall(".//camunda:formField", _BPMN_NS)
+            if field.attrib.get("id")
+            in {"declaredDocumentType", "confirmedDocumentType"}
+        ]
+        self.assertEqual(3, len(type_fields))
+        for field in type_fields:
+            with self.subTest(field_id=field.attrib["id"]):
+                self.assertEqual(
+                    expected_types,
+                    {
+                        item.attrib["id"]
+                        for item in field.findall("camunda:value", _BPMN_NS)
+                    },
+                )
+
         form_ids = {
             field.attrib["id"]
             for field in root.findall(".//camunda:formField", _BPMN_NS)
@@ -87,6 +137,48 @@ class CamundaAssetContractTests(TestCase):
         self.assertIn("finalHrNoteReference", form_ids)
         self.assertNotIn("hrReviewNote", form_ids)
         self.assertNotIn("finalHrNote", form_ids)
+
+    def test_human_review_is_audited_and_sla_only_escalates(self) -> None:
+        root = ElementTree.parse(_BPMN).getroot()
+        form_types = {
+            field.attrib["type"]
+            for field in root.findall(".//camunda:formField", _BPMN_NS)
+        }
+        self.assertLessEqual(form_types, {"string", "long", "date", "boolean", "enum"})
+        flows = {
+            flow.attrib["id"]: (flow.attrib["sourceRef"], flow.attrib["targetRef"])
+            for flow in root.findall(".//bpmn:sequenceFlow", _BPMN_NS)
+        }
+
+        self.assertEqual(
+            ("UserReview", "RecordUserReviewAudit"),
+            flows["F_UserAudit"],
+        )
+        self.assertEqual(
+            ("HRReview", "RecordHRReviewAudit"),
+            flows["F_HRAudit"],
+        )
+        self.assertEqual(
+            ("UserReviewSla", "HRReview"),
+            flows["F_UserSlaEscalation"],
+        )
+        self.assertEqual(
+            ("HRReviewSla", "FinalHR"),
+            flows["F_HRSlaEscalation"],
+        )
+        timers = {
+            event.attrib["id"]: event.find(
+                "bpmn:timerEventDefinition/bpmn:timeDuration",
+                _BPMN_NS,
+            ).text
+            for event in root.findall(".//bpmn:boundaryEvent", _BPMN_NS)
+            if event.find("bpmn:timerEventDefinition", _BPMN_NS) is not None
+        }
+        self.assertEqual({"UserReviewSla": "PT24H", "HRReviewSla": "PT8H"}, timers)
+        bpmn_text = _BPMN.read_text(encoding="utf-8")
+        self.assertIn("task.getAssignee()", bpmn_text)
+        self.assertIn("task.setVariable('reviewedAt'", bpmn_text)
+        self.assertNotIn("auto-approve", bpmn_text.casefold())
 
     def test_dmn_has_safety_inputs_first_hit_policy_and_shadow_gate(self) -> None:
         root = ElementTree.parse(_DMN).getroot()
@@ -100,19 +192,7 @@ class CamundaAssetContractTests(TestCase):
             item.find("dmn:inputExpression/dmn:text", _DMN_NS).text
             for item in decision_table.findall("dmn:input", _DMN_NS)
         }
-        self.assertEqual(
-            {
-                "qualityStatus",
-                "reviewRequired",
-                "sensitiveFieldNeedsReview",
-                "missingCriticalField",
-                "businessInconsistency",
-                "requiredFieldsComplete",
-                "overallConfidence",
-                "autoContinueEnabled",
-            },
-            inputs,
-        )
+        self.assertEqual(set(DMN_QUALITY_INPUT_VARIABLES), inputs)
         auto_rule = decision_table.find("dmn:rule[@id='Rule_Auto']", _DMN_NS)
         self.assertIsNotNone(auto_rule)
         auto_inputs = [
@@ -120,6 +200,37 @@ class CamundaAssetContractTests(TestCase):
             for entry in auto_rule.findall("dmn:inputEntry", _DMN_NS)
         ]
         self.assertEqual("true", auto_inputs[-1])
+        expected_shadow_outputs = {
+            "Rule_MissingCritical": '"REQUEST_REUPLOAD"',
+            "Rule_Sensitive": '"HR_REVIEW"',
+            "Rule_Inconsistency": '"HR_REVIEW"',
+            "Rule_QualityReview": '"USER_REVIEW"',
+            "Rule_ShadowHighConfidence": '"USER_REVIEW"',
+        }
+        for rule_id, expected_output in expected_shadow_outputs.items():
+            with self.subTest(rule_id=rule_id):
+                rule = decision_table.find(f"dmn:rule[@id='{rule_id}']", _DMN_NS)
+                self.assertIsNotNone(rule)
+                output = rule.find("dmn:outputEntry/dmn:text", _DMN_NS)
+                self.assertIsNotNone(output)
+                self.assertEqual(expected_output, output.text)
+        routing_outputs = {
+            output.text.strip('"')
+            for output in decision_table.findall(
+                "dmn:rule/dmn:outputEntry/dmn:text",
+                _DMN_NS,
+            )
+        }
+        self.assertNotIn("MANUAL_REVIEW", routing_outputs)
+        self.assertLessEqual(
+            routing_outputs,
+            {
+                "AUTO_CONTINUE",
+                "USER_REVIEW",
+                "HR_REVIEW",
+                "REQUEST_REUPLOAD",
+            },
+        )
 
         bpmn_text = _BPMN.read_text(encoding="utf-8")
         self.assertIn("execution.setVariable('autoContinueEnabled', false)", bpmn_text)

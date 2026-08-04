@@ -143,7 +143,13 @@ FIELD_SPECS: dict[str, dict[str, Any]] = {
         "multiline": True,
     },
     "dateOfExpiry": {
-        "labels": ("co gia tri den date of expiry", "co gia tri den", "date of expiry"),
+        "labels": (
+            "co gia tri den date of expiry",
+            "co gia tri den",
+            "co gla int deni",
+            "date of expiry",
+            "date afaxpir",
+        ),
         "labelThreshold": 0.60,
         "threshold": 0.86,
         "multiline": False,
@@ -180,7 +186,9 @@ FIELD_LABEL_ALIASES: dict[str, tuple[str, ...]] = {
     "dateOfExpiry": (
         "co gia tri den date of expiry",
         "co gia tri den",
+        "co gla int deni",
         "date of expiry",
+        "date afaxpir",
     ),
 }
 
@@ -944,6 +952,24 @@ def _candidate_lines(
                 )
             )
             continue
+        if (
+            field_name in {"placeOfOrigin", "placeOfResidence"}
+            and _vertical_overlap(anchor_bounds, candidate_bounds) >= 0.20
+            and candidate_bounds[0]
+            >= anchor_bounds[0] - (anchor_bounds[2] - anchor_bounds[0]) * 0.15
+            and candidate_bounds[0]
+            <= anchor_bounds[2] + (anchor_bounds[2] - anchor_bounds[0]) * 0.20
+        ):
+            distance = abs(candidate_bounds[0] - anchor_bounds[0])
+            same_row.append(
+                (
+                    distance
+                    - min(1.0, float(candidate.get("confidence") or 0.0))
+                    * anchor_height,
+                    candidate,
+                )
+            )
+            continue
         vertical_distance = candidate_bounds[1] - anchor_bounds[3]
         horizontal_tolerance = max(
             anchor_bounds[2] - anchor_bounds[0],
@@ -972,13 +998,14 @@ def _candidate_lines(
         return [min(same_row, key=lambda item: item[0])[1]]
     ordered_below = [item[1] for item in sorted(below, key=lambda item: item[0])]
     if multiline:
+        ordered_same_row = [item[1] for item in sorted(same_row, key=lambda item: item[0])]
         ordered_below.sort(
             key=lambda candidate: (
                 _bounds(candidate["box"])[1],
                 _bounds(candidate["box"])[0],
             )
         )
-        return ordered_below[:3]
+        return (ordered_same_row + ordered_below)[:3]
     if ordered_below:
         return ordered_below[:1]
     return [min(same_row, key=lambda item: item[0])[1]] if same_row else []
@@ -1136,7 +1163,15 @@ def extract_cccd_fields(
             # Vietnamese or English anchor before considering that field.
             if field_name == "dateOfExpiry":
                 record_key = accent_key(record["text"])
-                if "co gia tri den" not in record_key and "date of expiry" not in record_key:
+                if not any(
+                    marker in record_key
+                    for marker in (
+                        "co gia tri den",
+                        "co gla int deni",
+                        "date of expiry",
+                        "date afaxpir",
+                    )
+                ):
                     continue
             score = max(_label_score(record["text"], label) for label in spec["labels"])
             if score >= float(spec["labelThreshold"]) and (

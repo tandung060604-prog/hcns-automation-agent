@@ -293,10 +293,15 @@ class Camunda7WorkerTests(TestCase):
             stage.handle({})
 
         reupload = ReuploadControlHandler()
-        first = reupload.handle({"reuploadCount": 1, "maxReuploadAttempts": 3})
-        replay = reupload.handle({"reuploadCount": 1, "maxReuploadAttempts": 3})
+        first = reupload.handle(
+            {"reuploadCount": 1, "maxReuploadAttempts": 3, "caseVersion": 4}
+        )
+        replay = reupload.handle(
+            {"reuploadCount": 1, "maxReuploadAttempts": 3, "caseVersion": 4}
+        )
         self.assertEqual(first, replay)
         self.assertEqual(2, first["reuploadCount"])
+        self.assertEqual(5, first["caseVersion"])
 
         side_effect = MockSideEffectHandler(
             "hris_update_employee_record",
@@ -313,11 +318,53 @@ class Camunda7WorkerTests(TestCase):
             for topic in DOCUMENT_STAGE_TOPICS
         }
 
-        handlers = build_m4_shadow_handlers(operations)
+        handlers = build_m4_shadow_handlers(operations, lambda _: {})
 
         self.assertEqual(
             set(ALL_EXTERNAL_TASK_TOPICS),
             {handler.topic_name for handler in handlers},
         )
         with self.assertRaises(ValueError):
-            build_m4_shadow_handlers({})
+            build_m4_shadow_handlers({}, lambda _: {})
+
+    def test_shadow_extract_handler_enforces_m4_closed_set_before_operation(self) -> None:
+        extraction_calls: list[Mapping[str, ProcessValue]] = []
+
+        def extract(variables: Mapping[str, ProcessValue]) -> ProcessVariables:
+            extraction_calls.append(variables)
+            return {"extractionStatus": "SUCCESS"}
+
+        operations = {topic: (lambda _: {}) for topic in DOCUMENT_STAGE_TOPICS}
+        operations["document_extract"] = extract
+        extract_handler = next(
+            handler
+            for handler in build_m4_shadow_handlers(operations, lambda _: {})
+            if handler.topic_name == "document_extract"
+        )
+        base_variables: ProcessVariables = {
+            "resultReference": "object://synthetic/result",
+            "idempotencyKey": "IDEMPOTENT-SYNTHETIC",
+        }
+
+        for document_type in ("LEAVE_REQUEST", "OVERTIME_REQUEST"):
+            with self.subTest(document_type=document_type):
+                self.assertEqual(
+                    {"extractionStatus": "SUCCESS"},
+                    extract_handler.handle(
+                        {
+                            **base_variables,
+                            "workflowDocumentType": document_type,
+                        }
+                    ),
+                )
+
+        with self.assertRaises(CamundaBusinessError) as raised:
+            extract_handler.handle(
+                {
+                    **base_variables,
+                    "workflowDocumentType": "TIMESHEET",
+                }
+            )
+
+        self.assertEqual("DOCUMENT_INPUT_INVALID", raised.exception.error_code)
+        self.assertEqual(2, len(extraction_calls))
