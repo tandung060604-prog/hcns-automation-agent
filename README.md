@@ -221,6 +221,44 @@ bật trong phiên quan sát riêng, sau đó phải restart web dev server. M�
 đọc `docs/PROJECT_STATE.md`, `docs/HANDOFF.md` và `docs/BACKLOG.md`, chọn một
 task `READY`, cập nhật evidence rồi mới mở task kế tiếp.
 
+### OCR-HO-V2-014 (candidate 11.10.0, shadow-only)
+
+Vòng phát triển mới nhất chạy trên 15 tài liệu CCCD development, dùng detector
+line-aware và bốn recognizer hiện có. Kết quả so với baseline 11.9.1:
+
+| Metric | 11.9.1 | 11.10.0 |
+|---|---:|---:|
+| Field Exact | 60.83% | 63.33% |
+| ASCII match | 62.50% | 69.17% |
+| CER | 42.09% | 30.62% |
+| DER | 11.46% | 16.60% |
+| Field presence | 95.83% | 95.83% |
+
+Full-name ASCII đạt 93.33% (ROI 100%); place-of-origin ASCII 40% (ROI
+86.67%); place-of-residence ASCII 6.67% (ROI 66.67%). Vì DER tăng, còn exact
+regression và residence ROI chưa đủ, `developmentRegressionGate` và
+`heldoutReadinessGate` đều **HOLD**. Candidate không auto-accept và mọi field
+vẫn `MANUAL_REVIEW`/`SHADOW_REVIEW_ONLY`.
+
+Replay hoàn tất 212 jobs; warning telemetry: EasyOCR scalar overflow 90,
+`torch.load(weights_only=False)` 2, torch nested-tensor 1, VietOCR invalid-divide
+0. Ground Truth và overlay 15 tài liệu tiếp tục local-only; chỉ seal sau khi người
+duyệt xác nhận đủ line ID trong localhost.
+
+Để quan sát riêng OCR-HO trên localhost, truyền private root chứa report và
+session (không commit thư mục này):
+
+```powershell
+.\apps\ocr_lab\api\start_dashboard.ps1 `
+  -DataRoot "C:\path\to\private-data\paddleocr-hr-baseline" `
+  -OcrHoShadowRoot "C:\path\to\private-data\paddleocr-hr-baseline-archive-YYYYMMDD" `
+  -PythonPath ".\.venv\Scripts\python.exe"
+```
+
+Mở `http://localhost:3000`; khi hoàn tất mapping, giữ `linesChecked=false` cho
+đến khi đã kiểm tra đủ 15 tài liệu. Lexicon địa chính, engine thứ năm và
+fine-tune chưa được bật.
+
 ## Kiểm thử và mức độ sẵn sàng
 
 Các test mặc định dùng dữ liệu giả lập (synthetic), không cần tài liệu thật, file mô hình hoặc

@@ -100,9 +100,9 @@ def line_crops(image: Any, lines: list[dict[str, Any]]) -> list[Image.Image]:
 
 def warning_key(message: str) -> str:
     lowered = message.casefold()
-    if "overflow encountered in scalar" in lowered and "easyocr" in lowered:
+    if "overflow encountered in scalar" in lowered:
         return "easyocr_scalar_overflow"
-    if "invalid value encountered in divide" in lowered and "vietocr" in lowered:
+    if "invalid value encountered in divide" in lowered:
         return "vietocr_invalid_divide"
     if "weights_only=false" in lowered and "torch.load" in lowered:
         return "torch_load_weights_only_false"

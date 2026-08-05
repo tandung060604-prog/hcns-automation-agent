@@ -16,7 +16,7 @@ import numpy as np
 import phase11_5_cccd as phase11_5
 import phase11_6_cccd as phase11_6
 import phase11_9_cccd_v2 as phase11_9
-from phase11_cccd import FIELD_ORDER, _bounds, canonicalize_identity_card
+from phase11_cccd import FIELD_ORDER, _bounds, accent_key, canonicalize_identity_card
 
 CANDIDATE_VERSION = "11.10.0"
 SCHEMA_VERSION = phase11_6.SCHEMA_VERSION
@@ -33,14 +33,38 @@ def _line_bbox(box: Any) -> list[int]:
     return [left, top, right, bottom]
 
 
+def _trim_line_top(line: dict[str, Any], lines: list[dict[str, Any]]) -> list[int]:
+    left, top, right, bottom = _bounds(line["box"])
+    for previous in reversed(lines):
+        if previous["lineId"] >= line["lineId"]:
+            continue
+        previous_left, _, previous_right, previous_bottom = _bounds(previous["box"])
+        overlap = max(0.0, min(right, previous_right) - max(left, previous_left))
+        if overlap >= max(8.0, min(right - left, previous_right - previous_left) * 0.12):
+            top = max(top, previous_bottom)
+            break
+    return [int(round(left)), int(round(top)), int(round(right)), int(round(bottom))]
+
+
 def prepare_line_pages(
     session_dir: Any,
     pages: list[dict[str, Any]],
     images: list[Any],
 ) -> tuple[list[dict[str, Any]], list[Any]]:
-    """Use the existing card rectification and project detector boxes into it."""
+    """Use phase11's aligned page; rectify only when boxes are out of bounds."""
 
     if not images:
+        return pages, images
+    image_height, image_width = images[0].shape[:2]
+    box_bounds = [
+        _bounds(box)
+        for page in pages
+        for box in page.get("recognizedBoxes", [])
+    ]
+    if box_bounds and all(
+        right <= image_width * 1.02 and bottom <= image_height * 1.02
+        for _, _, right, bottom in box_bounds
+    ):
         return pages, images
     canonical, metadata = canonicalize_identity_card(images[0])
     transform = metadata.get("perspectiveTransform")
@@ -126,6 +150,21 @@ def locate_field_regions(
         "placeOfOrigin": "placeOfResidence",
         "placeOfResidence": "dateOfExpiry",
     }
+    label_markers = (
+        "full name",
+        "date of birth",
+        "place of origin",
+        "place of residence",
+        "date of expiry",
+        "quoc tich",
+        "que quan",
+        "noi thuong tru",
+        "co gia tri",
+        "nationality",
+        "sex",
+        "noh den",
+        "noi thuong",
+    )
     for field_name in TARGET_FIELDS:
         anchor = anchors.get(field_name)
         region = regions.get(field_name, {})
@@ -134,15 +173,76 @@ def locate_field_regions(
             left, top, right, bottom = _bounds(anchor["box"])
             next_anchor = anchors.get(next_labels[field_name])
             next_top = _bounds(next_anchor["box"])[1] if next_anchor else 10**9
+            next_left, _, next_right, _ = (
+                _bounds(next_anchor["box"]) if next_anchor else (0, 0, 0, 0)
+            )
+            next_horizontal_overlap = max(
+                0.0, min(right, next_right) - max(left, next_left)
+            )
+            next_boundary_related = (
+                bool(next_anchor)
+                and next_anchor["lineIndex"] > anchor["lineIndex"]
+                and next_top > bottom
+                and (
+                    next_horizontal_overlap >= max(
+                        8.0, min(right - left, next_right - next_left) * 0.12
+                    )
+                    or next_anchor["lineIndex"] > anchor["lineIndex"] + 1
+                )
+            )
+            next_top_limit = next_top if next_boundary_related else 10**9
             line_height = max(10, bottom - top)
+            anchor_center = (top + bottom) / 2
+            min_line_id = anchor["lineIndex"]
+            origin_anchor = anchors.get("placeOfOrigin")
+            if (
+                field_name == "placeOfResidence"
+                and origin_anchor
+                and origin_anchor["lineIndex"] == anchor["lineIndex"]
+            ):
+                min_line_id += 1
+            if (
+                field_name == "placeOfOrigin"
+                and next_anchor
+                and next_anchor["lineIndex"] == anchor["lineIndex"]
+            ):
+                for boundary_line in lines:
+                    if boundary_line["lineId"] <= anchor["lineIndex"]:
+                        continue
+                    boundary_text = accent_key(boundary_line["text"])
+                    if not any(marker in boundary_text for marker in label_markers):
+                        continue
+                    b_left, _, b_right, _ = _bounds(boundary_line["box"])
+                    if max(0.0, min(right, b_right) - max(left, b_left)) >= max(
+                        8.0, min(right - left, b_right - b_left) * 0.12
+                    ):
+                        next_top_limit = _bounds(boundary_line["box"])[1]
+                        break
             for line in lines:
                 line_left, line_top, line_right, line_bottom = _bounds(line["box"])
+                normalized_text = accent_key(line["text"])
+                if any(marker in normalized_text for marker in label_markers):
+                    continue
+                if line["lineId"] <= min_line_id:
+                    continue
+                horizontal_overlap = max(
+                    0.0, min(right, line_right) - max(left, line_left)
+                )
+                horizontal_related = horizontal_overlap >= max(
+                    8.0, min(right - left, line_right - line_left) * 0.12
+                )
                 same_row_value = (
                     top - line_height * 0.35 <= line_top <= bottom + line_height * 0.35
                     and line_left >= right - line_height
                 )
-                following_value = bottom < line_top < next_top - line_height * 0.08
-                if (same_row_value or following_value) and line["lineId"] != anchor["lineIndex"]:
+                following_value = (
+                    horizontal_related
+                    and line["lineId"] <= min_line_id + 5
+                    and line_top < bottom + line_height * 2.5
+                    and line_top < next_top_limit - line_height * 0.05
+                    and (line_top + line_bottom) / 2 > anchor_center + line_height * 0.15
+                )
+                if same_row_value or following_value:
                     choices.append(line)
         choices.sort(key=lambda item: (_bounds(item["box"])[1], _bounds(item["box"])[0]))
         max_lines = 1 if field_name == "fullName" else 2
@@ -154,7 +254,7 @@ def locate_field_regions(
             (page_sizes[0][0], page_sizes[0][1]),
         )
         if selected:
-            region["lineBboxes"] = [_line_bbox(item["box"]) for item in selected]
+            region["lineBboxes"] = [_trim_line_top(item, lines) for item in selected]
             region["lineIds"] = [item["lineId"] for item in selected]
             region["regionSource"] = "phase11_10_detector_lines"
         elif geometry_bboxes:

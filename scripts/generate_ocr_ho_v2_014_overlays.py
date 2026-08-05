@@ -5,10 +5,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
 import cv2
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "apps" / "ocr_lab" / "api"))
+from phase11_10_cccd_v2 import prepare_line_pages  # noqa: E402
 
 COLORS = {
     "fullName": (255, 180, 0),
@@ -50,20 +55,19 @@ def _draw_box(
 
 
 def render_overlay(session: Path, output: Path, document_index: int) -> dict[str, Any]:
-    page_path = next(
-        iter(sorted((session / "phase11" / "pages").glob("page_*.png"))),
-        None,
-    )
+    page_path = next(iter(sorted((session / "phase11" / "pages").glob("page_*.png"))), None)
     if page_path is None:
-        page_path = next(
-            iter(sorted((session / "phase11" / "canonical").glob("page_*.png"))),
-            None,
-        )
+        page_path = next(iter(sorted((session / "phase11" / "canonical").glob("page_*.png"))), None)
     if not page_path.is_file():
         page_path = session / "pages" / "page_000.png"
     image = cv2.imread(str(page_path), cv2.IMREAD_COLOR)
     if image is None:
         raise RuntimeError(f"Cannot read selected page: {page_path}")
+    result = json.loads((session / "result.json").read_text(encoding="utf-8"))
+    pages = result.get("phase11", {}).get("pages") or []
+    pages, prepared_images = prepare_line_pages(session, pages, [image])
+    if prepared_images and prepared_images[0] is not None:
+        image = prepared_images[0]
     evidence = json.loads(
         (session / "phase11_10_v2" / "field_consensus.json").read_text(encoding="utf-8")
     )
