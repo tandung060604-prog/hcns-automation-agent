@@ -176,7 +176,7 @@ test("hides held-out evidence by default behind a private local flag", async () 
   assert.match(dashboard, /Prediction vẫn bị ẩn/);
 });
 
-test("exposes the OCR-HO-V2-009 local shadow UAT inspector behind a private flag", async () => {
+test("exposes the OCR-HO-V2-014 local shadow UAT inspector behind a private flag", async () => {
   const [dashboard, css, envExample, api] = await Promise.all([
     readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),

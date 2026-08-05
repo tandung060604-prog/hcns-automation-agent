@@ -121,6 +121,7 @@ export default function LocalEvidenceOverview({ onOpen }: LocalEvidenceOverviewP
   const templates = object(byKey.templates?.payload);
   const heldoutOverall = object(heldout.overall);
   const cccdMetrics = object(object(object(cccd.evaluation).metrics).phase11_6);
+  const shadowCandidateMetrics = object(object(shadow.metrics).ocr_ho_v2_014);
   const externalNormalization = object(external.normalization);
   const externalScope = object(external.scope);
   const templateSessions = Array.isArray(templates.sessions) ? templates.sessions : [];
@@ -185,15 +186,15 @@ export default function LocalEvidenceOverview({ onOpen }: LocalEvidenceOverviewP
 
         {SHOW_OCR_HO_SHADOW_UAT ? <article className="local-evidence-card">
           <header>
-            <span>OCR-HO-V2 v11.9.1</span>
+            <span>OCR-HO-V2 v11.10.0</span>
             <strong>{byKey.shadow?.payload ? "SHADOW-ONLY" : errorLabel(byKey.shadow?.error ?? "")}</strong>
           </header>
           {byKey.shadow?.payload ? (
             <>
               <div className="local-evidence-metrics">
                 <Metric label="Ảnh dev" value={integer(shadow.documentCount)} />
-                <Metric label="Strict exact" value={percent(object(shadow.metrics).strictFieldExactMatch)} />
-                <Metric label="DER" value={percent(object(shadow.metrics).der)} />
+                <Metric label="Strict exact" value={percent(shadowCandidateMetrics.strictFieldExactMatch)} />
+                <Metric label="DER" value={percent(shadowCandidateMetrics.der)} />
                 <Metric label="Promotion" value={object(shadow.promotionGate).productionPromotionAllowed ? "ALLOW" : "HOLD"} />
               </div>
               <p>Ground Truth loaded: {String(shadow.groundTruthLoaded ?? false)} · mọi output vẫn MANUAL_REVIEW.</p>

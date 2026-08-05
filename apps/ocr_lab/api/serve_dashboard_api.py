@@ -3465,7 +3465,7 @@ def parse_args() -> argparse.Namespace:
         "--ocr-ho-shadow-root",
         type=Path,
         help=(
-            "Private local development archive for the OCR-HO-V2-009 shadow UAT. "
+            "Private local development archive for the OCR-HO-V2-014 shadow UAT. "
             "Defaults to --data-root."
         ),
     )

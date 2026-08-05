@@ -1318,7 +1318,7 @@ function OcrHoShadowInspector({
       <header>
         <div>
           <span>SHADOW UAT · LOCAL-ONLY</span>
-          <strong>OCR-HO-V2 v{detail.candidateVersion ?? "11.8.1"}</strong>
+          <strong>OCR-HO-V2 v{detail.candidateVersion ?? "11.10.0"}</strong>
         </div>
         <small>{detail.predictionMode} · không nạp Ground Truth</small>
       </header>
@@ -1333,7 +1333,7 @@ function OcrHoShadowInspector({
         <div className="shadow-uat-row heading" role="row">
           <span>FIELD</span>
           <span>BASELINE 11.5</span>
-          <span>CANDIDATE {detail.candidateVersion ?? "11.8.1"}</span>
+          <span>CANDIDATE {detail.candidateVersion ?? "11.10.0"}</span>
           <span>PROVENANCE</span>
         </div>
         {Object.entries(detail.fields).map(([fieldName, field]) => (
@@ -5615,7 +5615,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               role="tab"
               aria-selected={evidenceMode === "ocr-ho-v2-shadow"}
             >
-              OCR-HO-V2 v{ocrHoShadow?.candidateVersion ?? "11.8.1"} · Shadow UAT
+              OCR-HO-V2 v{ocrHoShadow?.candidateVersion ?? "11.10.0"} · Shadow UAT
             </button>
           ) : null}
           {SHOW_HELDOUT ? (
@@ -5697,7 +5697,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                   <strong>{document.sourceFile}</strong>
                   <small>
                     {document.reviewDecision} · {document.sourceFormat} · v
-                    {ocrHoShadow?.candidateVersion ?? "11.8.1"}
+                    {ocrHoShadow?.candidateVersion ?? "11.10.0"}
                   </small>
                 </button>
               ))}
@@ -5727,7 +5727,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                     <strong>{ocrHoShadowDetail.sourceFile}</strong>
                     <span>
                       Baseline Phase 11.5 → candidate v
-                      {ocrHoShadowDetail.candidateVersion ?? "11.8.1"} · Ground Truth không nạp
+                      {ocrHoShadowDetail.candidateVersion ?? "11.10.0"} · Ground Truth không nạp
                     </span>
                   </div>
                   <a
