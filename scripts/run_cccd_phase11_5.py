@@ -34,6 +34,8 @@ from phase11_5_cccd import (  # noqa: E402
 from serve_dashboard_api import UserOCRService  # noqa: E402
 
 TARGET_FIELDS = FIELD_ORDER
+prepare_line_pages = None
+assemble_line_candidates = None
 
 
 def utc_now() -> str:
@@ -84,6 +86,8 @@ def configure_phase(module_name: str) -> None:
             "business_values": module.business_values,
             "field_candidate": module.field_candidate,
             "locate_field_regions": module.locate_field_regions,
+            "assemble_line_candidates": getattr(module, "assemble_line_candidates", None),
+            "prepare_line_pages": getattr(module, "prepare_line_pages", None),
         }
     )
 
@@ -117,9 +121,7 @@ def sha256(path: Path) -> str:
 
 
 def verify_model_locks(args: argparse.Namespace) -> None:
-    policy = json.loads(
-        args.policy.read_text(encoding="utf-8")
-    )
+    policy = json.loads(args.policy.read_text(encoding="utf-8"))
     locks = {item["profile"]: item["sha256"] for item in policy["modelLocks"]}
     paths = {
         "paddle_ppocrv5_detector": (
@@ -178,13 +180,18 @@ def prepare(
     args: argparse.Namespace,
     records: list[dict[str, Any]],
     work_root: Path,
+    checkpoint_path: Path | None = None,
+    prepared: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     service = UserOCRService(args.data_root)
-    jobs: list[dict[str, Any]] = []
-    documents: list[dict[str, Any]] = []
+    jobs: list[dict[str, Any]] = list((prepared or {}).get("jobs", []))
+    documents: list[dict[str, Any]] = list((prepared or {}).get("documents", []))
+    completed_sessions = {str(item.get("sessionId")) for item in documents}
     sessions_root = session_root(args.data_root)
     for record in records:
         session_id = str(record["sessionId"])
+        if session_id in completed_sessions:
+            continue
         session_dir = sessions_root / session_id
         result = json.loads((session_dir / "result.json").read_text(encoding="utf-8"))
         pages = result.get("phase11", {}).get("pages") or []
@@ -194,6 +201,8 @@ def prepare(
         images = [cv2.imread(str(path), cv2.IMREAD_COLOR) for path in page_paths]
         if not images or any(image is None for image in images):
             raise RuntimeError(f"Missing selected CCCD page: {session_id}")
+        if prepare_line_pages is not None:
+            pages, images = prepare_line_pages(session_dir, pages, images)
         regions = locate_field_regions(
             pages,
             [(image.shape[1], image.shape[0]) for image in images],
@@ -202,44 +211,45 @@ def prepare(
         crop_records: dict[str, Any] = {}
         for field_name in TARGET_FIELDS:
             region = regions[field_name]
-            variants = build_crop_variants(
-                images[int(region["pageIndex"])],
-                region["bbox"],
-            )
+            line_bboxes = region.get("lineBboxes") or [region["bbox"]]
             crop_records[field_name] = {}
-            for variant_name, variant in variants.items():
-                case_id = f"{int(record['documentIndex']):03d}-{field_name}-{variant_name}"
-                crop_path = (
-                    work_root
-                    / "crops"
-                    / f"{int(record['documentIndex']):03d}"
-                    / f"{field_name}_{variant_name}.png"
-                )
-                crop_path.parent.mkdir(parents=True, exist_ok=True)
-                if not cv2.imwrite(str(crop_path), variant["image"]):
-                    raise OSError(f"Cannot write crop: {crop_path}")
-                candidate = paddle_candidate(
-                    service,
-                    crop_path,
-                    field_name,
-                    variant_name,
-                )
-                candidates[field_name].append(candidate)
-                jobs.append(
-                    {
+            for line_order, line_bbox in enumerate(line_bboxes):
+                variants = build_crop_variants(images[int(region["pageIndex"])], line_bbox)
+                for variant_name, variant in variants.items():
+                    suffix = f"-line{line_order}" if len(line_bboxes) > 1 else ""
+                    case_id = (
+                        f"{int(record['documentIndex']):03d}-{field_name}{suffix}-{variant_name}"
+                    )
+                    crop_path = (
+                        work_root
+                        / "crops"
+                        / f"{int(record['documentIndex']):03d}"
+                        / f"{field_name}_line{line_order}_{variant_name}.png"
+                    )
+                    crop_path.parent.mkdir(parents=True, exist_ok=True)
+                    if not cv2.imwrite(str(crop_path), variant["image"]):
+                        raise OSError(f"Cannot write crop: {crop_path}")
+                    candidate = paddle_candidate(service, crop_path, field_name, variant_name)
+                    candidate["lineOrder"] = line_order
+                    candidate["lineId"] = (region.get("lineIds") or [None])[line_order]
+                    candidates[field_name].append(candidate)
+                    jobs.append(
+                        {
+                            "caseId": case_id,
+                            "documentIndex": int(record["documentIndex"]),
+                            "fieldName": field_name,
+                            "variant": variant_name,
+                            "lineOrder": line_order,
+                            "lineId": candidate["lineId"],
+                            "cropPath": str(crop_path),
+                        }
+                    )
+                    crop_records[field_name][f"line{line_order}_{variant_name}"] = {
                         "caseId": case_id,
-                        "documentIndex": int(record["documentIndex"]),
-                        "fieldName": field_name,
-                        "variant": variant_name,
-                        "cropPath": str(crop_path),
+                        "path": str(crop_path),
+                        "sha256": sha256(crop_path),
+                        "paddle": candidate,
                     }
-                )
-                crop_records[field_name][variant_name] = {
-                    "caseId": case_id,
-                    "path": str(crop_path),
-                    "sha256": sha256(crop_path),
-                    "paddle": candidate,
-                }
         documents.append(
             {
                 "documentIndex": int(record["documentIndex"]),
@@ -249,6 +259,8 @@ def prepare(
                 "candidates": candidates,
             }
         )
+        if checkpoint_path is not None:
+            write_json(checkpoint_path, {"complete": False, "jobs": jobs, "documents": documents})
         print(
             json.dumps(
                 {
@@ -283,6 +295,8 @@ def merge_secondary(
                             "profile": profile,
                             "variant": variant_name,
                             "lines": prediction.get("lines", []),
+                            "lineOrder": crop["paddle"].get("lineOrder", 0),
+                            "lineId": crop["paddle"].get("lineId"),
                         }
                     )
 
@@ -294,9 +308,7 @@ def publish(
 ) -> list[dict[str, Any]]:
     sanitized: list[dict[str, Any]] = []
     sessions_root = session_root(args.data_root)
-    policy = json.loads(
-        args.policy.read_text(encoding="utf-8")
-    )
+    policy = json.loads(args.policy.read_text(encoding="utf-8"))
     for document in documents:
         started = time.perf_counter()
         recognition_duration_ms = round(
@@ -317,11 +329,14 @@ def publish(
                 raise FileNotFoundError(
                     f"Phase 11.5 baseline is required for protected replay: {baseline_path}"
                 )
-            baseline_fields = json.loads(
-                baseline_path.read_text(encoding="utf-8")
-            ).get("fields", {})
+            baseline_fields = json.loads(baseline_path.read_text(encoding="utf-8")).get(
+                "fields", {}
+            )
+        candidates = document["candidates"]
+        if assemble_line_candidates:
+            candidates = assemble_line_candidates(candidates)
         identity_card = build_identity_card(
-            document["candidates"],
+            candidates,
             document["regions"],
             **({"baseline_fields": baseline_fields} if baseline_fields is not None else {}),
         )
@@ -397,15 +412,13 @@ def publish(
         write_json(
             private_path,
             {
-                "schemaVersion": (
-                    f"{args.phase_key.replace('_', '.')}-private-evidence/1.0.0"
-                ),
+                "schemaVersion": (f"{args.phase_key.replace('_', '.')}-private-evidence/1.0.0"),
                 "containsRealPII": True,
                 "sessionId": document["sessionId"],
                 "policyLock": result[args.phase_key]["policyLock"],
                 "regions": document["regions"],
                 "crops": document["crops"],
-                "candidates": document["candidates"],
+                "candidates": candidates,
                 "identityCard": identity_card,
             },
         )
@@ -440,12 +453,14 @@ def main() -> int:
     prepared_path = work_root / "prepared_private.json"
     job_path = work_root / "secondary_job_private.json"
     secondary_path = work_root / "secondary_predictions_private.json"
+    prepared = None
     if prepared_path.is_file() and not args.overwrite:
         prepared = json.loads(prepared_path.read_text(encoding="utf-8"))
+    if prepared and prepared.get("complete") is True:
         jobs, documents = prepared["jobs"], prepared["documents"]
     else:
-        jobs, documents = prepare(args, records, work_root)
-        write_json(prepared_path, {"jobs": jobs, "documents": documents})
+        jobs, documents = prepare(args, records, work_root, prepared_path, prepared)
+        write_json(prepared_path, {"complete": True, "jobs": jobs, "documents": documents})
         write_json(job_path, {"items": jobs})
     if args.prepare_only:
         return 0
@@ -469,14 +484,14 @@ def main() -> int:
         secondary_env = None
         if args.secondary_pythonpath:
             secondary_env = os.environ.copy()
-            extra_path = os.pathsep.join(
-                str(path.resolve()) for path in args.secondary_pythonpath
-            )
+            extra_path = os.pathsep.join(str(path.resolve()) for path in args.secondary_pythonpath)
             inherited = secondary_env.get("PYTHONPATH")
             secondary_env["PYTHONPATH"] = (
                 extra_path + os.pathsep + inherited if inherited else extra_path
             )
         subprocess.run(command, check=True, env=secondary_env)
+        secondary = json.loads(secondary_path.read_text(encoding="utf-8"))
+    else:
         secondary = json.loads(secondary_path.read_text(encoding="utf-8"))
     if not args.paddle_only:
         merge_secondary(documents, secondary)

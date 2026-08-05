@@ -9,6 +9,7 @@
 | OCR-HO-V2-012 | REVIEW | Restored full secondary recognizers; v11.9.1 passes development gate but remains shadow-only pending explicit promotion decision | OCR-HO-V2-011 | P0 |
 | OCR-HO-V2-013 | REVIEW | Promotion review and localhost canary for v11.9.1; no primary-runtime promotion until all 15 local shadow decisions are recorded | OCR-HO-V2-012 | P0 |
 | OCR-EVIDENCE-LOCAL-001 | DONE (LOCAL HOLD) | Unified localhost evidence view for real prediction vs Ground Truth; keep Camunda closed until prediction artifacts and OCR gates are complete | OCR-HO-V2-013, DATA-10-R1 | P0 |
+| DATA-13 | DONE (HOLD) | OCR scope allowlist: only CCCD and certificate image/PDF scans may invoke OCR; other families use native text parsing or fail closed | DATA-12 | P0 |
 | OCR-HO-V2-007 | REVIEW | Tinh chinh ROI que quan/noi thuong tru va Unicode; replay development khong co exact improvement nen giu shadow | OCR-HO-V2-006 | P0 |
 | OCR-HO-V2-008 | DONE | Token-alignment cho address đạt development gate; giữ shadow-only, chưa promote hoặc đổi held-out | OCR-HO-V2-007 | P0 |
 | OCR-HO-V2-001 | REVIEW | Đã seal prediction ẩn trên 15 CCCD held-out; chờ xác nhận Ground Truth để evaluate-once | Manifest v2, policy 11.6 | P0 |
@@ -54,6 +55,7 @@
 | DATA-10 | APPROVED | Approve typed canonical projection for read-only downstream use; keep model/promotion gates disabled | DATA-09 | P0 |
 | DATA-10-R1 | DONE (APPROVED, READ-ONLY) | Freeze the DATA-09-R1 typed projection for read-only downstream use; keep promotion disabled | DATA-09-R1 | P0 |
 | DATA-11 | DONE (READ-ONLY) | Expose approved typed projection through loopback GET-only API and JSON/CSV export | DATA-10 | P0 |
+| DATA-12 | DONE (HOLD) | Generate private predictions for active CV/IELTS/contract inputs and evaluate one aggregate-only prediction-vs-Ground-Truth report on localhost | DATA-10-R1 | P0 |
 
 ## DATA-00..DATA-05 acceptance criteria
 
@@ -485,3 +487,12 @@
 - Gate `DEVELOPMENT_FAIL` vì DER tăng và chưa có exact improvement. Không
   promote runtime, không đọc/sửa held-out evaluate-once, không đưa raw PII vào
   Git. Báo cáo aggregate chỉ nằm ở private output.
+
+## LOCAL-SCOPE-001 - Mentor-safe localhost (DONE)
+
+- Scope: hide unrelated/held-out/private review data from the default localhost
+  view without deleting files or changing immutable evaluation artifacts.
+- Done: overview fetches only active template sessions unless a private review
+  flag is enabled; dashboard tabs and review summaries follow the same flags.
+- Docs updated: root README, OCR Lab README, WORKFLOWS, PROJECT_STATE and
+  HANDOFF. Camunda is unchanged.

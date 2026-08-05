@@ -697,3 +697,75 @@ Next:
 - Validation: web build, web tests (11), lint (0 errors, existing warnings),
   targeted Python tests (14), API health and all five evidence summary routes
   passed. No Camunda source, deployment or workflow state was changed.
+
+## DATA-12 checkpoint (2026-08-05, DONE/HOLD)
+
+- Created a private prediction artifact outside Git for 20 active documents /
+  202 fields (contract 8/112, CV 6/60, IELTS 6/30). Native DOCX/PDF text
+  uses the existing parser; image/PDF-scan inputs use local PaddleOCR.
+  Ground Truth was not read during prediction.
+- Evaluate-once ran exactly once after prediction creation: classification
+  11/20 (55.0%), field exact 49/202 (24.3%), field presence 86/202 (42.6%),
+  schema errors 0. Diagnosis counts: PARSER_MISSED=16,
+  OCR_RECOGNIZED_PARSER_MISSED=47, OCR_NOT_RECOGNIZED=87.
+- Safety policy holds: OCR cases are MANUAL_REVIEW, false AUTO_CONTINUE=0,
+  and the report contains no raw field values. Decision is HOLD;
+  promotionAllowed=false. DATA-10 and Camunda were not changed.
+- Local inspection is available at /workspace under DATA-12 Prediction + GT,
+  backed by /external-dataset/prediction/summary and
+  /external-dataset/prediction/document?id=.... Private artifacts remain
+  under C:\tmp.
+- Next READY task: classifier/parser recovery on a development-only split; do
+  not re-run the consumed evaluate-once marker until a new artifact exists.
+
+## DATA-13 checkpoint (2026-08-05, DONE/HOLD)
+
+- Implemented one OCR scope policy: image/PDF-scan OCR is allowed only for
+  `IDENTITY_CARD`/CCCD and `CERTIFICATE`; native DOCX/PDF text remains
+  parser-only. CV, contract and HCNS template scans fail closed with
+  `OCR_DISABLED_BY_POLICY` before any OCR engine is called. Camunda was not
+  changed.
+- DATA-13 evaluate-once ran exactly once on the new private prediction
+  artifact: 20 documents total, 11 evaluated, 9 policy-excluded, 96 evaluated
+  fields, 26 exact matches (27.1%), 59 present (61.5%), schema errors 0.
+  OCR policy reports 9 `UNSUPPORTED_NO_OCR`, 6 `MANUAL_REVIEW`, false
+  `AUTO_CONTINUE=0`. Decision is `HOLD`; `promotionAllowed=false`.
+- Private artifacts remain outside Git under `C:\tmp\...-data13-*` and the
+  aggregate report contains no raw field values. Localhost exposes a read-only
+  `DATA-13 · OCR SCOPE` tab; excluded scans are marked and omitted from metric.
+- Validation: targeted Python suite 43 passed. Do not promote or open Camunda
+  until a separate CCCD/certificate prediction gate is met.
+
+## OCR-HO-V2-014 geometry checkpoint (2026-08-05, HOLD)
+
+- Created a private prediction-blind diagnostic draft for 15 CCCD documents;
+  status is `DRAFT_NEEDS_LINE_CONFIRMATION`, with one missing line assignment.
+  No prediction was opened and the draft is not promotion-eligible.
+- Generated text-free overlays for all 15 documents and added card perspective
+  rectification plus projected line geometry before candidate cropping.
+- Replayed 200 crops with four existing recognizers. Full-name selection now
+  counts distinct VietOCR profiles as independent support while remaining
+  `needs_review`.
+- Current candidate versus 11.9.1: strict 60.00%, ASCII 62.50%, CER 46.66%,
+  DER 15.02%, full-name ASCII 80.00%, residence ROI 40.00%; both gates HOLD.
+- Address lexicon, a fifth OCR engine and fine-tuning were intentionally skipped:
+  residence ROI is below 80% and confirmed line-crop count is below 500.
+- Secondary worker now records private warning categories/counts; prior replay
+  observed EasyOCR scalar overflow and VietOCR invalid-divide warnings while
+  still completing. Targeted tests: 9 passed.
+- Next READY action: human-confirm the diagnostic line IDs/overlays, then tune
+  residence line bands and left boundary before another OCR replay.
+
+## LOCAL-SCOPE-001 checkpoint (2026-08-05, DONE)
+
+- Localhost now uses a mentor-safe default: upload/template evidence remains
+  visible; held-out, Ground Truth review, Shadow UAT and external dataset cards
+  are hidden and their summary endpoints are not fetched.
+- The private `.env.local` keeps legacy upload enabled for CCCD/certificate OCR
+  while all review flags are `false`. The startup script no longer forces the
+  external review flag when an external root is supplied.
+- No private files, Ground Truth, prediction artifact or evaluate-once marker
+  was deleted or changed. Private review can be reopened by setting one flag
+  and restarting the web server.
+- README, OCR Lab README, WORKFLOWS, HANDOFF and BACKLOG now describe the
+  active scope and the one-READY-task handoff rule. Camunda remains untouched.

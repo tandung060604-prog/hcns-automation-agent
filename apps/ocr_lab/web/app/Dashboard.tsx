@@ -5,6 +5,7 @@ import {
   resumePendingReview,
 } from "./review-queue.mjs";
 import ExternalDatasetReview from "./ExternalDatasetReview";
+import ExternalDatasetPrediction from "./ExternalDatasetPrediction";
 import LocalEvidenceOverview from "./LocalEvidenceOverview";
 
 const SHOW_HELDOUT = import.meta.env.VITE_SHOW_HELDOUT === "true";
@@ -728,7 +729,7 @@ type TemplateProcessingResult = {
     recommendedAction: string;
   };
   processing: {
-    sourceFormat: "DOCX" | "PDF_TEXT" | "PDF_SCAN" | "IMAGE";
+    sourceFormat: string;
     parserName: string;
     parserVersion: string;
     usesOcr: boolean;
@@ -742,13 +743,13 @@ type TemplateSessionSummary = {
   documentId: string;
   createdAt: string;
   originalFileName: string;
-  documentType: "LEAVE_REQUEST" | "OVERTIME_REQUEST";
+  documentType: string;
   templateId: string;
   templateVersion: string;
   status: string;
   recommendedAction: string | null;
   confidence: number | null;
-  sourceFormat: "DOCX" | "PDF_TEXT" | "PDF_SCAN" | "IMAGE";
+  sourceFormat: string;
   usesOcr: boolean;
   parserName: string;
 };
@@ -1614,7 +1615,7 @@ function EvidenceInspector({
               Policy khóa v4 · parser 2.0
             </button>
           ) : null}
-          <button
+            <button
             className={predictionSource === "sealed" ? "active" : ""}
             onClick={() => setPredictionSource("sealed")}
           >
@@ -2137,7 +2138,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [heldoutEvidenceLoading, setHeldoutEvidenceLoading] = useState(false);
   const [heldoutEvidenceError, setHeldoutEvidenceError] = useState("");
   const [evidenceMode, setEvidenceMode] =
-    useState<"overview" | "heldout" | "templates" | "cccd" | "external-dataset" | "ocr-ho-v2-shadow">(
+    useState<"overview" | "heldout" | "templates" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "ocr-ho-v2-shadow">(
       // Legacy default: SHOW_HELDOUT ? "heldout" : "templates"
       SHOW_OCR_HO_SHADOW_UAT
         ? "ocr-ho-v2-shadow"
@@ -2166,6 +2167,9 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [viewProfile, setViewProfile] = useState<"phase7" | "baseline">("phase7");
   const [processingMode, setProcessingMode] =
     useState<"template" | "legacy">("template");
+  const [ocrDocumentType, setOcrDocumentType] = useState<
+    "IDENTITY_CARD" | "CERTIFICATE"
+  >("IDENTITY_CARD");
   const [supportedTemplates, setSupportedTemplates] =
     useState<SupportedTemplate[]>([]);
   const [templateResult, setTemplateResult] =
@@ -2369,6 +2373,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     }
     refreshUserSessions();
     refreshTemplateSessions();
+    if (!SHOW_OCR_HO_SHADOW_UAT) return;
     fetch(`${API_BASE}/phase14/benchmark`)
       .then((response) => {
         if (!response.ok) throw new Error("Phase 14 unavailable");
@@ -2426,6 +2431,9 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   }, [activeHeldoutId]);
 
   useEffect(() => {
+    if (!SHOW_GROUND_TRUTH_REVIEW) {
+      return;
+    }
     fetch(`${API_BASE}/cccd-heldout/review/summary`)
       .then((response) => {
         if (!response.ok) throw new Error("Ground Truth review unavailable");
@@ -2886,9 +2894,11 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     if (!uploadFile || isUploading) return;
     if (
       processingMode === "template" &&
-      !/\.(docx|pdf|png|jpe?g)$/i.test(uploadFile.name)
+      !/\.(docx|pdf)$/i.test(uploadFile.name)
     ) {
-      setUploadError("Mẫu chuẩn hỗ trợ DOCX, PDF, PNG, JPG và JPEG.");
+      setUploadError(
+        "Định dạng hỗ trợ: TXT, DOCX, PDF, XLSX, PPTX, PNG, JPG/JPEG, TIF/TIFF và WEBP.",
+      );
       return;
     }
     setIsUploading(true);
@@ -2898,6 +2908,9 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     setDeleteArmed(false);
     const formData = new FormData();
     formData.append("file", uploadFile);
+    if (processingMode === "legacy") {
+      formData.append("documentType", ocrDocumentType);
+    }
     try {
       const endpoint =
         processingMode === "template"
@@ -2915,11 +2928,20 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             : typeof payload.error === "string"
               ? payload.error
               : "LOCAL_PROCESSING_FAILED";
+        const templateErrorMessages: Record<string, string> = {
+          SUPPORTED_TEMPLATE_FORMAT_REQUIRED:
+            "Định dạng này chưa được intake hỗ trợ. Dùng TXT, DOCX, PDF, XLSX, PPTX hoặc ảnh PNG/JPG/TIF/WEBP.",
+          "Document does not match an approved template":
+            "Chưa nhận diện được mẫu tài liệu. Tài liệu vẫn hợp lệ nhưng cần thêm template hoặc chuyển sang pipeline IDP tổng quát.",
+          "Unsupported file type":
+            "File hợp lệ nhưng parser local chưa hỗ trợ loại nội dung này.",
+        };
         throw new Error(
           processingMode === "template"
             ? errorCode === "OCR_RUNTIME_UNAVAILABLE"
               ? "OCR local chưa sẵn sàng. Hãy cài runtime PaddleOCR rồi thử lại."
-              : `Không xử lý được biểu mẫu: ${errorCode}`
+              : templateErrorMessages[errorCode] ??
+                `Không xử lý được biểu mẫu: ${errorCode}`
             : `OCR local thất bại: ${errorCode}`,
         );
       }
@@ -3891,7 +3913,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                     type="button"
                   >
                     <strong>Biểu mẫu HCNS</strong>
-                    <span>DOCX, PDF, ảnh scan</span>
+                    <span>Office, PDF, TXT, ảnh scan</span>
                   </button>
                   <button
                     aria-selected={processingMode === "legacy"}
@@ -3906,7 +3928,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                     type="button"
                   >
                     <strong>OCR / IDP cũ</strong>
-                    <span>Chỉ dùng khi chẩn đoán</span>
+                    <span>Chỉ dùng cho CCCD / CERTIFICATE</span>
                   </button>
                 </div>
               ) : null}
@@ -3915,11 +3937,27 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                 <span>MỘT ĐẦU VÀO · TỰ ĐỘNG CHỌN PIPELINE</span>
                 <h3>Tải tài liệu HCNS</h3>
                 <p>
-                  Chọn đơn nghỉ phép hoặc tăng ca. Hệ thống sẽ tự đọc DOCX,
-                  PDF hoặc ảnh scan và trả lại dữ liệu có cấu trúc.
+                  Chọn tài liệu HCNS. Hệ thống tự nhận dạng định dạng, ưu tiên
+                  native parser cho tài liệu có text và OCR local cho ảnh/PDF scan.
                 </p>
                 <small>{supportedTemplates.length || 2} biểu mẫu đang hỗ trợ</small>
               </div>
+              {processingMode === "legacy" ? (
+                <label className="upload-scope-select">
+                  <span>OCR SCOPE</span>
+                  <select
+                    value={ocrDocumentType}
+                    onChange={(event) =>
+                      setOcrDocumentType(
+                        event.target.value as "IDENTITY_CARD" | "CERTIFICATE",
+                      )
+                    }
+                  >
+                    <option value="IDENTITY_CARD">CCCD / Identity card</option>
+                    <option value="CERTIFICATE">Certificate / IELTS</option>
+                  </select>
+                </label>
+              ) : null}
 
               <label
                 className={`drop-zone ${isDragging ? "dragging" : ""} ${
@@ -3943,7 +3981,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                   data-testid="local-document-input"
                   accept={
                     processingMode === "template"
-                      ? ".docx,.pdf,.png,.jpg,.jpeg"
+                      ? ".docx,.pdf"
                       : ".png,.jpg,.jpeg,.pdf,.docx,.xlsx"
                   }
                   onChange={(event) =>
@@ -3958,8 +3996,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                   {uploadFile
                     ? `${(uploadFile.size / 1024 / 1024).toFixed(2)} MB`
                     : processingMode === "template"
-                      ? "DOCX, PDF, PNG, JPG/JPEG · nghỉ phép hoặc tăng ca"
-                      : "PNG, JPG, JPEG, PDF, DOCX, XLSX, tối đa 50 MB / 50 trang"}
+                      ? "DOCX, PDF native parser"
+                      : "CCCD/chứng chỉ: ảnh hoặc PDF scan; DOCX/PDF text: native parser"}
                 </p>
               </label>
               <div className="upload-consent">
@@ -5598,6 +5636,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           >
             {templateSessions.length} đơn nghỉ phép &amp; tăng ca
           </button>
+          {SHOW_GROUND_TRUTH_REVIEW ? (
           <button
             className={evidenceMode === "cccd" ? "active" : ""}
             onClick={() => setEvidenceMode("cccd")}
@@ -5606,6 +5645,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           >
             {groundTruthReview?.documentCount ?? 0} CCCD mới đã Ground Truth
           </button>
+          ) : null}
           {SHOW_EXTERNAL_DATASET_REVIEW ? (
             <button
               className={evidenceMode === "external-dataset" ? "active" : ""}
@@ -5616,6 +5656,26 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               DATA-08 · 4 contract case review
             </button>
           ) : null}
+          {SHOW_EXTERNAL_DATASET_REVIEW ? (
+            <>
+          <button
+            className={evidenceMode === "external-dataset-prediction" ? "active" : ""}
+            onClick={() => setEvidenceMode("external-dataset-prediction")}
+            role="tab"
+            aria-selected={evidenceMode === "external-dataset-prediction"}
+          >
+           DATA-12 · Prediction + GT
+           </button>
+            <button
+              className={evidenceMode === "external-dataset-prediction-v13" ? "active" : ""}
+            onClick={() => setEvidenceMode("external-dataset-prediction-v13")}
+            role="tab"
+            aria-selected={evidenceMode === "external-dataset-prediction-v13"}
+          >
+            DATA-13 · OCR scope
+            </button>
+            </>
+            ) : null}
         </div>
         {evidenceMode === "overview" ? (
           <LocalEvidenceOverview
@@ -5765,7 +5825,11 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               onViewChange={setEvidenceInspectorView}
             />
           </div>
-        ) : evidenceMode === "external-dataset" ? (
+        ) : SHOW_EXTERNAL_DATASET_REVIEW && evidenceMode === "external-dataset-prediction" ? (
+          <ExternalDatasetPrediction />
+        ) : SHOW_EXTERNAL_DATASET_REVIEW && evidenceMode === "external-dataset-prediction-v13" ? (
+          <ExternalDatasetPrediction version="data13" />
+        ) : SHOW_EXTERNAL_DATASET_REVIEW && evidenceMode === "external-dataset" ? (
           <ExternalDatasetReview />
         ) : evidenceMode === "templates" ? (
           <div className="heldout-evidence-grid">
@@ -5854,7 +5918,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               onViewChange={setEvidenceInspectorView}
             />
           </div>
-        ) : evidenceMode === "cccd" ? (
+        ) : SHOW_GROUND_TRUTH_REVIEW && evidenceMode === "cccd" ? (
           <div className="heldout-evidence-grid">
             <div className="heldout-document-list" role="list">
               {cccdEvidenceDocuments.map((document) => (

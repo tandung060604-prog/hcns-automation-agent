@@ -10,6 +10,7 @@ OCR và model weights luôn nằm ngoài Git.
 
 - `web/`: giao diện tại `http://localhost:3000`.
 - `api/`: API local tại `http://127.0.0.1:8765`.
+- Template-first nhận DOCX/PDF có text; OCR ảnh/PDF scan chỉ dành cho CCCD và chứng chỉ.
 - API chỉ đọc/ghi dưới `--data-root` do người vận hành cung cấp.
 
 ## Chạy local
@@ -34,12 +35,25 @@ Script chỉ bind API vào loopback. Upload được kiểm tra theo nội dung:
 kích thước/trang, format mismatch, PDF mã hóa, Office macro, archive path và
 archive expansion đều bị chặn trước parser/OCR.
 
+## Profile localhost mentor-safe
+
+Mặc định giao diện chỉ hiển thị upload/template đang active và không gọi các
+summary của held-out, Ground Truth review, Shadow UAT hoặc external dataset.
+Các cờ `VITE_SHOW_HELDOUT`, `VITE_SHOW_GROUND_TRUTH_REVIEW`,
+`VITE_SHOW_EXTERNAL_DATASET_REVIEW` và `VITE_SHOW_OCR_HO_SHADOW_UAT` trong
+`web/.env.local` phải để `false` khi mở localhost cho mentor. Bật từng cờ chỉ
+trong phiên quan sát riêng rồi restart Vite; dữ liệu private không bị xóa.
+
+Upload vẫn giữ hai đường xử lý cần thiết: Template-first cho DOCX/PDF native
+của HCNS và OCR/IDP cho ảnh hoặc PDF scan thuộc CCCD/chứng chỉ. CV, contract và
+biểu mẫu HCNS dạng scan bị policy từ chối OCR (`OCR_DISABLED_BY_POLICY`).
+
 ## Luồng Phase 14.8 và Phase 15
 
 ```text
 Upload
 → kiểm tra an toàn
-→ native parse (PDF text/DOCX/XLSX) hoặc OCR scan
+→ native parse (DOCX/PDF text) hoặc OCR scan theo allowlist CCCD/chứng chỉ
 → Paddle detector
 → VietOCR Seq2Seq primary
 → VietOCR Transformer verifier
@@ -58,10 +72,11 @@ kiểm tra rồi bấm **Xác nhận các trường Phase 15**. API giữ nguyê
 động và tạo riêng `idp_result_reviewed.json` cùng `business_reviewed.json`.
 Tải lại trang vẫn thấy trạng thái `Field review ✓`.
 
-## Bằng chứng held-out thật trên localhost
+## Bằng chứng held-out thật trên localhost (private observation)
 
-Màn hình chính chỉ hiển thị aggregate của 18 tài liệu held-out thật đã Ground
-Truth và cho phép đối chiếu tài liệu gốc từ `private-data`. Endpoint
+Profile mentor-safe mặc định không hiển thị aggregate của 18 tài liệu held-out
+hoặc hàng đợi Ground Truth. Khi bật cờ private tương ứng, dashboard cho phép
+đối chiếu tài liệu gốc từ `private-data`. Endpoint
 `/heldout/summary` không trả raw field value, OCR text, tên file hoặc PII.
 Endpoint `/heldout/document` chỉ hoạt động trên API loopback và chỉ resolve
 document ID đã có trong manifest. Tab CCCD lấy riêng các saved session

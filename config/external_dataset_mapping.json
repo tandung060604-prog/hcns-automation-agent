@@ -16,11 +16,11 @@
       "formatPolicy": {
         "PLAIN_TEXT": "NATIVE",
         "DOCX": "NATIVE",
-        "IMAGE": "OCR_REVIEW",
+        "IMAGE": "UNSUPPORTED_NO_OCR",
         "PPTX": "NATIVE_PARTIAL",
-        "PDF_SCAN": "OCR_REVIEW"
+        "PDF_SCAN": "UNSUPPORTED_NO_OCR"
       },
-      "mappingNote": "Active Ground Truth review uses 10 HR-recruiting fields for DOCX/IMAGE/PDF_SCAN; PLAIN_TEXT and PPTX remain inventory-only."
+      "mappingNote": "Native CV inputs are supported; IMAGE/PDF_SCAN are UNSUPPORTED_NO_OCR under DATA-13."
     },
     {
       "category": "contract",
@@ -32,11 +32,11 @@
       "formatPolicy": {
         "PLAIN_TEXT": "NATIVE",
         "DOCX": "NATIVE",
-        "IMAGE": "OCR_REVIEW",
+        "IMAGE": "UNSUPPORTED_NO_OCR",
         "PPTX": "NATIVE_PARTIAL",
-        "PDF_SCAN": "OCR_REVIEW"
+        "PDF_SCAN": "UNSUPPORTED_NO_OCR"
       },
-      "mappingNote": "External contract cases are probation agreements; review uses the reduced 14-field probation schema."
+      "mappingNote": "External contract cases are probation agreements; native inputs use the reduced 14-field schema; IMAGE/PDF_SCAN are UNSUPPORTED_NO_OCR under DATA-13."
     },
     {
       "category": "ielts",

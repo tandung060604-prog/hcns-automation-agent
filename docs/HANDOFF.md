@@ -700,6 +700,48 @@
   comparison. Keep Camunda untouched until that evidence and the CCCD gate
   are approved.
 
+### DATA-12 - Private prediction artifact and aggregate evaluation (DONE, HOLD)
+
+- Prediction was generated from source documents only for 20 active documents
+  and 202 typed fields. Native formats use the existing parser; image and PDF
+  scan inputs use PaddleOCR. Ground Truth stayed unopened during prediction.
+- The immutable evaluate-once report records classification 11/20, exact
+  field matches 49/202 (24.3%), presence 86/202 (42.6%), and schema errors 0.
+  Diagnosis counts are PARSER_MISSED=16,
+  OCR_RECOGNIZED_PARSER_MISSED=47, OCR_NOT_RECOGNIZED=87.
+- The report is HOLD with promotionAllowed=false; OCR remains MANUAL_REVIEW
+  and false AUTO_CONTINUE=0. Raw prediction values and the marker are
+  private files under C:\tmp, never committed.
+- Local handoff: select DATA-12 Prediction + GT at
+  http://localhost:3000/workspace; the loopback API serves summary and
+  document comparison routes. DATA-10 and Camunda remain untouched.
+- Next READY task is development-only classifier/parser recovery. The
+  consumed evaluate-once marker must not be rerun; prepare a new artifact for
+  any later gate.
+
+### DATA-13 - OCR scope allowlist (DONE, HOLD)
+
+- OCR is allowlisted to CCCD and certificates for image/PDF-scan inputs.
+  Native DOCX/PDF text for CV, contract and HCNS forms stays parser-only;
+  unsupported scans return `OCR_DISABLED_BY_POLICY` before OCR invocation.
+- Evaluate-once result: 20 total / 11 evaluated / 9 excluded, 26/96 exact,
+  59/96 present, schema errors 0, false `AUTO_CONTINUE=0`, decision `HOLD`.
+  Private prediction/report/marker files are under `C:\tmp` and were not added
+  to Git. DATA-12 and Camunda remain unchanged.
+- Local handoff: select `DATA-13 · OCR SCOPE` at
+  `http://localhost:3000/workspace`; excluded cases show
+  `UNSUPPORTED_NO_OCR · khong tinh metric`.
+
+### LOCAL-SCOPE-001 - Mentor-safe localhost (DONE)
+
+- The default local profile shows only active upload/template evidence. Held-out,
+  Ground Truth, Shadow UAT and external dataset review are private-flagged and
+  are not fetched when their flags are `false`.
+- Keep `VITE_SHOW_LEGACY_UPLOAD=true` locally for CCCD/certificate OCR. Set a
+  review flag to `true` only for a private observation session, then restart Vite.
+- No private artifact or evaluation marker was removed. Next task must read the
+  three state files and select one `READY` task before changing code.
+
 ## First command after resume
 
 ```powershell

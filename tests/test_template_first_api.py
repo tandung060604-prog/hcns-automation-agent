@@ -11,9 +11,6 @@ from pathlib import Path
 from synthetic_fixtures import administrative_image_bytes, scanned_pdf_bytes
 from test_template_first import docx_bytes, leave_lines
 
-from hcns_agent.adapters.mock_ocr import DeterministicMockOcrEngine
-from hcns_agent.bootstrap import build_default_intake
-from hcns_agent.templates.registry import build_default_template_registry
 from hcns_agent.templates.service import (
     TemplateProcessingService,
     TemplateTechnicalError,
@@ -220,7 +217,7 @@ def test_template_endpoint_rejects_unsupported_extension_separately(
     connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
     try:
         boundary = "synthetic-template-boundary"
-        payload = _multipart_payload(boundary, "unsupported.txt", b"synthetic")
+        payload = _multipart_payload(boundary, "unsupported.doc", b"synthetic")
         connection.request(
             "POST",
             "/api/documents/process",
@@ -242,19 +239,10 @@ def test_template_endpoint_rejects_unsupported_extension_separately(
         thread.join(timeout=5)
 
 
-def test_template_endpoint_processes_image_with_injected_ocr(
+def test_template_endpoint_rejects_image_before_ocr(
     tmp_path: Path,
 ) -> None:
-    ocr = DeterministicMockOcrEngine(
-        text="\n".join(leave_lines()),
-        confidence=0.91,
-    )
-    processor = TemplateProcessingService(
-        intake=build_default_intake(ocr),
-        registry=build_default_template_registry(),
-        ocr_engine=ocr,
-    )
-    configure_handler(tmp_path, processor)
+    configure_handler(tmp_path)
     server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -277,18 +265,8 @@ def test_template_endpoint_processes_image_with_injected_ocr(
         )
         response = connection.getresponse()
         result = json.loads(response.read().decode("utf-8"))
-        assert response.status == 200
-        assert result["documentType"] == "LEAVE_REQUEST"
-        assert result["processing"]["sourceFormat"] == "IMAGE"
-        assert result["processing"]["usesOcr"] is True
-        assert result["quality"]["recommendedAction"] == "MANUAL_REVIEW"
-        assert "OCR_REVIEW_REQUIRED" in result["quality"]["validationErrors"]
-        document_id = result["data"]["documentId"]
-        connection.request("GET", f"/api/documents/source?id={document_id}")
-        response = connection.getresponse()
-        assert response.status == 200
-        assert response.getheader("Content-Type") == "image/png"
-        assert response.read() == administrative_image_bytes()
+        assert response.status == 415
+        assert result["errorCode"] == "OCR_DISABLED_BY_POLICY"
     finally:
         connection.close()
         server.shutdown()
@@ -296,7 +274,7 @@ def test_template_endpoint_processes_image_with_injected_ocr(
         thread.join(timeout=5)
 
 
-def test_template_endpoint_reports_unavailable_ocr_as_service_unavailable(
+def test_template_endpoint_rejects_image_even_when_ocr_is_unavailable(
     tmp_path: Path,
 ) -> None:
     configure_handler(tmp_path)
@@ -333,8 +311,8 @@ def test_template_endpoint_reports_unavailable_ocr_as_service_unavailable(
         )
         response = connection.getresponse()
         result = json.loads(response.read().decode("utf-8"))
-        assert response.status == 503
-        assert result["errorCode"] == "OCR_RUNTIME_UNAVAILABLE"
+        assert response.status == 415
+        assert result["errorCode"] == "OCR_DISABLED_BY_POLICY"
     finally:
         connection.close()
         server.shutdown()

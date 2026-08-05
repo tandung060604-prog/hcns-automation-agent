@@ -2,7 +2,7 @@ from unittest import TestCase
 
 from hcns_agent.adapters.mock_ocr import DeterministicMockOcrEngine
 from hcns_agent.application.process_document import ProcessDocument
-from hcns_agent.domain.models import DocumentType, FieldStatus, HrDocument
+from hcns_agent.domain.models import DocumentType, HrDocument
 
 
 class ProcessDocumentTests(TestCase):
@@ -28,7 +28,8 @@ class ProcessDocumentTests(TestCase):
         proposal = ProcessDocument(DeterministicMockOcrEngine(confidence=0.42)).execute(document)
 
         self.assertTrue(proposal.requires_human_review)
-        self.assertEqual(FieldStatus.NEEDS_REVIEW, proposal.fields[0].status)
+        self.assertEqual((), proposal.fields)
+        self.assertEqual(("OCR_DISABLED_BY_POLICY",), proposal.review_reasons)
 
     def test_high_confidence_non_sensitive_demo_can_be_proposed(self) -> None:
         document = HrDocument(
@@ -39,5 +40,6 @@ class ProcessDocumentTests(TestCase):
 
         proposal = ProcessDocument(DeterministicMockOcrEngine()).execute(document)
 
-        self.assertFalse(proposal.requires_human_review)
-        self.assertEqual(FieldStatus.ACCEPTED, proposal.fields[0].status)
+        self.assertTrue(proposal.requires_human_review)
+        self.assertEqual((), proposal.fields)
+        self.assertEqual(("OCR_DISABLED_BY_POLICY",), proposal.review_reasons)

@@ -31,10 +31,13 @@ from hcns_agent.templates.registry import TemplateRegistry, build_default_templa
 
 _SUPPORTED_TEMPLATE_FORMATS = frozenset(
     {
+        SourceFormat.PLAIN_TEXT,
         SourceFormat.DOCX,
         SourceFormat.PDF_TEXT,
         SourceFormat.PDF_SCAN,
         SourceFormat.IMAGE,
+        SourceFormat.XLSX,
+        SourceFormat.PPTX,
     }
 )
 _OCR_TEMPLATE_FORMATS = frozenset({SourceFormat.PDF_SCAN, SourceFormat.IMAGE})
@@ -42,6 +45,10 @@ _OCR_TEMPLATE_FORMATS = frozenset({SourceFormat.PDF_SCAN, SourceFormat.IMAGE})
 
 class TemplateUnsupportedError(ValueError):
     """The upload is valid but outside the approved closed set."""
+
+    def __init__(self, code: str = "UNSUPPORTED_TEMPLATE") -> None:
+        super().__init__(code)
+        self.code = code
 
 
 class TemplateTechnicalError(RuntimeError):

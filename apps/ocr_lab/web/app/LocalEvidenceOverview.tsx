@@ -3,12 +3,20 @@
 import { useEffect, useMemo, useState } from "react";
 
 const API_BASE = "http://127.0.0.1:8765";
+const SHOW_HELDOUT = import.meta.env.VITE_SHOW_HELDOUT === "true";
+const SHOW_GROUND_TRUTH_REVIEW =
+  import.meta.env.VITE_SHOW_GROUND_TRUTH_REVIEW === "true";
+const SHOW_EXTERNAL_DATASET_REVIEW =
+  import.meta.env.VITE_SHOW_EXTERNAL_DATASET_REVIEW === "true";
+const SHOW_OCR_HO_SHADOW_UAT =
+  import.meta.env.VITE_SHOW_OCR_HO_SHADOW_UAT === "true";
 
 type EvidenceMode =
   | "heldout"
   | "templates"
   | "cccd"
   | "external-dataset"
+  | "external-dataset-prediction"
   | "ocr-ho-v2-shadow";
 
 type JsonRecord = Record<string, unknown>;
@@ -30,11 +38,23 @@ type EndpointState = {
 };
 
 const ENDPOINTS: Array<{ key: string; path: string }> = [
-  { key: "heldout", path: "/heldout/summary" },
-  { key: "cccd", path: "/cccd-heldout/review/summary" },
-  { key: "shadow", path: "/ocr-ho-v2/shadow/summary" },
-  { key: "external", path: "/external-dataset/typed/summary" },
   { key: "templates", path: "/api/documents/sessions" },
+  ...(SHOW_HELDOUT ? [{ key: "heldout", path: "/heldout/summary" }] : []),
+  ...(SHOW_GROUND_TRUTH_REVIEW
+    ? [{ key: "cccd", path: "/cccd-heldout/review/summary" }]
+    : []),
+  ...(SHOW_OCR_HO_SHADOW_UAT
+    ? [{ key: "shadow", path: "/ocr-ho-v2/shadow/summary" }]
+    : []),
+  ...(SHOW_EXTERNAL_DATASET_REVIEW
+    ? [
+        { key: "external", path: "/external-dataset/typed/summary" },
+        {
+          key: "externalPrediction",
+          path: "/external-dataset/prediction/summary",
+        },
+      ]
+    : []),
 ];
 
 function percent(value: unknown, digits = 1): string {
@@ -97,6 +117,7 @@ export default function LocalEvidenceOverview({ onOpen }: LocalEvidenceOverviewP
   const cccd = object(byKey.cccd?.payload);
   const shadow = object(byKey.shadow?.payload);
   const external = object(byKey.external?.payload);
+  const externalPrediction = object(byKey.externalPrediction?.payload);
   const templates = object(byKey.templates?.payload);
   const heldoutOverall = object(heldout.overall);
   const cccdMetrics = object(object(object(cccd.evaluation).metrics).phase11_6);
@@ -124,7 +145,7 @@ export default function LocalEvidenceOverview({ onOpen }: LocalEvidenceOverviewP
       </div>
 
       <div className="local-evidence-cards">
-        <article className="local-evidence-card">
+        {SHOW_HELDOUT ? <article className="local-evidence-card">
           <header>
             <span>HCNS HELD-OUT</span>
             <strong>{byKey.heldout?.payload ? "PREDICTION + GT" : errorLabel(byKey.heldout?.error ?? "")}</strong>
@@ -141,9 +162,9 @@ export default function LocalEvidenceOverview({ onOpen }: LocalEvidenceOverviewP
             </>
           ) : <p>{byKey.heldout?.error || "Chưa có response."}</p>}
           <button type="button" onClick={() => onOpen("heldout")}>Mở field inspector</button>
-        </article>
+        </article> : null}
 
-        <article className="local-evidence-card">
+        {SHOW_GROUND_TRUTH_REVIEW ? <article className="local-evidence-card">
           <header>
             <span>CCCD MẶT TRƯỚC</span>
             <strong>{byKey.cccd?.payload ? "EVALUATE-ONCE" : errorLabel(byKey.cccd?.error ?? "")}</strong>
@@ -160,9 +181,9 @@ export default function LocalEvidenceOverview({ onOpen }: LocalEvidenceOverviewP
             </>
           ) : <p>{byKey.cccd?.error || "Chưa có response."}</p>}
           <button type="button" onClick={() => onOpen("cccd")}>Mở CCCD evidence</button>
-        </article>
+        </article> : null}
 
-        <article className="local-evidence-card">
+        {SHOW_OCR_HO_SHADOW_UAT ? <article className="local-evidence-card">
           <header>
             <span>OCR-HO-V2 v11.9.1</span>
             <strong>{byKey.shadow?.payload ? "SHADOW-ONLY" : errorLabel(byKey.shadow?.error ?? "")}</strong>
@@ -179,12 +200,12 @@ export default function LocalEvidenceOverview({ onOpen }: LocalEvidenceOverviewP
             </>
           ) : <p>{byKey.shadow?.error || "Artifact shadow chưa nối vào process hiện tại."}</p>}
           <button type="button" onClick={() => onOpen("ocr-ho-v2-shadow")}>Mở shadow inspector</button>
-        </article>
+        </article> : null}
 
-        <article className="local-evidence-card">
+        {SHOW_EXTERNAL_DATASET_REVIEW ? <article className="local-evidence-card">
           <header>
             <span>CV · IELTS · CONTRACT</span>
-            <strong>{byKey.external?.payload ? "GROUND TRUTH ONLY" : errorLabel(byKey.external?.error ?? "")}</strong>
+            <strong>{externalPrediction.reportAvailable ? "PREDICTION + GT" : byKey.externalPrediction?.payload ? "PREDICTION READY" : byKey.external?.payload ? "GROUND TRUTH ONLY" : errorLabel(byKey.external?.error ?? "")}</strong>
           </header>
           {byKey.external?.payload ? (
             <>
@@ -194,11 +215,12 @@ export default function LocalEvidenceOverview({ onOpen }: LocalEvidenceOverviewP
                 <Metric label="Normalized" value={percent(Number(externalNormalization.normalizedFieldCount ?? 0) / Math.max(1, Number(externalScope.activeFieldCount ?? 0)))} />
                 <Metric label="Missing" value={integer(externalNormalization.missingFieldCount)} />
               </div>
-              <p>Chưa có prediction artifact; số trên là typed Ground Truth, không phải OCR accuracy.</p>
+              <p>{externalPrediction.reportAvailable ? "DATA-12 đã evaluate-once; mở field inspector để xem giá trị thật và chẩn đoán." : "Prediction artifact chưa evaluate; số trên vẫn là typed Ground Truth, không phải OCR accuracy."}</p>
             </>
           ) : <p>{byKey.external?.error || "Chưa có response."}</p>}
           <button type="button" onClick={() => onOpen("external-dataset")}>Mở dataset review</button>
-        </article>
+          <button type="button" onClick={() => onOpen("external-dataset-prediction")}>Mở prediction inspector</button>
+        </article> : null}
 
         <article className="local-evidence-card">
           <header>

@@ -70,3 +70,12 @@ Chi tiết contract, gate và kịch bản dry-run tại
 [`CAMUNDA_MVP_V2_INTEGRATION_PLAN.md`](CAMUNDA_MVP_V2_INTEGRATION_PLAN.md).
 Runbook authorization cho shadow pilot M5 tại
 [`CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md`](CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md).
+
+## Local evidence profile (LOCAL-SCOPE-001)
+
+Trước khi mở Camunda, localhost phải dùng profile `mentor-safe`: upload và
+Template-first là luồng active; các summary held-out, Ground Truth review,
+Shadow UAT và external dataset chỉ mở bằng cờ private. UI không fetch endpoint
+ẩn và không xóa artifact/queue gốc. Sau mỗi thay đổi cần kiểm tra `/health`,
+workspace và một upload thực tế; task mới phải đọc `PROJECT_STATE.md`,
+`HANDOFF.md`, `BACKLOG.md` rồi chỉ xử lý một task `READY`.

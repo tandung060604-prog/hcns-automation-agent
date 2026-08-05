@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from hcns_agent.application.extractor_registry import FieldExtractorRegistry
 from hcns_agent.application.intake import UniversalDocumentIntake
+from hcns_agent.application.ocr_scope import ocr_allowed_for_document_type
 from hcns_agent.application.quality_gate import ValidationQualityGate
 from hcns_agent.domain.canonical import CanonicalDocument
 from hcns_agent.domain.understanding import IdpResult
@@ -50,5 +51,9 @@ class IdpPipeline:
         self._understanding = understanding
 
     def execute(self, source: DocumentSource) -> IdpResult:
-        canonical_document = self._intake.execute(source)
+        allow_ocr = (
+            source.declared_document_type is None
+            or ocr_allowed_for_document_type(source.declared_document_type)
+        )
+        canonical_document = self._intake.execute(source, allow_ocr=allow_ocr)
         return self._understanding.execute(canonical_document)

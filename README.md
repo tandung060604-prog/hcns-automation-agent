@@ -11,7 +11,7 @@
 > Hệ thống đọc và xử lý hồ sơ hành chính nhân sự bằng AI, ưu tiên giữ dữ liệu trên
 > máy nội bộ, kiểm tra kết quả trước khi chuyển cho người duyệt và quy trình nghiệp vụ.
 
-Tính đến **04/08/2026**, luồng hai biểu mẫu HCNS đã chạy qua Template-first và
+Tính đến **05/08/2026**, luồng hai biểu mẫu HCNS đã chạy qua Template-first và
 Camunda 7.13 local. M4 đã hoàn tất dry-run 10/10; M5 shadow-pilot authorization
 đã mở ở trạng thái `READY`, chưa có production side effect.
 
@@ -47,8 +47,8 @@ kiểm thử và quản lý phiên bản; tài liệu lạ không bị ép vào 
 |---|---|---:|
 | DOCX (Word) | Đọc trực tiếp đoạn văn/bảng trong file | Nhận diện đúng 10/10; trường bắt buộc đúng 90/90 |
 | PDF có chữ | Đọc trực tiếp lớp chữ của PDF | Nhận diện đúng 10/10; trường bắt buộc đúng 90/90 |
-| Ảnh PNG/JPG/JPEG | OCR tiếng Việt bằng EasyOCR `vi-greedy` | Nhận diện đúng 10/10; trường bắt buộc đúng 86/90 (95,56%) |
-| PDF scan | Render trang rồi OCR tiếng Việt | Nhận diện đúng 10/10; trường bắt buộc đúng 82/90 (91,11%) |
+| Ảnh PNG/JPG/JPEG | OCR tiếng Việt chỉ trong scope CCCD/chứng chỉ; tài liệu khác fail-closed | DATA-13 allowlist |
+| PDF scan | OCR chỉ trong scope CCCD/chứng chỉ; PDF có text dùng native parser | DATA-13 allowlist |
 
 Các kết quả trên là kiểm thử chấp nhận tại máy local (UAT) trên bộ dữ liệu của hai biểu mẫu,
 không phải
@@ -62,7 +62,7 @@ OCR sai nhưng vẫn tự động đi tiếp.
 |---|---|
 | Giao diện local trên máy | Có thể tải file, xem bản xem trước cạnh kết quả, xem từng trường và JSON |
 | Nhận diện mẫu | Nhận diện hai phiên bản đơn nghỉ phép/tăng ca đã đăng ký |
-| Đọc nhiều định dạng | DOCX/PDF có chữ đọc trực tiếp; ảnh/PDF scan dùng OCR |
+| Đọc nhiều định dạng | DOCX/PDF có chữ native; ảnh/PDF scan chỉ OCR CCCD/chứng chỉ |
 | Kiểm tra chất lượng | Thiếu trường thông tin, sai mẫu, mâu thuẫn hoặc OCR chưa chắc chắn đều cần người kiểm tra |
 | Lưu trữ | File gốc, thông tin cá nhân, kết quả OCR và file mô hình nằm ngoài Git, trong vùng local/private |
 | Kết nối quy trình | BPMN/DMN, External Task worker, User Task, correction/re-upload và audit đã smoke trên Camunda 7.13 local; M5 pilot còn chờ chốt gate |
@@ -106,8 +106,8 @@ Runbook: [docs/CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md](docs/CAMUNDA_M5_SHADOW_PILOT_
 | Python 3.10+ | Xây luồng xử lý file, đọc tài liệu, kiểm tra dữ liệu và dịch vụ local |
 | TypeScript web dashboard | Giao diện tải file, xem bản xem trước và kiểm tra kết quả |
 | Native parsing | Đọc trực tiếp nội dung DOCX/PDF có chữ, nên nhanh và ít sai hơn OCR |
-| EasyOCR `vi-greedy` | Đọc tiếng Việt trong ảnh và PDF scan; đây là lựa chọn mặc định hiện tại |
-| PaddleOCR | Phương án quay lại khi cần so sánh hoặc chẩn đoán, không phải backend mặc định |
+| PaddleOCR PP-OCRv5 | Backend mặc định cho OCR ảnh/PDF scan trong scope CCCD/chứng chỉ; mọi kết quả vẫn MANUAL_REVIEW |
+| EasyOCR `vi-greedy` | Recognizer opt-in cho benchmark/chẩn đoán local, không tự thay thế output mặc định |
 | VietOCR | Công cụ từng dùng trong luồng OCR cũ/CCCD; hiện giữ ở legacy và benchmark, không phải mặc định của MVP |
 | JSON Schema | Kiểm tra JSON (dữ liệu dạng máy đọc được) có đủ trường và đúng kiểu dữ liệu |
 | Provenance | Lưu dấu vết trường thông tin lấy từ trang, vùng ảnh hoặc nguồn nào để người duyệt đối chiếu |
@@ -135,7 +135,8 @@ Runbook: [docs/CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md](docs/CAMUNDA_M5_SHADOW_PILOT_
 flowchart TD
     A["Người dùng tải hồ sơ"] --> B["Kiểm tra định dạng và an toàn file"]
     B -->|"DOCX hoặc PDF có chữ"| C["Đọc trực tiếp nội dung"]
-    B -->|"Ảnh hoặc PDF scan"| D["OCR tiếng Việt tại máy local"]
+    B -->|"Ảnh/PDF scan CCCD hoặc chứng chỉ"| D["PaddleOCR local + MANUAL_REVIEW"]
+    B -->|"Ảnh/PDF scan ngoài scope"| X["Từ chối OCR theo policy"]
     C --> E["Chuẩn hóa nội dung và lưu nguồn của từng trường"]
     D --> E
     E --> F["Nhận diện mẫu hồ sơ"]
@@ -205,6 +206,21 @@ Mở `http://localhost:3000`, tải một DOCX/PDF/PNG/JPG thuộc hai biểu m�
 các trường và JSON. Xóa phiên local khi không còn cần kết quả. Hướng dẫn chi tiết nằm tại
 [`apps/ocr_lab`](apps/ocr_lab/README.md).
 
+### Profile localhost mặc định (LOCAL-SCOPE-001)
+
+Localhost dùng profile `mentor-safe`: chỉ giữ luồng upload đang active và
+Template-first sessions (DOCX/PDF native cho HCNS; OCR ảnh/PDF scan chỉ cho
+CCCD/chứng chỉ). Các panel `held-out`, Ground Truth queue, Shadow UAT, DATA-08,
+DATA-12 và DATA-13 không hiển thị mặc định để tránh trộn dữ liệu lịch sử vào
+luồng demo. Việc này chỉ là lọc giao diện; private artifact, Ground Truth và
+endpoint loopback không bị xóa.
+
+Các cờ `VITE_SHOW_HELDOUT`, `VITE_SHOW_GROUND_TRUTH_REVIEW`,
+`VITE_SHOW_EXTERNAL_DATASET_REVIEW` và `VITE_SHOW_OCR_HO_SHADOW_UAT` chỉ được
+bật trong phiên quan sát riêng, sau đó phải restart web dev server. Mỗi task mới
+đọc `docs/PROJECT_STATE.md`, `docs/HANDOFF.md` và `docs/BACKLOG.md`, chọn một
+task `READY`, cập nhật evidence rồi mới mở task kế tiếp.
+
 ## Kiểm thử và mức độ sẵn sàng
 
 Các test mặc định dùng dữ liệu giả lập (synthetic), không cần tài liệu thật, file mô hình hoặc
@@ -267,3 +283,11 @@ sẵn sàng tự động hóa mọi loại hồ sơ trong môi trường thật.
 Dependency, OCR backend và model tuân theo license riêng của từng dự án. Khi thêm model,
 dataset hoặc template, cần ghi rõ nguồn, version, license và cách kiểm thử tương ứng.
 Trước khi tạo commit, chạy các quality gates ở trên và kiểm tra không có dữ liệu thật trong diff.
+
+## DATA-13 OCR scope (2026-08-05)
+
+Image/PDF-scan OCR is allowlisted to CCCD (`IDENTITY_CARD`) and certificates
+(`CERTIFICATE`) only. Native DOCX/PDF text for CV, contracts and HCNS forms
+stays parser-only. Other image/PDF scans fail closed with
+`OCR_DISABLED_BY_POLICY`; no OCR engine is invoked and the case is excluded
+from the DATA-13 metric. OCR cases remain `MANUAL_REVIEW`.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from hcns_agent.application.ocr_scope import ocr_allowed_for_document_type
 from hcns_agent.domain.models import (
     DocumentType,
     ExtractedField,
@@ -37,6 +38,15 @@ class ProcessDocument:
         self._policy = policy or ProcessingPolicy()
 
     def execute(self, document: HrDocument, *, content: bytes = b"") -> ProcessingProposal:
+        if not ocr_allowed_for_document_type(document.document_type):
+            return ProcessingProposal(
+                document_id=document.document_id,
+                document_type=document.document_type,
+                fields=(),
+                requires_human_review=True,
+                review_reasons=("OCR_DISABLED_BY_POLICY",),
+                engine="ocr-disabled-by-policy",
+            )
         result = self._ocr_engine.recognize(
             DocumentSource(
                 document_id=document.document_id,

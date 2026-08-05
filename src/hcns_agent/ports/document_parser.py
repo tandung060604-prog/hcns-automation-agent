@@ -15,6 +15,7 @@ class DocumentSource:
     filename: str
     content: bytes
     declared_media_type: str | None = None
+    declared_document_type: str | None = None
     source_reference: str | None = None
 
     def __post_init__(self) -> None:
