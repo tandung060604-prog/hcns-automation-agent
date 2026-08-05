@@ -210,6 +210,8 @@ test("exposes prediction-blind OCR-HO Ground Truth mapping behind a private flag
   assert.match(component, /\/ocr-ho-v2\/diagnostic\/summary/);
   assert.match(component, /predictionOpened: false/);
   assert.match(component, /lineIds/);
+  assert.match(component, /diagnostic-line-inputs/);
+  assert.match(component, /line đã chọn/);
   assert.match(component, /diagnostic-overlay/);
   assert.match(component, /mode=preview/);
   assert.match(api, /\/ocr-ho-v2\/diagnostic\/document/);

@@ -43,12 +43,17 @@ function parseLineIds(value: string): number[] {
     .filter((item, index, values) => Number.isInteger(item) && item >= 0 && values.indexOf(item) === index);
 }
 
-function lineText(field: DiagnosticField): string {
-  return field.lineIds.join(", ");
-}
-
 function linePoints(box: number[][]): string {
   return box.map(([x, y]) => `${x},${y}`).join(" ");
+}
+
+function updateLineId(field: DiagnosticField, index: number, value: string, limit: number): number[] {
+  const parsed = parseLineIds(value);
+  const next = [...field.lineIds];
+  if (!parsed.length) next.splice(index, 1);
+  else if (index === 0 && parsed.length > 1) return parsed.slice(0, limit);
+  else next[index] = parsed[0];
+  return [...new Set(next)].slice(0, limit);
 }
 
 export default function OcrHoDiagnostic() {
@@ -180,7 +185,7 @@ export default function OcrHoDiagnostic() {
       <aside className="evidence-inspector shadow-uat-inspector diagnostic-gt-inspector" data-testid="ocr-ho-diagnostic-inspector">
         <header><div><span>PREDICTION-BLIND · LOCAL-ONLY</span><strong>GROUND TRUTH LINE MAPPING</strong></div><small>Không nạp baseline, candidate hoặc prediction</small></header>
         <div className="shadow-uat-banner"><strong>Ảnh nguồn → giá trị xác nhận → line ID</strong><span>Chỉ nhập nội dung nhìn thấy trên ảnh. Mỗi field phải có line ID hợp lệ.</span></div>
-        {detail ? <div className="diagnostic-fields">{(Object.keys(FIELD_LIMITS) as FieldName[]).map((name) => <label key={name}><span>{name} · tối đa {FIELD_LIMITS[name]} dòng</span><input value={fields[name].value} onChange={(event) => setFields((current) => ({ ...current, [name]: { ...current[name], value: event.target.value } }))} placeholder="Nhập đúng nội dung trên ảnh" /><input value={lineText(fields[name])} onChange={(event) => setFields((current) => ({ ...current, [name]: { ...current[name], lineIds: parseLineIds(event.target.value) } }))} placeholder="Line ID, ví dụ: 12, 13" /></label>)}</div> : null}
+        {detail ? <div className="diagnostic-fields">{(Object.keys(FIELD_LIMITS) as FieldName[]).map((name) => <label key={name}><span>{name} · tối đa {FIELD_LIMITS[name]} dòng</span><input value={fields[name].value} onChange={(event) => setFields((current) => ({ ...current, [name]: { ...current[name], value: event.target.value } }))} placeholder="Nhập đúng nội dung trên ảnh" /><div className="diagnostic-line-inputs">{Array.from({ length: FIELD_LIMITS[name] }, (_, index) => <input key={index} value={fields[name].lineIds[index] ?? ""} onChange={(event) => setFields((current) => ({ ...current, [name]: { ...current[name], lineIds: updateLineId(current[name], index, event.target.value, FIELD_LIMITS[name]) } }))} placeholder={`Line ID dòng ${index + 1}${index ? " (nếu có)" : ""}`} inputMode="numeric" />)}</div><small>{fields[name].lineIds.length} line đã chọn{fields[name].lineIds.length ? `: ${fields[name].lineIds.join(" + ")}` : ""}</small></label>)}</div> : null}
         <div className="shadow-uat-assertions">{(["comparedWithSource", "allTextChecked", "linesChecked"] as const).map((name) => <label key={name}><input type="checkbox" checked={assertions[name]} onChange={(event) => setAssertions((current) => ({ ...current, [name]: event.target.checked }))} />{name === "comparedWithSource" ? "Đã đối chiếu ảnh nguồn" : name === "allTextChecked" ? "Đã kiểm tra toàn bộ chữ" : "Đã xác nhận đủ line ID"}</label>)}</div>
         {error ? <small className="shadow-uat-error">{error}</small> : null}
         <button type="button" onClick={() => void save()} disabled={!canSave || saving}>{saving ? "Đang lưu…" : saved ? "Đã lưu line mapping" : "Lưu Ground Truth local"}</button>

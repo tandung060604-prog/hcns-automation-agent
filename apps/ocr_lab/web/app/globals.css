@@ -1419,7 +1419,9 @@ section[id] { scroll-margin-top: 72px; }
 .diagnostic-fields { display: grid; gap: 9px; padding: 12px 13px; overflow-y: auto; }
 .diagnostic-fields label { display: grid; gap: 5px; color: var(--green); font: 700 9px/1.2 var(--font-geist-mono), monospace; }
 .diagnostic-fields input { min-height: 32px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); font: 11px/1.3 var(--font-geist-sans), sans-serif; }
-.diagnostic-fields input + input { color: var(--muted); font-family: var(--font-geist-mono), monospace; }
+.diagnostic-line-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.diagnostic-line-inputs input { color: var(--muted); font-family: var(--font-geist-mono), monospace; }
+.diagnostic-fields label > small { color: var(--muted); font: 9px/1.2 var(--font-geist-mono), monospace; }
 .diagnostic-gt-inspector { max-height: 720px; }
 .diagnostic-preview-stage { position: relative; line-height: 0; }
 .diagnostic-preview-stage img { display: block; width: 100%; height: auto; }
