@@ -448,11 +448,23 @@ def canonicalize_identity_card(
         polygon = cv2.approxPolyDP(contour, 0.025 * perimeter, True)
         if len(polygon) != 4 or not cv2.isContourConvex(polygon):
             continue
-        candidates.append((area, polygon.reshape(4, 2).astype(np.float32)))
+        points = polygon.reshape(4, 2).astype(np.float32)
+        ordered = _order_points(points)
+        edge_lengths = [
+            float(np.linalg.norm(ordered[(index + 1) % 4] - ordered[index]))
+            for index in range(4)
+        ]
+        quad_ratio = max(edge_lengths) / max(1.0, min(edge_lengths))
+        # Ignore the square canvas contour; a CCCD card is the only useful
+        # quadrilateral here and has a stable long/short edge ratio.
+        if not 1.25 <= quad_ratio <= 1.95:
+            continue
+        candidates.append((area, points))
 
     perspective_corrected = False
     detected_width = source_width
     resolution_capped = False
+    perspective_transform: list[list[float]] | None = None
     if candidates:
         points = _order_points(max(candidates, key=lambda item: item[0])[1])
         top_left, top_right, bottom_right, bottom_left = points
@@ -489,6 +501,7 @@ def canonicalize_identity_card(
                 borderMode=cv2.BORDER_REPLICATE,
             )
             perspective_corrected = True
+            perspective_transform = matrix.tolist()
 
     if not perspective_corrected and image.shape[1] < min_width:
         scale = min_width / image.shape[1]
@@ -518,6 +531,7 @@ def canonicalize_identity_card(
         "minimumWidth": min_width,
         "maximumWidth": max_width,
         "resolutionCapped": resolution_capped,
+        "perspectiveTransform": perspective_transform,
         "claheClipLimit": 1.4,
         "unsharp": True,
     }

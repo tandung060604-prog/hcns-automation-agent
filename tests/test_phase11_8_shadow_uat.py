@@ -12,6 +12,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "apps" / "ocr_lab" / "api"))
 
+from ocr_ho_v2_diagnostic import document as diagnostic_document  # noqa: E402
+from ocr_ho_v2_diagnostic import save as save_diagnostic  # noqa: E402
 from phase11_5_cccd import FIELD_ORDER  # noqa: E402
 from phase11_8_shadow_uat import (  # noqa: E402
     load_shadow_document,
@@ -32,9 +34,7 @@ def _field(value: str, *, changed: bool = False) -> dict[str, object]:
         "confidence": 0.88,
         "errorSignals": [],
         "selectionMode": (
-            "phase11_5_baseline_preserved"
-            if not changed
-            else "phase11_8_token_consensus"
+            "phase11_5_baseline_preserved" if not changed else "phase11_8_token_consensus"
         ),
         "evidence": {
             "pageIndex": 0,
@@ -85,11 +85,7 @@ def build_root(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     report_path = (
-        root
-        / "output"
-        / "phase11"
-        / "reports"
-        / "CCCD_OCR_HO_V2_008_DEVELOPMENT_COMPARISON.json"
+        root / "output" / "phase11" / "reports" / "CCCD_OCR_HO_V2_008_DEVELOPMENT_COMPARISON.json"
     )
     report_path.write_text(
         json.dumps(
@@ -220,3 +216,45 @@ def test_shadow_uat_api_exposes_preview_detail_and_review(tmp_path: Path) -> Non
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def test_diagnostic_ground_truth_is_prediction_blind_and_validates_line_ids(tmp_path: Path) -> None:
+    root = build_root(tmp_path)
+    session = root / "user_uploads-sessions" / SESSION_ID
+    result = json.loads((session / "result.json").read_text(encoding="utf-8"))
+    result["phase11"] = {
+        "pages": [
+            {
+                "recognizedBoxes": [
+                    [[1, 1], [2, 1], [2, 2], [1, 2]],
+                    [[3, 3], [4, 3], [4, 4], [3, 4]],
+                ]
+            }
+        ]
+    }
+    (session / "result.json").write_text(json.dumps(result), encoding="utf-8")
+    payload = diagnostic_document(root, SESSION_ID)
+    assert payload["predictionLoaded"] is False
+    assert payload["predictionOpened"] is False
+    with pytest.raises(ValueError, match="Prediction-blind"):
+        save_diagnostic(
+            root, SESSION_ID, {"predictionOpened": True, "fields": {}, "assertions": {}}
+        )
+    with pytest.raises(ValueError, match="assertions"):
+        save_diagnostic(root, SESSION_ID, {"fields": {}, "assertions": {}})
+    saved = save_diagnostic(
+        root,
+        SESSION_ID,
+        {
+            "fields": {
+                name: {"value": "synthetic", "lineIds": [0]}
+                for name in ("fullName", "placeOfOrigin", "placeOfResidence")
+            },
+            "assertions": {
+                "comparedWithSource": True,
+                "allTextChecked": True,
+                "linesChecked": True,
+            },
+        },
+    )
+    assert saved["promotionEligible"] is False

@@ -12,6 +12,8 @@ import hashlib
 import json
 import math
 import time
+import warnings
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -96,6 +98,28 @@ def line_crops(image: Any, lines: list[dict[str, Any]]) -> list[Image.Image]:
     return output
 
 
+def warning_key(message: str) -> str:
+    lowered = message.casefold()
+    if "overflow encountered in scalar" in lowered and "easyocr" in lowered:
+        return "easyocr_scalar_overflow"
+    if "invalid value encountered in divide" in lowered and "vietocr" in lowered:
+        return "vietocr_invalid_divide"
+    if "weights_only=false" in lowered and "torch.load" in lowered:
+        return "torch_load_weights_only_false"
+    if "enable_nested_tensor" in lowered:
+        return "torch_nested_tensor_warning"
+    return "other_runtime_warning"
+
+
+def observed(call: Any, warning_counts: Counter[str]) -> Any:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = call()
+    for warning in caught:
+        warning_counts[warning_key(str(warning.message))] += 1
+    return result
+
+
 def main() -> int:
     args = parse_args()
     job = json.loads(args.job.read_text(encoding="utf-8"))
@@ -123,26 +147,34 @@ def main() -> int:
         if not path.is_file() or sha256(path) != locked.get(profile):
             raise RuntimeError(f"Locked model mismatch: {profile}")
 
-    reader = easyocr.Reader(
-        ["vi"],
-        gpu=False,
-        model_storage_directory=str(args.runtime_root / "easyocr_models"),
-        download_enabled=False,
-        verbose=False,
+    warning_counts: Counter[str] = Counter()
+    reader = observed(
+        lambda: easyocr.Reader(
+            ["vi"],
+            gpu=False,
+            model_storage_directory=str(args.runtime_root / "easyocr_models"),
+            download_enabled=False,
+            verbose=False,
+        ),
+        warning_counts,
     )
     predictors = {
-        "vietocr_vgg_seq2seq": predictor("vgg_seq2seq", paths["vietocr_vgg_seq2seq"]),
-        "vietocr_vgg_transformer": predictor("vgg_transformer", paths["vietocr_vgg_transformer"]),
+        "vietocr_vgg_seq2seq": observed(
+            lambda: predictor("vgg_seq2seq", paths["vietocr_vgg_seq2seq"]),
+            warning_counts,
+        ),
+        "vietocr_vgg_transformer": observed(
+            lambda: predictor("vgg_transformer", paths["vietocr_vgg_transformer"]),
+            warning_counts,
+        ),
     }
     partial_path = args.output.with_suffix(".partial.json")
     results: dict[str, Any] = {}
     if partial_path.is_file():
         partial = json.loads(partial_path.read_text(encoding="utf-8"))
-        if (
-            partial.get("jobSha256") == job_digest
-            and partial.get("policySha256") == policy_digest
-        ):
+        if partial.get("jobSha256") == job_digest and partial.get("policySha256") == policy_digest:
             results = partial.get("results", {})
+            warning_counts.update(partial.get("warningCounts", {}))
     for index, item in enumerate(job["items"], start=1):
         if str(item["caseId"]) in results:
             continue
@@ -150,13 +182,16 @@ def main() -> int:
         if image is None:
             raise RuntimeError(f"Cannot read crop: {item['cropPath']}")
         started = time.perf_counter()
-        easy_raw = reader.readtext(
-            image,
-            detail=1,
-            paragraph=False,
-            decoder=str(runtime_profile.get("easyocrDecoder", "beamsearch")),
-            batch_size=int(runtime_profile.get("easyocrBatchSize", 1)),
-            rotation_info=runtime_profile.get("easyocrRotationInfo"),
+        easy_raw = observed(
+            lambda image=image: reader.readtext(
+                image,
+                detail=1,
+                paragraph=False,
+                decoder=str(runtime_profile.get("easyocrDecoder", "beamsearch")),
+                batch_size=int(runtime_profile.get("easyocrBatchSize", 1)),
+                rotation_info=runtime_profile.get("easyocrRotationInfo"),
+            ),
+            warning_counts,
         )
         easy_duration = round((time.perf_counter() - started) * 1000, 3)
         easy_lines = ordered_easy_lines(easy_raw)
@@ -184,7 +219,10 @@ def main() -> int:
             values: list[str] = []
             probabilities: list[float] = []
             for crop in crops:
-                text, probability = model.predict(crop, return_prob=True)
+                text, probability = observed(
+                    lambda model=model, crop=crop: model.predict(crop, return_prob=True),
+                    warning_counts,
+                )
                 values.append(str(text))
                 probabilities.append(safe_confidence(probability))
             predictions[profile] = {
@@ -210,6 +248,7 @@ def main() -> int:
                         "status": "RUNNING",
                         "jobSha256": job_digest,
                         "policySha256": policy_digest,
+                        "warningCounts": dict(sorted(warning_counts.items())),
                         "results": results,
                     },
                     ensure_ascii=False,
@@ -229,6 +268,7 @@ def main() -> int:
                 "jobSha256": job_digest,
                 "policySha256": policy_digest,
                 "containsRealPII": True,
+                "warningCounts": dict(sorted(warning_counts.items())),
                 "results": results,
             },
             ensure_ascii=False,

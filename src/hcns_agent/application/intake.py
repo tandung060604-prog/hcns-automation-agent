@@ -6,9 +6,11 @@ from dataclasses import replace
 from hashlib import sha256
 
 from hcns_agent.application.format_detection import FormatDetector
+from hcns_agent.application.ocr_scope import ocr_scope_for
 from hcns_agent.application.parser_registry import DocumentParserRegistry
 from hcns_agent.application.safety import FileSafetyValidator
 from hcns_agent.domain.canonical import CanonicalDocument, SourceDescriptor
+from hcns_agent.domain.errors import DocumentIntakeError, IntakeErrorCode
 from hcns_agent.ports.document_parser import DocumentSource, ParseContext
 
 
@@ -23,9 +25,15 @@ class UniversalDocumentIntake:
         self._safety_validator = safety_validator
         self._registry = registry
 
-    def execute(self, source: DocumentSource) -> CanonicalDocument:
+    def execute(self, source: DocumentSource, *, allow_ocr: bool = True) -> CanonicalDocument:
         self._safety_validator.preflight(source)
         detection = self._detector.detect(source)
+        if not allow_ocr and ocr_scope_for(detection.source_format, None) == "UNSUPPORTED_NO_OCR":
+            raise DocumentIntakeError(
+                IntakeErrorCode.UNSUPPORTED_FORMAT,
+                "OCR is disabled for this document scope",
+                details={"reason": "OCR_DISABLED_BY_POLICY"},
+            )
         safety = self._safety_validator.validate(source, detection)
         parser = self._registry.resolve(detection.source_format)
         descriptor = SourceDescriptor(

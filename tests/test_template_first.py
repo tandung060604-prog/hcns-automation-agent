@@ -131,8 +131,9 @@ def test_registry_lists_six_approved_templates() -> None:
         "probation-contract-v1",
         "vietnam-citizen-id-front-v1",
     ]
-    assert templates[0]["supportedFileTypes"] == ["docx", "pdf", "png", "jpg", "jpeg"]
+    assert templates[0]["supportedFileTypes"] == ["docx", "pdf"]
     assert templates[1]["supportedFileTypes"] == ["pdf", "png", "jpg", "jpeg"]
+    assert templates[2]["supportedFileTypes"] == templates[0]["supportedFileTypes"]
     assert all(template["lifecycle"] == "FROZEN" for template in templates)
     assert all(template["parserVersion"] == "1.0.0" for template in templates)
 
@@ -172,6 +173,21 @@ def test_cv_template_is_review_first_and_keeps_values_private_from_camunda() -> 
     assert response["quality"]["recommendedAction"] == "MANUAL_REVIEW"
     assert response["data"]["fullName"] == "Candidate Synthetic"
     assert "fullName" not in response["camundaVariables"]
+
+
+def test_probation_contract_detection_ignores_vietnamese_diacritics() -> None:
+    response = process(
+        [
+            "HỢP ĐỒNG THỬ VIỆC",
+            "THỜI GIAN THỬ VIỆC: 60 ngày",
+            "MỨC LƯƠNG: 10.000.000 đồng",
+        ],
+        filename="contract.pdf",
+    )
+
+    assert response["templateId"] == "probation-contract-v1"
+    assert response["documentType"] == "EMPLOYMENT_CONTRACT"
+    assert response["quality"]["recommendedAction"] == "MANUAL_REVIEW"
 
 
 def test_id_front_template_rejects_back_side() -> None:
@@ -304,7 +320,7 @@ def test_partial_anchor_match_is_review_only() -> None:
         ("synthetic-scan.pdf", scanned_pdf_bytes),
     ],
 )
-def test_ocr_sources_extract_fields_but_require_manual_review(
+def test_template_ocr_sources_require_manual_review(
     filename: str,
     content_factory: Callable[[], bytes],
 ) -> None:
@@ -326,21 +342,13 @@ def test_ocr_sources_extract_fields_but_require_manual_review(
             source_reference="object://synthetic/ocr",
         )
     ).public_dict()
-    data = response["data"]
-    processing = response["processing"]
-    assert isinstance(data, dict)
-    assert isinstance(processing, dict)
 
     assert response["documentType"] == "LEAVE_REQUEST"
-    assert data["employeeName"] == "NHÂN VIÊN SYNTHETIC"
-    assert data["recommendedAction"] == "MANUAL_REVIEW"
-    assert "OCR_REVIEW_REQUIRED" in data["validationErrors"]
-    assert processing["usesOcr"] is True
-    assert processing["ocrEngine"] == "mock/deterministic-v1"
-    assert processing["ocrConfidence"] == 0.93
+    assert response["quality"]["recommendedAction"] == "MANUAL_REVIEW"
+    assert "OCR_REVIEW_REQUIRED" in response["quality"]["validationErrors"]
 
 
-def test_degraded_overtime_ocr_keeps_structure_and_numeric_fields() -> None:
+def test_degraded_overtime_ocr_stays_manual_review() -> None:
     text = "\n".join(
         [
             "Hà Nội, ngày 31 tháng 05 năm 2026",
@@ -368,16 +376,9 @@ def test_degraded_overtime_ocr_keeps_structure_and_numeric_fields() -> None:
             content=administrative_image_bytes(),
         )
     ).public_dict()
-    data = response["data"]
-    assert isinstance(data, dict)
 
     assert response["documentType"] == "OVERTIME_REQUEST"
-    assert data["startDate"] == "2026-06-01"
-    assert data["endDate"] == "2026-06-03"
-    assert data["overtimeStartTime"] == "18:00"
-    assert data["overtimeEndTime"] == "20:00"
-    assert data["totalOvertimeHours"] == 6
-    assert data["recommendedAction"] == "MANUAL_REVIEW"
+    assert response["quality"]["recommendedAction"] == "MANUAL_REVIEW"
 
 
 def test_detection_normalizes_unicode_case_and_whitespace() -> None:

@@ -57,6 +57,12 @@ from external_dataset_typed import (
     load_typed_summary,
     resolve_typed_paths,
 )
+from external_dataset_prediction import (
+    PredictionArtifactError,
+    load_prediction_document,
+    load_prediction_summary,
+    resolve_prediction_paths,
+)
 from document_route_safety import (
     safe_existing_document_route,
     selected_orientations_are_identity,
@@ -96,6 +102,11 @@ from phase11_8_shadow_uat import (
     resolve_shadow_source,
     save_shadow_review,
 )
+from ocr_ho_v2_diagnostic import (
+    document as load_ocr_ho_diagnostic_document,
+    save as save_ocr_ho_diagnostic,
+    summary as load_ocr_ho_diagnostic_summary,
+)
 from phase12_ingestion import (
     ingest_document,
     render_native_previews,
@@ -113,6 +124,11 @@ from run_paddleocr_phase7 import PROFILES, prepare_image
 from upload_safety import validate_local_upload
 
 from hcns_agent.domain.errors import DocumentIntakeError
+from hcns_agent.domain.documents import SourceFormat
+from hcns_agent.application.ocr_scope import (
+    ocr_allowed_for_document_type,
+    ocr_scope_for,
+)
 from hcns_agent.ports.document_parser import DocumentSource
 from hcns_agent.templates.service import (
     TemplateProcessingService,
@@ -124,7 +140,10 @@ from hcns_agent.templates.service import (
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 MAX_REVIEW_BYTES = 2 * 1024 * 1024
 MAX_PDF_PAGES = 50
-TEMPLATE_ALLOWED_EXTENSIONS = {".docx", ".pdf", ".png", ".jpg", ".jpeg"}
+TEMPLATE_ALLOWED_EXTENSIONS = {
+    ".docx",
+    ".pdf",
+}
 ALLOWED_EXTENSIONS = {
     ".png",
     ".jpg",
@@ -950,6 +969,7 @@ class UserOCRService:
         original_filename: str,
         extension: str,
         content: bytes,
+        declared_document_type: str | None = None,
     ) -> dict[str, Any]:
         with self._lock:
             session_dir = self.sessions_root / session_id
@@ -963,6 +983,12 @@ class UserOCRService:
             total_started = time.perf_counter()
             canonical_document: dict[str, Any] | None = None
             page_results: list[dict[str, Any]]
+            pdf_preflight = ingest_document(input_path) if extension == ".pdf" else None
+            is_scan_input = extension in {".png", ".jpg", ".jpeg"} or bool(
+                pdf_preflight and pdf_preflight.get("ingestionMode") != "NATIVE"
+            )
+            if is_scan_input and not ocr_allowed_for_document_type(declared_document_type):
+                raise ValueError("OCR_DISABLED_BY_POLICY")
             if extension in {".docx", ".xlsx"}:
                 canonical_document = ingest_document(input_path)
                 page_paths, page_results = render_native_previews(
@@ -971,7 +997,7 @@ class UserOCRService:
                     visualization_dir,
                 )
             elif extension == ".pdf":
-                pdf_preflight = ingest_document(input_path)
+                assert pdf_preflight is not None
                 if int(pdf_preflight.get("pageCount", 0)) > MAX_PDF_PAGES:
                     raise ValueError(f"PDF exceeds the {MAX_PDF_PAGES}-page limit")
                 if pdf_preflight.get("ingestionMode") == "NATIVE":
@@ -1041,9 +1067,17 @@ class UserOCRService:
                     },
                     "inferenceDurationMs": inference_duration_ms,
                     "totalDurationMs": total_duration_ms,
+                    "ocrScope": ocr_scope_for(
+                        SourceFormat.PDF_SCAN
+                        if is_scan_input and extension == ".pdf"
+                        else SourceFormat.IMAGE
+                        if is_scan_input
+                        else SourceFormat.PDF_TEXT,
+                        declared_document_type,
+                    ),
                 },
                 "document": {
-                    "documentType": "USER_UPLOAD",
+                    "documentType": declared_document_type or "USER_UPLOAD",
                     "ocrSuccess": bool(all_texts),
                     "recognizedText": recognized_text,
                     "recognizedTextLineCount": len(all_texts),
@@ -1157,10 +1191,9 @@ class UserOCRService:
             payload = json.loads(result_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return None
-        if payload.get("documentType") not in {
-            "LEAVE_REQUEST",
-            "OVERTIME_REQUEST",
-        }:
+        if not isinstance(payload.get("templateId"), str) and payload.get(
+            "documentType"
+        ) not in {"LEAVE_REQUEST", "OVERTIME_REQUEST"}:
             return None
         return payload
 
@@ -1180,6 +1213,11 @@ class UserOCRService:
         if source_path is None:
             return None
         if source_path.suffix.lower() != ".pdf":
+            if source_path.suffix.lower() in {".tif", ".tiff"}:
+                output = BytesIO()
+                with Image.open(source_path) as image:
+                    image.convert("RGB").save(output, format="PNG", optimize=True)
+                return output.getvalue(), "image/png"
             content_type = (
                 mimetypes.guess_type(source_path.name)[0]
                 or "application/octet-stream"
@@ -1255,6 +1293,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
     external_dataset_typed_projection: Path | None
     external_dataset_typed_approval: Path | None
     external_dataset_typed_report: Path | None
+    external_dataset_predictions: Path | None
+    external_dataset_prediction_report: Path | None
+    external_dataset_prediction_marker: Path | None
+    external_dataset_predictions_data13: Path | None
+    external_dataset_prediction_report_data13: Path | None
+    external_dataset_prediction_marker_data13: Path | None
     native_indexes: dict[str, dict[str, Path]]
     user_ocr: UserOCRService
     template_processor: TemplateProcessingService
@@ -1348,12 +1392,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     encoding="utf-8",
                 )
                 self.send_json(payload)
-            except TemplateUnsupportedError:
+            except TemplateUnsupportedError as exc:
                 self.send_json(
                     {
                         "status": "REJECT_UNSUPPORTED",
                         "recommendedAction": "REJECT_UNSUPPORTED",
-                        "errorCode": "UNSUPPORTED_TEMPLATE",
+                        "errorCode": exc.code,
                     },
                     HTTPStatus.UNPROCESSABLE_ENTITY,
                 )
@@ -1421,6 +1465,22 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
             except PermissionError as exc:
                 self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if parsed.path == "/ocr-ho-v2/diagnostic/review":
+            if self.ocr_ho_shadow_root is None:
+                self.send_json({"error": "OCR-HO-V2 diagnostic is not configured"}, HTTPStatus.NOT_FOUND)
+                return
+            document_id = parse_qs(parsed.query).get("id", [""])[0]
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+                if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                    raise ValueError("Diagnostic payload is empty or too large")
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                if not isinstance(payload, dict):
+                    raise ValueError("Diagnostic payload must be an object")
+                self.send_json(save_ocr_ho_diagnostic(self.ocr_ho_shadow_root, document_id, payload))
             except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
                 self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
@@ -2017,8 +2077,37 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         session_id = str(uuid.uuid4())
         try:
-            result = self.user_ocr.process_upload(session_id, original_filename, extension, content)
+            declared_document_type = next(
+                (
+                    str(part.get_payload(decode=True) or b"", "utf-8").strip()
+                    for part in message.iter_parts()
+                    if part.get_filename() is None
+                    and part.get_param("name", header="content-disposition") == "documentType"
+                ),
+                None,
+            )
+            result = self.user_ocr.process_upload(
+                session_id,
+                original_filename,
+                extension,
+                content,
+                declared_document_type,
+            )
             self.send_json(result, HTTPStatus.CREATED)
+        except ValueError as exc:
+            if str(exc) == "OCR_DISABLED_BY_POLICY":
+                shutil.rmtree(self.user_ocr.sessions_root / session_id, ignore_errors=True)
+                self.send_json(
+                    {
+                        "status": "REJECT_UNSUPPORTED",
+                        "recommendedAction": "REJECT_UNSUPPORTED",
+                        "errorCode": "OCR_DISABLED_BY_POLICY",
+                        "message": "Ảnh/PDF scan chỉ nhận OCR cho CCCD hoặc chứng chỉ.",
+                    },
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
+                )
+                return
+            raise
         except Exception as exc:
             failure_dir = self.user_ocr.sessions_root / session_id
             failure_dir.mkdir(parents=True, exist_ok=True)
@@ -2092,12 +2181,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return None
         submitted_filename = str(file_part.get_filename())
         filename = Path(submitted_filename).name
-        if Path(filename).suffix.casefold() not in TEMPLATE_ALLOWED_EXTENSIONS:
+        suffix = Path(filename).suffix.casefold()
+        if suffix not in TEMPLATE_ALLOWED_EXTENSIONS:
+            error_code = (
+                "OCR_DISABLED_BY_POLICY"
+                if suffix in {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp"}
+                else "SUPPORTED_TEMPLATE_FORMAT_REQUIRED"
+            )
             self.send_json(
                 {
                     "status": "REJECT_UNSUPPORTED",
                     "recommendedAction": "REJECT_UNSUPPORTED",
-                    "errorCode": "SUPPORTED_TEMPLATE_FORMAT_REQUIRED",
+                    "errorCode": error_code,
                 },
                 HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
             )
@@ -2161,6 +2256,26 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/documents/sessions":
             self.send_json({"sessions": self.user_ocr.list_template_sessions()})
+            return
+
+        if parsed.path == "/ocr-ho-v2/diagnostic/summary":
+            if self.ocr_ho_shadow_root is None:
+                self.send_json({"error": "OCR-HO-V2 diagnostic is not configured"}, HTTPStatus.NOT_FOUND)
+                return
+            try:
+                self.send_json(load_ocr_ho_diagnostic_summary(self.ocr_ho_shadow_root))
+            except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+            return
+
+        if parsed.path == "/ocr-ho-v2/diagnostic/document":
+            if self.ocr_ho_shadow_root is None:
+                self.send_json({"error": "OCR-HO-V2 diagnostic is not configured"}, HTTPStatus.NOT_FOUND)
+                return
+            try:
+                self.send_json(load_ocr_ho_diagnostic_document(self.ocr_ho_shadow_root, query.get("id", [""])[0]))
+            except (OSError, ValueError, KeyError, json.JSONDecodeError):
+                self.send_json({"error": "OCR-HO-V2 diagnostic document is unavailable"}, HTTPStatus.NOT_FOUND)
             return
 
         if parsed.path == "/ocr-ho-v2/shadow/summary":
@@ -2334,6 +2449,80 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     {"error": f"Typed canonical projection unavailable: {exc}"},
                     HTTPStatus.SERVICE_UNAVAILABLE,
                 )
+            return
+
+        if parsed.path == "/external-dataset/prediction/summary":
+            if self.external_dataset_root is None:
+                self.send_json({"error": "DATA-12 prediction artifact is not configured"}, HTTPStatus.NOT_FOUND)
+                return
+            try:
+                self.send_json(
+                    load_prediction_summary(
+                        resolve_prediction_paths(
+                            self.external_dataset_root,
+                            prediction_path=self.external_dataset_predictions,
+                            report_path=self.external_dataset_prediction_report,
+                            evaluation_marker_path=self.external_dataset_prediction_marker,
+                        )
+                    )
+                )
+            except (OSError, PredictionArtifactError) as exc:
+                self.send_json({"error": f"DATA-12 prediction unavailable: {exc}"}, HTTPStatus.NOT_FOUND)
+            return
+
+        if parsed.path == "/external-dataset/prediction/document":
+            if self.external_dataset_root is None:
+                self.send_json({"error": "DATA-12 prediction artifact is not configured"}, HTTPStatus.NOT_FOUND)
+                return
+            case_id = query.get("id", [""])[0]
+            try:
+                self.send_json(
+                    load_prediction_document(
+                        resolve_prediction_paths(
+                            self.external_dataset_root,
+                            prediction_path=self.external_dataset_predictions,
+                            report_path=self.external_dataset_prediction_report,
+                            evaluation_marker_path=self.external_dataset_prediction_marker,
+                        ),
+                        case_id,
+                        self.external_dataset_ground_truth,
+                    )
+                )
+            except FileNotFoundError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+            except (OSError, PredictionArtifactError) as exc:
+                self.send_json({"error": f"DATA-12 prediction unavailable: {exc}"}, HTTPStatus.NOT_FOUND)
+            return
+
+        if parsed.path in {
+            "/external-dataset/prediction-v13/summary",
+            "/external-dataset/prediction-v13/document",
+        }:
+            if self.external_dataset_root is None:
+                self.send_json({"error": "DATA-13 prediction artifact is not configured"}, HTTPStatus.NOT_FOUND)
+                return
+            paths = resolve_prediction_paths(
+                self.external_dataset_root,
+                prediction_path=self.external_dataset_predictions_data13,
+                report_path=self.external_dataset_prediction_report_data13,
+                evaluation_marker_path=self.external_dataset_prediction_marker_data13,
+                version="data13",
+            )
+            try:
+                if parsed.path.endswith("/summary"):
+                    self.send_json(load_prediction_summary(paths))
+                else:
+                    self.send_json(
+                        load_prediction_document(
+                            paths,
+                            query.get("id", [""])[0],
+                            self.external_dataset_ground_truth,
+                        )
+                    )
+            except FileNotFoundError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+            except (OSError, PredictionArtifactError) as exc:
+                self.send_json({"error": f"DATA-13 prediction unavailable: {exc}"}, HTTPStatus.NOT_FOUND)
             return
 
         if parsed.path == "/external-dataset/typed/document":
@@ -3310,6 +3499,36 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Private DATA-09 aggregate-only report JSON.",
     )
+    parser.add_argument(
+        "--external-dataset-predictions",
+        type=Path,
+        help="Private DATA-12 prediction artifact JSON.",
+    )
+    parser.add_argument(
+        "--external-dataset-prediction-report",
+        type=Path,
+        help="Private DATA-12 aggregate report JSON.",
+    )
+    parser.add_argument(
+        "--external-dataset-prediction-marker",
+        type=Path,
+        help="Private DATA-12 evaluate-once marker JSON.",
+    )
+    parser.add_argument(
+        "--external-dataset-predictions-data13",
+        type=Path,
+        help="Private DATA-13 prediction artifact JSON.",
+    )
+    parser.add_argument(
+        "--external-dataset-prediction-report-data13",
+        type=Path,
+        help="Private DATA-13 aggregate report JSON.",
+    )
+    parser.add_argument(
+        "--external-dataset-prediction-marker-data13",
+        type=Path,
+        help="Private DATA-13 evaluate-once marker JSON.",
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     return parser.parse_args()
@@ -3365,6 +3584,36 @@ def main() -> int:
     DashboardHandler.external_dataset_typed_report = (
         args.external_dataset_typed_report.expanduser().resolve()
         if args.external_dataset_typed_report is not None
+        else None
+    )
+    DashboardHandler.external_dataset_predictions = (
+        args.external_dataset_predictions.expanduser().resolve()
+        if args.external_dataset_predictions is not None
+        else None
+    )
+    DashboardHandler.external_dataset_prediction_report = (
+        args.external_dataset_prediction_report.expanduser().resolve()
+        if args.external_dataset_prediction_report is not None
+        else None
+    )
+    DashboardHandler.external_dataset_prediction_marker = (
+        args.external_dataset_prediction_marker.expanduser().resolve()
+        if args.external_dataset_prediction_marker is not None
+        else None
+    )
+    DashboardHandler.external_dataset_predictions_data13 = (
+        args.external_dataset_predictions_data13.expanduser().resolve()
+        if args.external_dataset_predictions_data13 is not None
+        else None
+    )
+    DashboardHandler.external_dataset_prediction_report_data13 = (
+        args.external_dataset_prediction_report_data13.expanduser().resolve()
+        if args.external_dataset_prediction_report_data13 is not None
+        else None
+    )
+    DashboardHandler.external_dataset_prediction_marker_data13 = (
+        args.external_dataset_prediction_marker_data13.expanduser().resolve()
+        if args.external_dataset_prediction_marker_data13 is not None
         else None
     )
     DashboardHandler.native_indexes = indexes

@@ -31,6 +31,13 @@ def _artifact_config(root: Path) -> dict[str, str]:
     """Select the newest private candidate without opening Ground Truth."""
 
     report_dir = root / "output" / "phase11" / "reports"
+    if (report_dir / "CCCD_OCR_HO_V2_014_DEVELOPMENT_COMPARISON.json").is_file():
+        return {
+            "candidateRoot": "phase11_10_v2",
+            "reportName": "CCCD_OCR_HO_V2_014_DEVELOPMENT_COMPARISON.json",
+            "reviewName": "OCR_HO_V2_014_SHADOW_REVIEWS.json",
+            "schemaVersion": "ocr-ho-v2-014-line-aware-shadow/1.0.0",
+        }
     if (report_dir / "CCCD_OCR_HO_V2_011_DEVELOPMENT_COMPARISON.json").is_file():
         return {
             "candidateRoot": "phase11_9_v2",

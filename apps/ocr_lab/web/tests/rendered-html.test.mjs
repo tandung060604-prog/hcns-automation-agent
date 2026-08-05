@@ -99,8 +99,8 @@ test("exposes the Phase 15 multi-format IDP and field review flow", async () => 
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(dashboard, /\.png,\.jpg,\.jpeg,\.pdf,\.docx,\.xlsx/);
-  assert.match(dashboard, /PNG, JPG, JPEG, PDF, DOCX, XLSX/);
+  assert.match(dashboard, /\.docx,\.pdf/);
+  assert.match(dashboard, /DOCX, PDF native parser/);
   assert.match(dashboard, /phase12\?:/);
   assert.match(dashboard, /phase15\?:/);
   assert.match(dashboard, /PHASE 15 \/ UNIFIED INTAKE/);
@@ -245,7 +245,7 @@ test("exposes one Template-first upload with source preview and structured resul
   assert.match(dashboard, /SHOW_LEGACY_UPLOAD/);
   assert.match(dashboard, /Tải tài liệu HCNS/);
   assert.match(dashboard, /Trích xuất tài liệu/);
-  assert.match(dashboard, /DOCX, PDF, PNG, JPG\/JPEG/);
+  assert.match(dashboard, /TXT, DOCX, PDF, XLSX, PPTX, PNG, JPG\/JPEG/);
   assert.match(dashboard, /Thông tin trích xuất từ biểu mẫu chuẩn/);
   assert.match(dashboard, /Xem JSON đầy đủ/);
   assert.match(dashboard, /Không có trong tài liệu/);
@@ -265,7 +265,7 @@ test("exposes one Template-first upload with source preview and structured resul
     dashboard,
     /Dữ liệu được đọc trực tiếp bằng native parser, không dùng OCR/,
   );
-  assert.match(dashboard, /\.docx,.pdf,.png,.jpg,.jpeg/);
+  assert.match(dashboard, /\.docx,\.pdf/);
   assert.match(dashboard, /data-testid="local-document-input"/);
   assert.match(dashboard, /data-testid="template-document-preview"/);
   assert.match(dashboard, /data-testid="template-result-panel"/);
@@ -356,4 +356,24 @@ test("returns an empty queue after all crops are verified", () => {
 
   assert.deepEqual(resume.pending, []);
   assert.equal(resume.active, null);
+});
+
+test("keeps mentor localhost evidence scoped behind private flags", async () => {
+  const [overview, dashboard, envExample, starter] = await Promise.all([
+    readFile(new URL("../app/LocalEvidenceOverview.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+    readFile(new URL("../../api/start_dashboard.ps1", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(overview, /\.\.\.\(SHOW_HELDOUT \? \[/);
+  assert.match(overview, /SHOW_GROUND_TRUTH_REVIEW \? <article/);
+  assert.match(overview, /SHOW_EXTERNAL_DATASET_REVIEW \? <article/);
+  assert.match(dashboard, /SHOW_GROUND_TRUTH_REVIEW \? \(/);
+  assert.match(
+    dashboard,
+    /SHOW_EXTERNAL_DATASET_REVIEW && evidenceMode === "external-dataset-prediction"/,
+  );
+  assert.match(envExample, /^VITE_SHOW_EXTERNAL_DATASET_REVIEW=false$/m);
+  assert.doesNotMatch(starter, /VITE_SHOW_EXTERNAL_DATASET_REVIEW\s*=\s*"true"/);
 });

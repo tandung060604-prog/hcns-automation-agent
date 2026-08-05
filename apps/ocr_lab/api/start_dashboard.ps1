@@ -51,9 +51,6 @@ if ($ExternalDatasetTypedReport -and -not (Test-Path -LiteralPath $ExternalDatas
 }
 
 $env:PYTHONPATH = Join-Path $repoRoot "src"
-if ($ExternalDatasetRoot) {
-    $env:VITE_SHOW_EXTERNAL_DATASET_REVIEW = "true"
-}
 
 $apiRunning = [bool](Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue)
 if (-not $apiRunning) {

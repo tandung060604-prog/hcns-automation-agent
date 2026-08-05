@@ -17,6 +17,9 @@ from hcns_agent.templates.overtime_request.parser import OvertimeRequestParser
 from hcns_agent.templates.overtime_request.validator import OvertimeRequestValidator
 from hcns_agent.templates.review_only import ReviewOnlyParser, ReviewOnlyValidator
 
+_NATIVE_TEMPLATE_FILE_TYPES = ("docx", "pdf")
+_OCR_TEMPLATE_FILE_TYPES = ("pdf", "png", "jpg", "jpeg")
+
 
 class TemplateRegistry:
     def __init__(self) -> None:
@@ -35,6 +38,7 @@ class TemplateRegistry:
         )
         text = document_text(document)
         normalized = normalize(text)
+        normalized_plain = normalize_for_ocr_match(text)
         uses_ocr_matching = document.source_format in {
             SourceFormat.IMAGE,
             SourceFormat.PDF_SCAN,
@@ -54,6 +58,7 @@ class TemplateRegistry:
                 for anchor in definition.anchors
                 if (
                     normalize(anchor) in normalized
+                    or normalize_for_ocr_match(anchor) in normalized_plain
                     or (
                         uses_ocr_matching
                         and fuzzy_ocr_contains(text, anchor)
@@ -101,7 +106,7 @@ def build_default_template_registry() -> TemplateRegistry:
             template_id="leave-request-v1",
             document_type=DocumentType.LEAVE_REQUEST,
             version="1.0",
-            supported_file_types=("docx", "pdf", "png", "jpg", "jpeg"),
+            supported_file_types=_NATIVE_TEMPLATE_FILE_TYPES,
             required_fields=(
                 "employeeName",
                 "jobTitle",
@@ -141,7 +146,7 @@ def build_default_template_registry() -> TemplateRegistry:
             template_id="overtime-request-v1",
             document_type=DocumentType.OVERTIME_REQUEST,
             version="1.0",
-            supported_file_types=("docx", "pdf", "png", "jpg", "jpeg"),
+            supported_file_types=_NATIVE_TEMPLATE_FILE_TYPES,
             required_fields=(
                 "employeeName",
                 "jobTitle",
@@ -207,13 +212,18 @@ def build_default_template_registry() -> TemplateRegistry:
         review_template(
             template_id="probation-contract-v1",
             document_type=DocumentType.EMPLOYMENT_CONTRACT,
-            supported_file_types=("docx", "pdf", "png", "jpg", "jpeg"),
+            supported_file_types=_NATIVE_TEMPLATE_FILE_TYPES,
             required_fields=(
                 "employeeName", "employeeId", "jobTitle", "salary",
                 "effectiveDate", "probationEndDate", "employerName",
             ),
             schema_ref="schemas/templates/probation_contract_v1.schema.json",
-            anchors=("probation", "thoi gian thu viec", "muc luong"),
+            anchors=(
+                "probation",
+                "HỢP ĐỒNG THỬ VIỆC",
+                "THỜI GIAN THỬ VIỆC",
+                "MỨC LƯƠNG",
+            ),
             minimum_anchor_matches=2,
             field_labels={
                 "employeeName": ("employee name", "nguoi lao dong", "ho va ten"),
@@ -230,7 +240,7 @@ def build_default_template_registry() -> TemplateRegistry:
         review_template(
             template_id="cv-v1",
             document_type=DocumentType.CV,
-            supported_file_types=("docx", "pdf", "png", "jpg", "jpeg"),
+            supported_file_types=_NATIVE_TEMPLATE_FILE_TYPES,
             required_fields=(
                 "fullName", "headline", "email", "phoneNumber", "address",
                 "education", "experience", "skills",
@@ -254,7 +264,7 @@ def build_default_template_registry() -> TemplateRegistry:
         review_template(
             template_id="ielts-certificate-v1",
             document_type=DocumentType.CERTIFICATE,
-            supported_file_types=("pdf", "png", "jpg", "jpeg"),
+            supported_file_types=_OCR_TEMPLATE_FILE_TYPES,
             required_fields=(
                 "recipientName", "credentialId", "credentialType",
                 "overallScore", "issueDate",
@@ -275,7 +285,7 @@ def build_default_template_registry() -> TemplateRegistry:
         review_template(
             template_id="vietnam-citizen-id-front-v1",
             document_type=DocumentType.IDENTITY_CARD,
-            supported_file_types=("pdf", "png", "jpg", "jpeg"),
+            supported_file_types=_OCR_TEMPLATE_FILE_TYPES,
             required_fields=(
                 "idNumber", "fullName", "dateOfBirth", "sex", "nationality",
                 "placeOfOrigin", "placeOfResidence",

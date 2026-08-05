@@ -9,7 +9,7 @@
       "schemaRef": "schemas/templates/leave_request_v1.schema.json",
       "parserVersion": "1.0.0",
       "lifecycle": "FROZEN",
-      "supportedFileTypes": ["docx", "pdf", "png", "jpg", "jpeg"],
+      "supportedFileTypes": ["docx", "pdf"],
       "requiredFields": [
         "employeeName",
         "jobTitle",
@@ -27,7 +27,7 @@
       "schemaRef": "schemas/templates/overtime_request_v1.schema.json",
       "parserVersion": "1.0.0",
       "lifecycle": "FROZEN",
-      "supportedFileTypes": ["docx", "pdf", "png", "jpg", "jpeg"],
+      "supportedFileTypes": ["docx", "pdf"],
       "requiredFields": [
         "employeeName",
         "jobTitle",
@@ -49,7 +49,7 @@
       "schemaRef": "schemas/templates/probation_contract_v1.schema.json",
       "parserVersion": "1.0.0",
       "lifecycle": "FROZEN",
-      "supportedFileTypes": ["docx", "pdf", "png", "jpg", "jpeg"],
+      "supportedFileTypes": ["docx", "pdf"],
       "requiredFields": [
         "employeeName", "employeeId", "jobTitle", "salary",
         "effectiveDate", "probationEndDate", "employerName"
@@ -62,7 +62,7 @@
       "schemaRef": "schemas/templates/cv_v1.schema.json",
       "parserVersion": "1.0.0",
       "lifecycle": "FROZEN",
-      "supportedFileTypes": ["docx", "pdf", "png", "jpg", "jpeg"],
+      "supportedFileTypes": ["docx", "pdf"],
       "requiredFields": [
         "fullName", "headline", "email", "phoneNumber", "address",
         "education", "experience", "skills"
