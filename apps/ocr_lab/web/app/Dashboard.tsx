@@ -7,6 +7,7 @@ import {
 import ExternalDatasetReview from "./ExternalDatasetReview";
 import ExternalDatasetPrediction from "./ExternalDatasetPrediction";
 import LocalEvidenceOverview from "./LocalEvidenceOverview";
+import OcrHoDiagnostic from "./OcrHoDiagnostic";
 
 const SHOW_HELDOUT = import.meta.env.VITE_SHOW_HELDOUT === "true";
 const SHOW_GROUND_TRUTH_REVIEW =
@@ -15,6 +16,8 @@ const SHOW_EXTERNAL_DATASET_REVIEW =
   import.meta.env.VITE_SHOW_EXTERNAL_DATASET_REVIEW === "true";
 const SHOW_OCR_HO_SHADOW_UAT =
   import.meta.env.VITE_SHOW_OCR_HO_SHADOW_UAT === "true";
+const SHOW_OCR_HO_DIAGNOSTIC_GT =
+  import.meta.env.VITE_SHOW_OCR_HO_DIAGNOSTIC_GT === "true";
 const SHOW_LEGACY_UPLOAD =
   import.meta.env.VITE_SHOW_LEGACY_UPLOAD === "true";
 
@@ -2138,9 +2141,11 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [heldoutEvidenceLoading, setHeldoutEvidenceLoading] = useState(false);
   const [heldoutEvidenceError, setHeldoutEvidenceError] = useState("");
   const [evidenceMode, setEvidenceMode] =
-    useState<"overview" | "heldout" | "templates" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "ocr-ho-v2-shadow">(
+    useState<"overview" | "heldout" | "templates" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "ocr-ho-v2-shadow" | "ocr-ho-v2-diagnostic">(
       // Legacy default: SHOW_HELDOUT ? "heldout" : "templates"
-      SHOW_OCR_HO_SHADOW_UAT
+      SHOW_OCR_HO_DIAGNOSTIC_GT
+        ? "ocr-ho-v2-diagnostic"
+        : SHOW_OCR_HO_SHADOW_UAT
         ? "ocr-ho-v2-shadow"
         : SHOW_HELDOUT
         ? "heldout"
@@ -5608,6 +5613,16 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           >
             TỔNG QUAN ĐỐI CHIẾU LOCAL
           </button>
+          {SHOW_OCR_HO_DIAGNOSTIC_GT ? (
+            <button
+              className={evidenceMode === "ocr-ho-v2-diagnostic" ? "active" : ""}
+              onClick={() => setEvidenceMode("ocr-ho-v2-diagnostic")}
+              role="tab"
+              aria-selected={evidenceMode === "ocr-ho-v2-diagnostic"}
+            >
+              OCR-HO-V2 v11.10.0 · Prediction-blind GT
+            </button>
+          ) : null}
           {SHOW_OCR_HO_SHADOW_UAT ? (
             <button
               className={evidenceMode === "ocr-ho-v2-shadow" ? "active" : ""}
@@ -5681,6 +5696,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           <LocalEvidenceOverview
             onOpen={(mode) => setEvidenceMode(mode)}
           />
+        ) : SHOW_OCR_HO_DIAGNOSTIC_GT && evidenceMode === "ocr-ho-v2-diagnostic" ? (
+          <OcrHoDiagnostic />
         ) : SHOW_OCR_HO_SHADOW_UAT && evidenceMode === "ocr-ho-v2-shadow" ? (
           <div className="heldout-evidence-grid shadow-uat-grid">
             <div className="heldout-document-list" role="list">

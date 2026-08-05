@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from PIL import Image
+
 from phase11_8_shadow_uat import _record, _session_records
 
 FIELDS = {"fullName": 1, "placeOfOrigin": 2, "placeOfResidence": 2}
@@ -80,6 +82,14 @@ def summary(root: Path) -> dict[str, Any]:
     }
 
 
+def preview(root: Path, document_id: str) -> Path:
+    """Return the source-only page whose coordinates match detector boxes."""
+
+    record = _record(root, document_id)
+    canonical = record["sessionDir"] / "phase11" / "pages" / "page_000.png"
+    return canonical if canonical.is_file() else record["sourcePath"]
+
+
 def document(root: Path, document_id: str) -> dict[str, Any]:
     record = _record(root, document_id)
     result = json.loads((record["sessionDir"] / "result.json").read_text(encoding="utf-8"))
@@ -87,12 +97,16 @@ def document(root: Path, document_id: str) -> dict[str, Any]:
     lines = [
         {"lineId": index, "box": box} for index, box in enumerate(page.get("recognizedBoxes", []))
     ]
+    image_size = None
+    with Image.open(preview(root, document_id)) as image:
+        image_size = [image.width, image.height]
     return {
         "localOnly": True,
         "predictionLoaded": False,
         "predictionOpened": False,
         "documentId": document_id,
         "sourceFile": record["sourceFile"],
+        "imageSize": image_size,
         "fields": FIELDS,
         "lines": lines,
         "review": _load(root)["documents"].get(document_id),

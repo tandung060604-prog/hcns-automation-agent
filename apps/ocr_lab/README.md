@@ -44,6 +44,10 @@ Các cờ `VITE_SHOW_HELDOUT`, `VITE_SHOW_GROUND_TRUTH_REVIEW`,
 `web/.env.local` phải để `false` khi mở localhost cho mentor. Bật từng cờ chỉ
 trong phiên quan sát riêng rồi restart Vite; dữ liệu private không bị xóa.
 
+Phiên xác nhận OCR-HO-V2 dùng thêm `VITE_SHOW_OCR_HO_DIAGNOSTIC_GT=true`.
+Tab `Prediction-blind GT` chỉ đọc ảnh nguồn và line ID; tab `Shadow UAT` là
+audit baseline/candidate riêng, không dùng để tạo Ground Truth.
+
 Upload vẫn giữ hai đường xử lý cần thiết: Template-first cho DOCX/PDF native
 của HCNS và OCR/IDP cho ảnh hoặc PDF scan thuộc CCCD/chứng chỉ. CV, contract và
 biểu mẫu HCNS dạng scan bị policy từ chối OCR (`OCR_DISABLED_BY_POLICY`).

@@ -104,6 +104,7 @@ from phase11_8_shadow_uat import (
 )
 from ocr_ho_v2_diagnostic import (
     document as load_ocr_ho_diagnostic_document,
+    preview as resolve_ocr_ho_diagnostic_preview,
     save as save_ocr_ho_diagnostic,
     summary as load_ocr_ho_diagnostic_summary,
 )
@@ -2273,7 +2274,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": "OCR-HO-V2 diagnostic is not configured"}, HTTPStatus.NOT_FOUND)
                 return
             try:
-                self.send_json(load_ocr_ho_diagnostic_document(self.ocr_ho_shadow_root, query.get("id", [""])[0]))
+                document_id = query.get("id", [""])[0]
+                mode = query.get("mode", ["detail"])[0]
+                if mode == "preview":
+                    source = resolve_ocr_ho_diagnostic_preview(self.ocr_ho_shadow_root, document_id)
+                    self.send_file(
+                        source,
+                        mimetypes.guess_type(source.name)[0] or "application/octet-stream",
+                    )
+                elif mode == "detail":
+                    self.send_json(load_ocr_ho_diagnostic_document(self.ocr_ho_shadow_root, document_id))
+                else:
+                    self.send_json({"error": "Invalid diagnostic document mode"}, HTTPStatus.BAD_REQUEST)
             except (OSError, ValueError, KeyError, json.JSONDecodeError):
                 self.send_json({"error": "OCR-HO-V2 diagnostic document is unavailable"}, HTTPStatus.NOT_FOUND)
             return

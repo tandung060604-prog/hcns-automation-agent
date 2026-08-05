@@ -221,6 +221,11 @@ bật trong phiên quan sát riêng, sau đó phải restart web dev server. M�
 đọc `docs/PROJECT_STATE.md`, `docs/HANDOFF.md` và `docs/BACKLOG.md`, chọn một
 task `READY`, cập nhật evidence rồi mới mở task kế tiếp.
 
+Để xác nhận line ID prediction-blind cho OCR-HO-V2, bật thêm
+`VITE_SHOW_OCR_HO_DIAGNOSTIC_GT=true`. Tab `Prediction-blind GT` chỉ hiển thị
+ảnh nguồn, line ID và ba field cần nhập; tab `Shadow UAT` cũ chỉ dành cho audit
+nội bộ baseline/candidate và không dùng để tạo Ground Truth.
+
 ### OCR-HO-V2-014 (candidate 11.10.0, shadow-only)
 
 Vòng phát triển mới nhất chạy trên 15 tài liệu CCCD development, dùng detector
