@@ -3,17 +3,19 @@
 [![CI](https://github.com/tandung060604-prog/hcns-automation-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/tandung060604-prog/hcns-automation-agent/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Web-3178C6?logo=typescript&logoColor=white)
-![OCR](https://img.shields.io/badge/OCR-EasyOCR%20vi--greedy-0A8FDC)
+![OCR](https://img.shields.io/badge/OCR-Local%20Hybrid-0A8FDC)
 ![Workflow](https://img.shields.io/badge/Workflow-Camunda%207.13-FF5A00)
 ![Privacy](https://img.shields.io/badge/PII-Private%20by%20default-6B46C1)
-![Status](https://img.shields.io/badge/Status-Local%20UAT%20passed-16745A)
+![Status](https://img.shields.io/badge/Status-Development%20HOLD-D97706)
 
 > Hệ thống đọc và xử lý hồ sơ hành chính nhân sự bằng AI, ưu tiên giữ dữ liệu trên
 > máy nội bộ, kiểm tra kết quả trước khi chuyển cho người duyệt và quy trình nghiệp vụ.
 
-Tính đến **05/08/2026**, luồng hai biểu mẫu HCNS đã chạy qua Template-first và
+Tính đến **06/08/2026**, luồng hai biểu mẫu HCNS đã chạy qua Template-first và
 Camunda 7.13 local. M4 đã hoàn tất dry-run 10/10; M5 shadow-pilot authorization
-đã mở ở trạng thái `READY`, chưa có production side effect.
+đã mở ở trạng thái `READY`, chưa có production side effect. DATA-17 đã bổ sung
+benchmark development-only cho CV, Contract và IELTS/chứng chỉ trên 12 tài liệu
+với 112 field GroundTruth đã khóa.
 
 ## Sản phẩm này làm gì?
 
@@ -47,14 +49,13 @@ kiểm thử và quản lý phiên bản; tài liệu lạ không bị ép vào 
 |---|---|---:|
 | DOCX (Word) | Đọc trực tiếp đoạn văn/bảng trong file | Nhận diện đúng 10/10; trường bắt buộc đúng 90/90 |
 | PDF có chữ | Đọc trực tiếp lớp chữ của PDF | Nhận diện đúng 10/10; trường bắt buộc đúng 90/90 |
-| Ảnh PNG/JPG/JPEG | OCR tiếng Việt chỉ trong scope CCCD/chứng chỉ; tài liệu khác fail-closed | DATA-13 allowlist |
-| PDF scan | OCR chỉ trong scope CCCD/chứng chỉ; PDF có text dùng native parser | DATA-13 allowlist |
+| Ảnh PNG/JPG/JPEG | OCR local theo scope development; CV/IELTS được đọc bằng route hybrid và luôn `MANUAL_REVIEW` | DATA-17: IELTS 20/20 strict |
+| PDF scan | OCR local cho CV/Contract/IELTS trong route development; native PDF có text vẫn dùng parser | DATA-17: CV scan review-only |
 
-Các kết quả trên là kiểm thử chấp nhận tại máy local (UAT) trên bộ dữ liệu của hai biểu mẫu,
-không phải
-10 loại tài liệu hay 10 mẫu khác nhau. Toàn bộ lần chạy có 0 lỗi JSON Schema;
-20/20 trường hợp dùng OCR đều được chuyển sang người kiểm tra và không có trường hợp
-OCR sai nhưng vẫn tự động đi tiếp.
+Các kết quả Template-first là kiểm thử chấp nhận tại máy local trên bộ dữ liệu của hai
+biểu mẫu. DATA-17 là một development aggregate độc lập, không phải evaluate-once và
+không phải tuyên bố production quality. Toàn bộ lần chạy DATA-17 có 0 lỗi JSON Schema;
+5/5 tài liệu ảnh/PDF scan được giữ `MANUAL_REVIEW`.
 
 ### Những phần sản phẩm đã chạy thật
 
@@ -62,7 +63,7 @@ OCR sai nhưng vẫn tự động đi tiếp.
 |---|---|
 | Giao diện local trên máy | Có thể tải file, xem bản xem trước cạnh kết quả, xem từng trường và JSON |
 | Nhận diện mẫu | Nhận diện hai phiên bản đơn nghỉ phép/tăng ca đã đăng ký |
-| Đọc nhiều định dạng | DOCX/PDF có chữ native; ảnh/PDF scan chỉ OCR CCCD/chứng chỉ |
+| Đọc nhiều định dạng | DOCX/PDF có chữ native; DATA-17 dùng OCR hybrid local cho CV scan và IELTS |
 | Kiểm tra chất lượng | Thiếu trường thông tin, sai mẫu, mâu thuẫn hoặc OCR chưa chắc chắn đều cần người kiểm tra |
 | Lưu trữ | File gốc, thông tin cá nhân, kết quả OCR và file mô hình nằm ngoài Git, trong vùng local/private |
 | Kết nối quy trình | BPMN/DMN, External Task worker, User Task, correction/re-upload và audit đã smoke trên Camunda 7.13 local; M5 pilot còn chờ chốt gate |
@@ -72,10 +73,10 @@ OCR sai nhưng vẫn tự động đi tiếp.
 | Hạng mục dễ hiểu | Đã làm được | Trạng thái |
 |---|---|---|
 | MVP hai biểu mẫu HCNS | Đã có mẫu chuẩn, bộ trường, bộ đọc, kiểm tra và dashboard local | **Đang dùng làm luồng mặc định** |
-| Chọn công cụ OCR | Đã thử các công cụ trên cùng bộ UAT; EasyOCR `vi-greedy` cho kết quả tốt nhất trong luồng hiện tại | **Hoàn tất** |
-| Dữ liệu mở rộng CV/hợp đồng/chứng chỉ | Đã chạy thử 13 tài liệu/17 trang; 13/13 file xử lý được, 12/13 phân loại theo thư mục khớp | **Tạm giữ để bổ sung dữ liệu chuẩn** |
+| Chọn công cụ OCR | Template-first dùng EasyOCR `vi-greedy`; DATA-17 dùng hybrid EasyOCR `vi+en`/PaddleOCR theo family | **Hoàn tất, review-only** |
+| DATA-17 CV/Contract/IELTS | 12 tài liệu / 112 field; strict 90/112 (80,36%), accepted text 104/112 (92,86%) | **Development HOLD; chưa promote** |
 | Màn hình người duyệt dữ liệu | Đã có màn hình local để mở nguồn và xác nhận từng trường, không hiển thị dự đoán OCR | **Hoàn tất** |
-| Rà soát hợp đồng | Đang rà soát 4 hồ sơ DOCX/PDF, tổng cộng 56 trường; hiện mới xác nhận 0/56 | **Đang làm** |
+| Rà soát hợp đồng | Contract đạt 40/42 strict; field còn lệch được hiển thị kèm evidence trên DATA-13 | **Review thủ công** |
 | OCR CCCD | Đã đánh giá một lần trên 14 ảnh hợp lệ; độ khớp trường 50%, chưa đủ an toàn để tự động dùng | **Chỉ kiểm tra thủ công, chưa dùng trong môi trường thật** |
 | Điều phối quy trình nhân sự | M4 closed-set shadow đã pass 10/10 scenario; M5 có runbook authorization cho pilot local/isolated | **M5-CAM-001 READY** |
 
@@ -90,12 +91,30 @@ OCR sai nhưng vẫn tự động đi tiếp.
 
 Runbook: [docs/CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md](docs/CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md).
 
+### DATA-17 — OCR hybrid development comparison
+
+DATA-17 dùng 12 tài liệu thuộc ba family Contract, CV và IELTS/chứng chỉ với
+GroundTruth chính thức đã khóa (112 field). Kết quả development-only hiện tại:
+
+| Family | Strict exact | Accepted text |
+|---|---:|---:|
+| Contract | 40/42 (95,24%) | 40/42 (95,24%) |
+| CV | 30/50 (60%) | 44/50 (88%) |
+| IELTS/chứng chỉ | 20/20 (100%) | 20/20 (100%) |
+| **Tổng** | **90/112 (80,36%)** | **104/112 (92,86%)** |
+
+OCR chạy hoàn toàn local: EasyOCR `vi+en` cho CV scan và PaddleOCR local cho
+IELTS layout/pattern. Tất cả ảnh/PDF scan đều có `recommendedAction=MANUAL_REVIEW`;
+không có `UNSUPPORTED_NO_OCR` hoặc false auto-continue. Report/marker nằm trong
+private root và ghi `evaluateOnceArtifactTouched=false`; evaluate-once cũ không
+bị mở lại.
+
 ### Cách hiểu các con số
 
 - **Nhận diện đúng 10/10**: trong 10 file kiểm thử, hệ thống nhận đúng loại mẫu.
 - **Trường bắt buộc đúng 90/90**: 90 lần kiểm tra trường thông tin đều khớp dữ liệu chuẩn.
-- **13 tài liệu/17 trang**: bộ dữ liệu mở rộng nhỏ dùng cho chạy thử, chưa đủ lớn để
-  kết luận chất lượng trong môi trường thật.
+- **12 tài liệu/112 field**: split DATA-17 đã khóa GroundTruth để so sánh development-only;
+  chưa đủ điều kiện để promote sang production.
 - **50% trên CCCD**: kết quả hiện tại chỉ dùng để tìm lỗi và cho người duyệt xem lại,
   không phải cam kết hệ thống tự đọc CCCD chính xác.
 
@@ -106,8 +125,8 @@ Runbook: [docs/CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md](docs/CAMUNDA_M5_SHADOW_PILOT_
 | Python 3.10+ | Xây luồng xử lý file, đọc tài liệu, kiểm tra dữ liệu và dịch vụ local |
 | TypeScript web dashboard | Giao diện tải file, xem bản xem trước và kiểm tra kết quả |
 | Native parsing | Đọc trực tiếp nội dung DOCX/PDF có chữ, nên nhanh và ít sai hơn OCR |
-| PaddleOCR PP-OCRv5 | Backend mặc định cho OCR ảnh/PDF scan trong scope CCCD/chứng chỉ; mọi kết quả vẫn MANUAL_REVIEW |
-| EasyOCR `vi-greedy` | Recognizer opt-in cho benchmark/chẩn đoán local, không tự thay thế output mặc định |
+| PaddleOCR PP-OCRv5 | Detector/recognizer local cho IELTS trong DATA-17; mọi kết quả scan vẫn `MANUAL_REVIEW` |
+| EasyOCR `vi+en` | Recognizer local cho CV scan trong DATA-17; không tự thay thế review decision |
 | VietOCR | Công cụ từng dùng trong luồng OCR cũ/CCCD; hiện giữ ở legacy và benchmark, không phải mặc định của MVP |
 | JSON Schema | Kiểm tra JSON (dữ liệu dạng máy đọc được) có đủ trường và đúng kiểu dữ liệu |
 | Provenance | Lưu dấu vết trường thông tin lấy từ trang, vùng ảnh hoặc nguồn nào để người duyệt đối chiếu |
@@ -135,7 +154,7 @@ Runbook: [docs/CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md](docs/CAMUNDA_M5_SHADOW_PILOT_
 flowchart TD
     A["Người dùng tải hồ sơ"] --> B["Kiểm tra định dạng và an toàn file"]
     B -->|"DOCX hoặc PDF có chữ"| C["Đọc trực tiếp nội dung"]
-    B -->|"Ảnh/PDF scan CCCD hoặc chứng chỉ"| D["PaddleOCR local + MANUAL_REVIEW"]
+    B -->|"Ảnh/PDF scan trong scope"| D["Local OCR hybrid + MANUAL_REVIEW"]
     B -->|"Ảnh/PDF scan ngoài scope"| X["Từ chối OCR theo policy"]
     C --> E["Chuẩn hóa nội dung và lưu nguồn của từng trường"]
     D --> E
@@ -313,8 +332,8 @@ sẵn sàng tự động hóa mọi loại hồ sơ trong môi trường thật.
 
 - MVP mới mở hai biểu mẫu nghỉ phép và tăng ca đã được quản lý phiên bản.
 - Ảnh và PDF scan đã OCR được nhưng vẫn bắt buộc người kiểm tra.
-- Dữ liệu mở rộng CV/hợp đồng/chứng chỉ đang ở giai đoạn rà soát Ground Truth, chưa dùng
-  để tuyên bố chất lượng trong môi trường thật.
+- DATA-17 đã có development comparison cho CV/Contract/IELTS (90/112 strict,
+  104/112 accepted); chưa dùng để tuyên bố chất lượng production.
 - OCR CCCD chưa đạt mức an toàn để tự động chấp nhận.
 - Camunda hiện chỉ được xác nhận ở local/isolated shadow runtime; chưa có public
   endpoint, production deployment hoặc HRIS write thật.
@@ -336,10 +355,10 @@ Dependency, OCR backend và model tuân theo license riêng của từng dự á
 dataset hoặc template, cần ghi rõ nguồn, version, license và cách kiểm thử tương ứng.
 Trước khi tạo commit, chạy các quality gates ở trên và kiểm tra không có dữ liệu thật trong diff.
 
-## DATA-13 OCR scope (2026-08-05)
+## DATA-17 OCR scope (2026-08-06)
 
-Image/PDF-scan OCR is allowlisted to CCCD (`IDENTITY_CARD`) and certificates
-(`CERTIFICATE`) only. Native DOCX/PDF text for CV, contracts and HCNS forms
-stays parser-only. Other image/PDF scans fail closed with
-`OCR_DISABLED_BY_POLICY`; no OCR engine is invoked and the case is excluded
-from the DATA-13 metric. OCR cases remain `MANUAL_REVIEW`.
+The private development route permits local OCR for active Contract, CV and
+IELTS/chứng chỉ image/PDF-scan documents. Native DOCX/PDF text continues to use
+the shared parser. Scan outputs are never auto-accepted: they remain
+`MANUAL_REVIEW` with field provenance/evidence. The comparison is development-only;
+it does not alter the sealed GroundTruth or the historical evaluate-once artifact.
