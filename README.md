@@ -260,6 +260,11 @@ session (không commit thư mục này):
   -PythonPath ".\.venv\Scripts\python.exe"
 ```
 
+Dùng đúng script này cho mỗi lần cập nhật localhost; không chạy trực tiếp
+`serve_dashboard_api.py`. Script tự kiểm tra process đang giữ port 8765,
+khởi động lại nếu shadow root sai, rồi health-check số tài liệu trước khi báo
+localhost sẵn sàng.
+
 Mở `http://localhost:3000`; khi hoàn tất mapping, giữ `linesChecked=false` cho
 đến khi đã kiểm tra đủ 15 tài liệu. Lexicon địa chính, engine thứ năm và
 fine-tune chưa được bật.

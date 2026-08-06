@@ -31,6 +31,9 @@ Khởi động từ thư mục gốc repository:
   -HeldoutRoot "C:\Camunda\private-data\paddleocr-hr-heldout-v1"
 ```
 
+Mỗi lần đổi private root hãy dùng lại script này; script kiểm tra API health và
+không để localhost chạy im lặng với shadow root sai hoặc hàng đợi OCR-HO bằng 0.
+
 Script chỉ bind API vào loopback. Upload được kiểm tra theo nội dung: giới hạn
 kích thước/trang, format mismatch, PDF mã hóa, Office macro, archive path và
 archive expansion đều bị chặn trước parser/OCR.
