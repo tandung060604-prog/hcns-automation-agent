@@ -547,3 +547,18 @@ confirm every field, then SEALED. Benchmark remains intentionally unrun.
   remain the next bottleneck; OCR is still forced to manual review.
 - Preserve the sealed GroundTruth and old evaluate-once artifacts. The next
   comparison must create a new private prediction/report/marker set.
+
+### DATA-17-OCR-HYBRID - Certificate/IELTS and scanned-CV OCR (DONE / DEV HOLD)
+
+- Added local EasyOCR `vi+en` for scanned CV and local PaddleOCR layout parsing
+  for IELTS; no document is sent to cloud. Native documents keep native parsing.
+- Fresh development-only comparison: strict `90/112` (`80.36%`), accepted
+  text `104/112` (`92.86%`); Contract `40/42`, CV `30/50` strict / `44/50`
+  accepted, IELTS `20/20`. Classification `12/12`, schema errors `0`.
+- All 5 image/scan documents remain `MANUAL_REVIEW`; false auto-continue `0`,
+  `UNSUPPORTED_NO_OCR` `0`. DATA-13 localhost shows field-level
+  GroundTruth/prediction/evidence and mismatch reason.
+- Artifacts: `C:\tmp\bo10-dev-predictions-data13-ocr-v7-20260806.json`,
+  `C:\tmp\bo10-dev-aggregate-comparison-ocr-v7-20260806.json` and marker.
+  `evaluateOnceArtifactTouched=false`; promotion is disabled. Remaining work
+  is CV narrative OCR coverage and the Contract representative-name subset.

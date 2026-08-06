@@ -3,8 +3,8 @@
 ## Repository context
 
 - Repository: `D:\AI Vin Thực Chiến\Side Project\PaddleOCR\hcns-automation-agent`
-- Branch: `codex/ocr-ho-v2-014-localhost`
-- HEAD: `643a9fe31c0f62b71dae17d15bacd0eddf9a8d22`
+- Branch: `codex/ocr-ho-v2-014-seal-evaluate`
+- HEAD: `d566c78b8ccb671e9510c1f920feb4c4e8452969`
 - Routing: [docs/README.md](README.md)
 - Acceptance criteria: [docs/BACKLOG.md](BACKLOG.md)
 
@@ -859,6 +859,26 @@ image results manual-review-only; preserve sealed GT and evaluate-once.
   review flag to `true` only for a private observation session, then restart Vite.
 - No private artifact or evaluation marker was removed. Next task must read the
   three state files and select one `READY` task before changing code.
+
+### DATA-17 - Certificate/IELTS and scanned-CV OCR (DONE / DEV HOLD)
+
+- Added a local hybrid OCR route: EasyOCR `vi+en` for scanned CV and local
+  PaddleOCR for IELTS layout/pattern recovery. Native DOCX/PDF continues to
+  use the shared parser path.
+- The 12-document development comparison covers 112 sealed fields. Strict
+  exact is `90/112` (`80.36%`); accepted long-text coverage is `104/112`
+  (`92.86%`). Contract is `40/42` strict, CV `30/50` strict and `44/50`
+  accepted, IELTS `20/20` strict. Classification is `12/12`; schema errors
+  are `0`.
+- All image/scan outputs remain `MANUAL_REVIEW`: 5 scanned documents, 0 false
+  auto-continue and 0 `UNSUPPORTED_NO_OCR`. The API/UI shows field-level
+  GroundTruth, prediction, evidence and review reason at DATA-13.
+- Private artifacts are `C:\tmp\bo10-dev-predictions-data13-ocr-v7-20260806.json`,
+  `C:\tmp\bo10-dev-aggregate-comparison-ocr-v7-20260806.json` and its marker.
+  This is development-only (`evaluateOnceArtifactTouched=false`,
+  `promotionAllowed=false`); the old evaluate-once artifact and sealed GT were
+  not changed. Remaining HOLD items are CV narrative OCR truncation/coverage
+  and one Contract representative-name semantic subset.
 
 ## First command after resume
 

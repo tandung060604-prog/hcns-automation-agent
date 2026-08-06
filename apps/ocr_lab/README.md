@@ -10,7 +10,8 @@ OCR và model weights luôn nằm ngoài Git.
 
 - `web/`: giao diện tại `http://localhost:3000`.
 - `api/`: API local tại `http://127.0.0.1:8765`.
-- Template-first nhận DOCX/PDF có text; OCR ảnh/PDF scan chỉ dành cho CCCD và chứng chỉ.
+- Template-first nhận DOCX/PDF có text. Route DATA-17 development cho phép OCR local
+  ảnh/PDF scan của CV, Contract và IELTS/chứng chỉ; mọi output scan vẫn `MANUAL_REVIEW`.
 - API chỉ đọc/ghi dưới `--data-root` do người vận hành cung cấp.
 
 ## Chạy local
@@ -54,15 +55,16 @@ Bản nháp được lưu local khi chuyển tài liệu; chỉ `LINES CHECKED` 
 là Ground Truth đã xác nhận.
 
 Upload vẫn giữ hai đường xử lý cần thiết: Template-first cho DOCX/PDF native
-của HCNS và OCR/IDP cho ảnh hoặc PDF scan thuộc CCCD/chứng chỉ. CV, contract và
-biểu mẫu HCNS dạng scan bị policy từ chối OCR (`OCR_DISABLED_BY_POLICY`).
+của HCNS và OCR/IDP cho nguồn scan nằm trong scope. DATA-17 mở riêng route
+development cho CV, Contract và IELTS/chứng chỉ; OCR chỉ tạo evidence để review,
+không tự động chấp nhận. Profile upload thông thường vẫn fail-closed ngoài allowlist.
 
 ## Luồng Phase 14.8 và Phase 15
 
 ```text
 Upload
 → kiểm tra an toàn
-→ native parse (DOCX/PDF text) hoặc OCR scan theo allowlist CCCD/chứng chỉ
+→ native parse (DOCX/PDF text) hoặc local OCR scan theo family/scope
 → Paddle detector
 → VietOCR Seq2Seq primary
 → VietOCR Transformer verifier
@@ -155,3 +157,21 @@ summary; once the marker exists, both draft and final Ground Truth writes return
 `heldoutReadinessGate` independently. The current result is development-improved
 but readiness HOLD (residence ASCII remains below threshold), so no new held-out
 set is created and no lexicon or fifth engine is enabled.
+
+## DATA-17 development comparison (2026-08-06)
+
+The private 12-document split contains 112 sealed fields. The local hybrid route
+uses EasyOCR `vi+en` for scanned CV and PaddleOCR for IELTS layout/patterns;
+native Contract/CV documents continue through the shared layout-aware parsers.
+
+| Family | Strict exact | Accepted text |
+|---|---:|---:|
+| Contract | 40/42 (95.24%) | 40/42 (95.24%) |
+| CV | 30/50 (60%) | 44/50 (88%) |
+| IELTS/certificate | 20/20 (100%) | 20/20 (100%) |
+| **Total** | **90/112 (80.36%)** | **104/112 (92.86%)** |
+
+Classification is 12/12 and schema errors are 0. The five image/PDF-scan
+documents remain `MANUAL_REVIEW`; no cloud OCR is used. This is a separate
+development aggregate (`promotionAllowed=false`) and does not reopen the old
+evaluate-once artifact.
