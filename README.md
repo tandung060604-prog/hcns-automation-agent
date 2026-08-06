@@ -265,6 +265,10 @@ Dùng đúng script này cho mỗi lần cập nhật localhost; không chạy t
 khởi động lại nếu shadow root sai, rồi health-check số tài liệu trước khi báo
 localhost sẵn sàng.
 
+Form Prediction-blind tự lưu bản nháp local khi chuyển tài liệu. `DRAFT SAVED`
+chỉ nghĩa là dữ liệu đã giữ lại; Ground Truth chỉ hoàn tất khi đủ ba assertion
+và trạng thái chuyển thành `LINES CHECKED`.
+
 Mở `http://localhost:3000`; khi hoàn tất mapping, giữ `linesChecked=false` cho
 đến khi đã kiểm tra đủ 15 tài liệu. Lexicon địa chính, engine thứ năm và
 fine-tune chưa được bật.

@@ -19,6 +19,7 @@ type DiagnosticSummary = {
     documentIndex: number;
     sourceFile: string;
     reviewed: boolean;
+    drafted: boolean;
   }>;
 };
 type DiagnosticDetail = {
@@ -70,6 +71,8 @@ export default function OcrHoDiagnostic() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [draftSaved, setDraftSaved] = useState(false);
+  const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,6 +116,8 @@ export default function OcrHoDiagnostic() {
         if (cancelled) return;
         setDetail(payload);
         setSaved(false);
+        setDraftSaved(false);
+        setDirty(false);
         const next = emptyFields();
         for (const name of Object.keys(next) as FieldName[]) {
           const existing = payload.review?.fields?.[name];
@@ -140,6 +145,42 @@ export default function OcrHoDiagnostic() {
       Object.values(assertions).every(Boolean),
   );
 
+  const hasDraftData = Boolean(
+    detail &&
+      (Object.values(fields).some((field) => field.value.trim() || field.lineIds.length > 0) ||
+        Object.values(assertions).some(Boolean)),
+  );
+
+  const saveDraft = async (): Promise<boolean> => {
+    if (!activeId || !hasDraftData || saving) return !dirty;
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch(`${API_BASE}/ocr-ho-v2/diagnostic/draft?id=${encodeURIComponent(activeId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fields, assertions, predictionOpened: false, draft: true }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "KhÃ´ng lÆ°u Ä‘Æ°á»£c báº£n nhÃ¡p Ground Truth");
+      setDirty(false);
+      setDraftSaved(true);
+      setSummary((current) => current && { ...current, documents: current.documents.map((item) => item.documentId === activeId ? { ...item, drafted: true } : item) });
+      return true;
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "KhÃ´ng lÆ°u Ä‘Æ°á»£c báº£n nhÃ¡p local.");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const selectDocument = async (nextId: string) => {
+    if (nextId === activeId) return;
+    if (dirty && !(await saveDraft())) return;
+    setActiveId(nextId);
+  };
+
   const save = async () => {
     if (!activeId || !canSave || saving) return;
     setSaving(true);
@@ -153,6 +194,8 @@ export default function OcrHoDiagnostic() {
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Không lưu được Ground Truth");
       setSaved(true);
+      setDraftSaved(false);
+      setDirty(false);
       setSummary((current) => current && { ...current, reviewedDocumentCount: current.documents.filter((item) => item.reviewed || item.documentId === activeId).length, documents: current.documents.map((item) => item.documentId === activeId ? { ...item, reviewed: true } : item) });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Không lưu được Ground Truth local.");
@@ -165,10 +208,10 @@ export default function OcrHoDiagnostic() {
     <div className="heldout-evidence-grid shadow-uat-grid diagnostic-gt-grid">
       <div className="heldout-document-list" role="list">
         {summary?.documents.map((document) => (
-          <button className={document.documentId === activeId ? "active" : ""} key={document.documentId} onClick={() => setActiveId(document.documentId)} role="listitem">
+          <button className={document.documentId === activeId ? "active" : ""} key={document.documentId} onClick={() => void selectDocument(document.documentId)} role="listitem">
             <span>DEV-{String(document.documentIndex).padStart(2, "0")}</span>
             <strong>{document.sourceFile}</strong>
-            <small>{document.reviewed ? "LINES CHECKED" : "PENDING"} · prediction-blind</small>
+            <small>{document.reviewed ? "LINES CHECKED" : document.drafted ? "DRAFT SAVED" : "PENDING"} · prediction-blind</small>
           </button>
         ))}
         {!summary?.documents.length && !loading ? <div className="evidence-inspector-state">{error || "Chưa có tài liệu development."}</div> : null}
@@ -185,10 +228,10 @@ export default function OcrHoDiagnostic() {
       <aside className="evidence-inspector shadow-uat-inspector diagnostic-gt-inspector" data-testid="ocr-ho-diagnostic-inspector">
         <header><div><span>PREDICTION-BLIND · LOCAL-ONLY</span><strong>GROUND TRUTH LINE MAPPING</strong></div><small>Không nạp baseline, candidate hoặc prediction</small></header>
         <div className="shadow-uat-banner"><strong>Ảnh nguồn → giá trị xác nhận → line ID</strong><span>Chỉ nhập nội dung nhìn thấy trên ảnh. Mỗi field phải có line ID hợp lệ.</span></div>
-        {detail ? <div className="diagnostic-fields">{(Object.keys(FIELD_LIMITS) as FieldName[]).map((name) => <label key={name}><span>{name} · tối đa {FIELD_LIMITS[name]} dòng</span><input value={fields[name].value} onChange={(event) => setFields((current) => ({ ...current, [name]: { ...current[name], value: event.target.value } }))} placeholder="Nhập đúng nội dung trên ảnh" /><div className="diagnostic-line-inputs">{Array.from({ length: FIELD_LIMITS[name] }, (_, index) => <input key={index} value={fields[name].lineIds[index] ?? ""} onChange={(event) => setFields((current) => ({ ...current, [name]: { ...current[name], lineIds: updateLineId(current[name], index, event.target.value, FIELD_LIMITS[name]) } }))} placeholder={`Line ID dòng ${index + 1}${index ? " (nếu có)" : ""}`} inputMode="numeric" />)}</div><small>{fields[name].lineIds.length} line đã chọn{fields[name].lineIds.length ? `: ${fields[name].lineIds.join(" + ")}` : ""}</small></label>)}</div> : null}
-        <div className="shadow-uat-assertions">{(["comparedWithSource", "allTextChecked", "linesChecked"] as const).map((name) => <label key={name}><input type="checkbox" checked={assertions[name]} onChange={(event) => setAssertions((current) => ({ ...current, [name]: event.target.checked }))} />{name === "comparedWithSource" ? "Đã đối chiếu ảnh nguồn" : name === "allTextChecked" ? "Đã kiểm tra toàn bộ chữ" : "Đã xác nhận đủ line ID"}</label>)}</div>
+        {detail ? <div className="diagnostic-fields">{(Object.keys(FIELD_LIMITS) as FieldName[]).map((name) => <label key={name}><span>{name} · tối đa {FIELD_LIMITS[name]} dòng</span><input value={fields[name].value} onChange={(event) => { setDirty(true); setDraftSaved(false); setFields((current) => ({ ...current, [name]: { ...current[name], value: event.target.value } })); }} placeholder="Nhập đúng nội dung trên ảnh" /><div className="diagnostic-line-inputs">{Array.from({ length: FIELD_LIMITS[name] }, (_, index) => <input key={index} value={fields[name].lineIds[index] ?? ""} onChange={(event) => { setDirty(true); setDraftSaved(false); setFields((current) => ({ ...current, [name]: { ...current[name], lineIds: updateLineId(current[name], index, event.target.value, FIELD_LIMITS[name]) } })); }} placeholder={`Line ID dòng ${index + 1}${index ? " (nếu có)" : ""}`} inputMode="numeric" />)}</div><small>{fields[name].lineIds.length} line đã chọn{fields[name].lineIds.length ? `: ${fields[name].lineIds.join(" + ")}` : ""}</small></label>)}</div> : null}
+        <div className="shadow-uat-assertions">{(["comparedWithSource", "allTextChecked", "linesChecked"] as const).map((name) => <label key={name}><input type="checkbox" checked={assertions[name]} onChange={(event) => { setDirty(true); setDraftSaved(false); setAssertions((current) => ({ ...current, [name]: event.target.checked })); }} />{name === "comparedWithSource" ? "Đã đối chiếu ảnh nguồn" : name === "allTextChecked" ? "Đã kiểm tra toàn bộ chữ" : "Đã xác nhận đủ line ID"}</label>)}</div>
         {error ? <small className="shadow-uat-error">{error}</small> : null}
-        <button type="button" onClick={() => void save()} disabled={!canSave || saving}>{saving ? "Đang lưu…" : saved ? "Đã lưu line mapping" : "Lưu Ground Truth local"}</button>
+        <div className="diagnostic-actions"><button type="button" className="diagnostic-draft-button" onClick={() => void saveDraft()} disabled={!hasDraftData || saving}>{saving ? "Đang lưu…" : draftSaved ? "Đã lưu bản nháp" : "Lưu bản nháp local"}</button><button type="button" onClick={() => void save()} disabled={!canSave || saving}>{saving ? "Đang lưu…" : saved ? "Đã lưu line mapping" : "Lưu Ground Truth local"}</button></div>
       </aside>
     </div>
   );

@@ -214,7 +214,11 @@ test("exposes prediction-blind OCR-HO Ground Truth mapping behind a private flag
   assert.match(component, /line đã chọn/);
   assert.match(component, /diagnostic-overlay/);
   assert.match(component, /mode=preview/);
+  assert.match(component, /diagnostic\/draft/);
+  assert.match(component, /Lưu bản nháp local/);
+  assert.match(component, /DRAFT SAVED/);
   assert.match(api, /\/ocr-ho-v2\/diagnostic\/document/);
+  assert.match(api, /\/ocr-ho-v2\/diagnostic\/draft/);
 });
 
 test("exposes the DATA-08 independent contract review panel behind a private flag", async () => {

@@ -50,6 +50,8 @@ trong phiên quan sát riêng rồi restart Vite; dữ liệu private không b�
 Phiên xác nhận OCR-HO-V2 dùng thêm `VITE_SHOW_OCR_HO_DIAGNOSTIC_GT=true`.
 Tab `Prediction-blind GT` chỉ đọc ảnh nguồn và line ID; tab `Shadow UAT` là
 audit baseline/candidate riêng, không dùng để tạo Ground Truth.
+Bản nháp được lưu local khi chuyển tài liệu; chỉ `LINES CHECKED` mới được tính
+là Ground Truth đã xác nhận.
 
 Upload vẫn giữ hai đường xử lý cần thiết: Template-first cho DOCX/PDF native
 của HCNS và OCR/IDP cho ảnh hoặc PDF scan thuộc CCCD/chứng chỉ. CV, contract và

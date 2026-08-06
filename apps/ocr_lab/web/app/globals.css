@@ -1423,6 +1423,9 @@ section[id] { scroll-margin-top: 72px; }
 .diagnostic-line-inputs input { color: var(--muted); font-family: var(--font-geist-mono), monospace; }
 .diagnostic-fields label > small { color: var(--muted); font: 9px/1.2 var(--font-geist-mono), monospace; }
 .diagnostic-gt-inspector { max-height: 720px; }
+.diagnostic-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.diagnostic-actions button { min-width: 0; }
+.diagnostic-actions .diagnostic-draft-button { background: #fff; color: var(--green); border: 1px solid var(--green); }
 .diagnostic-preview-stage { position: relative; line-height: 0; }
 .diagnostic-preview-stage img { display: block; width: 100%; height: auto; }
 .diagnostic-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }

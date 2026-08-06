@@ -1485,6 +1485,23 @@ class DashboardHandler(BaseHTTPRequestHandler):
             except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
                 self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
+        if parsed.path == "/ocr-ho-v2/diagnostic/draft":
+            if self.ocr_ho_shadow_root is None:
+                self.send_json({"error": "OCR-HO-V2 diagnostic is not configured"}, HTTPStatus.NOT_FOUND)
+                return
+            document_id = parse_qs(parsed.query).get("id", [""])[0]
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+                if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                    raise ValueError("Diagnostic draft is empty or too large")
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                if not isinstance(payload, dict):
+                    raise ValueError("Diagnostic draft must be an object")
+                payload["draft"] = True
+                self.send_json(save_ocr_ho_diagnostic(self.ocr_ho_shadow_root, document_id, payload))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
         if parsed.path == "/cccd-heldout/review/save":
             if self.cccd_heldout_root is None:
                 self.send_json(
