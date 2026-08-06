@@ -50,13 +50,18 @@ def main() -> int:
     for index, record in enumerate(records, start=1):
         review = store["documents"].get(record["documentId"])
         assertions = review.get("assertions", {}) if isinstance(review, dict) else {}
+        required = ("comparedWithSource", "allTextChecked", "linesChecked")
         if not isinstance(review, dict) or review.get("draft") is not False or not all(
-            assertions.get(key) is True for key in ("comparedWithSource", "allTextChecked", "linesChecked")
+            assertions.get(key) is True for key in required
         ):
             raise SystemExit(f"Document {record['documentId']} is not fully checked")
         detail = _record(root, record["documentId"])
         result = json.loads((detail["sessionDir"] / "result.json").read_text(encoding="utf-8"))
-        line_count = len((result.get("phase11", {}).get("pages") or [{}])[0].get("recognizedBoxes", []))
+        line_count = len(
+            (result.get("phase11", {}).get("pages") or [{}])[0].get(
+                "recognizedBoxes", []
+            )
+        )
         fields: dict[str, Any] = {}
         for name, maximum in FIELDS.items():
             field = review.get("fields", {}).get(name) or {}
@@ -64,7 +69,10 @@ def main() -> int:
             line_ids = field.get("lineIds")
             if not value or not isinstance(line_ids, list) or not 1 <= len(line_ids) <= maximum:
                 raise SystemExit(f"Invalid sealed field {record['documentId']}:{name}")
-            if any(not isinstance(line_id, int) or line_id < 0 or line_id >= line_count for line_id in line_ids):
+            if any(
+                not isinstance(line_id, int) or line_id < 0 or line_id >= line_count
+                for line_id in line_ids
+            ):
                 raise SystemExit(f"Invalid line ID {record['documentId']}:{name}")
             fields[name] = {"value": value, "lineIds": line_ids}
             # recognizedBoxes are indexed; keep this validation independent of OCR text.
