@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from PIL import Image
+
 from phase11_8_shadow_uat import _record, _session_records
 
 FIELDS = {"fullName": 1, "placeOfOrigin": 2, "placeOfResidence": 2}
@@ -74,10 +76,19 @@ def summary(root: Path) -> dict[str, Any]:
                 "documentIndex": item["documentIndex"],
                 "sourceFile": item["sourceFile"],
                 "reviewed": item["documentId"] in reviewed,
+                "drafted": item["documentId"] in store["documents"],
             }
             for item in records
         ],
     }
+
+
+def preview(root: Path, document_id: str) -> Path:
+    """Return the source-only page whose coordinates match detector boxes."""
+
+    record = _record(root, document_id)
+    canonical = record["sessionDir"] / "phase11" / "pages" / "page_000.png"
+    return canonical if canonical.is_file() else record["sourcePath"]
 
 
 def document(root: Path, document_id: str) -> dict[str, Any]:
@@ -87,12 +98,16 @@ def document(root: Path, document_id: str) -> dict[str, Any]:
     lines = [
         {"lineId": index, "box": box} for index, box in enumerate(page.get("recognizedBoxes", []))
     ]
+    image_size = None
+    with Image.open(preview(root, document_id)) as image:
+        image_size = [image.width, image.height]
     return {
         "localOnly": True,
         "predictionLoaded": False,
         "predictionOpened": False,
         "documentId": document_id,
         "sourceFile": record["sourceFile"],
+        "imageSize": image_size,
         "fields": FIELDS,
         "lines": lines,
         "review": _load(root)["documents"].get(document_id),
@@ -102,16 +117,17 @@ def document(root: Path, document_id: str) -> dict[str, Any]:
 def save(root: Path, document_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     if payload.get("predictionOpened") is True:
         raise ValueError("Prediction-blind diagnostic payload cannot open prediction")
+    draft = payload.get("draft") is True
     item = document(root, document_id)
     fields = payload.get("fields")
     assertions = payload.get("assertions")
     if (
         not isinstance(fields, dict)
         or not isinstance(assertions, dict)
-        or not all(
+        or (not draft and not all(
             assertions.get(key) is True
             for key in ("comparedWithSource", "allTextChecked", "linesChecked")
-        )
+        ))
     ):
         raise ValueError("All fields and source assertions are required")
     valid_ids = {line["lineId"] for line in item["lines"]}
@@ -122,21 +138,29 @@ def save(root: Path, document_id: str, payload: dict[str, Any]) -> dict[str, Any
             raise ValueError(f"Missing diagnostic field: {name}")
         value = str(field.get("value", "")).strip()
         line_ids = field.get("lineIds")
-        if not value or len(value) > 500 or _CONTROL.search(value):
+        if (not draft and not value) or len(value) > 500 or _CONTROL.search(value):
             raise ValueError(f"Invalid diagnostic value: {name}")
         if (
             not isinstance(line_ids, list)
-            or not 1 <= len(line_ids) <= maximum
+            or (not draft and not 1 <= len(line_ids) <= maximum)
+            or (draft and len(line_ids) > maximum)
             or any(not isinstance(line_id, int) or line_id not in valid_ids for line_id in line_ids)
         ):
             raise ValueError(f"Invalid diagnostic line IDs: {name}")
         saved[name] = {"value": value, "lineIds": line_ids}
     store = _load(root)
+    normalized_assertions = {
+        key: assertions.get(key) is True
+        for key in ("comparedWithSource", "allTextChecked", "linesChecked")
+    }
     store["documents"][document_id] = {
         "fields": saved,
-        "assertions": {"comparedWithSource": True, "allTextChecked": True, "linesChecked": True},
+        "assertions": normalized_assertions,
         "predictionOpened": False,
-        "reviewedAt": datetime.now(timezone.utc).isoformat(),
+        "draft": draft,
+        "draftedAt": datetime.now(timezone.utc).isoformat(),
     }
+    if not draft:
+        store["documents"][document_id]["reviewedAt"] = store["documents"][document_id]["draftedAt"]
     _write(_path(root), store)
-    return {"saved": True, "documentId": document_id, "promotionEligible": False}
+    return {"saved": True, "draft": draft, "documentId": document_id, "promotionEligible": False}

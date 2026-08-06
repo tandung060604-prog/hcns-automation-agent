@@ -31,6 +31,9 @@ Khởi động từ thư mục gốc repository:
   -HeldoutRoot "C:\Camunda\private-data\paddleocr-hr-heldout-v1"
 ```
 
+Mỗi lần đổi private root hãy dùng lại script này; script kiểm tra API health và
+không để localhost chạy im lặng với shadow root sai hoặc hàng đợi OCR-HO bằng 0.
+
 Script chỉ bind API vào loopback. Upload được kiểm tra theo nội dung: giới hạn
 kích thước/trang, format mismatch, PDF mã hóa, Office macro, archive path và
 archive expansion đều bị chặn trước parser/OCR.
@@ -43,6 +46,12 @@ Các cờ `VITE_SHOW_HELDOUT`, `VITE_SHOW_GROUND_TRUTH_REVIEW`,
 `VITE_SHOW_EXTERNAL_DATASET_REVIEW` và `VITE_SHOW_OCR_HO_SHADOW_UAT` trong
 `web/.env.local` phải để `false` khi mở localhost cho mentor. Bật từng cờ chỉ
 trong phiên quan sát riêng rồi restart Vite; dữ liệu private không bị xóa.
+
+Phiên xác nhận OCR-HO-V2 dùng thêm `VITE_SHOW_OCR_HO_DIAGNOSTIC_GT=true`.
+Tab `Prediction-blind GT` chỉ đọc ảnh nguồn và line ID; tab `Shadow UAT` là
+audit baseline/candidate riêng, không dùng để tạo Ground Truth.
+Bản nháp được lưu local khi chuyển tài liệu; chỉ `LINES CHECKED` mới được tính
+là Ground Truth đã xác nhận.
 
 Upload vẫn giữ hai đường xử lý cần thiết: Template-first cho DOCX/PDF native
 của HCNS và OCR/IDP cho ảnh hoặc PDF scan thuộc CCCD/chứng chỉ. CV, contract và

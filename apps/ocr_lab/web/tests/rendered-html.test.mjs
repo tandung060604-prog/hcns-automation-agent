@@ -198,6 +198,29 @@ test("exposes the OCR-HO-V2-014 local shadow UAT inspector behind a private flag
   assert.match(api, /\/ocr-ho-v2\/shadow\/summary/);
 });
 
+test("exposes prediction-blind OCR-HO Ground Truth mapping behind a private flag", async () => {
+  const [dashboard, component, envExample, api] = await Promise.all([
+    readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/OcrHoDiagnostic.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+    readFile(new URL("../../api/serve_dashboard_api.py", import.meta.url), "utf8"),
+  ]);
+  assert.match(dashboard, /VITE_SHOW_OCR_HO_DIAGNOSTIC_GT === "true"/);
+  assert.match(envExample, /^VITE_SHOW_OCR_HO_DIAGNOSTIC_GT=false$/m);
+  assert.match(component, /\/ocr-ho-v2\/diagnostic\/summary/);
+  assert.match(component, /predictionOpened: false/);
+  assert.match(component, /lineIds/);
+  assert.match(component, /diagnostic-line-inputs/);
+  assert.match(component, /line đã chọn/);
+  assert.match(component, /diagnostic-overlay/);
+  assert.match(component, /mode=preview/);
+  assert.match(component, /diagnostic\/draft/);
+  assert.match(component, /Lưu bản nháp local/);
+  assert.match(component, /DRAFT SAVED/);
+  assert.match(api, /\/ocr-ho-v2\/diagnostic\/document/);
+  assert.match(api, /\/ocr-ho-v2\/diagnostic\/draft/);
+});
+
 test("exposes the DATA-08 independent contract review panel behind a private flag", async () => {
   const [dashboard, component, envExample, css] = await Promise.all([
     readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),

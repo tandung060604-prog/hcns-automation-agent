@@ -221,6 +221,11 @@ bật trong phiên quan sát riêng, sau đó phải restart web dev server. M�
 đọc `docs/PROJECT_STATE.md`, `docs/HANDOFF.md` và `docs/BACKLOG.md`, chọn một
 task `READY`, cập nhật evidence rồi mới mở task kế tiếp.
 
+Để xác nhận line ID prediction-blind cho OCR-HO-V2, bật thêm
+`VITE_SHOW_OCR_HO_DIAGNOSTIC_GT=true`. Tab `Prediction-blind GT` chỉ hiển thị
+ảnh nguồn, line ID và ba field cần nhập; tab `Shadow UAT` cũ chỉ dành cho audit
+nội bộ baseline/candidate và không dùng để tạo Ground Truth.
+
 ### OCR-HO-V2-014 (candidate 11.10.0, shadow-only)
 
 Vòng phát triển mới nhất chạy trên 15 tài liệu CCCD development, dùng detector
@@ -254,6 +259,15 @@ session (không commit thư mục này):
   -OcrHoShadowRoot "C:\path\to\private-data\paddleocr-hr-baseline-archive-YYYYMMDD" `
   -PythonPath ".\.venv\Scripts\python.exe"
 ```
+
+Dùng đúng script này cho mỗi lần cập nhật localhost; không chạy trực tiếp
+`serve_dashboard_api.py`. Script tự kiểm tra process đang giữ port 8765,
+khởi động lại nếu shadow root sai, rồi health-check số tài liệu trước khi báo
+localhost sẵn sàng.
+
+Form Prediction-blind tự lưu bản nháp local khi chuyển tài liệu. `DRAFT SAVED`
+chỉ nghĩa là dữ liệu đã giữ lại; Ground Truth chỉ hoàn tất khi đủ ba assertion
+và trạng thái chuyển thành `LINES CHECKED`.
 
 Mở `http://localhost:3000`; khi hoàn tất mapping, giữ `linesChecked=false` cho
 đến khi đã kiểm tra đủ 15 tài liệu. Lexicon địa chính, engine thứ năm và
