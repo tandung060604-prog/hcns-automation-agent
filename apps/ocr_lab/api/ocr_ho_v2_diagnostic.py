@@ -11,9 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
-
 from phase11_8_shadow_uat import _record, _session_records
+from PIL import Image
 
 FIELDS = {"fullName": 1, "placeOfOrigin": 2, "placeOfResidence": 2}
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")

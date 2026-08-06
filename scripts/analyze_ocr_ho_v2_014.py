@@ -94,7 +94,7 @@ def field_candidates(
     return [
         item for item in (field.get("evidence", {}).get("candidates") or [])
         if isinstance(item, dict)
-    ]
+]
 
 
 def make_documents(root: Path, sealed: dict[str, Any]) -> list[dict[str, Any]]:
@@ -109,11 +109,10 @@ def make_documents(root: Path, sealed: dict[str, Any]) -> list[dict[str, Any]]:
             (session / "phase11_10_v2" / "field_consensus.json").read_text(encoding="utf-8")
         )
         result = json.loads((session / "result.json").read_text(encoding="utf-8"))
-        candidate = candidate_artifact.get("identityCard", {})
         documents.append({
             "groundTruth": {name: item["value"] for name, item in record["fields"].items()},
             "baseline": baseline.get("fields", {}),
-            "phase11_10": candidate.get("fields", {}),
+            "phase11_10": candidate_artifact.get("identityCard", {}).get("fields", {}),
             "candidateArtifact": candidate_artifact,
             "gtFields": record["fields"],
             "durations": {
@@ -133,9 +132,9 @@ def class_report(documents: list[dict[str, Any]], variant: str) -> dict[str, Any
         fields = document[variant]
         for name in TARGET_FIELDS:
             expected = str(document["groundTruth"].get(name) or "")
+            field = fields.get(name) or {}
             if not expected:
                 continue
-            field = fields.get(name) or {}
             if variant == "phase11_10":
                 gt_ids = set(document["gtFields"][name]["lineIds"])
                 roi_ids = set((artifact.get("regions", {}).get(name) or {}).get("lineIds") or [])
@@ -153,10 +152,7 @@ def class_report(documents: list[dict[str, Any]], variant: str) -> dict[str, Any
                 else field_candidates(field, artifact, name)
             )
             labels.append((name, classify(
-                expected=expected,
-                field=field,
-                candidates=candidates,
-                roi_hit=roi_hit,
+                expected=expected, field=field, candidates=candidates, roi_hit=roi_hit
             )))
     return {
         "classCountsByField": aggregate(labels),
@@ -169,8 +165,6 @@ def class_report(documents: list[dict[str, Any]], variant: str) -> dict[str, Any
             for name in TARGET_FIELDS
         },
     }
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-root", type=Path, required=True)
@@ -289,7 +283,6 @@ def sealed_digest(payload: dict[str, Any]) -> str:
         unsigned, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

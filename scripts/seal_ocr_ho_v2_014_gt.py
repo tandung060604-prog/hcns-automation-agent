@@ -36,38 +36,48 @@ def main() -> int:
     output = (args.output or root / "OCR_HO_V2_014_GT_SEALED_PRIVATE.json").resolve()
     store = _load(root)
     records = _session_records(root)
-    if len(records) != 15:
-        raise SystemExit(f"Expected 15 eligible documents, found {len(records)}")
-    if len(store.get("documents", {})) != len(records):
-        raise SystemExit("Ground Truth is not complete for every eligible document")
-
+    if len(records) != 15 or len(store.get("documents", {})) != len(records):
+        raise SystemExit("Expected 15 complete eligible documents")
+    if output.is_file():
+        existing = json.loads(output.read_text(encoding="utf-8"))
+        existing_digest = existing.get("manifestSha256")
+        unsigned = {key: value for key, value in existing.items() if key != "manifestSha256"}
+        if existing_digest != digest(unsigned):
+            raise SystemExit("Sealed manifest is corrupt or was modified")
+        print(json.dumps({"status": "ALREADY_SEALED", "manifestSha256": existing_digest}))
+        return 0
     documents: list[dict[str, Any]] = []
     for index, record in enumerate(records, start=1):
         review = store["documents"].get(record["documentId"])
-        if not isinstance(review, dict) or review.get("draft") is not False:
-            raise SystemExit(f"Document {record['documentId']} is not final")
-        assertions = review.get("assertions") or {}
-        if not all(assertions.get(key) is True for key in (
-            "comparedWithSource", "allTextChecked", "linesChecked"
-        )):
+        assertions = review.get("assertions", {}) if isinstance(review, dict) else {}
+        required = ("comparedWithSource", "allTextChecked", "linesChecked")
+        if not isinstance(review, dict) or review.get("draft") is not False or not all(
+            assertions.get(key) is True for key in required
+        ):
             raise SystemExit(f"Document {record['documentId']} is not fully checked")
         detail = _record(root, record["documentId"])
-        line_count = len(json.loads(
-            (detail["sessionDir"] / "result.json").read_text(encoding="utf-8")
-        ).get("phase11", {}).get("pages", [{}])[0].get("recognizedBoxes", []))
+        result = json.loads((detail["sessionDir"] / "result.json").read_text(encoding="utf-8"))
+        line_count = len(
+            (result.get("phase11", {}).get("pages") or [{}])[0].get(
+                "recognizedBoxes", []
+            )
+        )
         fields: dict[str, Any] = {}
-        for field_name, maximum in FIELDS.items():
-            field = review.get("fields", {}).get(field_name) or {}
+        for name, maximum in FIELDS.items():
+            field = review.get("fields", {}).get(name) or {}
             value = str(field.get("value") or "").strip()
             line_ids = field.get("lineIds")
             if not value or not isinstance(line_ids, list) or not 1 <= len(line_ids) <= maximum:
-                raise SystemExit(f"Invalid sealed field {record['documentId']}:{field_name}")
-            if any(not isinstance(line_id, int) or line_id < 0 for line_id in line_ids):
-                raise SystemExit(f"Invalid line ID {record['documentId']}:{field_name}")
+                raise SystemExit(f"Invalid sealed field {record['documentId']}:{name}")
+            if any(
+                not isinstance(line_id, int) or line_id < 0 or line_id >= line_count
+                for line_id in line_ids
+            ):
+                raise SystemExit(f"Invalid line ID {record['documentId']}:{name}")
+            fields[name] = {"value": value, "lineIds": line_ids}
             # recognizedBoxes are indexed; keep this validation independent of OCR text.
             if any(line_id >= line_count for line_id in line_ids):
-                raise SystemExit(f"Line ID out of range {record['documentId']}:{field_name}")
-            fields[field_name] = {"value": value, "lineIds": line_ids}
+                raise SystemExit(f"Line ID out of range {record['documentId']}:{name}")
         documents.append({
             "documentIndex": index,
             "documentId": record["documentId"],
@@ -76,7 +86,6 @@ def main() -> int:
             "selectedRotationDegrees": 0,
             "fields": fields,
         })
-
     payload: dict[str, Any] = {
         "schemaVersion": "ocr-ho-v2-014-gt-sealed/1.0.0",
         "datasetRole": "DEVELOPMENT_GROUND_TRUTH",

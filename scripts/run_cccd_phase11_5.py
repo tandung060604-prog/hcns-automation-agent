@@ -213,6 +213,10 @@ def prepare(
         confirmed_fields = record.get("fields") or {}
         if confirmed_fields:
             boxes = (pages[0] if pages else {}).get("recognizedBoxes", [])
+            all_lines = [
+                {"lineId": index, "box": box}
+                for index, box in enumerate(boxes)
+            ]
             for field_name, field in confirmed_fields.items():
                 if field_name not in regions or not isinstance(field, dict):
                     continue
@@ -227,10 +231,7 @@ def prepare(
                         )
                     selected.append({"lineId": line_id, "box": boxes[line_id]})
                 regions[field_name]["lineBboxes"] = [
-                    phase_module._trim_line_top(item, [
-                        {"lineId": index, "box": box}
-                        for index, box in enumerate(boxes)
-                    ])
+                    phase_module._trim_line_top(item, all_lines)
                     if hasattr(phase_module, "_trim_line_top")
                     else [
                         int(min(point[0] for point in item["box"])),
