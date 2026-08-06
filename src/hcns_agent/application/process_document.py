@@ -60,7 +60,7 @@ class ProcessDocument:
         reasons: list[str] = []
 
         if document.document_type in self._policy.always_review_types:
-            reasons.append(f"{document.document_type} requires review by policy")
+            reasons.append(f"{str(document.document_type)} requires review by policy")
         if any(field.status is FieldStatus.NEEDS_REVIEW for field in fields):
             reasons.append("One or more fields are below the confidence threshold")
         if any(field.name in self._policy.sensitive_fields for field in fields):
