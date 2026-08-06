@@ -85,11 +85,16 @@ def classify(
     return "RECOGNIZER_MISS"
 
 
-def field_candidates(field: dict[str, Any], artifact: dict[str, Any], name: str) -> list[dict[str, Any]]:
+def field_candidates(
+    field: dict[str, Any], artifact: dict[str, Any], name: str
+) -> list[dict[str, Any]]:
     candidates = artifact.get("candidates", {}).get(name)
     if isinstance(candidates, list):
         return [item for item in candidates if isinstance(item, dict)]
-    return [item for item in (field.get("evidence", {}).get("candidates") or []) if isinstance(item, dict)]
+    return [
+        item for item in (field.get("evidence", {}).get("candidates") or [])
+        if isinstance(item, dict)
+    ]
 
 
 def make_documents(root: Path, sealed: dict[str, Any]) -> list[dict[str, Any]]:
@@ -97,7 +102,9 @@ def make_documents(root: Path, sealed: dict[str, Any]) -> list[dict[str, Any]]:
     documents: list[dict[str, Any]] = []
     for record in sealed["documents"]:
         session = sessions / str(record["sessionId"])
-        baseline = json.loads((session / "phase11_5" / "identity_card.json").read_text(encoding="utf-8"))
+        baseline = json.loads(
+            (session / "phase11_5" / "identity_card.json").read_text(encoding="utf-8")
+        )
         candidate_artifact = json.loads(
             (session / "phase11_10_v2" / "field_consensus.json").read_text(encoding="utf-8")
         )
@@ -138,7 +145,10 @@ def class_report(documents: list[dict[str, Any]], variant: str) -> dict[str, Any
             evaluated[name] += 1
             roi_hits[name] += int(roi_hit)
             candidates = (
-                [item for item in (field.get("evidence", {}).get("candidates") or []) if isinstance(item, dict)]
+                [
+                    item for item in (field.get("evidence", {}).get("candidates") or [])
+                    if isinstance(item, dict)
+                ]
                 if variant == "baseline"
                 else field_candidates(field, artifact, name)
             )
@@ -200,7 +210,10 @@ def main() -> int:
         if isinstance(field, dict)
     )
     protected_regressions = 0
-    protected_keys = ("value", "asciiValue", "confidence", "errorSignals", "evidence", "selectionMode", "validation")
+    protected_keys = (
+        "value", "asciiValue", "confidence", "errorSignals", "evidence",
+        "selectionMode", "validation",
+    )
     for document in documents:
         baseline_fields = document["baseline"]
         candidate_fields = document["phase11_10"]
@@ -210,7 +223,11 @@ def main() -> int:
                 != {key: candidate_fields.get(name, {}).get(key) for key in protected_keys}
             )
     secondary_path = root / "phase11_10_v2_private" / "secondary_predictions_private.json"
-    secondary = json.loads(secondary_path.read_text(encoding="utf-8")) if secondary_path.is_file() else {}
+    secondary = (
+        json.loads(secondary_path.read_text(encoding="utf-8"))
+        if secondary_path.is_file()
+        else {}
+    )
     report = {
         "schemaVersion": "ocr-ho-v2-014-evaluation/2.0.0",
         "candidateVersion": "11.10.0",
@@ -255,7 +272,11 @@ def main() -> int:
             "resultArtifact": "PHASE11_10_V2_RESULTS.json",
         },
     }
-    output = (args.output or root / "output" / "phase11" / "reports" / "CCCD_OCR_HO_V2_014_DEVELOPMENT_COMPARISON.json").resolve()
+    output = (
+        args.output
+        or root / "output" / "phase11" / "reports"
+        / "CCCD_OCR_HO_V2_014_DEVELOPMENT_COMPARISON.json"
+    ).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report["gates"], ensure_ascii=False))
@@ -264,7 +285,9 @@ def main() -> int:
 
 def sealed_digest(payload: dict[str, Any]) -> str:
     unsigned = {key: value for key, value in payload.items() if key != "manifestSha256"}
-    encoded = json.dumps(unsigned, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    encoded = json.dumps(
+        unsigned, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 

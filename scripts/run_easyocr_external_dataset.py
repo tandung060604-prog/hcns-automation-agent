@@ -55,7 +55,11 @@ def main() -> int:
     options.output.parent.mkdir(parents=True, exist_ok=True)
     options.output.write_text(
         json.dumps(
-            {"schemaVersion": "external-dataset-easyocr-pages/1.0.0", "engine": "easyocr/vi+en", "pages": pages},
+            {
+                "schemaVersion": "external-dataset-easyocr-pages/1.0.0",
+                "engine": "easyocr/vi+en",
+                "pages": pages,
+            },
             ensure_ascii=False,
         )
         + "\n",

@@ -6,9 +6,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from datetime import datetime, timezone
-from pathlib import Path
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 API = ROOT / "apps" / "ocr_lab" / "api"
@@ -71,7 +70,9 @@ def main() -> int:
                 "status": "SEALED",
                 "reviewStatus": "CONFIRMED",
                 "sha256": gt_sha256,
-                "fieldCount": sum(len(case.get("fields", [])) for case in ground_truth.get("cases", [])),
+                "fieldCount": sum(
+                    len(case.get("fields", [])) for case in ground_truth.get("cases", [])
+                ),
             },
             "prediction": {
                 "sha256": _sha256(args.prediction),

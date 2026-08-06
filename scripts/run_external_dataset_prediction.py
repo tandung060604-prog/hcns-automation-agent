@@ -51,7 +51,9 @@ def _paddle() -> object:
 
 
 class _MappedEasyOcr:
-    def __init__(self, pages: dict[str, dict[str, object]], engine_name: str = "easyocr/vi+en") -> None:
+    def __init__(
+        self, pages: dict[str, dict[str, object]], engine_name: str = "easyocr/vi+en"
+    ) -> None:
         self.pages = pages
         self.engine_name = engine_name
 
@@ -79,7 +81,9 @@ def _easyocr_pages(
     for record in inventory.get("cases", []):
         category = str(record.get("category", ""))
         source_format = str(record.get("sourceFormat", ""))
-        if category not in ACTIVE_CATEGORIES or source_format in OUT_OF_SCOPE_REVIEW_FORMATS.get(category, frozenset()):
+        if category not in ACTIVE_CATEGORIES or source_format in OUT_OF_SCOPE_REVIEW_FORMATS.get(
+            category, frozenset()
+        ):
             continue
         if source_format not in {"IMAGE", "PDF_SCAN"} and not (
             category == "ielts" and record.get("embeddedImageReview")
