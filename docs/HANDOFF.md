@@ -3,9 +3,30 @@
 ## Repository context
 
 - Repository: `D:\AI Vin Thực Chiến\Side Project\PaddleOCR\hcns-automation-agent`
-- Branch: `codex/m1-m2-document-understanding`
+- Branch: `codex/ocr-ho-v2-014-localhost`
+- HEAD: `643a9fe31c0f62b71dae17d15bacd0eddf9a8d22`
 - Routing: [docs/README.md](README.md)
 - Acceptance criteria: [docs/BACKLOG.md](BACKLOG.md)
+
+## Current checkpoint (2026-08-06)
+
+- Checkpoint task: `LONGRUN-MAINT-001` is complete.
+- Branch and HEAD above are verified from the nested repository; the earlier
+  `codex/m1-m2-document-understanding` label was stale metadata.
+- Product WIP is intentionally preserved: OCR-HO/DATA-16 API, web, scripts,
+  application policy and tests remain uncommitted on this branch.
+- Current product status is development `HOLD`; OCR image/scan outputs remain
+  `MANUAL_REVIEW`, with no production promotion or real side effect.
+- New maintenance files are `scripts/validate_longrun_state.py` and
+  `docs/archive/PROJECT_STATE_HISTORY_2026-08-06.md`.
+- Validation: `python scripts/validate_longrun_state.py` PASS,
+  `python -m compileall -q scripts/validate_longrun_state.py` PASS,
+  `.venv\\Scripts\\ruff.exe check scripts/validate_longrun_state.py` PASS, and
+  `git diff --check` PASS with line-ending warnings only.
+- `scripts/check_repository.py` remains a pre-existing FAIL because untracked
+  `data/private` exists; no tracked private files were found and it was not changed.
+- Next READY task: `M5-CAM-001`; read its runbook and complete approval gates
+  before any cohort or deployment action.
 
 ## Active workstreams
 
@@ -721,9 +742,8 @@
 
 ### DATA-13 - OCR scope allowlist (DONE, HOLD)
 
-- OCR is allowlisted to CCCD and certificates for image/PDF-scan inputs.
-  Native DOCX/PDF text for CV, contract and HCNS forms stays parser-only;
-  unsupported scans return `OCR_DISABLED_BY_POLICY` before OCR invocation.
+- The original DATA-13 evaluate-once artifact remains immutable and records the
+  previous CCCD/certificate-only policy. It must not be reopened.
 - Evaluate-once result: 20 total / 11 evaluated / 9 excluded, 26/96 exact,
   59/96 present, schema errors 0, false `AUTO_CONTINUE=0`, decision `HOLD`.
   Private prediction/report/marker files are under `C:\tmp` and were not added
@@ -731,6 +751,104 @@
 - Local handoff: select `DATA-13 · OCR SCOPE` at
   `http://localhost:3000/workspace`; excluded cases show
   `UNSUPPORTED_NO_OCR · khong tinh metric`.
+
+### DATA-14 - Shared family parser recovery (DONE/DEV HOLD)
+
+- Visual OCR scope now includes CV, employment contract, contract appendix and
+  HR decision; every OCR result remains `MANUAL_REVIEW`.
+- External prediction mapping reuses Phase 17 bounded-label/section helpers and
+  emits `extractor`, `method`, `sourceSpan` and `reviewReason` provenance.
+- Validation: full Python suite 316 passed; touched Ruff and source mypy passed;
+  API `/health` is `ok` on loopback. No Ground Truth or evaluate-once artifact
+  was changed.
+- The bounded development-only prediction split is recorded in DATA-15 below.
+
+### DATA-15-PREDICTION-INSPECTOR - Prediction-only localhost (DONE/DEV HOLD)
+
+- The user did not provide Ground Truth. The 41.96% value in DATA-15 is a
+  provisional local source-reviewed annotation, not an authoritative accuracy
+  result.
+- `http://localhost:3000/workspace` → `DATA-13 · OCR scope` serves the 12-file
+  prediction artifact with `PREDICTION_READY`, `Field exact=—` and a visible
+  prediction-only warning. Each field exposes status, method, source span/bbox
+  and review reason.
+- The old DATA-13 evaluate-once marker was not reopened or modified. Confirm
+  or correct Ground Truth first, then run a new development aggregate.
+
+### DATA-15-GT-REVIEW - Official Ground Truth input (READY/DRAFT)
+
+- A fresh prediction-blind draft is configured at
+  `C:\tmp\bo10-official-ground-truth-draft-20260805.json`: 12 documents, 112
+  fields, all pending and empty. It is separate from the provisional
+  source-reviewed file and from the DATA-13 prediction artifact.
+- Use `http://localhost:3000/workspace` → `DATA-08 · 4 contract case review`.
+  The panel now exposes source preview, field inputs, absent/unreadable
+  checkboxes, per-case confirmation, and final SEALED. No benchmark has run.
+- Current state is `DRAFT`, `0/112` confirmed, `canLock=false`. Do not click
+  SEALED until all values have been checked against the original documents.
+
+### DATA-15-GT-SEALED - Official Ground Truth locked (READY FOR DEV AGGREGATE)
+
+- GroundTruth is now `SEALED`/`CONFIRMED`: 12 documents and 112/112 fields.
+- Seal metadata is private at
+  `C:\tmp\bo10-official-ground-truth-draft-20260805-SEALED.json` with
+  `predictionsOpened=false`.
+- No benchmark has run yet. Next action is a separate development aggregate;
+  never modify or reopen the sealed GroundTruth.
+
+### DATA-15-DEV-AGGREGATE - Official development comparison (DONE / HOLD)
+
+- The sealed GroundTruth and DATA-13 prediction artifact were compared once in
+  a separate private development report. The old evaluate-once artifact was
+  not touched.
+- Strict exact: `30/112` (`26.79%`); accepted long-text policy (case-insensitive
+  and at least 80% token coverage): `43/112` (`38.39%`). Classification `11/12`,
+  schema errors `0`; Contract `16/42`, CV `27/50`, IELTS `0/20` accepted.
+- Report/marker are
+  `C:\tmp\bo10-dev-aggregate-comparison-official-20260806.json` and
+  `C:\tmp\bo10-dev-aggregate-comparison-official-20260806.marker.json`.
+  DATA-13 localhost is now `DEVELOPMENT_EVALUATED` and exposes per-field
+  GroundTruth/prediction/evidence. Promotion remains `HOLD`.
+
+### DATA-16-PARSER-V2 - Contract/CV parser rerun (DONE / DEV HOLD)
+
+- Native fixes are in `apps/ocr_lab/api/phase15_idp.py` and
+  `apps/ocr_lab/api/external_dataset_prediction.py`: section-aware CV parsing,
+  multi-column header/contact handling, Contract narrative/multiline labels,
+  Vietnamese dates and schedule-derived weekly hours.
+- Fresh private artifacts:
+  `C:\tmp\bo10-dev-predictions-data13-parser-v2-20260806.json`,
+  `C:\tmp\bo10-dev-aggregate-comparison-parser-v2-20260806.json`, and marker.
+  Strict `69/112` (`61.61%`), accepted text `82/112` (`73.21%`), Contract
+  `40/42`, CV `42/50`, IELTS `0/20`, classification `11/12`, schema errors `0`.
+  Decision remains `HOLD`.
+- API `127.0.0.1:8765` and localhost DATA-13 are connected to parser-v2; the
+  visible tab shows both metrics and field-level GroundTruth/prediction/evidence.
+
+Next READY action: improve certificate and scanned-CV OCR while keeping scan/
+image results manual-review-only; preserve sealed GT and evaluate-once.
+
+### DATA-15 - User bundle development benchmark (DONE/DEV HOLD)
+
+- The 12-file bundle from `D:\bo_10_file_contract_cv_ielts_v2` was copied to a
+  new private staging root and inventoried without changing the existing DATA-13
+  root, Ground Truth or evaluate-once marker.
+- PaddleOCR local prediction completed for all 12 documents. Independent
+  source review confirmed and sealed 112 Ground Truth fields with
+  `predictionsOpened=false`. The separate development aggregate comparison
+  scored 47/112 exact (41.96%): Contract 30/42, CV 17/50, IELTS 0/20;
+  classification agreement was 11/12 and schema errors were 0.
+- Diagnostics: `PARSER_MISSED=13`,
+  `OCR_RECOGNIZED_PARSER_MISSED=9`, `OCR_NOT_RECOGNIZED=23`; OCR remains
+  manual-review-only and false `AUTO_CONTINUE=0`. Decision is `HOLD`.
+- Private artifacts: `C:\tmp\bo10-dev-split-20260805.json`,
+  `C:\tmp\bo10-dev-predictions-data13-private-20260805.json`,
+  `C:\tmp\bo10-dev-ground-truth-draft-20260805.json`,
+  `C:\tmp\bo10-dev-ground-truth-draft-20260805-SEALED.json`, and
+  `C:\tmp\bo10-dev-aggregate-comparison-20260805.json`.
+- Next READY action: fix IELTS OCR/layout and contract/CV label mapping using
+  these field diagnostics, then create a fresh held-out split. Do not reopen
+  the consumed DATA-13 evaluate-once artifact.
 
 ### LOCAL-SCOPE-001 - Mentor-safe localhost (DONE)
 

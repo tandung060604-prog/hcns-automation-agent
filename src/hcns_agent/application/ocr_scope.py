@@ -6,15 +6,24 @@ from hcns_agent.domain.documents import DocumentType, SourceFormat
 
 OCR_ALLOWED_DOCUMENT_TYPES = frozenset(
     {
+        DocumentType.CV,
         DocumentType.IDENTITY_CARD,
+        DocumentType.EMPLOYMENT_CONTRACT,
+        DocumentType.CONTRACT_APPENDIX,
+        DocumentType.HR_DECISION,
         DocumentType.CERTIFICATE,
     }
 )
 OCR_SCAN_FORMATS = frozenset({SourceFormat.IMAGE, SourceFormat.PDF_SCAN})
 
 _ALIASES = {
+    "CV": DocumentType.CV,
     "IDENTITY_DOCUMENT": DocumentType.IDENTITY_CARD,
     "IDENTITY_CARD": DocumentType.IDENTITY_CARD,
+    "EMPLOYMENT_CONTRACT": DocumentType.EMPLOYMENT_CONTRACT,
+    "CONTRACT": DocumentType.EMPLOYMENT_CONTRACT,
+    "CONTRACT_DECISION": DocumentType.HR_DECISION,
+    "HR_DECISION": DocumentType.HR_DECISION,
     "CERTIFICATE": DocumentType.CERTIFICATE,
 }
 

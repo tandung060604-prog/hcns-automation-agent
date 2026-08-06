@@ -18,14 +18,19 @@ from phase11_8_shadow_uat import _session_records  # noqa: E402
 
 
 def digest(payload: dict[str, Any]) -> str:
-    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    encoded = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-root", type=Path, required=True)
-    parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument(
+        "--output", type=Path, default=None,
+        help="Private output path; defaults to the archive root seal marker.",
+    )
     args = parser.parse_args()
     root = args.data_root.resolve()
     output = (args.output or root / "OCR_HO_V2_014_GT_SEALED_PRIVATE.json").resolve()
@@ -62,6 +67,9 @@ def main() -> int:
             if any(not isinstance(line_id, int) or line_id < 0 or line_id >= line_count for line_id in line_ids):
                 raise SystemExit(f"Invalid line ID {record['documentId']}:{name}")
             fields[name] = {"value": value, "lineIds": line_ids}
+            # recognizedBoxes are indexed; keep this validation independent of OCR text.
+            if any(line_id >= line_count for line_id in line_ids):
+                raise SystemExit(f"Line ID out of range {record['documentId']}:{name}")
         documents.append({
             "documentIndex": index,
             "documentId": record["documentId"],
@@ -79,17 +87,29 @@ def main() -> int:
         "sealed": True,
         "immutable": True,
         "sealedAt": datetime.now(timezone.utc).isoformat(),
-        "documentCount": 15,
-        "fieldCount": 45,
+        "documentCount": len(documents),
+        "fieldCount": sum(len(item["fields"]) for item in documents),
         "documents": documents,
     }
     manifest_sha = digest(payload)
     payload["manifestSha256"] = manifest_sha
+    if output.is_file():
+        existing = json.loads(output.read_text(encoding="utf-8"))
+        if existing.get("manifestSha256") != manifest_sha:
+            raise SystemExit("Sealed manifest already exists with a different digest")
+        print(json.dumps({"status": "ALREADY_SEALED", "manifestSha256": manifest_sha}))
+        return 0
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_name(f".{output.name}.tmp")
     temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     temporary.replace(output)
-    print(json.dumps({"status": "SEALED", "documentCount": 15, "fieldCount": 45, "manifestSha256": manifest_sha}))
+    print(json.dumps({
+        "status": "SEALED",
+        "documentCount": len(documents),
+        "fieldCount": payload["fieldCount"],
+        "manifestSha256": manifest_sha,
+        "output": str(output),
+    }, ensure_ascii=False))
     return 0
 
 

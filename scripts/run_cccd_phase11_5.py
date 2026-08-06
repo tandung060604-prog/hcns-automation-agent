@@ -226,7 +226,9 @@ def prepare(
                 selected = []
                 for line_id in line_ids:
                     if not isinstance(line_id, int) or not 0 <= line_id < len(boxes):
-                        raise ValueError(f"Invalid confirmed line ID {session_id}:{field_name}:{line_id}")
+                        raise ValueError(
+                            f"Invalid confirmed line ID {session_id}:{field_name}:{line_id}"
+                        )
                     selected.append({"lineId": line_id, "box": boxes[line_id]})
                 regions[field_name]["lineBboxes"] = [
                     phase_module._trim_line_top(item, all_lines)

@@ -66,9 +66,9 @@ def summary(root: Path) -> dict[str, Any]:
     sealed_digest = None
     if sealed:
         with suppress(OSError, json.JSONDecodeError):
-            sealed_digest = json.loads(_sealed_path(root).read_text(encoding="utf-8")).get(
-                "manifestSha256"
-            )
+            sealed_digest = json.loads(
+                _sealed_path(root).read_text(encoding="utf-8")
+            ).get("manifestSha256")
     reviewed = {
         document_id
         for document_id, review in store["documents"].items()
