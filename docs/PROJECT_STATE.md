@@ -1,60 +1,65 @@
 # Project State
 
-Current milestone: DATA-17 OCR hybrid development checkpoint 2026-08-06; `M5-CAM-001` READY
+Current milestone: OCR-HO-V2-017A CCCD secondary-runtime preflight checkpoint 2026-08-06; `DATA-20` DONE / HOLD
 Documentation profile: Standard (`PROJECT_STATE.md`, `BACKLOG.md`, `HANDOFF.md`)
 
-Checkpoint task: `LONGRUN-MAINT-001` DONE. Product WIP is preserved; no reset, stash,
-cleanup, commit, or push was performed by this maintenance task.
-
+Checkpoint task: `OCR-HO-V2-017A` completed; runtime restored/verified, CCCD development gate HOLD.
 Repository:
-- Branch: `codex/ocr-ho-v2-014-seal-evaluate`
-- HEAD: `d566c78` (`docs: publish DATA-17 OCR hybrid status`)
-- Local changes remain in the OCR-HO/DATA-16 workstream and are recorded in `HANDOFF.md`.
-
-Completed capability:
-- Template-first leave/overtime intake with native DOCX/PDF parsing and local OCR routing.
-- Canonical document, schema validation, provenance, quality routing and manual review.
-- Localhost evidence UI, private result references and Camunda 7 shadow workflow.
-- Correction/re-upload, audit, idempotency and aggregate-only evaluation safeguards.
+- Branch: `codex/data-18-cv-scan-recovery`
+- HEAD: `13aa284`; unrelated OCR-HO WIP preserved.
 
 Evidence summary:
-- Native DOCX/PDF: 90/90 required fields, 0 schema errors.
-- Template OCR: image 48/54 and scan PDF 45/54; all cases manual review; false
-  `AUTO_CONTINUE` count 0.
-- DATA-17 hybrid local OCR development run: 90/112 strict exact (80.36%),
-  104/112 accepted text (92.86%), classification 12/12, schema errors 0;
-  promotion remains `HOLD`.
-- Family rates: Contract 40/42 strict (95.24%), CV 30/50 strict and 44/50
-  accepted (88%), IELTS 20/20 (100%).
-- M4 Camunda dry-run: 10/10 scenarios; real side effects disabled.
+- DATA-19 fresh aggregate: strict `90/112`, semantic `92/112`, accepted `105/112`;
+  Contract `40/42` strict / `42/42` semantic, CV `30/50` strict/`45/50` accepted,
+  IELTS `20/20`, classification `12/12`, schema `0`.
+- Party extraction is bounded to `Bên A`/`Bên B`; fallback strips person prefix/role suffix
+  while preserving source characters. Scan remains `MANUAL_REVIEW`-only: 5/5, false auto `0`.
+- GroundTruth and old evaluate-once are unchanged; all reports/predictions remain private.
+- DATA-20 gate aggregate v4: strict `90/112`, semantic `92/112`, applicable completeness
+  `99/99`, sensitive false acceptance `0`, parser-correct regressions `0`, schema `0`,
+  classification `12/12`, scan strict `27/30`, scan manual-review `5/5`; strict CV family
+  gate and fallback scan `+10pp` gate remain HOLD. Gate report is private and aggregate-only.
+- DATA-20 artifacts: `C:\tmp\bo10-dev-aggregate-data20-regression-gates-v4.json`,
+  `C:\tmp\bo10-dev-data20-gate-report-v4.json` and their markers; evaluate-once untouched.
 
-Safety and limits:
-- Local/loopback processing only; no real HRIS, notification or production promotion.
-- Private documents, Ground Truth, raw OCR and model weights stay outside Git.
-- Image/scan OCR remains `MANUAL_REVIEW`-only: 5/5 scanned documents reviewed,
-  0 false auto-continue and 0 `UNSUPPORTED_NO_OCR` under `all-active-families`.
-- DATA-17 is a development-only aggregate; `evaluateOnceArtifactTouched=false`
-  and `promotionAllowed=false`. The sealed 112-field GroundTruth is unchanged.
+## DATA-21 - PaddleOCR-VL local benchmark (DONE / HOLD)
 
-Next READY task: `M5-CAM-001` (after DATA-17 OCR review).
-Next action: read `docs/CAMUNDA_M5_SHADOW_PILOT_RUNBOOK.md`, complete its gates, then
-run only the documented preflight; do not start a cohort before approval.
+- The private runner and synthetic coverage are implemented. The public pin
+  `PaddleOCR-VL-1.6` resolves in PaddleOCR 3.7 to runtime model
+  `PaddleOCR-VL-1.6-0.9B`; model/package/runtime hashes are recorded privately.
+- CPU-first initialization downloaded the 1.93 GB model tree but exceeded the
+  local initialization budget before the first scan completed. This is a runtime
+  HOLD, not a quality PASS; no fallback or promotion was enabled.
+- Private aggregate-only report/marker:
+  `C:\tmp\bo10-data21-paddleocr-vl-benchmark-report-v5.json` and
+  `C:\tmp\bo10-data21-paddleocr-vl.marker-v5.json` (`processedCount=0`,
+  `failureRate=1.0`, `promotionAllowed=false`, `evaluateOnceArtifactTouched=false`).
+  Raw model/runtime cache remains outside Git.
+- Approved rerun used a 600-second CPU window with the same private cache. GPU was
+  unavailable because the installed Paddle wheel is CPU-only; the native worker
+  exited `1` after weight load before pipeline initialization. Rerun report/marker:
+  `C:\tmp\bo10-data21-paddleocr-vl-benchmark-report-v8.json` and
+  `C:\tmp\bo10-data21-paddleocr-vl.marker-v8.json`; quality metrics remain `null`.
+- DATA-22 remains BLOCKED by approved source rights/retention and the minimum
+  corpus; no held-out split or evaluate-once was opened.
 
-Validation:
-- `python scripts/validate_longrun_state.py`: PASS.
-- `python -m compileall -q scripts/validate_longrun_state.py`: PASS.
-- `.venv\\Scripts\\ruff.exe check scripts/validate_longrun_state.py`: PASS.
-- `git diff --check`: PASS; Git emitted line-ending warnings only.
-- `scripts/check_repository.py`: FAIL on pre-existing untracked `data/private`;
-  no tracked private files were found and the directory was not changed.
+OCR-HO-V2-017A evidence: private runtime `C:\Camunda\private-data\paddleocr-hr-baseline\runtime`,
+EasyOCR `1.7.2`, VietOCR `0.3.13`, CPU Torch; 6/6 model locks pass. Single-doc smoke:
+16 crops, all 3 secondary profiles, runtime-only warnings. Artifact:
+`C:\tmp\ocr-ho-v2-017a-preflight-20260806\preflight.log` plus private outputs; no source/primary change.
+Next action: keep CCCD shadow/manual-review-only; no held-out/evaluate-once.
+Next READY task: `OCR-HO-V2-017B` full 15/120 replay with restored secondary runtime.
 
-Archive: `docs/archive/PROJECT_STATE_HISTORY_2026-08-06.md` preserves the prior
-milestone evidence and status history.
+Validation: targeted pytest `27 passed`; selected Ruff, compileall, `git diff --check` and
+`scripts/validate_longrun_state.py` passed. Full-file Ruff retains baseline findings outside DATA-20.
+Archive: `docs/archive/PROJECT_STATE_HISTORY_2026-08-06.md` preserves prior evidence.
 
-First command after resume:
+## OCR-HO-V2-015/015A - 016A-R1/016B (DONE / HOLD)
 
-```powershell
-Set-Location "D:\AI Vin Thực Chiến\Side Project\PaddleOCR\hcns-automation-agent"
-python scripts/validate_longrun_state.py
-git status --short --branch
-```
+- Sealed 15/120 diagnostics remain shadow-only: detector misses `0`, boundary
+  misses fullName `7/15`, origin `6/15`, residence `13/15`; snapshot drift persists.
+- 016A/016B parser-only candidates preserve manual review but remain below gates:
+  AUTO exact `60.00%`, DER `14.62%`, presence `95.83%`, one exact regression;
+  oracle ROI is `100%` but does not authorize promotion or held-out evaluation.
+- Detailed replay artifacts remain in the private archive; no primary runtime or
+  GroundTruth/evaluate-once artifact was changed.

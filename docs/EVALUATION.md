@@ -33,6 +33,21 @@ aggregate-only, luôn `promotionAllowed=false` và không được gọi là acc
 benchmark. Mapping folder/type là nhãn vận hành tạm thời, không thay thế review
 Ground Truth.
 
+### DATA-21 — PaddleOCR-VL local benchmark
+
+`scripts/run_paddleocr_vl_external_dataset.py` runs pinned PaddleOCR-VL-1.6 through
+the `native` backend in an isolated private runtime, CPU-first, over the fixed
+development scan subset (`IMAGE`/`PDF_SCAN`). PaddleOCR 3.7 registers the pinned
+public name as runtime model `PaddleOCR-VL-1.6-0.9B`; both names are recorded in
+the manifest. It records package/model versions,
+runtime-tree SHA-256, latency p50/p95, failure rate and peak memory in an
+aggregate-only report; raw Markdown/JSON and predictions stay outside Git.
+
+Scans always remain `MANUAL_REVIEW`; `fallbackEnabled=false` and
+`promotionAllowed=false`. Quality metrics are scored separately by the development
+aggregate; benchmark confidence never replaces strict EM and never opens
+held-out/evaluate-once.
+
 ## Metrics
 
 - OCR: CER, WER, reading-order accuracy.

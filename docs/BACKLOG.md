@@ -19,6 +19,13 @@
 | OCR-HO-V2-002 | DONE | Review Ground Truth độc lập, loại ảnh mặt sau, khóa queue và evaluate đúng một lần trên 14 ảnh | OCR-HO-V2-001 | P0 |
 | OCR-HO-V2-003 | DONE | Local inspector đối chiếu Ground Truth và output Phase 11.5/11.6 sau evaluate-once | OCR-HO-V2-002 | P1 |
 | OCR-HO-V2-004 | REVIEW | OCR-HO v1.1 fixed-0° parser boundary fixes; development regression gate failed, so not promoted | OCR-HO-V2-003 | P0 |
+
+| OCR-HO-V2-015 | DONE / HOLD | Canonical CCCD 15-document/120-field diagnostic; snapshot mismatch and automatic ROI misses keep promotion and held-out blocked | OCR-HO-V2-014 | P0 |
+| OCR-HO-V2-016A | DONE / HOLD | Kept residence anchor value lines with one boundary rule; fresh 15/120 AUTO_DETECTOR replay remains below ROI/exact/DER gates | OCR-HO-V2-015A | P0 |
+| OCR-HO-V2-016A-R1 | DONE / HOLD | Independent sealed-line oracle diagnostic; oracle ROI 100%, parser contamination is the provisional 016B layer but exact/DER remain below gate | OCR-HO-V2-016A | P0 |
+| OCR-HO-V2-016B | DONE / HOLD | Parser-only candidate 11.10.2 replayed; exact regression remains 1 and DER 14.62%, so no next layer or promotion | OCR-HO-V2-016A-R1 | P0 |
+| OCR-HO-V2-017A | DONE / HOLD | Restored and lock-verified the existing private EasyOCR/VietOCR runtime; single-document smoke passed without changing primary runtime | OCR-HO-V2-016B | P0 |
+| OCR-HO-V2-017B | READY | Full 15-document/120-field development replay using the restored secondary runtime; keep shadow/manual-review-only and do not open held-out | OCR-HO-V2-017A | P0 |
 | TF-P1-001 | DONE | Template-first cho đơn nghỉ phép và tăng ca DOCX | 14 mẫu synthetic local | P0 |
 | TF-P1-002 | DONE | Commit/push Template-first, chạy API local và live smoke hai DOCX gốc | TF-P1-001 | P0 |
 | TF-P1-003 | DONE | Tích hợp Template-first vào OCR Lab localhost và hiển thị kết quả trích xuất | TF-P1-002 | P0 |
@@ -42,7 +49,7 @@
 | M4-CAM-004 | DONE | Deploy BPMN/DMN và smoke hai loại tài liệu trên Camunda 7.13 local | M4-CAM-003, môi trường/quyền deploy | P1 |
 | M4-CAM-005 | DONE | Hoàn thiện User Task, correction/re-upload loop, revalidation và reviewer audit | M4-CAM-004 | P1 |
 | M4-CAM-006 | DONE | Dry-run 10/10 scenario; approve shadow pilot có điều kiện, giữ shadow routing và side effect giả lập | M4-CAM-005 | P1 |
-| M5-CAM-001 | READY | Mở closed set đúng sáu loại, thêm bốn template review-first, gỡ Timesheet, giữ shadow-only và gate business/privacy/rollback | M4-CAM-006 | P0 |
+| M5-CAM-001 | PARKED | Camunda pilot ngoài scope DATA-17/18; giữ shadow-only và chờ workstream riêng | M4-CAM-006 | P1 |
 | M5-CAM-002 | PLANNED | Hoàn tất Ground Truth/cohort được cấp quyền cho CV, IELTS, probation contract và CCCD mặt trước; evaluate-once aggregate-only | M5-CAM-001 | P0 |
 | DATA-00 | DONE | Pin external source, isolate staging and reconcile dataset workstream | User-directed dataset commit | P0 |
 | DATA-01 | DONE (PUBLIC TEST PROFILE) | Record explicit public/synthetic classification; keep unknown/private sources fail-closed | DATA-00 | P0 |
@@ -59,6 +66,13 @@
 | DATA-10-R1 | DONE (APPROVED, READ-ONLY) | Freeze the DATA-09-R1 typed projection for read-only downstream use; keep promotion disabled | DATA-09-R1 | P0 |
 | DATA-11 | DONE (READ-ONLY) | Expose approved typed projection through loopback GET-only API and JSON/CSV export | DATA-10 | P0 |
 | DATA-12 | DONE (HOLD) | Generate private predictions for active CV/IELTS/contract inputs and evaluate one aggregate-only prediction-vs-Ground-Truth report on localhost | DATA-10-R1 | P0 |
+| DATA-18-CV-SCAN-RECOVERY | DONE (DEV HOLD) | Geometry-aware CV scan section recovery; keep scan manual-review-only and preserve schema/API | DATA-17 | P0 |
+| DATA-19-CONTRACT-SEMANTIC-NORMALIZATION | DONE (DEV HOLD) | Normalize employer representative by party boundary without name lexicon or GroundTruth lookup | DATA-18-CV-SCAN-RECOVERY | P0 |
+| DATA-20-REGRESSION-AND-GATE-HARNESS | DONE (DEV HOLD) | Add additive completeness/safety/regression gates and fallback +10pp measurement | DATA-19-CONTRACT-SEMANTIC-NORMALIZATION | P0 |
+| DATA-21-PADDLEOCR-VL-LOCAL-BENCHMARK | DONE (LOCAL HOLD) | Benchmark PaddleOCR-VL locally, CPU-first, with fallback disabled unless gates pass | DATA-20-REGRESSION-AND-GATE-HARNESS | P1 |
+| DATA-22-CORPUS-EXPANSION | BLOCKED | Reach 30 development and 10 held-out documents per family with rights/lineage | DATA-21-PADDLEOCR-VL-LOCAL-BENCHMARK | P0 |
+| DATA-23-PREDICTION-BLIND-HELDOUT-SEAL | BLOCKED | Seal prediction-blind held-out split and independent GroundTruth locks | DATA-22-CORPUS-EXPANSION | P0 |
+| DATA-24-HELDOUT-EVALUATE-ONCE | BLOCKED | Run one immutable held-out evaluation only after DATA-23 lock and approval | DATA-23-PREDICTION-BLIND-HELDOUT-SEAL | P0 |
 
 ## DATA-00..DATA-05 acceptance criteria
 
@@ -562,3 +576,70 @@ confirm every field, then SEALED. Benchmark remains intentionally unrun.
   `C:\tmp\bo10-dev-aggregate-comparison-ocr-v7-20260806.json` and marker.
   `evaluateOnceArtifactTouched=false`; promotion is disabled. Remaining work
   is CV narrative OCR coverage and the Contract representative-name subset.
+
+### DATA-18-CV-SCAN-RECOVERY - DONE / DEV HOLD (2026-08-06)
+
+- Added geometry-aware OCR extraction for CV `education`, `experience` and
+  `skills`, using page bbox/column bounds and same-line grouping. Existing family
+  parsing remains the fallback when geometry is unavailable; schema/API/native
+  parser and OCR engine are unchanged.
+- Added a synthetic two-column/interleaved-heading regression in
+  `tests/test_external_dataset_prediction.py`. Scan outputs remain
+  `MANUAL_REVIEW`; no confidence-based fallback promotion was introduced.
+- Fresh v2 development aggregate: strict `90/112`, accepted `105/112`, Contract
+  `40/42`, CV `30/50` strict / `45/50` accepted, IELTS `20/20`, classification
+  `12/12`, schema errors `0`, raw presence `99/112`. Accepted text remains
+  additive and does not replace strict EM; the CV strict gate remains HOLD.
+- Private artifacts: `C:\tmp\bo10-dev-predictions-data18-cv-recovery-v2.json`,
+  `C:\tmp\bo10-dev-aggregate-data18-cv-recovery-v2.json` and its marker. The
+  sealed GroundTruth and historical evaluate-once artifact were not modified.
+- Validation: targeted pytest `21 passed`; compileall passed; new Ruff import/
+  closure checks passed; full-file Ruff has 14 pre-existing findings.
+- Next READY task: `DATA-19-CONTRACT-SEMANTIC-NORMALIZATION`; later regression,
+  benchmark, corpus, held-out and evaluate-once tasks remain sequential/gated.
+
+### DATA-19-CONTRACT-SEMANTIC-NORMALIZATION - DONE / DEV HOLD (2026-08-06)
+
+- Added party-bounded Contract extraction: representative is searched only in
+  `Bên A`, employee name only in `Bên B`; missing explicit labels use the same
+  bounded party slice rather than a whole-document fallback.
+- Person fallback normalization removes `Ông`/`Bà` and trailing role/gender/date
+  labels while preserving source characters. No name lexicon, GroundTruth lookup,
+  schema/API change, confidence promotion, or scan policy change was added.
+- Added synthetic regressions for interleaved parties and fallback labels. Fresh
+  development aggregate remains strict `90/112`, accepted `105/112`, Contract
+  `40/42`, CV `30/50` strict / `45/50` accepted, IELTS `20/20`, classification
+  `12/12`, schema errors `0`, scan manual-review `5/5`, false auto `0`.
+- Added an evaluator-only, symmetric semantic metric for Contract
+  `employee_name` and `employer_representative`: leading honorifics, role suffixes
+  and casing are normalized on both prediction and sealed GroundTruth. Raw strict
+  EM remains unchanged and remains the gate metric; semantic Contract is `42/42`
+  and overall semantic is `92/112`.
+- Fresh semantic aggregate remains `HOLD` because raw strict is `90/112` overall
+  and `40/42` for Contract; accepted text remains a separate metric.
+- Private artifacts: `C:\tmp\bo10-dev-predictions-data19-contract-normalization-v2.json`,
+  `C:\tmp\bo10-dev-aggregate-data19-contract-normalization-semantic-v2.json` and its marker.
+- Validation: targeted pytest `24 passed`; selected Ruff and compileall passed; no
+  GroundTruth/evaluate-once artifact was modified.
+- Next READY task: `DATA-20-REGRESSION-AND-GATE-HARNESS`; held-out/evaluate-once remain gated.
+
+### DATA-20-REGRESSION-AND-GATE-HARNESS - DONE / DEV HOLD (2026-08-06)
+
+- Added evaluator metrics `applicableFieldCount`, `applicableFieldPresenceCount`,
+  `applicableCompletenessRate`, `sensitiveFalseAcceptanceCount` and
+  `parserCorrectRegressionCount`; raw presence, accepted text and semantic metrics
+  remain separately reported.
+- Added deterministic gate harness for strict overall/per-family `>=80%`, applicable
+  completeness `>=95%`, classification `>=95%`, schema `0`, sensitive false
+  acceptance `0`, parser regression `0`, scan manual-review and fallback `+10pp`.
+- Fixed development comparison used DATA-18-v2 baseline and DATA-19-v2 candidate:
+  same set `12/12` and scan subset `5/5`, parser regressions `0`, applicable completeness
+  `99/99`, scan strict `27/30`, but strict CV is `30/50` and fallback scan improvement
+  is `0pp`; decision is `HOLD`.
+- Private artifacts: `C:\tmp\bo10-dev-aggregate-data20-regression-gates-v4.json`,
+  `C:\tmp\bo10-dev-data20-gate-report-v4.json` and their markers. No GroundTruth,
+  evaluate-once or production API/schema was changed.
+- Validation: targeted pytest `27 passed`; selected Ruff and compileall passed;
+  `scripts/validate_longrun_state.py` and `git diff --check` passed.
+- DATA-21 is implemented but held by the local CPU runtime initialization budget;
+  DATA-22 remains blocked pending approved corpus rights/retention and minimum counts.

@@ -25,10 +25,12 @@ try:
     )
     from .phase12_ingestion import ingest_document, ingest_image
     from .phase15_idp import (
+        _SECTION_HEADINGS,
         _bounded_labeled,
         _box_bounds,
         _credential_type,
         _field_after_marker,
+        _is_section_heading,
         _likely_person_name,
         _regex_field,
         classify_phase15_document,
@@ -42,10 +44,12 @@ except ImportError:  # Direct script execution used by the local OCR runner.
     )
     from phase12_ingestion import ingest_document, ingest_image
     from phase15_idp import (
+        _SECTION_HEADINGS,
         _bounded_labeled,
         _box_bounds,
         _credential_type,
         _field_after_marker,
+        _is_section_heading,
         _likely_person_name,
         _regex_field,
         classify_phase15_document,
@@ -73,6 +77,12 @@ SOFT_TEXT_FIELDS = frozenset(
     }
 )
 SOFT_TEXT_MIN_COVERAGE = 0.80
+SEMANTIC_PERSON_FIELDS = frozenset(
+    {
+        ("contract", "employee_name"),
+        ("contract", "employer_representative"),
+    }
+)
 
 
 class PredictionArtifactError(ValueError):
@@ -451,6 +461,164 @@ def _ocr_bbox(block: dict[str, Any]) -> tuple[float, float, float, float] | None
     return _box_bounds(evidence.get("bbox")) if isinstance(evidence, dict) else None
 
 
+def _same_cv_column(
+    box: tuple[float, float, float, float],
+    heading_box: tuple[float, float, float, float],
+    *,
+    heading_full_width: bool,
+    page_width: float,
+) -> bool:
+    if heading_full_width:
+        return True
+    bx0, _, bx1, _ = box
+    hx0, _, hx1, _ = heading_box
+    overlap = min(hx1, bx1) - max(hx0, bx0)
+    return overlap > 0 or abs(((bx0 + bx1) / 2) - ((hx0 + hx1) / 2)) <= max(
+        80.0, page_width * 0.18
+    )
+
+
+def _cv_section_bounds(
+    heading_box: tuple[float, float, float, float],
+    heading_full_width: bool,
+    nearby_headings: list[tuple[float, float, float, float]],
+    section_boxes: list[tuple[float, float, float, float]],
+    page_width: float,
+) -> tuple[float, float]:
+    if heading_full_width:
+        return 0.0, page_width
+    hx0, hy0, hx1, hy1 = heading_box
+    heading_center = (hx0 + hx1) / 2
+    left = 0.0
+    right = max((box[2] for box in section_boxes), default=page_width)
+    for other_box in nearby_headings:
+        other_center = (other_box[0] + other_box[2]) / 2
+        boundary = (heading_center + other_center) / 2
+        if other_center < heading_center:
+            left = max(left, boundary)
+        elif other_center > heading_center:
+            right = min(right, boundary)
+    return left, right
+
+
+def _cv_ocr_section(
+    canonical: dict[str, Any],
+    headings: tuple[str, ...],
+    *,
+    review: bool,
+    method: str,
+) -> dict[str, Any]:
+    """Extract one CV section from OCR geometry without trusting engine order."""
+
+    normalized_headings = tuple(_fold(item) for item in headings)
+    for page in canonical.get("pages", []):
+        blocks = [
+            block for block in page.get("blocks", []) if str(block.get("text") or "").strip()
+        ]
+        positioned = [(block, _ocr_bbox(block)) for block in blocks]
+        boxes = [box for _, box in positioned if box is not None]
+        if not boxes:
+            continue
+        page_width = max(box[2] for box in boxes)
+        for heading, heading_box in positioned:
+            if heading_box is None:
+                continue
+            heading_key = _fold(heading.get("text"))
+            if not any(
+                heading_key == item or heading_key.startswith(f"{item} ")
+                for item in normalized_headings
+            ):
+                continue
+            hx0, hy0, hx1, hy1 = heading_box
+            heading_full_width = hx1 - hx0 >= page_width * 0.6
+            heading_height = max(1.0, hy1 - hy0)
+            nearby_headings = [
+                other_box
+                for other, other_box in positioned
+                if other_box is not None
+                and other is not heading
+                and _is_section_heading(_fold(other.get("text")))
+                and abs(((other_box[1] + other_box[3]) / 2) - ((hy0 + hy1) / 2))
+                <= max(36.0, heading_height * 1.5)
+            ]
+
+            next_heading_y = min(
+                (
+                    other_box[1]
+                    for other, other_box in positioned
+                    if other_box is not None
+                    and other_box[1] > hy0
+                    and _same_cv_column(
+                        other_box,
+                        heading_box,
+                        heading_full_width=heading_full_width,
+                        page_width=page_width,
+                    )
+                    and any(
+                        _fold(other.get("text")) == item
+                        or _fold(other.get("text")).startswith(f"{item} ")
+                        for item in _SECTION_HEADINGS
+                    )
+                ),
+                default=None,
+            )
+            section_boxes = [
+                box
+                for _, box in positioned
+                if box is not None
+                and box[1] >= hy1 - 4
+                and (next_heading_y is None or box[1] < next_heading_y)
+            ]
+            left_bound, right_bound = _cv_section_bounds(
+                heading_box,
+                heading_full_width,
+                nearby_headings,
+                section_boxes,
+                page_width,
+            )
+            selected: list[tuple[tuple[float, float, float, float], dict[str, Any]]] = []
+            for block, box in positioned:
+                if box is None or block is heading:
+                    continue
+                if box[1] < hy1 - 4 or (next_heading_y is not None and box[1] >= next_heading_y):
+                    continue
+                if (
+                    box[2] > left_bound
+                    and box[0] < right_bound
+                    and not _is_section_heading(_fold(block.get("text")))
+                ):
+                    selected.append((box, block))
+            if selected:
+                median_height = sorted(
+                    box[3] - box[1] for box, _ in selected
+                )[len(selected) // 2]
+                line_tolerance = max(18.0, median_height * 0.65)
+                lines: list[list[tuple[tuple[float, float, float, float], dict[str, Any]]]] = []
+                for item in sorted(
+                    selected,
+                    key=lambda value: ((value[0][1] + value[0][3]) / 2, value[0][0]),
+                ):
+                    center_y = (item[0][1] + item[0][3]) / 2
+                    if lines:
+                        last_center = (lines[-1][-1][0][1] + lines[-1][-1][0][3]) / 2
+                        if center_y - last_center <= line_tolerance:
+                            lines[-1].append(item)
+                            continue
+                    lines.append([item])
+                selected = [
+                    item
+                    for line in lines
+                    for item in sorted(line, key=lambda value: value[0][0])
+                ]
+                return _field(
+                    "\n".join(str(block.get("text") or "").strip() for _, block in selected),
+                    method=method,
+                    block=selected[0][1],
+                    review=review,
+                )
+    return _field(None, method=method, block=None, review=review)
+
+
 def _ocr_value_after_label(
     blocks: list[dict[str, Any]],
     labels: tuple[str, ...],
@@ -645,6 +813,96 @@ def _narrative_label(
     return _field(None, method=method, block=None, review=review)
 
 
+def _contract_party_view(
+    canonical: dict[str, Any],
+    start_markers: tuple[str, ...],
+    end_markers: tuple[str, ...],
+) -> dict[str, Any]:
+    blocks = _canonical_blocks(canonical)
+    start_keys = tuple(_fold(marker) for marker in start_markers)
+    end_keys = tuple(_fold(marker) for marker in end_markers)
+
+    def starts_with_marker(text: str, markers: tuple[str, ...]) -> bool:
+        key = _fold(text)
+        return any(
+            key == marker
+            or re.match(rf"^{re.escape(marker)}(?:\s*[:\-–—]|\s|$)", key)
+            for marker in markers
+        )
+
+    start = next(
+        (
+            index
+            for index, block in enumerate(blocks)
+            if starts_with_marker(block.get("text", ""), start_keys)
+        ),
+        None,
+    )
+    if start is None:
+        return canonical
+    end = next(
+        (
+            index
+            for index, block in enumerate(blocks[start + 1 :], start + 1)
+            if starts_with_marker(block.get("text", ""), end_keys)
+        ),
+        len(blocks),
+    )
+    selected = blocks[start:end]
+    if not selected:
+        return canonical
+    return {
+        **canonical,
+        "plainText": "\n".join(str(block.get("text") or "") for block in selected),
+        "pages": [{"blocks": selected, "ocrBlocks": selected}],
+    }
+
+
+def _normalize_party_person(value: str) -> str:
+    value = re.sub(r"^(?:Ông|Bà|Ông/bà)\s+", "", value.strip(), flags=re.IGNORECASE)
+    value = re.split(
+        r"\s+(?:Chức vụ|Chức danh|Giới tính|Ngày sinh|CMND/CCCD số|CCCD số)"
+        r"\s*(?::|[-–—])?\s*",
+        value,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
+    return value.strip(" .;:-")
+
+
+def _contract_party_person(
+    canonical: dict[str, Any],
+    *,
+    start_markers: tuple[str, ...],
+    end_markers: tuple[str, ...],
+    narrative_pattern: str,
+    labels: tuple[str, ...],
+    stops: tuple[str, ...],
+    method: str,
+    fallback_method: str,
+    review: bool,
+) -> dict[str, Any]:
+    party = _contract_party_view(canonical, start_markers, end_markers)
+    result = _narrative_label(
+        party,
+        narrative_pattern,
+        method=method,
+        review=review,
+        normalizer=_normalize_party_person,
+        continue_lines=False,
+    )
+    if result["value"] is not None:
+        return result
+    return _bounded_external(
+        party,
+        labels,
+        stops=stops,
+        review=review,
+        method=fallback_method,
+        normalizer=_normalize_party_person,
+    )
+
+
 def _weekly_hours(canonical: dict[str, Any], *, review: bool) -> dict[str, Any]:
     for block in _canonical_blocks(canonical):
         text = str(block.get("text") or "")
@@ -756,6 +1014,12 @@ def _external_fields(
         if address["value"] is None:
             address = _cv_contact_address(canonical, review=ocr)
         education = direct("education")
+        if ocr:
+            geometry_education = _cv_ocr_section(
+                canonical, ("Học vấn",), review=ocr, method="cv_education_ocr_geometry"
+            )
+            if geometry_education["value"] is not None:
+                education = geometry_education
         if education["value"] is None:
             education = _from_phase_field(
                 extraction.get("fields", {}).get("education", {"value": None}),
@@ -763,6 +1027,15 @@ def _external_fields(
                 review=ocr,
             )
         experience = direct("experience")
+        if ocr:
+            geometry_experience = _cv_ocr_section(
+                canonical,
+                ("Kinh nghiệm làm việc", "Kinh nghiệm"),
+                review=ocr,
+                method="cv_experience_ocr_geometry",
+            )
+            if geometry_experience["value"] is not None:
+                experience = geometry_experience
         if experience["value"] is None:
             experience = _from_phase_field(
                 extraction.get("fields", {}).get("experience", {"value": None}),
@@ -770,6 +1043,12 @@ def _external_fields(
                 review=ocr,
             )
         skills = direct("skills")
+        if ocr:
+            geometry_skills = _cv_ocr_section(
+                canonical, ("Kỹ năng",), review=ocr, method="cv_skills_ocr_geometry"
+            )
+            if geometry_skills["value"] is not None:
+                skills = geometry_skills
         if skills["value"] is None:
             skills = _from_phase_field(
                 extraction.get("fields", {}).get("skills", {"value": None}),
@@ -888,36 +1167,35 @@ def _external_fields(
                 review=ocr,
                 method="employer_label",
             )
-        representative = _narrative_label(
+        representative = _contract_party_person(
             canonical,
-            r"Đại\s+diện\s+bởi\s*:\s*(?:Ông|Bà)\s+(.+?)(?=\s+Chức\s+vụ\s*:|$)",
+            start_markers=("Bên A", "Bên A: Người sử dụng lao động"),
+            end_markers=("Bên B", "Bên B: Người lao động"),
+            narrative_pattern=(
+                r"Đại\s+diện\s+(?:bởi|cho)\s*:\s*(?:Ông|Bà)\s+"
+                r"(.+?)(?=\s+Chức\s+vụ\s*(?::|[-–—])|"
+                r"\s+Chức\s+danh\s*(?::|[-–—])|$)"
+            ),
+            labels=("Đại diện bởi", "Đại diện cho", "Đại diện"),
+            stops=labels + ("Bên B", "Người lao động", "Họ và tên"),
             method="representative_name_label",
+            fallback_method="representative_label",
             review=ocr,
-            continue_lines=False,
         )
-        if representative["value"] is None:
-            representative = _bounded_external(
-                canonical,
-                ("Đại diện",),
-                stops=labels,
-                review=ocr,
-                method="representative_label",
-            )
-        employee = _narrative_label(
+        employee = _contract_party_person(
             canonical,
-            r"Họ\s+và\s+tên\s*:\s*(.+?)(?=\s+Giới\s+tính\s*:|$)",
+            start_markers=("Bên B", "Bên B: Người lao động"),
+            end_markers=("Hai bên thỏa thuận", "Điều 1"),
+            narrative_pattern=(
+                r"Họ\s+và\s+tên\s*:\s*(.+?)"
+                r"(?=\s+Giới\s+tính\s*:|\s+Ngày\s+sinh\s*:|$)"
+            ),
+            labels=("Người lao động", "Ông/bà", "Họ và tên"),
+            stops=labels + ("Giới tính", "Ngày sinh", "CMND/CCCD số"),
             method="employee_name_label",
+            fallback_method="employee_label",
             review=ocr,
-            continue_lines=False,
         )
-        if employee["value"] is None:
-            employee = _bounded_external(
-                canonical,
-                ("Người lao động", "Ông/bà", "Họ và tên"),
-                stops=labels,
-                review=ocr,
-                method="employee_label",
-            )
         employee_id = _regex_external(
             canonical,
             (r"(?:CCCD số|CCCD so|CMND số|CMND so)\s*[:\-]?\s*([0-9]{9,12})",),
@@ -1237,6 +1515,23 @@ def _norm(value: Any) -> str:
     return " ".join(unicodedata.normalize("NFC", str(value or "")).split())
 
 
+def _semantic_key(category: str, name: str, value: Any) -> str:
+    """Canonicalize only the two explicitly approved Contract person fields."""
+
+    normalized = _norm(value)
+    if (category, name) not in SEMANTIC_PERSON_FIELDS:
+        return normalized
+    normalized = re.sub(r"^(?:ông/bà|ông|bà)\s+", "", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(
+        r"\s+(?:chức vụ|chức danh)\b(?:\s*[:\-–—]?\s*.*)?$",
+        "",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    normalized = re.sub(r"\s+[\-–—]\s+.+$", "", normalized)
+    return " ".join(normalized.casefold().split())
+
+
 def _field_match(
     category: str,
     name: str,
@@ -1246,73 +1541,179 @@ def _field_match(
     """Return strict and policy-accepted matching without removing accents."""
 
     truth_norm, guess_norm = _norm(truth), _norm(guess)
+    truth_semantic = _semantic_key(category, name, truth)
+    guess_semantic = _semantic_key(category, name, guess)
+    semantic_exact = truth_norm == guess_norm or bool(
+        truth_norm
+        and guess_norm
+        and truth_semantic
+        and guess_semantic
+        and truth_semantic == guess_semantic
+    )
+
+    def result(**payload: Any) -> dict[str, Any]:
+        payload["semanticExact"] = semantic_exact
+        return payload
+
     if truth_norm == guess_norm:
-        return {
-            "exact": True,
-            "match": True,
-            "matchType": "EXACT",
-            "coverage": 1.0,
-            "diagnosis": None,
-        }
+        return result(
+            exact=True,
+            match=True,
+            matchType="EXACT",
+            coverage=1.0,
+            diagnosis=None,
+        )
     if not truth_norm:
-        return {
-            "exact": False,
-            "match": False,
-            "matchType": "EXTRA_PREDICTION" if guess_norm else "EXACT",
-            "coverage": 0.0,
-            "diagnosis": "PREDICTION_FOR_ABSENT_FIELD" if guess_norm else None,
-        }
+        return result(
+            exact=False,
+            match=False,
+            matchType="EXTRA_PREDICTION" if guess_norm else "EXACT",
+            coverage=0.0,
+            diagnosis="PREDICTION_FOR_ABSENT_FIELD" if guess_norm else None,
+        )
     if not guess_norm:
-        return {
-            "exact": False,
-            "match": False,
-            "matchType": "NOT_FOUND",
-            "coverage": 0.0,
-            "diagnosis": "OCR_NOT_RECOGNIZED",
-        }
+        return result(
+            exact=False,
+            match=False,
+            matchType="NOT_FOUND",
+            coverage=0.0,
+            diagnosis="OCR_NOT_RECOGNIZED",
+        )
     if (category, name) not in SOFT_TEXT_FIELDS:
-        return {
-            "exact": False,
-            "match": False,
-            "matchType": "MISMATCH",
-            "coverage": 0.0,
-            "diagnosis": "OCR_RECOGNIZED_PARSER_MISSED",
-        }
+        return result(
+            exact=False,
+            match=False,
+            matchType="MISMATCH",
+            coverage=0.0,
+            diagnosis="OCR_RECOGNIZED_PARSER_MISSED",
+        )
 
     # Case differences are accepted, while NFC accents/diacritics remain part
     # of the comparison so missing or corrupted Vietnamese text is visible.
     truth_fold, guess_fold = truth_norm.casefold(), guess_norm.casefold()
     if truth_fold == guess_fold:
-        return {
-            "exact": False,
-            "match": True,
-            "matchType": "CASE_INSENSITIVE",
-            "coverage": 1.0,
-            "diagnosis": None,
-        }
+        return result(
+            exact=False,
+            match=True,
+            matchType="CASE_INSENSITIVE",
+            coverage=1.0,
+            diagnosis=None,
+        )
     truth_tokens = re.findall(r"[^\W_]+", truth_fold, flags=re.UNICODE)
     guess_tokens = re.findall(r"[^\W_]+", guess_fold, flags=re.UNICODE)
     overlap = sum((Counter(guess_tokens) & Counter(truth_tokens)).values())
     coverage = overlap / max(1, len(truth_tokens))
     if coverage >= SOFT_TEXT_MIN_COVERAGE:
-        return {
-            "exact": False,
-            "match": True,
-            "matchType": "PARTIAL_80",
-            "coverage": round(coverage, 6),
-            "diagnosis": None,
-        }
+        return result(
+            exact=False,
+            match=True,
+            matchType="PARTIAL_80",
+            coverage=round(coverage, 6),
+            diagnosis=None,
+        )
+    return result(
+        exact=False,
+        match=False,
+        matchType="PARTIAL_BELOW_80",
+        coverage=round(coverage, 6),
+        diagnosis="PARTIAL_TEXT_BELOW_80",
+    )
+
+
+def _included_documents(prediction: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {
-        "exact": False,
-        "match": False,
-        "matchType": "PARTIAL_BELOW_80",
-        "coverage": round(coverage, 6),
-        "diagnosis": "PARTIAL_TEXT_BELOW_80",
+        str(document.get("caseId")): document
+        for document in prediction.get("documents", [])
+        if document.get("evaluationIncluded", True) is not False
+    }
+
+
+def _parser_regression_summary(
+    prediction: dict[str, Any],
+    baseline_prediction: dict[str, Any] | None,
+    ground_truth: dict[str, Any],
+) -> tuple[int, int, dict[str, Any]]:
+    if baseline_prediction is None:
+        return 0, 0, {
+            "baselineProvided": False,
+            "sameEvaluationSet": None,
+            "sameScanEvaluationSet": None,
+            "baselineDocumentCount": 0,
+            "candidateDocumentCount": len(_included_documents(prediction)),
+            "overlapDocumentCount": 0,
+            "baselineScanDocumentCount": 0,
+            "candidateScanDocumentCount": sum(
+                bool(document.get("processing", {}).get("usesOcr"))
+                for document in _included_documents(prediction).values()
+            ),
+            "scanOverlapDocumentCount": 0,
+        }
+    candidate_by_id = _included_documents(prediction)
+    baseline_by_id = _included_documents(baseline_prediction)
+    candidate_ids, baseline_ids = set(candidate_by_id), set(baseline_by_id)
+    overlap_ids = candidate_ids & baseline_ids
+    candidate_scan_ids = {
+        case_id
+        for case_id, document in candidate_by_id.items()
+        if bool(document.get("processing", {}).get("usesOcr"))
+    }
+    baseline_scan_ids = {
+        case_id
+        for case_id, document in baseline_by_id.items()
+        if bool(document.get("processing", {}).get("usesOcr"))
+    }
+    scan_overlap_ids = overlap_ids & candidate_scan_ids & baseline_scan_ids
+    gt_by_id = {str(case.get("caseId")): case for case in ground_truth.get("cases", [])}
+    regressions = 0
+    scan_regressions = 0
+    for case_id in sorted(overlap_ids):
+        candidate = candidate_by_id[case_id]
+        baseline = baseline_by_id[case_id]
+        category = str(candidate.get("category", ""))
+        if category != str(baseline.get("category", "")):
+            continue
+        gt_fields = {
+            str(item.get("name")): item for item in gt_by_id.get(case_id, {}).get("fields", [])
+        }
+        expected = FIELD_SPECS.get(category, ())
+        candidate_fields = candidate.get("fields", {})
+        baseline_fields = baseline.get("fields", {})
+        for name in expected:
+            truth = gt_fields.get(name, {}).get("value")
+            candidate_value = (
+                candidate_fields.get(name, {}).get("value")
+                if isinstance(candidate_fields.get(name), dict)
+                else None
+            )
+            baseline_value = (
+                baseline_fields.get(name, {}).get("value")
+                if isinstance(baseline_fields.get(name), dict)
+                else None
+            )
+            baseline_exact = _field_match(category, name, truth, baseline_value)["exact"]
+            candidate_exact = _field_match(category, name, truth, candidate_value)["exact"]
+            regressions += int(baseline_exact and not candidate_exact)
+            if case_id in scan_overlap_ids:
+                scan_regressions += int(baseline_exact and not candidate_exact)
+    return regressions, scan_regressions, {
+        "baselineProvided": True,
+        "sameEvaluationSet": candidate_ids == baseline_ids,
+        "sameScanEvaluationSet": candidate_scan_ids == baseline_scan_ids,
+        "baselineDocumentCount": len(baseline_ids),
+        "candidateDocumentCount": len(candidate_ids),
+        "overlapDocumentCount": len(overlap_ids),
+        "baselineScanDocumentCount": len(baseline_scan_ids),
+        "candidateScanDocumentCount": len(candidate_scan_ids),
+        "scanOverlapDocumentCount": len(scan_overlap_ids),
     }
 
 
 def build_aggregate_report(
-    prediction: dict[str, Any], ground_truth: dict[str, Any], *, evaluated_at: str | None = None
+    prediction: dict[str, Any],
+    ground_truth: dict[str, Any],
+    *,
+    evaluated_at: str | None = None,
+    baseline_prediction: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     data13_scope = prediction.get("ocrScopePolicy") in {
         "cccd-and-certificate-only",
@@ -1321,10 +1722,17 @@ def build_aggregate_report(
     report_schema = DATA13_REPORT_SCHEMA_VERSION if data13_scope else REPORT_SCHEMA_VERSION
     gt_by_id = {str(case.get("caseId")): case for case in ground_truth.get("cases", [])}
     exact = 0
+    semantic_exact = 0
+    ocr_exact = 0
+    ocr_field_count = 0
     present = 0
+    applicable = 0
+    applicable_present = 0
+    sensitive_false_acceptance = 0
     field_count = 0
     schema_errors = 0
     classification_matches = 0
+    ocr_documents = 0
     manual_review = 0
     false_auto = 0
     excluded_documents = 0
@@ -1346,12 +1754,14 @@ def build_aggregate_report(
             schema_errors += 1
         classification_matches += int(document.get("predictedCategory") == category)
         processing = document.get("processing", {})
+        ocr_documents += int(bool(processing.get("usesOcr")))
         manual_review += int(processing.get("recommendedAction") == "MANUAL_REVIEW")
         false_auto += int(
             processing.get("usesOcr") and processing.get("recommendedAction") == "AUTO_CONTINUE"
         )
         stats = by_category.setdefault(
-            category, {"fields": 0, "exact": 0, "accepted": 0, "present": 0}
+            category,
+            {"fields": 0, "exact": 0, "semanticExact": 0, "accepted": 0, "present": 0},
         )
         for name in expected:
             field_count += 1
@@ -1365,15 +1775,29 @@ def build_aggregate_report(
             match = _field_match(category, name, truth, guess)
             exact += int(match["exact"])
             stats["exact"] += int(match["exact"])
+            if processing.get("usesOcr"):
+                ocr_field_count += 1
+                ocr_exact += int(match["exact"])
+            semantic_exact += int(match["semanticExact"])
+            stats["semanticExact"] += int(match["semanticExact"])
             stats["accepted"] += int(match["match"])
             if _norm(guess):
                 present += 1
                 stats["present"] += 1
+            if _norm(truth):
+                applicable += 1
+                if _norm(guess):
+                    applicable_present += 1
+            if gt_fields.get(name, {}).get("sensitive") and match["match"] and not match["exact"]:
+                sensitive_false_acceptance += 1
             if match["diagnosis"]:
                 reason = match["diagnosis"]
                 if reason == "OCR_NOT_RECOGNIZED" and not processing.get("usesOcr"):
                     reason = "PARSER_MISSED"
                 diagnoses[reason] = diagnoses.get(reason, 0) + 1
+    parser_regressions, scan_parser_regressions, parser_comparison = _parser_regression_summary(
+        prediction, baseline_prediction, ground_truth
+    )
     return {
         "schemaVersion": report_schema,
         "evaluationKind": "aggregate-only",
@@ -1395,6 +1819,17 @@ def build_aggregate_report(
         "metrics": {
             "fieldExactMatchCount": exact,
             "fieldExactMatchRate": round(exact / max(1, field_count), 6),
+            "fieldSemanticMatchCount": semantic_exact,
+            "fieldSemanticMatchRate": round(semantic_exact / max(1, field_count), 6),
+            "ocrFieldExactMatchCount": ocr_exact,
+            "ocrFieldCount": ocr_field_count,
+            "ocrFieldExactMatchRate": round(ocr_exact / max(1, ocr_field_count), 6),
+            "applicableFieldCount": applicable,
+            "applicableFieldPresenceCount": applicable_present,
+            "applicableCompletenessRate": round(applicable_present / max(1, applicable), 6),
+            "sensitiveFalseAcceptanceCount": sensitive_false_acceptance,
+            "parserCorrectRegressionCount": parser_regressions,
+            "scanParserCorrectRegressionCount": scan_parser_regressions,
             "fieldAcceptedMatchCount": sum(item["accepted"] for item in by_category.values()),
             "fieldAcceptedMatchRate": round(
                 sum(item["accepted"] for item in by_category.values()) / max(1, field_count),
@@ -1407,6 +1842,9 @@ def build_aggregate_report(
             category: {
                 **stats,
                 "exactRate": round(stats["exact"] / max(1, stats["fields"]), 6),
+                "semanticExactRate": round(
+                    stats["semanticExact"] / max(1, stats["fields"]), 6
+                ),
                 "acceptedRate": round(stats["accepted"] / max(1, stats["fields"]), 6),
                 "presenceRate": round(stats["present"] / max(1, stats["fields"]), 6),
             }
@@ -1419,16 +1857,127 @@ def build_aggregate_report(
             "softTextMinTokenCoverage": SOFT_TEXT_MIN_COVERAGE,
             "caseInsensitiveForSoftText": True,
             "diacriticsSensitive": True,
+            "semanticPersonFields": sorted(
+                f"{category}.{name}" for category, name in SEMANTIC_PERSON_FIELDS
+            ),
+            "semanticPersonNormalization": (
+                "NFC whitespace normalization; remove leading honorific and trailing "
+                "Chức vụ/Chức danh or dash-delimited role; casefold; accents remain sensitive"
+            ),
+            "semanticMetricDoesNotReplaceStrict": True,
         },
         "schemaErrors": schema_errors,
+        "parserRegressionComparison": parser_comparison,
         "ocrPolicy": {
+            "ocrDocumentCount": ocr_documents,
             "manualReviewCount": manual_review,
+            "manualReviewRate": round(manual_review / max(1, ocr_documents), 6),
             "falseAutoContinueCount": false_auto,
-            "ocrAlwaysManualReview": false_auto == 0,
+            "ocrAlwaysManualReview": ocr_documents > 0
+            and manual_review == ocr_documents
+            and false_auto == 0,
             "unsupportedNoOcrCount": excluded_documents,
             "scopePolicy": prediction.get("ocrScopePolicy", "legacy"),
         },
         "decision": "HOLD",
+        "promotionAllowed": False,
+        "containsRawFieldValues": False,
+        "groundTruthUsedForScoringOnly": True,
+    }
+
+
+def build_gate_report(
+    candidate_report: dict[str, Any],
+    baseline_report: dict[str, Any] | None = None,
+    *,
+    fallback_candidate: bool = False,
+) -> dict[str, Any]:
+    """Apply DATA-20 gates to aggregate-only reports without exposing values."""
+
+    metrics = candidate_report.get("metrics", {})
+    categories = candidate_report.get("byCategory", {})
+    strict_family = {
+        category: float(categories.get(category, {}).get("exactRate", 0.0)) >= 0.80
+        for category in sorted(ACTIVE_CATEGORIES)
+    }
+    ocr_policy = candidate_report.get("ocrPolicy", {})
+    parser_comparison = candidate_report.get("parserRegressionComparison", {})
+    base_rate = (
+        float((baseline_report or {}).get("metrics", {}).get("ocrFieldExactMatchRate", 0.0))
+        if baseline_report is not None
+        else None
+    )
+    candidate_rate = float(metrics.get("fieldExactMatchRate", 0.0))
+    candidate_scan_rate = float(metrics.get("ocrFieldExactMatchRate", 0.0))
+    strict_delta = (
+        round(candidate_scan_rate - base_rate, 6) if base_rate is not None else None
+    )
+    fallback = {
+        "status": "NOT_EVALUATED" if not fallback_candidate else "HOLD",
+        "baselineProvided": base_rate is not None,
+        "strictImprovementRate": strict_delta,
+        "scanStrictImprovementRate": strict_delta,
+        "baselineScanStrictRate": base_rate,
+        "candidateScanStrictRate": candidate_scan_rate,
+        "minimumStrictImprovementRate": 0.10,
+        "parserCorrectRegressionCount": metrics.get("scanParserCorrectRegressionCount", 0),
+        "sameEvaluationSet": parser_comparison.get("sameScanEvaluationSet"),
+        "fixedScanSubset": True,
+        "schemaErrors": candidate_report.get("schemaErrors", 0),
+        "scanManualReview": bool(ocr_policy.get("ocrAlwaysManualReview"))
+        and int(ocr_policy.get("falseAutoContinueCount", 0)) == 0,
+    }
+    fallback["pass"] = bool(
+        fallback["baselineProvided"]
+        and fallback["sameEvaluationSet"] is True
+        and strict_delta is not None
+        and strict_delta >= 0.10
+        and fallback["parserCorrectRegressionCount"] == 0
+        and fallback["schemaErrors"] == 0
+        and fallback["scanManualReview"]
+    )
+    if fallback_candidate:
+        fallback["status"] = "PASS" if fallback["pass"] else "HOLD"
+
+    gates: dict[str, Any] = {
+        "strictOverallAtLeast80": candidate_rate >= 0.80,
+        "strictEachFamilyAtLeast80": all(strict_family.values()),
+        "strictByFamily": strict_family,
+        "applicableCompletenessAtLeast95": int(metrics.get("applicableFieldCount", 0)) > 0
+        and float(metrics.get("applicableCompletenessRate", 0.0)) >= 0.95,
+        "classificationAtLeast95": float(
+            candidate_report.get("classification", {}).get("accuracy", 0.0)
+        )
+        >= 0.95,
+        "schemaErrorsZero": int(candidate_report.get("schemaErrors", 0)) == 0,
+        "sensitiveFalseAcceptanceZero": int(
+            metrics.get("sensitiveFalseAcceptanceCount", 0)
+        )
+        == 0,
+        "parserCorrectRegressionZero": int(
+            metrics.get("parserCorrectRegressionCount", 0)
+        )
+        == 0,
+        "parserRegressionComparisonReady": bool(
+            parser_comparison.get("baselineProvided")
+            and parser_comparison.get("sameEvaluationSet")
+        ),
+        "scanAlwaysManualReview": bool(ocr_policy.get("ocrAlwaysManualReview")),
+        "falseAutoContinueZero": int(ocr_policy.get("falseAutoContinueCount", 0)) == 0,
+        "unsupportedOcrZero": int(ocr_policy.get("unsupportedNoOcrCount", 0)) == 0,
+        "acceptedTextReportedSeparately": "fieldAcceptedMatchRate" in metrics,
+        "semanticMetricNotUsedAsStrictGate": True,
+    }
+    passed = all(gates.values()) and (not fallback_candidate or fallback["pass"])
+    return {
+        "schemaVersion": "external-dataset-data20-gate/1.0.0",
+        "evaluationKind": "development-gate-harness",
+        "evaluatedAt": candidate_report.get("evaluatedAt", utc_now()),
+        "datasetId": candidate_report.get("datasetId"),
+        "candidateReportEvaluationKind": candidate_report.get("evaluationKind"),
+        "gates": gates,
+        "fallback": fallback,
+        "decision": "PASS" if passed else "HOLD",
         "promotionAllowed": False,
         "containsRawFieldValues": False,
         "groundTruthUsedForScoringOnly": True,

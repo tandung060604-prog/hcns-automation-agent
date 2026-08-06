@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from apps.ocr_lab.api.external_dataset_prediction import _external_fields, build_aggregate_report
+from apps.ocr_lab.api.external_dataset_prediction import (
+    _external_fields,
+    build_aggregate_report,
+    build_gate_report,
+)
 from apps.ocr_lab.api.phase15_idp import classify_phase15_document, extract_phase15_document
 
 
@@ -41,6 +45,29 @@ def _ocr_canonical(lines: list[str]) -> dict[str, Any]:
         )
     return {
         "plainText": "\n".join(lines),
+        "pages": [{"blocks": blocks, "ocrBlocks": blocks}],
+        "tables": [],
+    }
+
+
+def _positioned_ocr_canonical(items: list[tuple[str, int, int, int]]) -> dict[str, Any]:
+    blocks = []
+    for index, (text, x, y, width) in enumerate(items):
+        box = [[x, y], [x + width, y], [x + width, y + 20], [x, y + 20]]
+        blocks.append(
+            {
+                "text": text,
+                "sourceKind": "ocr",
+                "confidence": 0.94,
+                "evidence": {
+                    "pageIndex": 0,
+                    "sourceRef": f"ocr:{index}",
+                    "bbox": box,
+                },
+            }
+        )
+    return {
+        "plainText": "\n".join(item[0] for item in items),
         "pages": [{"blocks": blocks, "ocrBlocks": blocks}],
         "tables": [],
     }
@@ -105,7 +132,15 @@ def test_data12_aggregate_is_prediction_scoring_only() -> None:
 
     assert report["fieldCount"] == 10
     assert report["metrics"]["fieldExactMatchCount"] == 10
+    assert report["metrics"]["applicableFieldCount"] == 1
+    assert report["metrics"]["applicableFieldPresenceCount"] == 1
+    assert report["metrics"]["applicableCompletenessRate"] == 1.0
+    assert report["metrics"]["sensitiveFalseAcceptanceCount"] == 0
+    assert report["metrics"]["parserCorrectRegressionCount"] == 0
     assert report["schemaErrors"] == 0
+    assert report["ocrPolicy"]["ocrDocumentCount"] == 1
+    assert report["ocrPolicy"]["manualReviewRate"] == 1.0
+    assert report["ocrPolicy"]["ocrAlwaysManualReview"] is True
     assert report["ocrPolicy"]["falseAutoContinueCount"] == 0
     assert report["containsRawFieldValues"] is False
     assert report["promotionAllowed"] is False
@@ -136,6 +171,145 @@ def test_data13_aggregate_excludes_non_ocr_scan_cases() -> None:
     assert report["policyExcludedDocumentCount"] == 1
     assert report["fieldCount"] == 0
     assert report["ocrPolicy"]["unsupportedNoOcrCount"] == 1
+
+
+def test_data20_sensitive_false_acceptance_is_additive_and_separate() -> None:
+    names = (
+        "full_name", "headline", "email", "phone_number", "address", "desired_role",
+        "years_experience", "experience", "skills", "education",
+    )
+    prediction_values = {name: None for name in names}
+    truth_values = {name: None for name in names}
+    truth_values["experience"] = "A B C D"
+    prediction_values["experience"] = "a b c d"
+    report = build_aggregate_report(
+        {
+            "datasetId": "synthetic-test",
+            "documents": [{
+                "caseId": "cv-001",
+                "category": "cv",
+                "predictedCategory": "cv",
+                "fields": {name: {"value": value} for name, value in prediction_values.items()},
+                "processing": {"usesOcr": False, "recommendedAction": "USER_REVIEW"},
+            }],
+        },
+        {"cases": [{
+            "caseId": "cv-001",
+            "fields": [
+                {
+                    "name": name,
+                    "value": value,
+                    "sensitive": name == "experience",
+                }
+                for name, value in truth_values.items()
+            ],
+        }]},
+    )
+
+    assert report["metrics"]["fieldExactMatchCount"] == 9
+    assert report["metrics"]["fieldAcceptedMatchCount"] == 10
+    assert report["metrics"]["applicableFieldCount"] == 1
+    assert report["metrics"]["applicableCompletenessRate"] == 1.0
+    assert report["metrics"]["sensitiveFalseAcceptanceCount"] == 1
+
+
+def test_data20_parser_regression_compares_fixed_candidate_baseline_set() -> None:
+    names = (
+        "full_name", "headline", "email", "phone_number", "address", "desired_role",
+        "years_experience", "experience", "skills", "education",
+    )
+    truth_values = {name: None for name in names}
+    truth_values["full_name"] = "Exact Person"
+
+    def prediction(value: str) -> dict[str, Any]:
+        fields = {name: None for name in names}
+        fields["full_name"] = value
+        return {
+            "datasetId": "synthetic-test",
+            "documents": [{
+                "caseId": "cv-001",
+                "category": "cv",
+                "predictedCategory": "cv",
+                "fields": {name: {"value": item} for name, item in fields.items()},
+                "processing": {"usesOcr": False, "recommendedAction": "USER_REVIEW"},
+            }],
+        }
+
+    baseline = prediction("Exact Person")
+    candidate = prediction("Wrong Person")
+    report = build_aggregate_report(
+        candidate,
+        {"cases": [{
+            "caseId": "cv-001",
+            "fields": [{"name": name, "value": value} for name, value in truth_values.items()],
+        }]},
+        baseline_prediction=baseline,
+    )
+
+    assert report["metrics"]["parserCorrectRegressionCount"] == 1
+    assert report["parserRegressionComparison"] == {
+        "baselineProvided": True,
+        "sameEvaluationSet": True,
+        "sameScanEvaluationSet": True,
+        "baselineDocumentCount": 1,
+        "candidateDocumentCount": 1,
+        "overlapDocumentCount": 1,
+        "baselineScanDocumentCount": 0,
+        "candidateScanDocumentCount": 0,
+        "scanOverlapDocumentCount": 0,
+    }
+
+
+def test_data20_gate_harness_is_deterministic_and_requires_fallback_ten_points() -> None:
+    specs = {
+        "cv": (
+            "full_name", "headline", "email", "phone_number", "address", "desired_role",
+            "years_experience", "experience", "skills", "education",
+        ),
+        "contract": (
+            "contract_number", "contract_sign_date", "effective_date", "probation_end_date",
+            "employer_name", "employer_representative", "employee_name", "employee_id_number",
+            "job_title", "workplace", "weekly_hours", "probation_salary_monthly",
+            "allowances_summary", "salary_payment_schedule",
+        ),
+        "ielts": ("recipient_name", "credential_id", "credential_type", "overall_score", "issue_date"),
+    }
+    ground_truth = {"cases": [{
+        "caseId": f"{category}-001",
+        "fields": [{"name": name, "value": "synthetic"} for name in names],
+    } for category, names in specs.items()]}
+
+    def artifact(*, wrong_cv_name: bool = False) -> dict[str, Any]:
+        documents = []
+        for category, names in specs.items():
+            values = {name: {"value": "synthetic"} for name in names}
+            if category == "cv" and wrong_cv_name:
+                for name in names[:7]:
+                    values[name] = {"value": "not exact"}
+            documents.append({
+                "caseId": f"{category}-001",
+                "category": category,
+                "predictedCategory": category,
+                "fields": values,
+                "processing": {"usesOcr": True, "recommendedAction": "MANUAL_REVIEW"},
+            })
+        return {
+            "datasetId": "synthetic-test",
+            "documents": documents,
+        }
+
+    candidate = build_aggregate_report(artifact(), ground_truth)
+    baseline = build_aggregate_report(artifact(wrong_cv_name=True), ground_truth)
+    candidate_with_baseline = build_aggregate_report(
+        artifact(), ground_truth, baseline_prediction=artifact(wrong_cv_name=True)
+    )
+    passing = build_gate_report(candidate_with_baseline, baseline, fallback_candidate=True)
+    holding = build_gate_report(candidate, baseline, fallback_candidate=True)
+
+    assert passing["decision"] == "PASS"
+    assert passing["fallback"]["strictImprovementRate"] >= 0.1
+    assert holding["decision"] == "HOLD"
+    assert holding["fallback"]["status"] == "HOLD"
 
 
 def test_family_mapping_keeps_multiline_cv_and_contract_evidence() -> None:
@@ -191,6 +365,67 @@ def test_family_mapping_keeps_multiline_cv_and_contract_evidence() -> None:
     assert contract_fields["employee_name"]["value"] == "Trần Thị B"
     assert contract_fields["job_title"]["value"] == "Chuyên viên nhân sự"
     assert contract_fields["effective_date"]["normalizedValue"] == "05/02/2026"
+
+
+def test_contract_party_normalization_does_not_cross_party_boundary() -> None:
+    contract = _canonical(
+        [
+            "BÊN A: NGƯỜI SỬ DỤNG LAO ĐỘNG",
+            "Đại diện bởi: Bà ALPHA REPRESENTATIVE",
+            "Chức vụ: Giám đốc",
+            "BÊN B: NGƯỜI LAO ĐỘNG",
+            "Họ và tên: BETA EMPLOYEE Giới tính: Nữ",
+            "Điều 1. Công việc",
+        ]
+    )
+    classification = classify_phase15_document(contract)
+    extraction = extract_phase15_document(contract, classification)
+    fields = _external_fields("contract", contract, extraction, ocr=False)
+
+    assert fields["employer_representative"]["value"] == "ALPHA REPRESENTATIVE"
+    assert fields["employee_name"]["value"] == "BETA EMPLOYEE"
+
+
+def test_contract_party_fallback_strips_person_prefix_and_role_suffix() -> None:
+    contract = _canonical(
+        [
+            "BÊN A: NGƯỜI SỬ DỤNG LAO ĐỘNG",
+            "Đại diện: Ông ALPHA REPRESENTATIVE Chức vụ: Giám đốc",
+            "BÊN B: NGƯỜI LAO ĐỘNG",
+            "Họ và tên: BETA EMPLOYEE Giới tính: Nam",
+        ]
+    )
+    classification = classify_phase15_document(contract)
+    extraction = extract_phase15_document(contract, classification)
+    fields = _external_fields("contract", contract, extraction, ocr=False)
+
+    assert fields["employer_representative"]["value"] == "ALPHA REPRESENTATIVE"
+    assert fields["employee_name"]["value"] == "BETA EMPLOYEE"
+
+
+def test_cv_ocr_sections_follow_geometry_not_engine_order() -> None:
+    canonical = _positioned_ocr_canonical(
+        [
+            ("CURRICULUM VITAE", 10, 0, 650),
+            ("NGUYỄN VĂN A", 10, 30, 220),
+            ("HỌC VẤN", 10, 70, 180),
+            ("KINH NGHIỆM LÀM VIỆC", 420, 70, 230),
+            ("Công ty Synthetic", 420, 110, 220),
+            ("Chuyên viên nhân sự", 420, 145, 220),
+            ("Đại học Kiểm thử", 10, 110, 220),
+            ("Kỹ thuật phần mềm", 10, 145, 220),
+            ("KỸ NĂNG", 10, 210, 160),
+            ("Python, SQL", 10, 250, 180),
+        ]
+    )
+    classification = classify_phase15_document(canonical)
+    extraction = extract_phase15_document(canonical, classification)
+    fields = _external_fields("cv", canonical, extraction, ocr=True)
+
+    assert fields["education"]["value"] == "Đại học Kiểm thử Kỹ thuật phần mềm"
+    assert fields["experience"]["value"] == "Công ty Synthetic Chuyên viên nhân sự"
+    assert fields["skills"]["value"] == "Python, SQL"
+    assert fields["education"]["status"] == "needs_review"
 
 
 def test_data13_all_active_families_are_scored_when_prediction_includes_visual_cv() -> None:
@@ -301,3 +536,43 @@ def test_soft_text_policy_accepts_case_and_eighty_percent_coverage_only() -> Non
     assert report["metrics"]["fieldExactMatchRate"] == 0.8
     assert report["metrics"]["fieldAcceptedMatchRate"] == 1.0
     assert report["byCategory"]["cv"]["acceptedRate"] == 1.0
+
+
+def test_contract_semantic_metric_is_symmetric_and_keeps_raw_strict_metric() -> None:
+    names = (
+        "contract_number", "contract_sign_date", "effective_date", "probation_end_date",
+        "employer_name", "employer_representative", "employee_name", "employee_id_number",
+        "job_title", "workplace", "weekly_hours", "probation_salary_monthly",
+        "allowances_summary", "salary_payment_schedule",
+    )
+    prediction_values = {name: None for name in names}
+    truth_values = {name: None for name in names}
+    prediction_values.update({
+        "employer_representative": "VÕ THU HẰNG",
+        "employee_name": "NGUYỄN HỮU LONG",
+    })
+    truth_values.update({
+        "employer_representative": "Bà Võ Thu Hằng – Giám đốc",
+        "employee_name": "Nguyễn Hữu Long",
+    })
+    report = build_aggregate_report(
+        {
+            "datasetId": "synthetic-test",
+            "documents": [{
+                "caseId": "contract-003",
+                "category": "contract",
+                "predictedCategory": "contract",
+                "fields": {name: {"value": value} for name, value in prediction_values.items()},
+                "processing": {"usesOcr": False, "recommendedAction": "USER_REVIEW"},
+            }],
+        },
+        {"cases": [{
+            "caseId": "contract-003",
+            "fields": [{"name": name, "value": value} for name, value in truth_values.items()],
+        }]},
+    )
+
+    assert report["metrics"]["fieldExactMatchCount"] == 12
+    assert report["metrics"]["fieldSemanticMatchCount"] == 14
+    assert report["metrics"]["fieldSemanticMatchRate"] == 1.0
+    assert report["byCategory"]["contract"]["semanticExactRate"] == 1.0

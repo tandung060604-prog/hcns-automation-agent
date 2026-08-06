@@ -3,30 +3,58 @@
 ## Repository context
 
 - Repository: `D:\AI Vin Thực Chiến\Side Project\PaddleOCR\hcns-automation-agent`
-- Branch: `codex/ocr-ho-v2-014-seal-evaluate`
-- HEAD: `d566c78b8ccb671e9510c1f920feb4c4e8452969`
+- Branch: `codex/data-18-cv-scan-recovery`
+- HEAD: `13aa284613ba363cedfb12f0adbe4f11e50a5725` (`main` merge containing DATA-17)
 - Routing: [docs/README.md](README.md)
 - Acceptance criteria: [docs/BACKLOG.md](BACKLOG.md)
 
 ## Current checkpoint (2026-08-06)
 
-- Checkpoint task: `LONGRUN-MAINT-001` is complete.
-- Branch and HEAD above are verified from the nested repository; the earlier
-  `codex/m1-m2-document-understanding` label was stale metadata.
-- Product WIP is intentionally preserved: OCR-HO/DATA-16 API, web, scripts,
-  application policy and tests remain uncommitted on this branch.
-- Current product status is development `HOLD`; OCR image/scan outputs remain
-  `MANUAL_REVIEW`, with no production promotion or real side effect.
-- New maintenance files are `scripts/validate_longrun_state.py` and
-  `docs/archive/PROJECT_STATE_HISTORY_2026-08-06.md`.
-- Validation: `python scripts/validate_longrun_state.py` PASS,
-  `python -m compileall -q scripts/validate_longrun_state.py` PASS,
-  `.venv\\Scripts\\ruff.exe check scripts/validate_longrun_state.py` PASS, and
-  `git diff --check` PASS with line-ending warnings only.
-- `scripts/check_repository.py` remains a pre-existing FAIL because untracked
-  `data/private` exists; no tracked private files were found and it was not changed.
-- Next READY task: `M5-CAM-001`; read its runbook and complete approval gates
-  before any cohort or deployment action.
+- Checkpoint task: `OCR-HO-V2-017A` is complete; the existing private secondary
+  runtime is restored and lock-verified, while CCCD development remains `HOLD`
+  because snapshot, exact/DER and automatic-ROI gates remain unmet.
+- Prior checkpoint `DATA-19-CONTRACT-SEMANTIC-NORMALIZATION` remains implemented;
+  its development status is `HOLD` because raw Contract strict remains 40/42;
+  additive semantic scoring is 42/42 and does not replace raw strict EM.
+- `DATA-20-REGRESSION-AND-GATE-HARNESS` is implemented and `HOLD`: applicable
+  completeness is `99/99`, sensitive false acceptance `0`, parser-correct
+  regressions `0`, schema `0`, classification `12/12`, and scan manual-review
+  remains `5/5`; CV strict and fallback `+10pp` gates are not met.
+- Party extraction is bounded to `Bên A`/`Bên B`; fallback strips person prefix/role
+  suffix while preserving source characters. Native parser/schema/API remain unchanged.
+- Fresh private artifacts are `C:\tmp\bo10-dev-predictions-data19-contract-normalization-v2.json`,
+  `C:\tmp\bo10-dev-aggregate-data19-contract-normalization-semantic-v2.json` and its marker.
+  Aggregate: strict 90/112, semantic 92/112, accepted 105/112, Contract 40/42 strict /
+  42/42 semantic, CV 30/50 strict / 45/50 accepted, IELTS 20/20, classification 12/12,
+  schema errors 0.
+- DATA-20 private artifacts are `C:\tmp\bo10-dev-aggregate-data20-regression-gates-v4.json`,
+  `C:\tmp\bo10-dev-data20-gate-report-v4.json` and their markers. No GroundTruth or
+  evaluate-once artifact was modified.
+- DATA-21 runner/tests are implemented. PaddleOCR 3.7 resolves the public pin
+  `PaddleOCR-VL-1.6` to `PaddleOCR-VL-1.6-0.9B`; CPU initialization downloaded the
+  private model tree but exceeded the local budget before the first scan, so the
+  benchmark is `HOLD` rather than a quality PASS. Report/marker:
+  `C:\tmp\bo10-data21-paddleocr-vl-benchmark-report-v5.json` and
+  `C:\tmp\bo10-data21-paddleocr-vl.marker-v5.json`. Fallback, promotion and
+  evaluate-once remain disabled; raw runtime stays outside Git.
+- DATA-22 remains blocked until approved source rights/retention and the minimum
+  corpus are supplied; do not open held-out or evaluate-once.
+- Approved DATA-21 rerun used a 600-second CPU window. GPU could not be used because
+  the installed Paddle wheel is CPU-only; native worker exit `1` after weight load
+  produced no prediction. Rerun report/marker are
+  `C:\tmp\bo10-data21-paddleocr-vl-benchmark-report-v8.json` and
+  `C:\tmp\bo10-data21-paddleocr-vl.marker-v8.json`; quality remains unscored/HOLD.
+- Validation: targeted pytest 27 passed; selected Ruff, compileall, `git diff --check`
+  and state consistency passed. Full-file Ruff retains baseline findings outside DATA-19.
+- OCR-HO-V2-017A smoke evidence: runtime
+  `C:\Camunda\private-data\paddleocr-hr-baseline\runtime` has EasyOCR 1.7.2,
+  VietOCR 0.3.13 and CPU Torch; all 6 model locks pass. One private CCCD smoke
+  processed 16 crops with all 3 secondary profiles. Artifact:
+  `C:\tmp\ocr-ho-v2-017a-preflight-20260806\preflight.log`.
+- No OCR source or primary runtime changed; all fields remain manual review and
+  no held-out/evaluate-once action occurred.
+- Next READY task: `OCR-HO-V2-017B`; run the full 15/120 development replay only
+  after approval, keeping shadow/manual-review-only.
 
 ## Active workstreams
 
@@ -886,3 +914,103 @@ image results manual-review-only; preserve sealed GT and evaluate-once.
 Set-Location "D:\AI Vin Thực Chiến\Side Project\PaddleOCR\hcns-automation-agent"
 git status --short --branch
 ```
+
+### OCR-HO-V2-015 - canonical CCCD diagnostic checkpoint (DONE / HOLD)
+
+- Added `scripts/analyze_ocr_ho_v2_015.py`; the historical 014 analyzer now
+  dispatches to it without overwriting the 014 report.
+- Added diagnostic gates and a regression test proving snapshot mismatch holds
+  development and held-out readiness. Target tests: `10 passed`; Ruff on all
+  touched OCR-HO-V2 files: pass.
+- Private aggregate report:
+  `C:\Camunda\private-data\paddleocr-hr-baseline-archive-20260803\output\phase11\reports\CCCD_OCR_HO_V2_015_DIAGNOSTIC.json`.
+  It records dataset isolation (`CCCD` / `DATA-HO-014`), baseline `11.9.1`,
+  protocols, artifact digests, DER counts, error transitions, and no raw PII.
+- Observed: `SNAPSHOT_MISMATCH`, exact regression `1`, schema errors `0`,
+  protected regressions `0`, automatic ROI `13.33% / 13.33% / 6.67%` for
+  fullName/origin/residence, and oracle ROI `100% / 100% / 100%`. Both gates
+  are `HOLD`; no evaluate-once, primary-runtime promotion, or held-out opening.
+- Next decision: review detector/snapshot drift first. Do not start 016A/016B
+  until the error class and smallest affected layer are explicitly selected.
+
+### OCR-HO-V2-015A - drift and ROI attribution checkpoint (DONE / 016A READY)
+
+- The first 015 automatic-ROI calculation used `result.document.pages`, while
+  the sealed manifest was created from `result.phase11.pages`. That source
+  mismatch invalidated the initial `13.33% / 13.33% / 6.67%` ROI figures.
+- After correction, automatic ROI is `53.33% / 60.00% / 13.33%` for
+  fullName/origin/residence. Across all target fields, detector misses are
+  `0`, crop/page misses are `0`, and all failures are boundary/line-selection
+  misses. Residence is `13/15` boundary misses: `8` inside the automatic region
+  bbox but not selected, `5` outside the bbox.
+- Snapshot drift is confirmed rather than resolved: baseline 11.9.1 and
+  15/120 scope are stable, but README candidate numbers do not reproduce from
+  the current sealed candidate artifact. Candidate metrics remain explicitly
+  oracle-line diagnostic; the gate remains `HOLD`.
+- Decision: mark `OCR-HO-V2-016A` `READY` for one minimal boundary-rule patch.
+  Do not change recognizer, parser, normalization or primary runtime in 016A;
+  require a fresh development replay after the patch.
+
+### OCR-HO-V2-016A - residence anchor boundary replay (DONE / HOLD)
+
+- Implemented one boundary-only change in `phase11_10_cccd_v2.py`: retain a
+  residence anchor line when the existing field-candidate cleanup yields at
+  least two tokens. Added one synthetic regression test; no recognizer,
+  parser, normalization or primary-runtime path changed.
+- Fresh local replay is prediction-blind and aggregate-only over `15/15` CCCD
+  documents and `120/120` fields with baseline `11.9.1`, candidate `11.10.1`,
+  and `AUTO_DETECTOR` mapping. Report:
+  `C:\tmp\cccd-ho-v2-016a-stage-20260806\CCCD_OCR_HO_V2_016A_DEVELOPMENT_REPLAY.json`.
+- Results: strict exact `60.00%` vs baseline `60.83%`, ASCII `63.33%` vs
+  `62.50%`, CER `40.15%`, DER `14.62%` (`37/253` vs `29/253`), presence
+  `95.83%`; exact improvement `0`, exact regression `1`, schema errors `0`,
+  protected regressions `0`. Automatic ROI is `53.33% / 60.00% / 66.67%`
+  for fullName/origin/residence. Snapshot mismatch keeps both gates `HOLD`.
+- All fields remain manual review (`acceptedCoverage=0`, sensitive false
+  acceptance `0`); no primary promotion, held-out opening or evaluate-once.
+  Replay was Paddle-only because EasyOCR/VietOCR optional runtimes are not
+  installed. Next action is review evidence before any 016B layer change.
+
+### OCR-HO-V2-016A-R1 - independent oracle diagnostic (DONE / HOLD)
+
+- Analyzer now accepts a separate oracle phase root and reports oracle metrics
+  outside the AUTO_DETECTOR gate. The private R1 replay used sealed line IDs in
+  a copied staging tree; the 016A AUTO artifact was not overwritten.
+- Report:
+  `C:\tmp\cccd-ho-v2-016a-r1-20260806\CCCD_OCR_HO_V2_016A_R1_DIAGNOSTIC.json`.
+  Oracle ROI is `100% / 100% / 100%`; oracle exact `60.00%`, ASCII `62.50%`,
+  CER `39.07%`, DER `11.86% (30/253)`, presence `95.83%`.
+- Oracle classes are parser contamination `15`, recognizer miss `13`, and
+  diacritic miss `5`; select parser cleanup as the single provisional 016B
+  layer. Exact and DER still fail acceptance, so 016B remains BLOCKED; all
+  fields stay manual review and no held-out/evaluate-once/promotion occurred.
+
+### OCR-HO-V2-016B - parser-only replay (DONE / HOLD)
+
+- Candidate `11.10.2` changed only parser cleanup for merged residence labels;
+  recognizer, Unicode normalization, reading order and ROI code were unchanged.
+  Regression suite: `13 passed`; touched-file Ruff, compileall and state checks
+  pass.
+- Fresh AUTO_DETECTOR replay report:
+  `C:\tmp\cccd-ho-v2-016b-rerun-20260806\CCCD_OCR_HO_V2_016B_DEVELOPMENT_REPLAY.json`.
+  Results remain exact `60.00%`, ASCII `63.33%`, CER `40.15%`, DER `14.62%`
+  (`37/253`), presence `95.83%`; exact improvements `0`, exact regression `1`,
+  schema errors `0`, sensitive false acceptance `0`. Parser cleanup did not
+  clear the recognizer consensus bottleneck, so the development gate is HOLD.
+- Do not continue to another layer or promote. Keep all fields manual review;
+  next decision requires a separately approved recognizer/runtime task.
+
+### OCR-HO-V2-017A - secondary-runtime preflight (DONE / HOLD)
+
+- Reused the existing private runtime at
+  `C:\Camunda\private-data\paddleocr-hr-baseline\runtime`; no package/model was
+  added. EasyOCR `1.7.2`, VietOCR `0.3.13`, CPU Torch, and all six policy model
+  hashes/sizes passed `validate_phase11_5_lock.py`.
+- A one-document private smoke initialized the worker and processed 16 crops with
+  `easyocr_vi`, `vietocr_vgg_seq2seq`, and `vietocr_vgg_transformer`; warnings were
+  runtime-only (`easyocr_scalar_overflow`, Torch load/nested-tensor warnings).
+- Evidence: `C:\tmp\ocr-ho-v2-017a-preflight-20260806\preflight.log` and the
+  private `phase11_10_v2_017a_preflight_private` directory. The prior 15-document
+  report was restored from the archive after the single-document smoke.
+- No OCR source, primary runtime, GroundTruth, held-out artifact, or evaluate-once
+  marker changed. Next READY task is `OCR-HO-V2-017B`: full development replay.

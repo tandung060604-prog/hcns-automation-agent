@@ -12,10 +12,28 @@
 > máy nội bộ, kiểm tra kết quả trước khi chuyển cho người duyệt và quy trình nghiệp vụ.
 
 Tính đến **06/08/2026**, luồng hai biểu mẫu HCNS đã chạy qua Template-first và
-Camunda 7.13 local. M4 đã hoàn tất dry-run 10/10; M5 shadow-pilot authorization
-đã mở ở trạng thái `READY`, chưa có production side effect. DATA-17 đã bổ sung
+Camunda 7.13 local. M4 đã hoàn tất dry-run 10/10; M5 đang `PARKED` ngoài
+workstream DATA-17/18 và chưa có production side effect. DATA-17 đã bổ sung
 benchmark development-only cho CV, Contract và IELTS/chứng chỉ trên 12 tài liệu
 với 112 field GroundTruth đã khóa.
+
+### Cập nhật 06/08/2026 — DATA-18 đến DATA-21
+
+- DATA-18 khôi phục section CV scan theo geometry/column; DATA-19 khóa semantic
+  Contract theo ranh giới Bên A/Bên B; DATA-20 thêm completeness, safety và
+  regression gates. Schema/API không đổi và scan vẫn luôn `MANUAL_REVIEW`.
+- Development aggregate vẫn `90/112` strict; Contract `40/42`, CV `30/50`,
+  IELTS/chứng chỉ `20/20`. Accepted text và semantic match chỉ là metric bổ sung,
+  không thay thế strict EM.
+- DATA-21 đã thêm runner benchmark PaddleOCR-VL local với model pin
+  `PaddleOCR-VL-1.6` (runtime registry `PaddleOCR-VL-1.6-0.9B`), model/runtime
+  hash, latency/memory/failure report và raw artifact private ngoài Git.
+- Rerun được duyệt bằng CPU window 600 giây; GPU chưa dùng được vì Paddle wheel
+  hiện tại CPU-only. Native worker thoát mã `1` sau khi nạp weight, nên DATA-21
+  giữ `HOLD`, quality metrics chưa có, fallback/promotion vẫn tắt.
+- Không mở lại evaluate-once cũ, không thay GroundTruth, không upload tài liệu/OCR
+  lên cloud. DATA-22 vẫn `BLOCKED` cho tới khi có corpus mới kèm quyền sử dụng,
+  retention và lineage.
 
 ## Sản phẩm này làm gì?
 
