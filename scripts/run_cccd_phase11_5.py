@@ -36,6 +36,7 @@ from serve_dashboard_api import UserOCRService  # noqa: E402
 TARGET_FIELDS = FIELD_ORDER
 prepare_line_pages = None
 assemble_line_candidates = None
+phase_module: Any = None
 
 
 def utc_now() -> str:
@@ -76,7 +77,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def configure_phase(module_name: str) -> None:
+    global phase_module
     module = importlib.import_module(module_name)
+    phase_module = module
     globals().update(
         {
             "FIELD_ORDER": module.FIELD_ORDER,
@@ -207,6 +210,38 @@ def prepare(
             pages,
             [(image.shape[1], image.shape[0]) for image in images],
         )
+        confirmed_fields = record.get("fields") or {}
+        if confirmed_fields:
+            boxes = (pages[0] if pages else {}).get("recognizedBoxes", [])
+            for field_name, field in confirmed_fields.items():
+                if field_name not in regions or not isinstance(field, dict):
+                    continue
+                line_ids = field.get("lineIds") or []
+                if not line_ids:
+                    continue
+                selected = []
+                for line_id in line_ids:
+                    if not isinstance(line_id, int) or not 0 <= line_id < len(boxes):
+                        raise ValueError(
+                            f"Invalid confirmed line ID {session_id}:{field_name}:{line_id}"
+                        )
+                    selected.append({"lineId": line_id, "box": boxes[line_id]})
+                regions[field_name]["lineBboxes"] = [
+                    phase_module._trim_line_top(item, [
+                        {"lineId": index, "box": box}
+                        for index, box in enumerate(boxes)
+                    ])
+                    if hasattr(phase_module, "_trim_line_top")
+                    else [
+                        int(min(point[0] for point in item["box"])),
+                        int(min(point[1] for point in item["box"])),
+                        int(max(point[0] for point in item["box"])),
+                        int(max(point[1] for point in item["box"])),
+                    ]
+                    for item in selected
+                ]
+                regions[field_name]["lineIds"] = line_ids
+                regions[field_name]["regionSource"] = "sealed_gt_line_mapping"
         candidates: dict[str, list[dict[str, Any]]] = {name: [] for name in FIELD_ORDER}
         crop_records: dict[str, Any] = {}
         for field_name in TARGET_FIELDS:
@@ -443,7 +478,15 @@ def main() -> int:
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
     records = [
         record
-        for record in manifest.get("records", [])
+        for record in (manifest.get("records") or [
+            {
+                "documentIndex": item.get("documentIndex"),
+                "sessionId": item.get("sessionId") or item.get("documentId"),
+                "selectedRotationDegrees": item.get("selectedRotationDegrees", 0),
+                "fields": item.get("fields", {}),
+            }
+            for item in manifest.get("documents", [])
+        ])
         if record.get("sessionId")
         and (not args.document_index or int(record["documentIndex"]) in args.document_index)
     ]

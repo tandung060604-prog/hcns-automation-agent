@@ -12,6 +12,7 @@ import json
 import re
 import unicodedata
 import zipfile
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -23,7 +24,16 @@ try:
         OUT_OF_SCOPE_REVIEW_FORMATS,
     )
     from .phase12_ingestion import ingest_document, ingest_image
-    from .phase15_idp import classify_phase15_document, extract_phase15_document
+    from .phase15_idp import (
+        _bounded_labeled,
+        _box_bounds,
+        _credential_type,
+        _field_after_marker,
+        _likely_person_name,
+        _regex_field,
+        classify_phase15_document,
+        extract_phase15_document,
+    )
 except ImportError:  # Direct script execution used by the local OCR runner.
     from external_dataset_review import (
         ALLOWED_SUFFIXES,
@@ -31,13 +41,38 @@ except ImportError:  # Direct script execution used by the local OCR runner.
         OUT_OF_SCOPE_REVIEW_FORMATS,
     )
     from phase12_ingestion import ingest_document, ingest_image
-    from phase15_idp import classify_phase15_document, extract_phase15_document
+    from phase15_idp import (
+        _bounded_labeled,
+        _box_bounds,
+        _credential_type,
+        _field_after_marker,
+        _likely_person_name,
+        _regex_field,
+        classify_phase15_document,
+        extract_phase15_document,
+    )
 
 PREDICTION_SCHEMA_VERSION = "external-dataset-predictions/1.0.0"
 DATA13_PREDICTION_SCHEMA_VERSION = "external-dataset-predictions/data13/1.0.0"
 REPORT_SCHEMA_VERSION = "external-dataset-data12-aggregate/1.0.0"
 DATA13_REPORT_SCHEMA_VERSION = "external-dataset-data13-aggregate/1.0.0"
 ACTIVE_CATEGORIES = frozenset(FIELD_SPECS)
+# Long free-text sections may be abbreviated by OCR/layout parsing. Structured
+# identifiers, dates, money and names remain strict to avoid false acceptance.
+SOFT_TEXT_FIELDS = frozenset(
+    {
+        ("cv", "headline"),
+        ("cv", "desired_role"),
+        ("cv", "experience"),
+        ("cv", "skills"),
+        ("cv", "education"),
+        ("contract", "job_title"),
+        ("contract", "workplace"),
+        ("contract", "allowances_summary"),
+        ("contract", "salary_payment_schedule"),
+    }
+)
+SOFT_TEXT_MIN_COVERAGE = 0.80
 
 
 class PredictionArtifactError(ValueError):
@@ -123,10 +158,6 @@ def _fold(value: Any) -> str:
     )
 
 
-def _lines(text: str) -> list[str]:
-    return [" ".join(line.split()) for line in text.splitlines() if line.strip()]
-
-
 def _field(
     value: str | None,
     *,
@@ -136,6 +167,15 @@ def _field(
 ) -> dict[str, Any]:
     value = " ".join(value.split()).strip() if isinstance(value, str) and value.strip() else None
     evidence = block.get("evidence") if block else None
+    source_span = (
+        {
+            key: evidence.get(key)
+            for key in ("pageIndex", "sourceRef", "bbox")
+            if key in evidence
+        }
+        if isinstance(evidence, dict)
+        else None
+    )
     return {
         "value": value,
         "normalizedValue": value,
@@ -146,55 +186,489 @@ def _field(
         else "not_found",
         "confidence": round(float(block.get("confidence", 0.0)), 6) if block else None,
         "evidence": evidence,
+        "sourceSpan": source_span,
         "method": method,
+        "extractor": "phase17-family-layout",
+        "reviewReason": "ocr_requires_human_review" if review and value is not None else None,
     }
 
 
-def _find_line(lines: list[str], *markers: str) -> tuple[str | None, dict[str, Any] | None]:
-    folded = tuple(_fold(marker) for marker in markers)
-    for line in lines:
-        key = _fold(line)
-        marker = next((item for item in folded if item in key), None)
-        if marker is None:
-            continue
-        tail = re.split(r"[:\-]\s*", line, maxsplit=1)
-        value = tail[1] if len(tail) == 2 else line[key.find(marker) + len(marker) :]
-        return value.strip(" .;"), None
-    return None, None
+def _from_phase_field(
+    field: dict[str, Any],
+    *,
+    review: bool,
+    method: str,
+) -> dict[str, Any]:
+    """Adapt the shared family parser field without losing its evidence."""
+
+    value = field.get("normalizedValue")
+    if value is None:
+        value = field.get("value")
+    return _field(
+        str(value) if value is not None else None,
+        method=method,
+        block=field if value is not None else None,
+        review=review,
+    )
 
 
-def _regex_line(lines: list[str], pattern: str) -> str | None:
-    expression = re.compile(pattern, re.IGNORECASE)
-    for line in lines:
-        match = expression.search(_fold(line))
-        if match:
-            # Fold preserves character count for Vietnamese accents and đ.
-            return line[match.start(1) : match.end(1)].strip(" .;:")
-    return None
+def _bounded_external(
+    canonical: dict[str, Any],
+    labels: tuple[str, ...],
+    *,
+    stops: tuple[str, ...],
+    review: bool,
+    method: str,
+    normalizer: Any = None,
+) -> dict[str, Any]:
+    return _from_phase_field(
+        _bounded_labeled(
+            canonical,
+            labels,
+            stop_labels=stops,
+            normalizer=normalizer,
+            method=method,
+        ),
+        review=review,
+        method=method,
+    )
 
 
-def _section(lines: list[str], heading: str, stops: tuple[str, ...]) -> str | None:
-    start = next((i for i, line in enumerate(lines) if heading in _fold(line)), None)
-    if start is None:
-        return None
-    stop_keys = tuple(_fold(item) for item in stops)
-    values: list[str] = []
-    for line in lines[start + 1 :]:
-        if any(marker in _fold(line) for marker in stop_keys):
-            break
-        values.append(line)
-    return "\n".join(values).strip() or None
+def _regex_external(
+    canonical: dict[str, Any],
+    patterns: tuple[str, ...],
+    *,
+    review: bool,
+    method: str,
+    data_type: str = "string",
+    normalizer: Any = None,
+) -> dict[str, Any]:
+    return _from_phase_field(
+        _regex_field(
+            canonical,
+            patterns,
+            data_type=data_type,
+            normalizer=normalizer,
+            method=method,
+        ),
+        review=review,
+        method=method,
+    )
 
 
 def _date(value: str | None) -> str | None:
     if not value:
         return None
+    words = re.search(
+        r"(?:ngày\s+)?(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})",
+        value,
+        re.IGNORECASE,
+    )
+    if words:
+        return f"{int(words.group(1)):02d}/{int(words.group(2)):02d}/{words.group(3)}"
     match = re.search(r"(\d{1,2})[./-](\d{1,2})[./-](\d{4})", value)
     return (
         f"{int(match.group(1)):02d}/{int(match.group(2)):02d}/{match.group(3)}"
         if match
         else value.strip()
     )
+
+
+def _iso_date(value: str | None) -> str | None:
+    if not value:
+        return None
+    cleaned = " ".join(str(value).replace("–", "-").split()).upper()
+    for pattern in ("%d/%m/%Y", "%d-%m-%Y", "%d/%b/%Y", "%d-%b-%Y"):
+        try:
+            return datetime.strptime(cleaned, pattern).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    match = re.search(r"(\d{1,2})[./-](\d{1,2})[./-](\d{4})", cleaned)
+    if match:
+        try:
+            return datetime(
+                int(match.group(3)), int(match.group(2)), int(match.group(1))
+            ).strftime("%Y-%m-%d")
+        except ValueError:
+            return None
+    return None
+
+
+def _canonical_blocks(canonical: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        block
+        for page in canonical.get("pages", [])
+        for block in page.get("blocks", [])
+        if str(block.get("text") or "").strip()
+    ]
+
+
+def _cv_name_candidate(value: str) -> bool:
+    words = value.split()
+    letters = [character for character in value if character.isalpha()]
+    key = _fold(value)
+    return (
+        2 <= len(words) <= 6
+        and len(letters) >= 6
+        and "@" not in value
+        and not any(character.isdigit() for character in value)
+        and key not in {"curriculum vitae", "ky nang", "hoc van", "kinh nghiem lam viec"}
+    )
+
+
+def _cv_header_fields(canonical: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    blocks = _canonical_blocks(canonical)
+    empty = _field(None, method="cv_header_layout", block=None, review=False)
+    for block in blocks[:5]:
+        text = str(block.get("text") or "").strip(" •")
+        if not text or "@" in text or "|" in text:
+            continue
+        parts = re.split(r"(?<=[a-zà-ỹ])(?=[A-ZĐ])", text, maxsplit=1)
+        if len(parts) == 2 and _cv_name_candidate(parts[0].strip()):
+            name = _field(parts[0].strip(), method="cv_header_name", block=block, review=False)
+            headline = _field(parts[1].strip(), method="cv_header_headline", block=block, review=False)
+            return name, headline
+        if _cv_name_candidate(text):
+            name = _field(text, method="cv_header_name", block=block, review=False)
+            for candidate in blocks[blocks.index(block) + 1 : blocks.index(block) + 4]:
+                candidate_text = str(candidate.get("text") or "").strip(" •")
+                if candidate_text and "|" not in candidate_text and "@" not in candidate_text:
+                    return name, _field(
+                        candidate_text,
+                        method="cv_header_headline",
+                        block=candidate,
+                        review=False,
+                    )
+            return name, empty
+    return empty, empty
+
+
+def _cv_contact_address(canonical: dict[str, Any], *, review: bool) -> dict[str, Any]:
+    for block in _canonical_blocks(canonical)[:6]:
+        text = str(block.get("text") or "")
+        if "|" not in text:
+            continue
+        for part in reversed([item.strip() for item in text.split("|")]):
+            if part and "@" not in part and "linkedin" not in part.casefold() and not re.search(r"\d", part):
+                return _field(part, method="cv_contact_layout", block=block, review=review)
+    return _field(None, method="cv_contact_layout", block=None, review=review)
+
+
+def _cv_email(canonical: dict[str, Any], *, review: bool) -> dict[str, Any]:
+    for block in _canonical_blocks(canonical)[:8]:
+        text = str(block.get("text") or "")
+        match = re.search(
+            r"([A-Z0-9._%+-]+(?:\s+[A-Z0-9._%+-]+)?)\s*@\s*([A-Z0-9.-]+)\s*(?:\.|\s+)?(com|vn|net|org)\b",
+            text,
+            re.IGNORECASE,
+        )
+        if not match:
+            continue
+        local = re.sub(r"\s+", ".", match.group(1).strip(" ."))
+        domain = re.sub(r"\s+", "", match.group(2)).strip(".")
+        return _field(
+            f"{local}@{domain}.{match.group(3).lower()}",
+            block=block,
+            method="cv_email_ocr_layout",
+            review=review,
+        )
+    return _field(None, method="cv_email_ocr_layout", block=None, review=review)
+
+
+def _cv_layout_headline(canonical: dict[str, Any], *, review: bool) -> dict[str, Any]:
+    blocks = _canonical_blocks(canonical)
+    for index, block in enumerate(blocks[:6]):
+        if not _cv_name_candidate(str(block.get("text") or "").strip()):
+            continue
+        parts: list[str] = []
+        evidence = None
+        for candidate in blocks[index + 1 : index + 4]:
+            text = str(candidate.get("text") or "").strip()
+            if (
+                not text
+                or "|" in text
+                or "@" in text
+                or re.search(r"\d", text)
+                or _fold(text) in {"muc tieu nghe nghiep", "objective"}
+            ):
+                break
+            parts.append(text)
+            evidence = evidence or candidate
+            if sum(len(item.split()) for item in parts) >= 4:
+                break
+        if parts:
+            return _field(" ".join(parts), method="cv_header_headline", block=evidence, review=review)
+    return _field(None, method="cv_header_headline", block=None, review=review)
+
+
+def _cv_years(canonical: dict[str, Any], *, review: bool) -> dict[str, Any]:
+    for block in _canonical_blocks(canonical):
+        match = re.search(r"(\d+)\s+nam", _fold(block.get("text")))
+        if match:
+            return _field(
+                f"{match.group(1)} năm",
+                method="cv_years_ocr_layout",
+                block=block,
+                review=review,
+            )
+    return _field(None, method="cv_years_ocr_layout", block=None, review=review)
+
+
+def _cv_desired_role(canonical: dict[str, Any], *, review: bool) -> dict[str, Any]:
+    blocks = _canonical_blocks(canonical)
+    in_objective = False
+    for block in blocks:
+        text = str(block.get("text") or "").strip()
+        key = _fold(text)
+        if "muc tieu nghe nghiep" in key or key == "objective":
+            in_objective = True
+            continue
+        if in_objective and any(
+            key == marker or key.startswith(f"{marker} ") or key.startswith(f"{marker} &")
+            for marker in ("hoc van", "kinh nghiem", "ky nang", "chung chi", "du an")
+        ):
+            break
+        if not in_objective or not text:
+            continue
+        patterns = (
+            r"\b(?:vị trí|trở thành|theo hướng)\s+(.+?)(?=\s+(?:cho|trong|với|có)\b|[.;]|$)",
+            r"^\s*[•-]?\s*([^,.;]+?)(?=\s+với\b)",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return _field(
+                    match.group(1).strip(" .;,-"),
+                    method="cv_objective_role_layout",
+                    block=block,
+                    review=review,
+                )
+    return _field(None, method="cv_objective_role_layout", block=None, review=review)
+
+
+def _ocr_bbox(block: dict[str, Any]) -> tuple[float, float, float, float] | None:
+    evidence = block.get("evidence")
+    return _box_bounds(evidence.get("bbox")) if isinstance(evidence, dict) else None
+
+
+def _ocr_value_after_label(
+    blocks: list[dict[str, Any]],
+    labels: tuple[str, ...],
+    *,
+    predicate: Any,
+    method: str,
+    review: bool,
+) -> dict[str, Any]:
+    keys = tuple(_fold(label) for label in labels)
+    for index, block in enumerate(blocks):
+        key = _fold(block.get("text"))
+        if not any(label in key for label in keys):
+            continue
+        label_box = _ocr_bbox(block)
+        candidates: list[tuple[float, dict[str, Any]]] = []
+        for candidate_index, candidate in enumerate(blocks[index + 1 : index + 5], index + 1):
+            text = str(candidate.get("text") or "").strip()
+            candidate_key = _fold(text)
+            if any(
+                marker in candidate_key
+                for marker in ("first name", "candidate", "date", "sex", "scheme", "country", "nationality", "test results", "overall")
+            ):
+                break
+            if not text or not predicate(text):
+                continue
+            candidate_box = _ocr_bbox(candidate)
+            distance = float(candidate_index - index)
+            if label_box and candidate_box:
+                lx0, ly0, lx1, ly1 = label_box
+                cx0, cy0, cx1, cy1 = candidate_box
+                if cy0 < ly0 - 80 or cy0 > ly1 + 100:
+                    distance += 10
+                if cx0 >= lx1 - 30:
+                    distance -= 1
+                distance += abs((cy0 + cy1) / 2 - (ly0 + ly1) / 2) / 1000
+            candidates.append((distance, candidate))
+        if candidates:
+            selected = min(candidates, key=lambda item: item[0])[1]
+            return _field(str(selected.get("text")), method=method, block=selected, review=review)
+    return _field(None, method=method, block=None, review=review)
+
+
+def _ielts_fields(canonical: dict[str, Any], *, review: bool) -> dict[str, dict[str, Any]]:
+    blocks = _canonical_blocks(canonical)
+    person = lambda value: (
+        1 <= len(value.split()) <= 5
+        and len(re.sub(r"[^A-Za-zÀ-ỹ]", "", value)) >= 3
+        and not re.search(r"\d|candidate|family|first|date|number", value, re.IGNORECASE)
+    )
+    family_person = lambda value: (
+        1 <= len(value.split()) <= 3
+        and len(re.sub(r"[^A-Za-zÀ-ỹ]", "", value)) >= 2
+        and not re.search(r"\d|candidate|family|first|date|number", value, re.IGNORECASE)
+    )
+    family = _ocr_value_after_label(
+        blocks, ("Family Name",), predicate=family_person,
+        method="ielts_family_name_layout", review=review,
+    )
+    first = _ocr_value_after_label(
+        blocks, ("First Name(s)", "First Name"), predicate=person,
+        method="ielts_first_name_layout", review=review,
+    )
+    recipient_value = " ".join(
+        str(item["value"]).strip() for item in (family, first) if item.get("value")
+    ) or None
+    recipient = _field(
+        recipient_value,
+        block=family if family.get("value") is not None else first,
+        method="ielts_family_first_layout",
+        review=review,
+    )
+
+    credential = next(
+        (block for block in blocks if _fold(block.get("text")) == "academic"),
+        None,
+    )
+    credential_type = _field(
+        "IELTS Academic" if credential else None,
+        block=credential,
+        method="ielts_credential_type_layout",
+        review=review,
+    )
+
+    def form_number(value: str) -> bool:
+        compact = re.sub(r"\s+", "", value).upper()
+        return bool(re.fullmatch(r"[0-9A-Z]{18}", compact)) and sum(char.isalpha() for char in compact) >= 6
+
+    def normalize_form_number(value: str) -> str:
+        chars = list(re.sub(r"\s+", "", value).upper())
+        digit_positions = set(range(0, 2)) | set(range(4, 10)) | set(range(14, 17))
+        replacements = {"O": "0", "I": "1", "L": "1", "S": "5", "B": "8", "Z": "2"}
+        for index in digit_positions:
+            if index < len(chars):
+                chars[index] = replacements.get(chars[index], chars[index])
+        return "".join(chars)
+
+    form_candidates = [block for block in blocks if form_number(str(block.get("text") or ""))]
+    credential_id = _field(
+        normalize_form_number(str(selected.get("text"))) if (selected := (max(form_candidates, key=lambda block: (_ocr_bbox(block) or (0, 0, 0, 0))[1]) if form_candidates else None)) else None,
+        block=selected,
+        method="ielts_form_number_layout",
+        review=review,
+    )
+    if credential_id.get("value") is not None:
+        credential_id["value"] = normalize_form_number(str(credential_id["value"]))
+        credential_id["normalizedValue"] = credential_id["value"]
+
+    def band_score(value: str) -> bool:
+        return bool(re.fullmatch(r"(?:[0-9]|10)(?:\.0|\.5)?", value.strip()))
+
+    score = _field(None, method="ielts_overall_band_layout", block=None, review=review)
+    for block in blocks:
+        key = _fold(block.get("text"))
+        if "overall" not in key and key not in {"bvnral", "overall band"}:
+            continue
+        label_box = _ocr_bbox(block)
+        candidates = []
+        for candidate in blocks:
+            value = str(candidate.get("text") or "").strip().replace(",", ".")
+            box = _ocr_bbox(candidate)
+            if not box or not label_box or not band_score(value):
+                continue
+            if box[0] < label_box[2] - 20 or box[1] < label_box[1] - 35 or box[1] > label_box[3] + 90:
+                continue
+            candidates.append((abs(box[0] - label_box[2]) + abs(box[1] - label_box[1]), candidate, value))
+        if candidates:
+            _, selected, value = min(candidates, key=lambda item: item[0])
+            score = _field(value, block=selected, method="ielts_overall_band_layout", review=review)
+            break
+    if score["value"] is None:
+        score = _ocr_value_after_label(
+            blocks, ("Overall", "Band"), predicate=band_score,
+            method="ielts_overall_band_layout", review=review,
+        )
+
+    date_blocks = [
+        block for block in blocks
+        if re.search(r"\b\d{1,2}(?:/|-)[A-Za-z0-9]{2,3}(?:/|-)\d{4}\b|\b\d{1,2}[./-]\d{1,2}[./-]\d{4}\b", str(block.get("text") or ""))
+    ]
+    issue = _field(None, method="ielts_issue_date_layout", block=None, review=review)
+    if date_blocks:
+        selected = max(
+            date_blocks,
+            key=lambda block: (_ocr_bbox(block) or (0, 0, 0, 0))[1],
+        )
+        raw = str(selected.get("text") or "")
+        normalized = _iso_date(raw)
+        issue = _field(normalized or raw, method="ielts_issue_date_layout", block=selected, review=review)
+        issue["normalizedValue"] = normalized or issue["value"]
+    return {
+        "recipient_name": recipient,
+        "credential_id": credential_id,
+        "credential_type": credential_type,
+        "overall_score": score,
+        "issue_date": issue,
+    }
+
+
+def _narrative_label(
+    canonical: dict[str, Any],
+    pattern: str,
+    *,
+    method: str,
+    review: bool,
+    normalizer: Any = None,
+    continue_lines: bool = True,
+) -> dict[str, Any]:
+    blocks = _canonical_blocks(canonical)
+    compiled = re.compile(pattern, re.IGNORECASE)
+    for index, block in enumerate(blocks):
+        text = str(block.get("text") or "").strip()
+        match = compiled.search(text)
+        if not match:
+            continue
+        value = match.group(1).strip(" .;:-")
+        evidence = block
+        cursor = index + 1
+        can_continue = continue_lines and match.end() >= len(text.rstrip())
+        while can_continue and value and not value.endswith(".") and cursor < len(blocks) and len(value) < 320:
+            candidate = str(blocks[cursor].get("text") or "").strip()
+            if (
+                not candidate
+                or re.match(r"^(?:\d+\.\s*|Điều\s+\d+|BÊN\s+[AB])", candidate, re.IGNORECASE)
+            ):
+                break
+            value = f"{value} {candidate}".strip(" .;:-")
+            cursor += 1
+        normalized = normalizer(value) if normalizer else value
+        return _field(value, method=method, block=evidence, review=review) | {
+            "normalizedValue": normalized,
+        }
+    return _field(None, method=method, block=None, review=review)
+
+
+def _weekly_hours(canonical: dict[str, Any], *, review: bool) -> dict[str, Any]:
+    for block in _canonical_blocks(canonical):
+        text = str(block.get("text") or "")
+        if "thời giờ làm việc" not in text.casefold() and "thoi gio lam viec" not in _fold(text):
+            continue
+        times = [
+            (int(hour), int(minute or 0))
+            for hour, minute in re.findall(r"(\d{1,2})h(\d{2})?", text, re.IGNORECASE)
+        ]
+        if len(times) < 4:
+            continue
+        daily = sum(
+            (times[index + 1][0] + times[index + 1][1] / 60)
+            - (times[index][0] + times[index][1] / 60)
+            for index in (0, 2)
+        )
+        weekly = daily * 5
+        def fmt(value: float) -> str:
+            return str(int(value)) if value.is_integer() else str(value).replace(".", ",")
+        result = f"{fmt(weekly)} giờ/tuần"
+        if not daily.is_integer():
+            result += f" — {fmt(daily)} giờ/ngày × 5 ngày"
+        return _field(result, method="weekly_hours_schedule", block=block, review=review)
+    return _field(None, method="weekly_hours_schedule", block=None, review=review)
 
 
 def _external_fields(
@@ -204,81 +678,121 @@ def _external_fields(
     *,
     ocr: bool,
 ) -> dict[str, dict[str, Any]]:
-    lines = _lines(canonical.get("plainText", ""))
     phase_fields = extraction.get("fields", {})
 
     def direct(name: str, aliases: tuple[str, ...] = ()) -> dict[str, Any]:
         for candidate in (name, *aliases):
             item = phase_fields.get(candidate)
             if isinstance(item, dict) and item.get("value") is not None:
-                return _field(
-                    str(item["value"]),
-                    method="phase15_alias",
-                    block=item.get("evidence"),
+                return _from_phase_field(
+                    item,
+                    method="phase15_family_alias",
                     review=ocr,
                 )
-        return _field(None, method="phase15_alias", block=None, review=ocr)
+        return _field(None, method="phase15_family_alias", block=None, review=ocr)
 
     if category == "cv":
         name = direct("fullName")
-        if name["value"] is None and lines:
-            name = _field(lines[0], method="top_line", block=None, review=ocr)
+        layout_name, layout_headline = _cv_header_fields(canonical)
+        if name["value"] is None or not _cv_name_candidate(str(name["value"])):
+            if layout_name.get("value") is not None:
+                name = _field(
+                    str(layout_name["value"]),
+                    method=str(layout_name.get("method") or "cv_header_name"),
+                    block=layout_name,
+                    review=ocr,
+                )
+        if ocr:
+            combined_headline = _cv_layout_headline(canonical, review=ocr)
+            if combined_headline["value"] is not None:
+                layout_headline = combined_headline
         headline = direct("headline")
-        if headline["value"] is None and len(lines) > 1:
-            headline = _field(lines[1], method="top_line", block=None, review=ocr)
-        email = direct("email")
-        if email["value"] is None:
-            email = _field(
-                _regex_line(lines, r"([\w.+-]+@[\w.-]+\.[a-z]{2,})"),
-                method="email_pattern",
-                block=None,
+        if headline["value"] is None and layout_headline.get("value") is not None:
+            headline = _field(
+                str(layout_headline["value"]),
+                method=str(layout_headline.get("method") or "cv_header_headline"),
+                block=layout_headline,
                 review=ocr,
             )
+        if headline["value"] is None:
+            headline = _bounded_external(
+                canonical,
+                ("Vị trí ứng tuyển", "Chức danh", "Vị trí", "Headline"),
+                stops=("Địa chỉ", "Học vấn", "Kinh nghiệm", "Kỹ năng"),
+                review=ocr,
+                method="cv_headline_label",
+            )
+        email = direct("email")
+        if email["value"] is None:
+            email = _regex_external(
+                canonical,
+                (r"\b([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\b",),
+                method="email_pattern",
+                review=ocr,
+            )
+        if email["value"] is None and ocr:
+            email = _cv_email(canonical, review=ocr)
+        elif ocr:
+            layout_email = _cv_email(canonical, review=ocr)
+            if layout_email["value"] is not None:
+                email = layout_email
         phone = direct("phoneNumber")
         if phone["value"] is None:
-            phone = _field(
-                _regex_line(lines, r"(0\d{8,10})"), method="phone_pattern", block=None, review=ocr
+            phone = _regex_external(
+                canonical,
+                (r"((?:\+?84|0)(?:[\s.-]?\d){8,10})",),
+                method="phone_pattern",
+                review=ocr,
             )
         address = direct("address")
         if address["value"] is None:
-            value, _ = _find_line(lines, "địa chỉ", "address")
-            address = _field(value, method="address_label", block=None, review=ocr)
+            address = _bounded_external(
+                canonical,
+                ("Địa chỉ", "Address"),
+                stops=("Mục tiêu nghề nghiệp", "Kinh nghiệm", "Kỹ năng", "Học vấn"),
+                review=ocr,
+                method="cv_address_label",
+            )
+        if address["value"] is None:
+            address = _cv_contact_address(canonical, review=ocr)
         education = direct("education")
         if education["value"] is None:
-            education = _field(
-                _section(lines, "học vấn", ("kinh nghiệm", "kỹ năng")),
+            education = _from_phase_field(
+                extraction.get("fields", {}).get("education", {"value": None}),
                 method="section",
-                block=None,
                 review=ocr,
             )
         experience = direct("experience")
         if experience["value"] is None:
-            experience = _field(
-                _section(lines, "kinh nghiệm", ("kỹ năng", "chứng chỉ")),
+            experience = _from_phase_field(
+                extraction.get("fields", {}).get("experience", {"value": None}),
                 method="section",
-                block=None,
                 review=ocr,
             )
         skills = direct("skills")
         if skills["value"] is None:
-            skills = _field(
-                _section(lines, "kỹ năng", ("chứng chỉ", "giải thưởng", "hoạt động")),
+            skills = _from_phase_field(
+                extraction.get("fields", {}).get("skills", {"value": None}),
                 method="section",
-                block=None,
                 review=ocr,
             )
-        desired = _field(
-            _regex_line(lines, r"trở thành\s+(.+)$"),
-            method="desired_role_pattern",
-            block=None,
-            review=ocr,
-        )
-        years = _field(
-            _regex_line(lines, r"((?:hơn|trên|ít nhất)\s+\d+\s+năm)"),
+        desired = _cv_desired_role(canonical, review=ocr)
+        if desired["value"] is None:
+            desired = _bounded_external(
+                canonical,
+                ("Mục tiêu nghề nghiệp", "Desired role", "Vị trí mong muốn"),
+                stops=("Học vấn", "Kinh nghiệm", "Kỹ năng"),
+                review=ocr,
+                method="cv_desired_role_section",
+            )
+        years = _regex_external(
+            canonical,
+            (r"((?:hơn|trên|ít nhất)\s+\d+\s+năm)", r"(\d+\s+năm\s+kinh\s+nghiệm)", r"(\d+\s+năm)"),
             method="years_experience_pattern",
-            block=None,
             review=ocr,
         )
+        if years["value"] is None and ocr:
+            years = _cv_years(canonical, review=ocr)
         return {
             "full_name": name,
             "headline": headline,
@@ -293,71 +807,163 @@ def _external_fields(
         }
 
     if category == "contract":
-
-        def line(*markers: str, method: str = "label") -> dict[str, Any]:
-            value, _ = _find_line(lines, *markers)
-            return _field(value, method=method, block=None, review=ocr)
-
-        contract_number = _field(
-            _regex_line(lines, r"(?:số|so)\s*[:\-]?\s*([a-z0-9./-]{5,})"),
-            method="contract_number_pattern",
-            block=None,
+        labels = (
+            "Số hợp đồng", "Số", "Ngày ký", "Hiệu lực từ", "Bắt đầu từ",
+            "Kết thúc thử việc", "Hết hạn thử việc", "Đại diện cho", "Công ty",
+            "Đại diện", "Người lao động", "Ông/bà", "Họ và tên", "CCCD số",
+            "CMND số", "Công việc/Chức danh", "Chức danh", "Vị trí công việc",
+            "Địa điểm làm việc", "Mức lương thử việc", "Lương thử việc", "Phụ cấp",
+            "Thanh toán", "Trả lương", "Số giờ/tuần", "Giờ/tuần",
+        )
+        contract_number = _bounded_external(
+            canonical,
+            ("Số hợp đồng", "Số", "Contract number"),
+            stops=labels,
+            review=ocr,
+            method="contract_number_label",
+        )
+        date_pattern = (
+            r"((?:\d{1,2}[./-]\d{1,2}[./-]\d{4}|"
+            r"\d{1,2}\s+tháng\s+\d{1,2}\s+năm\s+\d{4}))"
+        )
+        sign_date = _regex_external(
+            canonical,
+            (rf"ngày\s+{date_pattern}",),
+            method="sign_date_narrative",
+            normalizer=_date,
             review=ocr,
         )
-        sign_date = _field(
-            _regex_line(
-                lines, r"(?:ngày ký|ngay ky|ngày)\s*[:\-]?\s*(\d{1,2}[./-]\d{1,2}[./-]\d{4})"
-            ),
-            method="sign_date_pattern",
-            block=None,
+        if sign_date["value"] is None:
+            sign_date = _bounded_external(
+                canonical,
+                ("Ngày ký", "Ngay ky"),
+                stops=labels,
+                method="sign_date_label",
+                normalizer=_date,
+                review=ocr,
+            )
+        effective = _regex_external(
+            canonical,
+            (rf"kể từ ngày\s+{date_pattern}",),
+            method="effective_date_narrative",
+            normalizer=_date,
             review=ocr,
         )
-        effective = _field(
-            _regex_line(
-                lines,
-                r"(?:hiệu lực từ|hieu luc tu|bắt đầu từ|bat dau tu)\s*"
-                r"(?:ngày|ngay)?\s*[:\-]?\s*"
-                r"(\d{1,2}[./-]\d{1,2}[./-]\d{4})",
-            ),
-            method="effective_date_pattern",
-            block=None,
+        if effective["value"] is None:
+            effective = _bounded_external(
+                canonical,
+                ("Hiệu lực từ", "Hieu luc tu", "Bắt đầu từ", "Bat dau tu"),
+                stops=labels,
+                method="effective_date_label",
+                normalizer=_date,
+                review=ocr,
+            )
+        probation_end = _regex_external(
+            canonical,
+            (rf"đến ngày\s+{date_pattern}",),
+            method="probation_end_narrative",
+            normalizer=_date,
             review=ocr,
         )
-        probation_end = _field(
-            _regex_line(
-                lines,
-                r"(?:kết thúc thử việc|ket thuc thu viec|hết hạn thử việc)\s*"
-                r"[:\-]?\s*(\d{1,2}[./-]\d{1,2}[./-]\d{4})",
-            ),
-            method="probation_end_pattern",
-            block=None,
+        if probation_end["value"] is None:
+            probation_end = _bounded_external(
+                canonical,
+                ("Kết thúc thử việc", "Ket thuc thu viec", "Hết hạn thử việc"),
+                stops=labels,
+                method="probation_end_label",
+                normalizer=_date,
+                review=ocr,
+            )
+        employer = _regex_external(
+            canonical,
+            (r"Tên\s+công\s+ty\s*:\s*(.+)",),
+            method="employer_name_label",
             review=ocr,
         )
-        employer = line("đại diện cho", "cong ty", method="employer_label")
-        representative = line("đại diện", "dai dien", method="representative_label")
-        employee = line("ông/bà", "ong/ba", method="employee_label")
-        employee_id = _field(
-            _regex_line(lines, r"(?:cccd số|cccd so|cmnd số|cmnd so)\s*[:\-]?\s*([0-9]{9,12})"),
-            method="employee_id_pattern",
-            block=None,
+        if employer["value"] is None:
+            employer = _bounded_external(
+                canonical,
+                ("Đại diện cho", "Công ty"),
+                stops=labels,
+                review=ocr,
+                method="employer_label",
+            )
+        representative = _narrative_label(
+            canonical,
+            r"Đại\s+diện\s+bởi\s*:\s*(?:Ông|Bà)\s+(.+?)(?=\s+Chức\s+vụ\s*:|$)",
+            method="representative_name_label",
+            review=ocr,
+            continue_lines=False,
+        )
+        if representative["value"] is None:
+            representative = _bounded_external(
+                canonical,
+                ("Đại diện",),
+                stops=labels,
+                review=ocr,
+                method="representative_label",
+            )
+        employee = _narrative_label(
+            canonical,
+            r"Họ\s+và\s+tên\s*:\s*(.+?)(?=\s+Giới\s+tính\s*:|$)",
+            method="employee_name_label",
+            review=ocr,
+            continue_lines=False,
+        )
+        if employee["value"] is None:
+            employee = _bounded_external(
+                canonical,
+                ("Người lao động", "Ông/bà", "Họ và tên"),
+                stops=labels,
+                review=ocr,
+                method="employee_label",
+            )
+        employee_id = _regex_external(
+            canonical,
+            (r"(?:CCCD số|CCCD so|CMND số|CMND so)\s*[:\-]?\s*([0-9]{9,12})",),
+            method="employee_id_pattern", review=ocr,
+        )
+        job = _narrative_label(
+            canonical,
+            r"Chức\s+danh\s+công\s+việc\s*:\s*(.+?)(?:\.\s*$|$)",
+            method="job_title_narrative",
             review=ocr,
         )
-        job = line("công việc/chức danh", "chức danh", "vi tri cong viec", method="job_title_label")
-        workplace = line("địa điểm làm việc", "dia diem lam viec", method="workplace_label")
-        weekly = _field(
-            _regex_line(lines, r"(\d{1,3}\s*giờ\s*/\s*tuần|\d{1,3}\s*gio\s*/\s*tuan)"),
-            method="weekly_hours_pattern",
-            block=None,
+        if job["value"] is None:
+            job = _bounded_external(
+                canonical,
+                ("Công việc/Chức danh", "Chức danh", "Vị trí công việc"),
+                stops=labels,
+                review=ocr,
+                method="job_title_label",
+            )
+        workplace = _narrative_label(
+            canonical,
+            r"Nơi\s+làm\s+việc\s*:\s*(.+?)(?:\.\s*$|$)",
+            method="workplace_narrative",
             review=ocr,
         )
-        salary = line(
-            "mức lương thử việc", "muc luong thu viec", "lương thử việc", method="salary_label"
+        if workplace["value"] is None:
+            workplace = _bounded_external(
+                canonical,
+                ("Địa điểm làm việc",),
+                stops=labels,
+                review=ocr,
+                method="workplace_label",
+            )
+        weekly = _weekly_hours(canonical, review=ocr)
+        salary = _bounded_external(
+            canonical, ("Mức lương thử việc", "Lương thử việc"), stops=labels,
+            review=ocr, method="salary_label",
         )
-        allowances = line("phụ cấp", "phu cap", method="allowances_label")
-        payment = line("thanh toán", "thanh toan", "trả lương", method="payment_label")
-        for item in (sign_date, effective, probation_end):
-            item["value"] = _date(item["value"])
-            item["normalizedValue"] = item["value"]
+        allowances = _bounded_external(
+            canonical, ("Phụ cấp",), stops=labels,
+            review=ocr, method="allowances_label",
+        )
+        payment = _bounded_external(
+            canonical, ("Thanh toán", "Trả lương"), stops=labels,
+            review=ocr, method="payment_label",
+        )
         return {
             "contract_number": contract_number,
             "contract_sign_date": sign_date,
@@ -375,51 +981,73 @@ def _external_fields(
             "salary_payment_schedule": payment,
         }
 
-    credential = _field(
-        _regex_line(lines, r"(ielts\s+(?:academic|general training))"),
-        method="credential_type_pattern",
-        block=None,
-        review=ocr,
-    )
-    recipient = _field(
-        _regex_line(lines, r"(?:candidate name|recipient|họ và tên|ho va ten)\s*[:\-]?\s*(.+)$"),
-        method="recipient_label",
-        block=None,
-        review=ocr,
-    )
-    if recipient["value"] is None:
-        recipient = _field(
-            next((line for line in lines if re.fullmatch(r"[A-Z][A-Z .'-]{5,}", line)), None),
-            method="uppercase_name_candidate",
-            block=None,
-            review=ocr,
+    if category == "ielts":
+        layout = _ielts_fields(canonical, review=ocr)
+        for key, phase_name in (
+            ("recipient_name", "recipientName"),
+            ("credential_id", "credentialId"),
+            ("credential_type", "credentialType"),
+            ("overall_score", "overallScore"),
+            ("issue_date", "issueDate"),
+        ):
+            if layout[key]["value"] is None:
+                item = direct(phase_name)
+                if item["value"] is not None:
+                    layout[key] = item
+        return layout
+
+    credential = direct("credentialType")
+    if credential["value"] is None:
+        credential = _from_phase_field(
+            _credential_type(canonical), review=ocr, method="credential_type_heading"
         )
-    credential_id = _field(
-        _regex_line(
-            lines,
-            r"(?:trf no|test report form|candidate number|credential id|id)\s*"
-            r"[:\-]?\s*([a-z0-9-]{6,})",
-        ),
-        method="credential_id_pattern",
-        block=None,
-        review=ocr,
-    )
-    score = _field(
-        _regex_line(lines, r"(?:overall(?: band)?(?: score)?|overall)\s*[:\-]?\s*(\d(?:\.\d)?)"),
-        method="overall_score_pattern",
-        block=None,
-        review=ocr,
-    )
-    issue = _field(
-        _regex_line(
-            lines,
-            r"(?:issue date|test date|date of issue|ngày cấp|ngay cap)\s*"
-            r"[:\-]?\s*(\d{1,2}[./-]\d{1,2}[./-]\d{4})",
-        ),
-        method="issue_date_pattern",
-        block=None,
-        review=ocr,
-    )
+    recipient = direct("recipientName")
+    if recipient["value"] is None:
+        recipient = _bounded_external(
+            canonical,
+            ("Candidate name", "Recipient", "Họ và tên", "Cấp cho", "Awarded to"),
+            stops=("Candidate number", "Credential ID", "Overall", "Issue date", "Test date"),
+            review=ocr,
+            method="recipient_label",
+        )
+    if recipient["value"] is None:
+        recipient = _from_phase_field(
+            _field_after_marker(
+                canonical,
+                ("Trân trọng chứng nhận", "This certifies that", "Awarded to"),
+                predicate=_likely_person_name,
+                method="recipient_after_credential_marker",
+            ),
+            review=ocr,
+            method="recipient_after_credential_marker",
+        )
+    credential_id = direct("credentialId")
+    if credential_id["value"] is None:
+        credential_id = _bounded_external(
+            canonical,
+            ("TRF No", "Test Report Form", "Candidate number", "Credential ID", "ID",
+             "Số hiệu/Mã chứng nhận", "Mã chứng chỉ"),
+            stops=("Overall", "Issue date", "Test date", "Candidate name"),
+            review=ocr,
+            method="credential_id_pattern",
+        )
+    score = direct("overallScore")
+    if score["value"] is None:
+        score = _regex_external(
+            canonical,
+            (r"(?:overall(?: band)?(?: score)?|overall)\s*[:\-]?\s*(\d(?:\.\d)?)",),
+            method="overall_score_pattern", review=ocr,
+        )
+    issue = direct("issueDate")
+    if issue["value"] is None:
+        issue = _bounded_external(
+            canonical,
+            ("Issue date", "Test date", "Date of issue", "Ngày cấp", "Ngày thi"),
+            stops=("Overall", "Candidate number", "Credential ID"),
+            review=ocr,
+            method="issue_date_pattern",
+            normalizer=_date,
+        )
     return {
         "recipient_name": recipient,
         "credential_id": credential_id,
@@ -503,6 +1131,7 @@ def build_prediction_artifact(
     *,
     ocr_engine: Any,
     scope_policy: str = "data12",
+    ocr_engine_name: str | None = None,
 ) -> dict[str, Any]:
     root = _safe_root(root)
     inventory = _read_object(inventory_path)
@@ -525,37 +1154,6 @@ def build_prediction_artifact(
             and source_format == "DOCX"
             and bool(record.get("embeddedImageReview"))
         )
-        if data13_scope and scan_input and category != "ielts":
-            fields = {
-                name: _field(
-                    None,
-                    method="ocr_disabled_by_policy",
-                    block=None,
-                    review=False,
-                )
-                for name in FIELD_SPECS[category]
-            }
-            documents.append(
-                {
-                    "caseId": record["caseId"],
-                    "category": category,
-                    "sourceFormat": source_format,
-                    "sourceFile": source.name,
-                    "sourceSha256": record.get("sourceSha256"),
-                    "predictedCategory": None,
-                    "classification": {},
-                    "fields": fields,
-                    "evaluationIncluded": False,
-                    "processing": {
-                        "usesOcr": False,
-                        "ocrEngine": None,
-                        "ocrScope": "UNSUPPORTED_NO_OCR",
-                        "recommendedAction": "REJECT_UNSUPPORTED",
-                        "reason": "OCR_DISABLED_BY_POLICY",
-                    },
-                }
-            )
-            continue
         canonical = ingest_document(source)
         ocr_required = ocr_required or (
             data13_scope
@@ -606,7 +1204,10 @@ def build_prediction_artifact(
                 "evaluationIncluded": True,
                 "processing": {
                     "usesOcr": ocr_required,
-                    "ocrEngine": "paddleocr/latin_pp-ocrv5" if ocr_required else None,
+                    "ocrEngine": (
+                        ocr_engine_name
+                        or getattr(ocr_engine, "engine_name", "paddleocr/latin_pp-ocrv5")
+                    ) if ocr_required else None,
                     "ocrScope": "OCR_ALLOWED" if ocr_required else "NATIVE_ONLY",
                     "recommendedAction": "MANUAL_REVIEW" if ocr_required else "USER_REVIEW",
                     "ingestionMode": canonical.get("ingestionMode"),
@@ -627,7 +1228,7 @@ def build_prediction_artifact(
         "containsRealPII": True,
         "localOnly": True,
         "predictionBlindDuringGroundTruthReview": True,
-        "ocrScopePolicy": ("cccd-and-certificate-only" if scope_policy == "data13" else "legacy"),
+        "ocrScopePolicy": ("all-active-families" if scope_policy == "data13" else "legacy"),
         "documents": documents,
     }
 
@@ -636,10 +1237,87 @@ def _norm(value: Any) -> str:
     return " ".join(unicodedata.normalize("NFC", str(value or "")).split())
 
 
+def _field_match(
+    category: str,
+    name: str,
+    truth: Any,
+    guess: Any,
+) -> dict[str, Any]:
+    """Return strict and policy-accepted matching without removing accents."""
+
+    truth_norm, guess_norm = _norm(truth), _norm(guess)
+    if truth_norm == guess_norm:
+        return {
+            "exact": True,
+            "match": True,
+            "matchType": "EXACT",
+            "coverage": 1.0,
+            "diagnosis": None,
+        }
+    if not truth_norm:
+        return {
+            "exact": False,
+            "match": False,
+            "matchType": "EXTRA_PREDICTION" if guess_norm else "EXACT",
+            "coverage": 0.0,
+            "diagnosis": "PREDICTION_FOR_ABSENT_FIELD" if guess_norm else None,
+        }
+    if not guess_norm:
+        return {
+            "exact": False,
+            "match": False,
+            "matchType": "NOT_FOUND",
+            "coverage": 0.0,
+            "diagnosis": "OCR_NOT_RECOGNIZED",
+        }
+    if (category, name) not in SOFT_TEXT_FIELDS:
+        return {
+            "exact": False,
+            "match": False,
+            "matchType": "MISMATCH",
+            "coverage": 0.0,
+            "diagnosis": "OCR_RECOGNIZED_PARSER_MISSED",
+        }
+
+    # Case differences are accepted, while NFC accents/diacritics remain part
+    # of the comparison so missing or corrupted Vietnamese text is visible.
+    truth_fold, guess_fold = truth_norm.casefold(), guess_norm.casefold()
+    if truth_fold == guess_fold:
+        return {
+            "exact": False,
+            "match": True,
+            "matchType": "CASE_INSENSITIVE",
+            "coverage": 1.0,
+            "diagnosis": None,
+        }
+    truth_tokens = re.findall(r"[^\W_]+", truth_fold, flags=re.UNICODE)
+    guess_tokens = re.findall(r"[^\W_]+", guess_fold, flags=re.UNICODE)
+    overlap = sum((Counter(guess_tokens) & Counter(truth_tokens)).values())
+    coverage = overlap / max(1, len(truth_tokens))
+    if coverage >= SOFT_TEXT_MIN_COVERAGE:
+        return {
+            "exact": False,
+            "match": True,
+            "matchType": "PARTIAL_80",
+            "coverage": round(coverage, 6),
+            "diagnosis": None,
+        }
+    return {
+        "exact": False,
+        "match": False,
+        "matchType": "PARTIAL_BELOW_80",
+        "coverage": round(coverage, 6),
+        "diagnosis": "PARTIAL_TEXT_BELOW_80",
+    }
+
+
 def build_aggregate_report(
     prediction: dict[str, Any], ground_truth: dict[str, Any], *, evaluated_at: str | None = None
 ) -> dict[str, Any]:
-    data13_scope = prediction.get("ocrScopePolicy") == "cccd-and-certificate-only"
+    data13_scope = prediction.get("ocrScopePolicy") in {
+        "cccd-and-certificate-only",
+        "all-active-families",
+    }
     report_schema = DATA13_REPORT_SCHEMA_VERSION if data13_scope else REPORT_SCHEMA_VERSION
     gt_by_id = {str(case.get("caseId")): case for case in ground_truth.get("cases", [])}
     exact = 0
@@ -672,7 +1350,9 @@ def build_aggregate_report(
         false_auto += int(
             processing.get("usesOcr") and processing.get("recommendedAction") == "AUTO_CONTINUE"
         )
-        stats = by_category.setdefault(category, {"fields": 0, "exact": 0, "present": 0})
+        stats = by_category.setdefault(
+            category, {"fields": 0, "exact": 0, "accepted": 0, "present": 0}
+        )
         for name in expected:
             field_count += 1
             stats["fields"] += 1
@@ -682,19 +1362,18 @@ def build_aggregate_report(
                 if isinstance(predicted_fields.get(name), dict)
                 else None
             )
-            truth_norm, guess_norm = _norm(truth), _norm(guess)
-            exact += int(truth_norm == guess_norm)
-            stats["exact"] += int(truth_norm == guess_norm)
-            if guess_norm:
+            match = _field_match(category, name, truth, guess)
+            exact += int(match["exact"])
+            stats["exact"] += int(match["exact"])
+            stats["accepted"] += int(match["match"])
+            if _norm(guess):
                 present += 1
                 stats["present"] += 1
-            if truth_norm and not guess_norm:
-                reason = "OCR_NOT_RECOGNIZED" if processing.get("usesOcr") else "PARSER_MISSED"
+            if match["diagnosis"]:
+                reason = match["diagnosis"]
+                if reason == "OCR_NOT_RECOGNIZED" and not processing.get("usesOcr"):
+                    reason = "PARSER_MISSED"
                 diagnoses[reason] = diagnoses.get(reason, 0) + 1
-            elif truth_norm and guess_norm and truth_norm != guess_norm:
-                diagnoses["OCR_RECOGNIZED_PARSER_MISSED"] = (
-                    diagnoses.get("OCR_RECOGNIZED_PARSER_MISSED", 0) + 1
-                )
     return {
         "schemaVersion": report_schema,
         "evaluationKind": "aggregate-only",
@@ -716,11 +1395,31 @@ def build_aggregate_report(
         "metrics": {
             "fieldExactMatchCount": exact,
             "fieldExactMatchRate": round(exact / max(1, field_count), 6),
+            "fieldAcceptedMatchCount": sum(item["accepted"] for item in by_category.values()),
+            "fieldAcceptedMatchRate": round(
+                sum(item["accepted"] for item in by_category.values()) / max(1, field_count),
+                6,
+            ),
             "fieldPresenceCount": present,
             "fieldPresenceRate": round(present / max(1, field_count), 6),
         },
-        "byCategory": by_category,
+        "byCategory": {
+            category: {
+                **stats,
+                "exactRate": round(stats["exact"] / max(1, stats["fields"]), 6),
+                "acceptedRate": round(stats["accepted"] / max(1, stats["fields"]), 6),
+                "presenceRate": round(stats["present"] / max(1, stats["fields"]), 6),
+            }
+            for category, stats in by_category.items()
+        },
         "diagnosisCounts": diagnoses,
+        "matchingPolicy": {
+            "strictExact": "NFC whitespace-normalized equality",
+            "softTextFields": sorted(f"{category}.{name}" for category, name in SOFT_TEXT_FIELDS),
+            "softTextMinTokenCoverage": SOFT_TEXT_MIN_COVERAGE,
+            "caseInsensitiveForSoftText": True,
+            "diacriticsSensitive": True,
+        },
         "schemaErrors": schema_errors,
         "ocrPolicy": {
             "manualReviewCount": manual_review,
@@ -764,8 +1463,14 @@ def load_prediction_summary(paths: tuple[Path, Path, Path]) -> dict[str, Any]:
             ],
         }
     aggregate = _read_object(report)
+    marker_payload = _read_object(marker)
+    evaluated_status = (
+        "DEVELOPMENT_EVALUATED"
+        if marker_payload.get("evaluationKind") == "development-aggregate-comparison"
+        else "EVALUATED_ONCE"
+    )
     return {
-        "status": "EVALUATED_ONCE",
+        "status": evaluated_status,
         "predictionBlind": False,
         "documentCount": artifact.get("documentCount", 0),
         "reportAvailable": True,
@@ -812,14 +1517,22 @@ def load_prediction_document(
         )
         if isinstance(case, dict):
             gt = {str(item.get("name")): item.get("value") for item in case.get("fields", [])}
-            result["comparison"] = {
-                name: {
+            field_names = list(document.get("fields", {}))
+            field_names.extend(name for name in gt if name not in field_names)
+            result["comparison"] = {}
+            for name in field_names:
+                field = document.get("fields", {}).get(name)
+                guess = field.get("value") if isinstance(field, dict) else None
+                match = _field_match(str(document.get("category", "")), name, gt.get(name), guess)
+                if (
+                    match["diagnosis"] == "OCR_NOT_RECOGNIZED"
+                    and not (document.get("processing") or {}).get("usesOcr")
+                ):
+                    match["diagnosis"] = "PARSER_MISSED"
+                result["comparison"][name] = {
                     "groundTruth": gt.get(name),
-                    "prediction": (field or {}).get("value") if isinstance(field, dict) else None,
-                    "exact": _norm(gt.get(name))
-                    == _norm((field or {}).get("value") if isinstance(field, dict) else None),
+                    "prediction": guess,
+                    **match,
                 }
-                for name, field in document.get("fields", {}).items()
-            }
             result["predictionBlind"] = False
     return result

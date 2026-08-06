@@ -230,6 +230,7 @@ def load_shadow_summary(root: Path) -> dict[str, Any]:
     """Return aggregate gate plus non-Ground-Truth local review metadata."""
     config = _artifact_config(root)
     report = _json(_report_path(root))
+    gate_report = report.get("gates") or report.get("promotionGate", {})
     records = _session_records(root)
     store = _review_store(root)
     review_counts = {"PENDING": 0, "APPROVE_SHADOW": 0, "REJECT_SHADOW": 0, "NEEDS_FOLLOWUP": 0}
@@ -263,7 +264,11 @@ def load_shadow_summary(root: Path) -> dict[str, Any]:
         "protectedFields": report.get("protectedFields", []),
         "documentCount": len(records),
         "metrics": report.get("metrics", {}),
-        "promotionGate": report.get("promotionGate", {}),
+        "gates": gate_report,
+        "developmentRegressionGate": gate_report.get("developmentRegressionGate", {}),
+        "heldoutReadinessGate": gate_report.get("heldoutReadinessGate", {}),
+        "promotionGate": gate_report,
+        "warningCounts": report.get("warningCounts", {}),
         "reviewCounts": review_counts,
         "documents": documents,
     }

@@ -5,11 +5,14 @@
 
 | ID | Trạng thái | Mục tiêu | Phụ thuộc | Ưu tiên |
 |---|---|---|---|---|
+| LONGRUN-MAINT-001 | DONE | Chốt checkpoint, archive evidence cũ và kiểm tra nhất quán state/handoff | Current branch state | P1 |
 | OCR-HO-V2-011 | REVIEW | Deterministic address ROI replay failed exact-improvement/DER gate; keep shadow-only and restore secondary recognizer runtime before next replay | OCR-HO-V2-009 | P0 |
 | OCR-HO-V2-012 | REVIEW | Restored full secondary recognizers; v11.9.1 passes development gate but remains shadow-only pending explicit promotion decision | OCR-HO-V2-011 | P0 |
 | OCR-HO-V2-013 | REVIEW | Promotion review and localhost canary for v11.9.1; no primary-runtime promotion until all 15 local shadow decisions are recorded | OCR-HO-V2-012 | P0 |
 | OCR-EVIDENCE-LOCAL-001 | DONE (LOCAL HOLD) | Unified localhost evidence view for real prediction vs Ground Truth; keep Camunda closed until prediction artifacts and OCR gates are complete | OCR-HO-V2-013, DATA-10-R1 | P0 |
-| DATA-13 | DONE (HOLD) | OCR scope allowlist: only CCCD and certificate image/PDF scans may invoke OCR; other families use native text parsing or fail closed | DATA-12 | P0 |
+| DATA-13 | DONE (HOLD) | OCR scope allowlist and evaluate-once artifact for visual HR families; promotion remains disabled | DATA-12 | P0 |
+| DATA-14 | DONE (DEV HOLD) | Recover CV/contract/certificate fields with shared layout-aware parsers; keep visual OCR manual-review and evaluate only on a new development split | DATA-13 | P0 |
+| DATA-15 | DONE (DEV HOLD) | Seal independent Ground Truth for the user-provided Contract/CV/IELTS development split and run a separate aggregate comparison; promotion remains disabled | DATA-14 | P0 |
 | OCR-HO-V2-007 | REVIEW | Tinh chinh ROI que quan/noi thuong tru va Unicode; replay development khong co exact improvement nen giu shadow | OCR-HO-V2-006 | P0 |
 | OCR-HO-V2-008 | DONE | Token-alignment cho address đạt development gate; giữ shadow-only, chưa promote hoặc đổi held-out | OCR-HO-V2-007 | P0 |
 | OCR-HO-V2-001 | REVIEW | Đã seal prediction ẩn trên 15 CCCD held-out; chờ xác nhận Ground Truth để evaluate-once | Manifest v2, policy 11.6 | P0 |
@@ -496,3 +499,51 @@
   flag is enabled; dashboard tabs and review summaries follow the same flags.
 - Docs updated: root README, OCR Lab README, WORKFLOWS, PROJECT_STATE and
   HANDOFF. Camunda is unchanged.
+
+### DATA-15-PREDICTION-INSPECTOR - Review predictions before scoring (DONE/DEV HOLD)
+
+- Localhost exposes the new 12-document prediction-only split with field-level
+  provenance; it intentionally shows no EM because user-authoritative Ground
+  Truth has not been supplied.
+- The earlier 41.96% aggregate is provisional self-annotation only. Do not use
+  it for promotion; obtain/correct Ground Truth, then run a fresh dev aggregate.
+
+### DATA-15-GT-REVIEW - Official annotation queue (READY/DRAFT)
+
+- Fresh private draft: `C:\tmp\bo10-official-ground-truth-draft-20260805.json`;
+  12 documents / 112 fields, all pending and prediction-blind.
+- Review in localhost `DATA-08 · 4 contract case review`; save each case,
+confirm every field, then SEALED. Benchmark remains intentionally unrun.
+
+### DATA-15-GT-SEALED - GroundTruth ready for development scoring (READY)
+
+- Official GroundTruth is sealed: 12/12 documents and 112/112 fields confirmed;
+  predictions remain unopened.
+- Next: run the separate development aggregate comparison only. Keep the old
+  evaluate-once artifact immutable.
+
+### DATA-15-DEV-AGGREGATE - Official comparison completed (HOLD)
+
+- Development-only comparison used the SEALED 112-field GroundTruth and the
+  DATA-13 prediction artifact without changing the old evaluate-once output.
+- Strict exact is `30/112` (`26.79%`); accepted long-text policy is `43/112`
+  (`38.39%`). Classification is `11/12`, schema errors `0`; accepted family
+  rates are Contract `16/42`, CV `27/50`, IELTS `0/20`.
+- DATA-13 localhost now loads the private report and shows field-level
+  GroundTruth/prediction/evidence. Next: fix parser/OCR errors revealed by the
+  comparison, then rerun development-only; do not promote or reopen GT.
+
+### DATA-16-PARSER-V2 - Contract/CV parser/layout fixes (DONE / HOLD)
+
+- Replaced fixed-line assumptions for native Contract/CV extraction with
+  section-aware and narrative/layout-aware parsing. Native Contract accepted
+  rate is `40/42`; CV accepted rate is `42/50` on the fresh 12-document split.
+- Fresh private artifacts:
+  `C:\tmp\bo10-dev-predictions-data13-parser-v2-20260806.json`,
+  `C:\tmp\bo10-dev-aggregate-comparison-parser-v2-20260806.json`, and marker.
+  Strict overall `69/112`; accepted text `82/112`; classification `11/12`;
+  schema errors `0`; decision `HOLD`.
+- Localhost is wired to this report. IELTS/certificate (`0/20`) and scanned CV
+  remain the next bottleneck; OCR is still forced to manual review.
+- Preserve the sealed GroundTruth and old evaluate-once artifacts. The next
+  comparison must create a new private prediction/report/marker set.

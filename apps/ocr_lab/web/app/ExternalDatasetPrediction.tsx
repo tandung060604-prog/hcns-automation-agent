@@ -56,6 +56,7 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
   const prediction = object(detail?.prediction);
   const fields = object(prediction.fields);
   const comparison = object(detail?.comparison);
+  const hasComparison = Object.keys(comparison).length > 0;
   const report = object(summary?.report);
   const metrics = object(report.metrics);
 
@@ -65,12 +66,14 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
         <div><span>{version === "data13" ? "DATA-13 · OCR SCOPE" : "DATA-12 · LOCAL-ONLY"}</span><h2>Prediction ↔ Ground Truth</h2></div>
         <strong>{summary?.status ?? "LOADING"}</strong>
       </div>
+      {summary && !hasComparison ? <div className="external-review-message">Prediction-only: Ground Truth not supplied; Field exact not evaluated.</div> : null}
       {error ? <div className="external-review-message">{error}</div> : null}
       {summary ? (
         <>
           <div className="local-evidence-metrics">
             <span className="local-evidence-metric"><small>Tài liệu</small><strong>{summary.documentCount}</strong></span>
-            <span className="local-evidence-metric"><small>Field exact</small><strong>{metrics.fieldExactMatchRate !== undefined ? `${(Number(metrics.fieldExactMatchRate) * 100).toFixed(1)}%` : "—"}</strong></span>
+            <span className="local-evidence-metric"><small>Field exact (strict)</small><strong>{metrics.fieldExactMatchRate !== undefined ? `${(Number(metrics.fieldExactMatchRate) * 100).toFixed(1)}%` : "—"}</strong></span>
+            <span className="local-evidence-metric"><small>Field accepted (text ≥80%)</small><strong>{metrics.fieldAcceptedMatchRate !== undefined ? `${(Number(metrics.fieldAcceptedMatchRate) * 100).toFixed(1)}%` : "—"}</strong></span>
             <span className="local-evidence-metric"><small>Schema errors</small><strong>{metrics ? String(report.schemaErrors ?? "—") : "—"}</strong></span>
             <span className="local-evidence-metric"><small>Decision</small><strong>{String(report.decision ?? "HOLD")}</strong></span>
           </div>
@@ -97,7 +100,30 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
               {Object.entries(fields).map(([name, field]) => {
                 const item = object(field);
                 const pair = object(comparison[name]);
-                return <div className="external-review-field" key={name}><span>{name}</span><strong>{String(item.value ?? "—")}</strong><small>Ground Truth: {String(pair.groundTruth ?? "—")} · {pair.exact === true ? "EXACT" : "MISMATCH"}</small></div>;
+                if (!hasComparison) {
+                  const sourceSpan = object(item.sourceSpan);
+                  return <div className="external-review-field" key={name}>
+                    <span>{name}</span>
+                    <strong>{String(item.value ?? "â€”")}</strong>
+                    <small>Prediction only · status: {String(item.status ?? "not_found")}</small>
+                    {item.method ? <small>method: {String(item.method)}{item.reviewReason ? ` · ${String(item.reviewReason)}` : ""}</small> : null}
+                    {Object.keys(sourceSpan).length > 0 ? <small>sourceSpan: {JSON.stringify(sourceSpan)}</small> : null}
+                  </div>;
+                }
+                const status = pair.match === true
+                  ? String(pair.matchType ?? (pair.exact === true ? "EXACT" : "ACCEPTED"))
+                  : String(pair.matchType ?? "MISMATCH");
+                const evidence = Object.keys(object(item.sourceSpan)).length > 0
+                  ? object(item.sourceSpan)
+                  : object(item.evidence);
+                return <div className="external-review-field" key={name}>
+                  <span>{name}</span>
+                  <strong>{String(item.value ?? "—")}</strong>
+                  <small>Ground Truth: {String(pair.groundTruth ?? "—")} · Prediction: {String(pair.prediction ?? "—")} · {status}</small>
+                  {String(pair.matchType ?? "").startsWith("PARTIAL") && pair.coverage !== undefined ? <small>Text coverage: {`${(Number(pair.coverage) * 100).toFixed(1)}%`}</small> : null}
+                  {pair.diagnosis ? <small>Diagnosis: {String(pair.diagnosis)}</small> : null}
+                  {Object.keys(evidence).length > 0 ? <small>Evidence: {JSON.stringify(evidence)}</small> : null}
+                </div>;
               })}
             </div>
           </div>
