@@ -145,3 +145,13 @@ npm test
 
 Không commit `node_modules`, `.next`, `dist`, `.wrangler`, file upload, output,
 Ground Truth private hoặc model weights.
+
+## OCR-HO-V2-014 sealed development replay
+
+The prediction-blind line mapping is sealed outside Git at
+`OCR_HO_V2_014_GT_SEALED_PRIVATE.json`. Its digest is exposed by the diagnostic
+summary; once the marker exists, both draft and final Ground Truth writes return
+`400`. The replay report publishes `developmentRegressionGate` and
+`heldoutReadinessGate` independently. The current result is development-improved
+but readiness HOLD (residence ASCII remains below threshold), so no new held-out
+set is created and no lexicon or fifth engine is enabled.

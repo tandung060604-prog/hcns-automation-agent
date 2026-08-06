@@ -15,6 +15,7 @@ def gates(
     regressions: int,
     schema_errors: int,
     all_manual_review: bool,
+    protected_regressions: int = 0,
 ) -> dict[str, Any]:
     per_field = after.get("perField", {})
     full_name_ascii = float(per_field.get("fullName", {}).get("asciiExactMatch", 0))
@@ -35,6 +36,7 @@ def gates(
         "derNotWorse": after["der"] <= before["der"],
         "presenceNotWorse": after["fieldPresence"] >= before["fieldPresence"],
         "manualReviewOnly": all_manual_review,
+        "protectedFieldsPreserved": protected_regressions == 0,
     }
     readiness = {
         "fullNameAsciiExactMatch": full_name_ascii >= 0.90,
@@ -46,6 +48,7 @@ def gates(
             float(after.get("acceptedCoverage", 0.0)) == 0.0
             or after.get("acceptedPrecision") in (1.0, None)
         ),
+        "protectedFieldsPreserved": protected_regressions == 0,
     }
     return {
         "developmentRegressionGate": {

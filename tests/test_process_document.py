@@ -28,8 +28,11 @@ class ProcessDocumentTests(TestCase):
         proposal = ProcessDocument(DeterministicMockOcrEngine(confidence=0.42)).execute(document)
 
         self.assertTrue(proposal.requires_human_review)
-        self.assertEqual((), proposal.fields)
-        self.assertEqual(("OCR_DISABLED_BY_POLICY",), proposal.review_reasons)
+        self.assertEqual(1, len(proposal.fields))
+        self.assertEqual("NEEDS_REVIEW", proposal.fields[0].status.value)
+        self.assertTrue(
+            any("below the confidence threshold" in reason for reason in proposal.review_reasons)
+        )
 
     def test_high_confidence_non_sensitive_demo_can_be_proposed(self) -> None:
         document = HrDocument(
@@ -41,5 +44,6 @@ class ProcessDocumentTests(TestCase):
         proposal = ProcessDocument(DeterministicMockOcrEngine()).execute(document)
 
         self.assertTrue(proposal.requires_human_review)
-        self.assertEqual((), proposal.fields)
-        self.assertEqual(("OCR_DISABLED_BY_POLICY",), proposal.review_reasons)
+        self.assertEqual(1, len(proposal.fields))
+        self.assertEqual("ACCEPTED", proposal.fields[0].status.value)
+        self.assertIn("DocumentType.CV requires review by policy", proposal.review_reasons)

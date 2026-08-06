@@ -219,6 +219,8 @@ _TYPE_RULES: dict[str, tuple[tuple[str, float], ...]] = {
         ("certification", 5.0),
         ("credential id", 3.0),
         ("so hieu van bang", 2.0),
+        ("ielts", 7.0),
+        ("test report form", 6.0),
     ),
     "EMPLOYEE_INFORMATION_FORM": (
         ("phieu thong tin nhan vien", 7.0),
@@ -531,9 +533,9 @@ def _section_field(
             continue
         values: list[str] = []
         evidence = None
-        for candidate in blocks[index + 1 : index + 8]:
+        for candidate in blocks[index + 1 :]:
             candidate_key = accent_key(candidate.get("text"))
-            if candidate_key in _SECTION_HEADINGS:
+            if _is_section_heading(candidate_key):
                 break
             if candidate.get("text"):
                 evidence = evidence or candidate
@@ -545,6 +547,14 @@ def _section_field(
                 method="section_after_heading",
             )
     return _field(None, None, method="section_after_heading")
+
+
+def _is_section_heading(value: str) -> bool:
+    key = accent_key(value).strip()
+    return key in _SECTION_HEADINGS or any(
+        key.startswith(f"{heading} ") or key.startswith(f"{heading}&")
+        for heading in _SECTION_HEADINGS
+    )
 
 
 def _cv_name(canonical: dict[str, Any]) -> dict[str, Any]:
@@ -569,13 +579,17 @@ def _cv_name(canonical: dict[str, Any]) -> dict[str, Any]:
         return (
             2 <= len(words) <= 6
             and len(letters) >= 6
-            and len(uppercase) / max(1, len(letters)) >= 0.65
+            and len(uppercase) / max(1, len(letters)) >= 0.18
+            and not _is_section_heading(key)
             and not any(marker in key for marker in excluded)
             and "@" not in value
         )
 
     for block in _blocks(canonical)[:12]:
         value = str(block.get("text") or "").strip()
+        split = re.split(r"(?<=[a-zà-ỹ])(?=[A-ZĐ])", value, maxsplit=1)
+        if len(split) == 2 and likely_name(split[0].strip()):
+            return _field(split[0].strip(), block, method="cv_top_name_candidate")
         if likely_name(value):
             return _field(value, block, method="cv_top_name_candidate")
     return _field(None, None, method="cv_top_name_candidate")

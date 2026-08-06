@@ -25,6 +25,8 @@ class ProcessingPolicy:
     )
     always_review_types: frozenset[DocumentType] = frozenset(
         {
+            DocumentType.CV,
+            DocumentType.CERTIFICATE,
             DocumentType.IDENTITY_CARD,
             DocumentType.PASSPORT,
             DocumentType.EMPLOYMENT_CONTRACT,

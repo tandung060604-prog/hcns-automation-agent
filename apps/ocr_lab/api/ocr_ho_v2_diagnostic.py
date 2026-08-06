@@ -23,6 +23,10 @@ def _path(root: Path) -> Path:
     return root / "OCR_HO_V2_014_DIAGNOSTIC_GT_PRIVATE.json"
 
 
+def _sealed_path(root: Path) -> Path:
+    return root / "OCR_HO_V2_014_GT_SEALED_PRIVATE.json"
+
+
 def _load(root: Path) -> dict[str, Any]:
     path = _path(root)
     if not path.is_file():
@@ -58,6 +62,13 @@ def _write(path: Path, payload: dict[str, Any]) -> None:
 def summary(root: Path) -> dict[str, Any]:
     store = _load(root)
     records = _session_records(root)
+    sealed = _sealed_path(root).is_file()
+    sealed_digest = None
+    if sealed:
+        with suppress(OSError, json.JSONDecodeError):
+            sealed_digest = json.loads(
+                _sealed_path(root).read_text(encoding="utf-8")
+            ).get("manifestSha256")
     reviewed = {
         document_id
         for document_id, review in store["documents"].items()
@@ -68,6 +79,8 @@ def summary(root: Path) -> dict[str, Any]:
         "predictionLoaded": False,
         "predictionOpened": False,
         "promotionEligible": False,
+        "groundTruthSealed": sealed,
+        "groundTruthDigest": sealed_digest,
         "documentCount": len(records),
         "reviewedDocumentCount": len(reviewed),
         "documents": [
@@ -99,8 +112,11 @@ def document(root: Path, document_id: str) -> dict[str, Any]:
         {"lineId": index, "box": box} for index, box in enumerate(page.get("recognizedBoxes", []))
     ]
     image_size = None
-    with Image.open(preview(root, document_id)) as image:
-        image_size = [image.width, image.height]
+    try:
+        with Image.open(preview(root, document_id)) as image:
+            image_size = [image.width, image.height]
+    except OSError:
+        image_size = None
     return {
         "localOnly": True,
         "predictionLoaded": False,
@@ -115,6 +131,8 @@ def document(root: Path, document_id: str) -> dict[str, Any]:
 
 
 def save(root: Path, document_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if _sealed_path(root).is_file():
+        raise ValueError("Ground Truth manifest is sealed")
     if payload.get("predictionOpened") is True:
         raise ValueError("Prediction-blind diagnostic payload cannot open prediction")
     draft = payload.get("draft") is True

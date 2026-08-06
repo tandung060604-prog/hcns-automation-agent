@@ -10,6 +10,7 @@ liên kết ổn định. Không đổi tên tài liệu lịch sử nếu khôn
 | [PROJECT_STATE.md](PROJECT_STATE.md) | Sự thật hiện tại, milestone, rủi ro và giới hạn | Sau milestone hoặc thay đổi policy |
 | [BACKLOG.md](BACKLOG.md) | Task có trạng thái, phụ thuộc và acceptance criteria | Khi bắt đầu/kết thúc task |
 | [HANDOFF.md](HANDOFF.md) | Checkpoint để session/agent khác tiếp tục | Trước khi kết thúc workstream |
+| [archive/PROJECT_STATE_HISTORY_2026-08-06.md](archive/PROJECT_STATE_HISTORY_2026-08-06.md) | Evidence lịch sử theo milestone | Khi rút gọn state hiện tại |
 | [ROADMAP.md](ROADMAP.md) | Định hướng milestone dài hạn | Khi thay đổi ưu tiên |
 
 ## OCR và đánh giá

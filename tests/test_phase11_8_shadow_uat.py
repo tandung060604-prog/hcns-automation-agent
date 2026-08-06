@@ -258,3 +258,11 @@ def test_diagnostic_ground_truth_is_prediction_blind_and_validates_line_ids(tmp_
         },
     )
     assert saved["promotionEligible"] is False
+
+
+def test_diagnostic_ground_truth_rejects_writes_after_seal(tmp_path: Path) -> None:
+    root = build_root(tmp_path)
+    seal = root / "OCR_HO_V2_014_GT_SEALED_PRIVATE.json"
+    seal.write_text(json.dumps({"manifestSha256": "sha256:test"}), encoding="utf-8")
+    with pytest.raises(ValueError, match="sealed"):
+        save_diagnostic(root, SESSION_ID, {"draft": True, "fields": {}, "assertions": {}})
