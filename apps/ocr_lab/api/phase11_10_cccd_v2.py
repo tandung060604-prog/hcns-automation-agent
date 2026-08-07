@@ -8,6 +8,7 @@ reading order and never promotes a value beyond ``needs_review``.
 from __future__ import annotations
 
 import copy
+import re
 from collections import defaultdict
 from typing import Any
 
@@ -18,14 +19,62 @@ import phase11_6_cccd as phase11_6
 import phase11_9_cccd_v2 as phase11_9
 from phase11_cccd import FIELD_ORDER, _bounds, accent_key, canonicalize_identity_card
 
-CANDIDATE_VERSION = "11.10.0"
+CANDIDATE_VERSION = "11.10.2"
 SCHEMA_VERSION = phase11_6.SCHEMA_VERSION
-POLICY_ID = "phase11.10-v2-line-aware-name-address"
+POLICY_ID = "phase11.10.2-v2-parser-label-cleanup"
 TARGET_FIELDS = ("fullName", "placeOfOrigin", "placeOfResidence")
 PROTECTED_FIELDS = tuple(name for name in FIELD_ORDER if name not in TARGET_FIELDS)
 build_crop_variants = phase11_5.build_crop_variants
 business_values = phase11_6.business_values
-field_candidate = phase11_6.field_candidate
+
+_RESIDENCE_LABEL_PREFIX = re.compile(
+    r"^(?:n(?:ơ|o)i\s+th(?:ư|u)(?:ờ|o)ng\s+tr(?:ú|u)|"
+    r"place\s+of\s+residence)\s*[:/;.-]*\s*",
+    flags=re.IGNORECASE,
+)
+
+
+def field_candidate(field_name: str, raw_text: Any) -> str:
+    """Apply the existing parser, then remove one merged residence label."""
+
+    value = (
+        phase11_5.field_candidate(field_name, raw_text)
+        if field_name == "placeOfResidence"
+        else phase11_6.field_candidate(field_name, raw_text)
+    )
+    if field_name == "placeOfResidence":
+        value = _RESIDENCE_LABEL_PREFIX.sub("", value, count=1)
+    return phase11_5.nfc_text(value).strip(" ,;|/-")
+
+
+def _parser_cleanup_field(field_name: str, candidate: dict[str, Any]) -> dict[str, Any]:
+    if field_name != "placeOfResidence" or not candidate.get("value"):
+        return candidate
+    cleaned = field_candidate(field_name, candidate.get("value"))
+    updated = dict(candidate, value=cleaned, asciiValue=phase11_5.ascii_text(cleaned))
+    updated["errorSignals"] = [
+        signal
+        for signal in candidate.get("errorSignals", [])
+        if signal != "label_contamination"
+    ]
+    return updated
+
+
+def _parser_normalized_candidates(
+    field_name: str,
+    candidates: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if field_name not in {"placeOfOrigin", "placeOfResidence"}:
+        return candidates
+    normalized: list[dict[str, Any]] = []
+    for candidate in candidates:
+        updated = dict(candidate)
+        source = updated.get("rawValue") or updated.get("value")
+        updated["sourceRawValue"] = source
+        updated.pop("rawValue", None)
+        updated["value"] = field_candidate(field_name, source)
+        normalized.append(updated)
+    return normalized
 
 
 def _line_bbox(box: Any) -> list[int]:
@@ -103,7 +152,13 @@ def _geometry_line_bboxes(
     }
     band_top, band_bottom = template_bands[field_name]
     top = max(region_top, int(height * band_top))
-    bottom = min(region_bottom, int(height * band_bottom))
+    geometry_bottom_extension = (
+        15
+        if field_name == "placeOfResidence"
+        and region.get("regionSource") == "phase11_10_geometry_line_segmentation"
+        else 0
+    )
+    bottom = min(region_bottom, int(height * band_bottom) + geometry_bottom_extension)
     value_left = int(width * (0.47 if field_name != "fullName" else 0.45))
     rows: list[tuple[int, list[int]]] = []
     for line_id, box in enumerate(page.get("recognizedBoxes", [])):
@@ -221,9 +276,20 @@ def locate_field_regions(
             for line in lines:
                 line_left, line_top, line_right, line_bottom = _bounds(line["box"])
                 normalized_text = accent_key(line["text"])
-                if any(marker in normalized_text for marker in label_markers):
+                residence_anchor_value_line = (
+                    field_name == "placeOfResidence"
+                    and line["lineId"] == anchor["lineIndex"]
+                    and len(
+                        phase11_6.field_candidate(field_name, line["text"]).split()
+                    )
+                    >= 2
+                )
+                if (
+                    any(marker in normalized_text for marker in label_markers)
+                    and not residence_anchor_value_line
+                ):
                     continue
-                if line["lineId"] <= min_line_id:
+                if line["lineId"] < min_line_id and not residence_anchor_value_line:
                     continue
                 horizontal_overlap = max(
                     0.0, min(right, line_right) - max(left, line_left)
@@ -242,14 +308,19 @@ def locate_field_regions(
                     and line_top < next_top_limit - line_height * 0.05
                     and (line_top + line_bottom) / 2 > anchor_center + line_height * 0.15
                 )
-                if same_row_value or following_value:
+                if same_row_value or following_value or residence_anchor_value_line:
                     choices.append(line)
         choices.sort(key=lambda item: (_bounds(item["box"])[1], _bounds(item["box"])[0]))
         max_lines = 1 if field_name == "fullName" else 2
         selected = choices[:max_lines]
+        geometry_region = (
+            dict(region, regionSource="phase11_10_geometry_line_segmentation")
+            if field_name == "placeOfResidence" and not selected
+            else region
+        )
         geometry_bboxes, geometry_ids = _geometry_line_bboxes(
             page,
-            region,
+            geometry_region,
             field_name,
             (page_sizes[0][0], page_sizes[0][1]),
         )
@@ -283,6 +354,7 @@ def assemble_line_candidates(
             members.sort(key=lambda item: int(item.get("lineOrder", 0)))
             value = " ".join(str(item.get("value") or "").strip() for item in members).strip()
             raw = " ".join(str(item.get("rawValue") or "").strip() for item in members).strip()
+            value = field_candidate(field_name, value)
             if not value:
                 continue
             merged = dict(members[0])
@@ -370,10 +442,13 @@ def build_identity_card(
         elif field_name in {"placeOfOrigin", "placeOfResidence"}:
             candidate = phase11_9.select_address_candidate(
                 field_name,
-                candidates_by_field.get(field_name, []),
+                _parser_normalized_candidates(
+                    field_name, candidates_by_field.get(field_name, [])
+                ),
                 bbox=region.get("bbox"),
                 page_index=0,
             )
+            candidate = _parser_cleanup_field(field_name, candidate)
         else:
             fields[field_name] = baseline
             continue

@@ -143,7 +143,6 @@ def test_http_api_exposes_get_only_typed_routes(tmp_path: Path) -> None:
     from serve_dashboard_api import DashboardHandler, UserOCRService  # noqa: PLC0415
 
     DashboardHandler.data_root = data_root
-    DashboardHandler.heldout_root = None
     DashboardHandler.cccd_heldout_root = None
     DashboardHandler.external_dataset_root = data_root
     DashboardHandler.external_dataset_inventory = None

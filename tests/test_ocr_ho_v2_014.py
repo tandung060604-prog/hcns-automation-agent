@@ -5,11 +5,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "apps" / "ocr_lab" / "api"))
+sys.path.insert(0, str(ROOT / "scripts"))
 
-from ocr_ho_v2_014_evaluation import classify, gates  # noqa: E402
+from analyze_ocr_ho_v2_015 import class_report  # noqa: E402
+from ocr_ho_v2_014_evaluation import classify, diagnostic_gates, gates  # noqa: E402
 from phase11_10_cccd_v2 import (  # noqa: E402
     _select_name,
     assemble_line_candidates,
+    build_identity_card,
+    field_candidate,
     locate_field_regions,
 )
 
@@ -37,6 +41,57 @@ def test_line_aware_regions_stop_at_the_next_label() -> None:
     regions = locate_field_regions([page], [(500, 500)])
     assert regions["fullName"]["lineIds"] == [1]
     assert regions["placeOfResidence"]["lineIds"] == [3, 4]
+
+
+def test_residence_keeps_value_sharing_its_label_line() -> None:
+    page = {
+        "pageIndex": 0,
+        "recognizedTexts": [
+            "Place of origin",
+            "Origin value",
+            "Place of residence: Residence value",
+            "Date of expiry",
+        ],
+        "recognizedBoxes": [
+            [[10, 100], [180, 100], [180, 120], [10, 120]],
+            [[20, 130], [220, 130], [220, 150], [20, 150]],
+            [[10, 300], [320, 300], [320, 325], [10, 325]],
+            [[10, 400], [180, 400], [180, 420], [10, 420]],
+        ],
+    }
+    regions = locate_field_regions([page], [(500, 500)])
+    assert regions["placeOfResidence"]["lineIds"] == [2]
+
+
+def test_parser_removes_merged_residence_label_without_accepting_value() -> None:
+    assert field_candidate(
+        "placeOfResidence", "N\u01a1i th\u01b0\u1eddng tr\u00fa: ABC DEF"
+    ) == "ABC DEF"
+    card = build_identity_card(
+        {
+            "placeOfResidence": [
+                {
+                    "profile": "paddle_ppocrv5",
+                    "variant": "color_original",
+                    "value": "ABC DEF",
+                    "rawValue": "Place of residence: ABC DEF",
+                    "confidence": 0.9,
+                },
+                {
+                    "profile": "paddle_ppocrv5",
+                    "variant": "grayscale_clahe",
+                    "value": "ABC DEF",
+                    "rawValue": "Place of residence: ABC DEF",
+                    "confidence": 0.9,
+                },
+            ]
+        },
+        {"placeOfResidence": {"bbox": [0, 0, 100, 100], "pageIndex": 0}},
+    )
+    field = card["fields"]["placeOfResidence"]
+    assert field["value"] == "ABC DEF"
+    assert "label_contamination" not in field["errorSignals"]
+    assert field["status"] == "needs_review"
 
 
 def test_line_candidates_keep_reading_order() -> None:
@@ -138,3 +193,54 @@ def test_name_selector_counts_two_vietocr_profiles_as_independent_support() -> N
         "phase11_10_name_unicode_consensus",
         "phase11_10_name_ascii_consensus",
     }
+
+
+def test_diagnostic_gate_holds_when_canonical_snapshot_does_not_match() -> None:
+    metric = {
+        "strictFieldExactMatch": 0.7,
+        "asciiFieldExactMatch": 0.95,
+        "cer": 0.1,
+        "der": 0.1,
+        "fieldPresence": 1.0,
+        "sensitiveFieldFalseAcceptanceCount": 0,
+        "perField": {
+            "fullName": {"asciiExactMatch": 0.95},
+            "placeOfOrigin": {"asciiExactMatch": 0.9},
+            "placeOfResidence": {"asciiExactMatch": 0.9},
+        },
+    }
+    result = diagnostic_gates(
+        metric,
+        metric,
+        improvements=1,
+        regressions=0,
+        schema_errors=0,
+        all_manual_review=True,
+        protected_regressions=0,
+        snapshot_status="SNAPSHOT_MISMATCH",
+        document_count=15,
+        evaluated_field_count=120,
+        automatic_roi={"placeOfOrigin": 1.0, "placeOfResidence": 1.0},
+    )
+    assert result["developmentRegressionGate"]["status"] == "HOLD"
+    assert result["developmentRegressionGate"]["checks"]["snapshotMatched"] is False
+    assert result["heldoutReadinessGate"]["status"] == "HOLD"
+
+
+def test_oracle_class_report_uses_oracle_regions_not_auto_regions() -> None:
+    target = {
+        "fullName": "A",
+        "placeOfOrigin": "B",
+        "placeOfResidence": "C",
+    }
+    document = {
+        "groundTruth": target,
+        "oracle": {name: {"value": value} for name, value in target.items()},
+        "oracleArtifact": {
+            "regions": {name: {"lineIds": [0]} for name in target},
+            "candidates": {name: [] for name in target},
+        },
+        "gtFields": {name: {"lineIds": [0]} for name in target},
+    }
+    report = class_report([document], "oracle")
+    assert all(item["accuracy"] == 1.0 for item in report["roiByField"].values())

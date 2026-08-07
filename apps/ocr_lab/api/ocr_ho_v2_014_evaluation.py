@@ -64,6 +64,71 @@ def gates(
     }
 
 
+def diagnostic_gates(
+    before: dict[str, Any],
+    after: dict[str, Any],
+    *,
+    improvements: int,
+    regressions: int,
+    schema_errors: int,
+    all_manual_review: bool,
+    protected_regressions: int,
+    snapshot_status: str,
+    document_count: int,
+    evaluated_field_count: int,
+    automatic_roi: dict[str, float],
+) -> dict[str, Any]:
+    """Evaluate the canonical 120-field diagnostic without opening promotion."""
+
+    per_field = after.get("perField", {})
+    checks = {
+        "snapshotMatched": snapshot_status == "MATCH",
+        "documentCount": document_count == 15,
+        "evaluatedFieldCount": evaluated_field_count == 120,
+        "schemaErrorsZero": schema_errors == 0,
+        "noExactRegression": regressions == 0,
+        "targetImprovement": improvements >= 1,
+        "exactNotWorse": after["strictFieldExactMatch"] >= before["strictFieldExactMatch"],
+        "asciiNotWorse": after["asciiFieldExactMatch"] >= before["asciiFieldExactMatch"],
+        "cerNotWorse": after["cer"] <= before["cer"],
+        "derNotWorse": after["der"] <= before["der"],
+        "presenceNotWorse": after["fieldPresence"] >= before["fieldPresence"],
+        "manualReviewOnly": all_manual_review,
+        "protectedFieldsPreserved": protected_regressions == 0,
+        "fullNameAsciiExactMatch": float(
+            per_field.get("fullName", {}).get("asciiExactMatch", 0.0)
+        )
+        >= 0.90,
+        "originAsciiExactMatch": float(
+            per_field.get("placeOfOrigin", {}).get("asciiExactMatch", 0.0)
+        )
+        >= 0.85,
+        "residenceAsciiExactMatch": float(
+            per_field.get("placeOfResidence", {}).get("asciiExactMatch", 0.0)
+        )
+        >= 0.85,
+        "originAutomaticRoi": automatic_roi.get("placeOfOrigin", 0.0) >= 0.95,
+        "residenceAutomaticRoi": automatic_roi.get("placeOfResidence", 0.0) >= 0.95,
+        "sensitiveFalseAcceptance": after.get("sensitiveFieldFalseAcceptanceCount", 0) == 0,
+    }
+    development_pass = all(checks.values())
+    return {
+        "developmentRegressionGate": {
+            "status": "PASS" if development_pass else "HOLD",
+            "checks": checks,
+        },
+        "heldoutReadinessGate": {
+            "status": "HOLD",
+            "checks": {
+                "developmentRegressionGate": development_pass,
+                "predictionAndGroundTruthLockedIndependently": False,
+                "newHeldoutOpened": False,
+            },
+        },
+        "automaticRoi": automatic_roi,
+    }
+
+
 def classify(
     *,
     roi_contains_lines: bool,

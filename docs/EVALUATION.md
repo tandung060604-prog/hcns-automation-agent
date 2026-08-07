@@ -1,5 +1,9 @@
 # Evaluation
 
+> Lưu ý: phần benchmark held-out 18 tài liệu ở cuối file là báo cáo lịch sử của
+> corpus đã retire. Corpus, route dashboard và script Phase 16 không còn được
+> local runtime sử dụng; không dùng các số liệu đó để mô tả trạng thái hiện tại.
+
 ## Câu hỏi
 
 Không hỏi “OCR nào tốt nhất?” mà hỏi “backend nào giảm sai sót và thời gian
@@ -446,3 +450,9 @@ một lần: classification accuracy 77,78%, Field Exact Match 13,00%, field com
 Artifact bảng synthetic/Phase 17 đã retired khỏi sản phẩm và không được tính vào
 tiến độ Camunda M5. Chỉ sáu họ active trong template manifest và các cohort được
 cấp quyền mới được dùng cho evaluate-once hoặc promotion gate.
+# Lưu ý về benchmark cũ
+
+Phần benchmark 18 tài liệu bên dưới là báo cáo lịch sử của corpus held-out đã
+retire. Corpus, route dashboard và script Phase 16 không còn được local runtime
+sử dụng; không dùng các số liệu này để mô tả trạng thái hiện tại. Phạm vi hiện
+hành được xem riêng theo template-first, CCCD review và OCR-HO shadow.

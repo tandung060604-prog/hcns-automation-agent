@@ -31,7 +31,6 @@ def configure_handler(
     processor: TemplateProcessingService | None = None,
 ) -> None:
     DashboardHandler.data_root = data_root
-    DashboardHandler.heldout_root = None
     DashboardHandler.cccd_heldout_root = None
     DashboardHandler.native_indexes = {}
     DashboardHandler.user_ocr = UserOCRService(data_root)

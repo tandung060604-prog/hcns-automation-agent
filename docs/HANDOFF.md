@@ -4,15 +4,14 @@
 
 - Repository: `D:\AI Vin Thực Chiến\Side Project\PaddleOCR\hcns-automation-agent`
 - Branch: `codex/data-18-cv-scan-recovery`
-- HEAD: `13aa284613ba363cedfb12f0adbe4f11e50a5725` (`main` merge containing DATA-17)
+- HEAD: `6883d68335a0619f69e117b733d6ab116639f31c` (`docs: add README workflow and OCR benchmarks`)
 - Routing: [docs/README.md](README.md)
 - Acceptance criteria: [docs/BACKLOG.md](BACKLOG.md)
 
-## Current checkpoint (2026-08-06)
+## Current checkpoint (2026-08-07)
 
-- Checkpoint task: `OCR-HO-V2-017A` is complete; the existing private secondary
-  runtime is restored and lock-verified, while CCCD development remains `HOLD`
-  because snapshot, exact/DER and automatic-ROI gates remain unmet.
+- Checkpoint task: `OCR-HO-V2-018F` attributed recognizer/token evidence after the
+  018E boundary reconciliation. CCCD quality gates remain `HOLD`.
 - Prior checkpoint `DATA-19-CONTRACT-SEMANTIC-NORMALIZATION` remains implemented;
   its development status is `HOLD` because raw Contract strict remains 40/42;
   additive semantic scoring is 42/42 and does not replace raw strict EM.
@@ -46,15 +45,53 @@
   `C:\tmp\bo10-data21-paddleocr-vl.marker-v8.json`; quality remains unscored/HOLD.
 - Validation: targeted pytest 27 passed; selected Ruff, compileall, `git diff --check`
   and state consistency passed. Full-file Ruff retains baseline findings outside DATA-19.
-- OCR-HO-V2-017A smoke evidence: runtime
-  `C:\Camunda\private-data\paddleocr-hr-baseline\runtime` has EasyOCR 1.7.2,
-  VietOCR 0.3.13 and CPU Torch; all 6 model locks pass. One private CCCD smoke
-  processed 16 crops with all 3 secondary profiles. Artifact:
-  `C:\tmp\ocr-ho-v2-017a-preflight-20260806\preflight.log`.
-- No OCR source or primary runtime changed; all fields remain manual review and
-  no held-out/evaluate-once action occurred.
-- Next READY task: `OCR-HO-V2-017B`; run the full 15/120 development replay only
-  after approval, keeping shadow/manual-review-only.
+- OCR-HO-V2-017B aggregate: candidate `11.10.2`, exact `63.33%`, ASCII `69.17%`,
+  CER `32.02%`, DER `16.21% (41/253)`, presence `95.83%`; improvements/regressions
+  `4/1`, schema `0`, protected regressions `0`, accepted coverage `0`.
+- Automatic ROI fullName/origin/residence is `53.33% / 60.00% / 66.67%`; gates are
+  `HOLD`. Full output is private staging at
+  `C:\tmp\ocr-ho-v2-017b-stage-20260806\CCCD_OCR_HO_V2_017B_DIAGNOSTIC.json`.
+- The worker required four private batches after single-process memory failures;
+  all 252 crop predictions were combined with matching job/policy hashes. No OCR
+  source, primary runtime, GroundTruth, held-out artifact, or evaluate-once marker changed.
+- 017C report is private aggregate-only at
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017c-20260807\CCCD_OCR_HO_V2_017C_DER_ATTRIBUTION.json`.
+  Canonical target classes are ROI `18`, recognizer `8`, parser `6`, selector `4`,
+  diacritic `2`; no raw PII is in the report.
+- Decision: next layer is `RECOGNIZER_PROFILE_SELECTOR_CONSENSUS`; VietOCR transformer
+  and seq2seq profile oracles have lower DER than the selected candidate. Do not add
+  an engine/model or change parser/ROI/Unicode/primary runtime in that task.
+- 018C aggregate-only replay artifact is
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018c-20260807\CCCD_OCR_HO_V2_018C_DEVELOPMENT_REPLAY_DIAGNOSTIC.json`.
+  Candidate `11.10.2` over 15/120 AUTO_DETECTOR fields: exact `63.33%`, ASCII
+  `69.17%`, CER `32.02%`, DER `16.21% (41/253)`, presence `95.83%`; ROI
+  fullName/origin/residence `53.33%/60.00%/66.67%`; schema/sensitive false
+  acceptance `0`, accepted coverage `0`, all fields manual review. Exact/ASCII/CER
+  improved versus baseline, but DER and address gates fail; development and held-out
+  remain `HOLD`.
+- Replay used the 018B authorization, an input manifest without field values, and an
+  isolated private session copy. No primary runtime, selector, GroundTruth,
+  held-out or evaluate-once artifact changed.
+- 018D review artifact is
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018d-20260807\CCCD_OCR_HO_V2_018D_GATE_FAILURE_REVIEW.json`.
+  It records 18/45 target ROI misses, residence bottom-boundary misses `3/5`,
+  snapshot mismatch, exact regression `1`, and DER `41/253`; all other layers are
+  deferred or closed by prior evidence. No raw PII is present.
+- 018E confirms all three 018C ROI counts, global dominant boundary rate `44.44%`
+  (below the 50% patch threshold), residence geometry bottom-boundary `3/5`,
+  geometry line-ID overlap `0%`, and prior 15px patch gain unproven.
+- 018F artifact is
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018f-20260807\CCCD_OCR_HO_V2_018F_RECOGNIZER_TOKEN_ATTRIBUTION.json`.
+  In AUTO_REGION_HIT errors, recognizer disagreement is `291/375 = 77.6%`;
+  token mismatch totals `11`, line-order mismatch is `72`. AUTO_REGION_MISS remains
+  a separate `245/245` line-ID cohort. The report is aggregate-only and does not
+  authorize a profile selector, counterfactual, runtime patch or replay.
+- Decision: `RECOGNIZER_TOKEN_ATTRIBUTION_HOLD`. Owner review is required before
+  any separately approved selector counterfactual; keep held-out, evaluate-once,
+  patch and promotion closed.
+- Next READY task: `OCR-HO-V2-018G`; review this aggregate evidence and decide whether
+  a separately authorized selector counterfactual is warranted. Do not run it in 018F.
+  Keep shadow/manual-review-only and do not run held-out/evaluate-once.
 
 ## Active workstreams
 
@@ -128,15 +165,16 @@
 - README đưa Template-first Phase 1 và hai mẫu nghỉ phép/tăng ca lên thành luồng MVP mặc định.
 - Làm rõ bộ regression gồm 14 hồ sơ synthetic thuộc 2 loại biểu mẫu, không phải 14 loại đơn.
 - Thêm hướng dẫn thử DOCX mới trên `localhost:3000` và dẫn tới báo cáo metric chi tiết.
-- Không xóa tài liệu cũ; Universal Intake, OCR/CCCD, generic IDP và Camunda vẫn được giữ.
+- Corpus held-out legacy và các route phục vụ nó đã được gỡ; Universal Intake,
+  OCR/CCCD, generic IDP và Camunda vẫn được giữ.
 - Lần chạy API test đầu thiếu `PYTHONPATH=src` nên lỗi collection; chạy lại đúng môi trường
   đạt 4/4. Repository hygiene và `git diff --check` đều pass.
 
 ### TF-P1-005 — Mentor-safe localhost
 
-- Held-out nav, metrics, proof strip, evidence tab và private authorization note bị ẩn mặc định.
-- Held-out summary/evidence không được fetch trong mentor view.
-- Đặt `VITE_SHOW_HELDOUT=true` trước khi chạy web để bật lại chế độ quan sát riêng.
+- Held-out legacy nav, metrics, proof strip, evidence tab và private authorization
+  note đã được gỡ khỏi frontend.
+- Route/API và flag `VITE_SHOW_HELDOUT` của corpus cũ không còn tồn tại.
 - Default build và private build đều pass; web 9/9 tests, lint 0 error/19 warning cũ.
 - Browser smoke xác nhận không còn “REAL HELD-OUT · EVALUATE ONCE”, nav hoặc tab held-out.
 - Một lần chạy hai build song song gặp `EBUSY` ở `dist`; chạy tuần tự sau đó đều pass.
@@ -148,7 +186,7 @@
 - Evidence ẩn danh sách upload HCNS generic cũ nhưng không xóa session hoặc chức năng legacy.
 - Tab Template-first hiển thị danh sách, metadata DOCX native và field/JSON ở panel bên phải.
 - Tab CCCD và panel Schema/JSON cũ được giữ nguyên.
-- Browser smoke mặc định thấy một Template-first session và 30 CCCD, không thấy held-out/generic.
+- Browser smoke mặc định thấy Template-first và CCCD, không thấy held-out legacy/generic.
 - API restart bằng `.venv`, PID quan sát tại checkpoint là `31572`; health trả `ok`.
 - Lần start bằng Python hệ thống thiếu `cv2`; không thay đổi dữ liệu và đã sửa bằng `.venv`.
 
@@ -1014,3 +1052,439 @@ git status --short --branch
   report was restored from the archive after the single-document smoke.
 - No OCR source, primary runtime, GroundTruth, held-out artifact, or evaluate-once
   marker changed. Next READY task is `OCR-HO-V2-017B`: full development replay.
+
+### OCR-HO-V2-017B - full secondary development replay (DONE / HOLD)
+
+- Staged the prediction-blind manifest with SHA `8f79a53c...e8339f0` and ran all
+  15 documents / 120 fields using candidate `11.10.2` and the lock-verified local
+  EasyOCR/VietOCR runtime. The long worker hit Windows access/memory failures, so
+  the same 252 crop jobs were completed in four fresh private batches and combined
+  only after job/policy hash and result-count checks passed.
+- Aggregate-only report:
+  `C:\tmp\ocr-ho-v2-017b-stage-20260806\CCCD_OCR_HO_V2_017B_DIAGNOSTIC.json`.
+  Candidate exact `63.33%`, ASCII `69.17%`, CER `32.02%`, DER `16.21% (41/253)`,
+  presence `95.83%`; baseline DER is `11.46% (29/253)`. Exact improvements/regressions
+  are `4/1`; schema/protected regressions/sensitive false acceptance are `0`.
+- Automatic ROI remains fullName `53.33%`, origin `60.00%`, residence `66.67%`.
+  `developmentRegressionGate=HOLD`, `heldoutReadinessGate=HOLD`, all 120 fields remain
+  manual review, and no primary promotion, held-out opening, or evaluate-once occurred.
+- Next READY task: `OCR-HO-V2-017C` — attribute DER/profile contribution and choose
+  one layer only; do not modify selector/parser/primary runtime before that review.
+
+### OCR-HO-V2-017C - DER/profile attribution (DONE / HOLD)
+
+- Reused the sealed 017B artifacts only. The aggregate report is
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017c-20260807\CCCD_OCR_HO_V2_017C_DER_ATTRIBUTION.json`;
+  it covers 15 documents / 45 target fields, has `containsRawPII=false`, and keeps
+  `predictionOpened=false`.
+- Canonical 017B target classes are ROI miss `18`, recognizer miss `8`, parser
+  contamination `6`, selector miss `4`, and diacritic miss `2`. Target selected DER
+  is `40/228 = 17.54%`; VietOCR transformer profile oracle is `25/228 = 10.96%`
+  and seq2seq is `28/228 = 12.28%`.
+- Selection diagnostics show origin/residence frequently fall back to
+  `baseline_preserved` or `single_candidate`; five selector opportunities and three
+  Unicode/diacritic opportunities exist. No profile reaches the residence ASCII gate.
+- Decision: select exactly one next layer, `RECOGNIZER_PROFILE_SELECTOR_CONSENSUS`.
+  This is diagnostic-only: no engine/model, parser, ROI, Unicode-normalization or
+  primary-runtime change was made; no promotion, held-out opening or evaluate-once.
+- Next READY task: `OCR-HO-V2-017D` — selector-only counterfactual diagnostic with
+  DER no worse, exact regression `0`, and all fields still manual review.
+
+### OCR-HO-V2-017D - selector-only counterfactual (DONE / HOLD)
+
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017c-20260807\CCCD_OCR_HO_V2_017D_SELECTOR_COUNTERFACTUAL.json`.
+  The run covers 15/120, keeps `predictionOpened=false`, `gtUsedAtSelection=false`,
+  and contains no raw PII.
+- The profile-weighted consensus counterfactual changed target selection only;
+  GroundTruth was used after selection for scoring. Automatic ROI stayed
+  `53.33% / 60.00% / 66.67%` (fullName/origin/residence).
+- Canonical result: selected candidate exact `76/120`, CER `32.02%`, DER
+  `41/253 = 16.205%`; counterfactual exact `75/120`, CER `32.19%`, DER
+  `43/253 = 16.996%`. The counterfactual therefore worsens DER by two errors and
+  has non-zero exact regression; it is not eligible for replay or promotion.
+- Schema errors, sensitive false acceptance, and accepted coverage are `0`; all
+  fields remain manual review and `productionPromotionAllowed=false`. No primary
+  runtime, GroundTruth, held-out or evaluate-once artifact changed.
+- Decision: `DIAGNOSTIC_ONLY_HOLD`. Next READY task: `OCR-HO-V2-017E`, review the
+  failed selector rule and define a non-regressive rule before another replay.
+
+### OCR-HO-V2-017E - selector rule review (DONE / HOLD)
+
+- Aggregate-only artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017e-20260807\CCCD_OCR_HO_V2_017E_SELECTOR_RULE_REVIEW.json`.
+  It covers 15/120, has `containsRawPII=false`, `predictionOpened=false`,
+  `gtUsedAtSelection=false`, and keeps all fields manual review.
+- Root cause: 017D collapsed accent variants into one base/token key and then let
+  profile weight outrank exact Unicode agreement. The representative fullName switch
+  selected VietOCR transformer evidence over an exact EasyOCR/seq2seq consensus.
+- Defined rule `STRICT_UNANIMOUS_PROFILE_NFC_CONSENSUS_WITH_CURRENT_FALLBACK`:
+  use exact NFC/whitespace/casefold groups only when every usable profile and every
+  usable crop variant agrees across at least two recognizer families; otherwise keep
+  the current candidate. ASCII/base-key-only agreement is not sufficient.
+- Diagnostic on 45 target fields changed `0` fields: exact `13/45`, CER `41.14%`,
+  DER `40/228 = 17.54%`, unchanged from selected 017B and better than 017D's
+  counterfactual `42/228 = 18.42%`. `derNotWorse=true`, exact regression `0`.
+- Decision: `RULE_DEFINED_DIAGNOSTIC_ONLY_HOLD`. No selector/runtime source,
+  primary runtime, GroundTruth, held-out or evaluate-once artifact changed.
+  Next READY task was `OCR-HO-V2-017F`, replayed in the following checkpoint.
+
+### OCR-HO-V2-017F - selector-only replay (DONE / HOLD)
+
+- Aggregate-only artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017f-20260807\CCCD_OCR_HO_V2_017F_SELECTOR_REPLAY.json`.
+  The replay uses 017B candidate artifacts, covers 15/120 with a 45-field selector
+  diagnostic, keeps `predictionOpened=false` and `gtUsedAtSelection=false`.
+- The 017E rule changed `0/45` fields. Target exact remains `13/45`, CER `41.14%`,
+  DER `40/228 = 17.54%`; `derNotWorse=true`, exact regression `0`. Full selected
+  candidate metrics remain exact `76/120`, DER `41/253 = 16.205%`.
+- Schema errors `0`, accepted field count `0`, all fields manual review, and
+  `productionPromotionAllowed=false`. This is a selector-only replay; no OCR engine,
+  primary runtime, GroundTruth, held-out or evaluate-once artifact changed.
+- Decision: `RULE_REPLAY_NON_REGRESSIVE_NO_GAIN_HOLD`. The following checkpoint
+  `OCR-HO-V2-017G` reviewed the no-gain result and selected one bounded next layer.
+
+### OCR-HO-V2-017G - no-gain review and next-layer selection (DONE / HOLD)
+
+- Aggregate-only artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017g-20260807\CCCD_OCR_HO_V2_017G_LAYER_SELECTION_REVIEW.json`.
+  It contains no raw PII, keeps prediction sealed, and does not change OCR/runtime.
+- 017F changed `0/45` target fields; target DER stayed `40/228 = 17.54%`.
+  AUTO_DETECTOR evidence still has ROI miss `18` and automatic ROI
+  `53.33% / 60.00% / 66.67%` for fullName/origin/residence.
+- Target-only attribution has recognizer bottleneck `15`, parser contamination `9`,
+  selector opportunity `5`, and Unicode opportunity `3`. Recognizer is deferred:
+  relaxing selector consensus would reopen the 017D DER regression and residence
+  still has no profile near the 85% gate. Parser is deferred after 016B no gain.
+- Selected exactly one next layer: `OCR-HO-V2-017H` `ROI_BOUNDARY_AND_LINE_SELECTION`.
+  First step is diagnostic-only, with AUTO_DETECTOR as gate protocol and oracle line
+  mapping for attribution only; no boundary patch is authorized in 017G.
+- Acceptance for 017H: report left/top/bottom/expiry/line-order/duplicate misses;
+  patch at most one cause only if it dominates at least 50% of automatic misses;
+  preserve schema/manual-review/sensitive false-acceptance gates.
+
+### OCR-HO-V2-017H - ROI boundary/line-selection diagnostic (DONE / HOLD)
+
+- Aggregate-only artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017h-20260807\CCCD_OCR_HO_V2_017H_ROI_BOUNDARY_DIAGNOSTIC.json`.
+  It covers 15/120, contains no raw PII, keeps prediction sealed, and uses
+  `AUTO_DETECTOR` for gate evidence; oracle lines are attribution-only.
+- AUTO_DETECTOR ROI hit `27/45`; boundary misses `18`; detector/crop misses `0`.
+  Miss categories are bottom `8`, line order `7`, multiple sides `2`, top `1`,
+  and left/expiry/duplicate `0`. Bottom is `8/18 = 44.44%`, below the `50%`
+  threshold, so no boundary patch is authorized.
+- Oracle line attribution is `45/45` and is excluded from development gates.
+  Schema errors `0`, sensitive false acceptance `0`, accepted coverage `0`,
+  all fields remain manual review, and promotion/held-out/evaluate-once remain closed.
+- Decision: `ROI_NO_DOMINANT_CAUSE_HOLD`; next READY task became 017I and was
+  subsequently completed without a runtime change or old-evaluation reopen.
+
+### OCR-HO-V2-017I - recognizer profile/variant diagnostic (DONE / HOLD)
+
+- Aggregate-only artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017i-20260807\CCCD_OCR_HO_V2_017I_RECOGNIZER_PROFILE_VARIANT_DIAGNOSTIC.json`.
+  It covers 15/120, 45 target fields, 4 local profiles and 4 crop variants;
+  `containsRawPII=false`, `predictionOpened=false`, and `gtUsedAtSelection=false`.
+- The best profile oracle is VietOCR transformer, but the best profile or variant
+  reaches only `2/15` residence ASCII exact under attribution-only scoring; the
+  `13/15` (85%) gate is not close. This evidence is not a selector or promotion result.
+- Gates remain `developmentRegressionGate=HOLD` and `heldoutReadinessGate=HOLD`;
+  schema errors `0`, sensitive false acceptance `0`, accepted coverage `0`, all
+  fields manual review, and `productionPromotionAllowed=false`.
+- Decision: `RECOGNIZER_PROFILE_VARIANT_DIAGNOSTIC_HOLD`. Next READY task is
+  `OCR-HO-V2-017J`, bounded selector-counterfactual review only.
+
+### OCR-HO-V2-017J - selector counterfactual evidence review (DONE / HOLD)
+
+- Aggregate-only artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017j-20260807\CCCD_OCR_HO_V2_017J_SELECTOR_COUNTERFACTUAL_REVIEW.json`.
+  It covers 15/120 and 45 target fields, contains no raw PII, and does not open
+  prediction or use Ground Truth at selection.
+- 017I found no profile/variant residence ceiling above `2/15` versus the `13/15`
+  gate. 017D worsened DER from `41/253` (`16.205%`) to `43/253` (`16.996%`);
+  017E/017F had `0` eligible and `0` changed fields.
+- Decision: `NO_COUNTERFACTUAL_AUTHORIZATION_HOLD`; do not run a selector
+  counterfactual. Schema errors `0`, sensitive false acceptance `0`, accepted
+  coverage `0`, all fields manual review, and promotion/held-out/evaluate-once closed.
+- Next READY task: `OCR-HO-V2-017K` — gather new line/token recognizer evidence
+  before reconsidering a selector.
+
+### OCR-HO-V2-017K - line/token recognizer evidence (DONE / HOLD)
+
+- Analyzer: `scripts/analyze_ocr_ho_v2_017k.py`; synthetic coverage is in
+  `tests/test_ocr_ho_v2_017k.py`. No OCR rerun or runtime source changed.
+- Aggregate artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017k-20260807\CCCD_OCR_HO_V2_017K_LINE_TOKEN_DIAGNOSTIC.json`.
+  It covers 15/120 with 45 target fields, 675 profile/variant groups and 630 eligible failures;
+  no raw PII, prediction sealed, GT used only for post-prediction attribution.
+- Counts: `LINE_ID_MISS 246`, `LINE_ORDER_MISMATCH 72`,
+  `RECOGNIZER_DISAGREEMENT 291`, `TOKEN_EXTRA 8`, `TOKEN_SWAP 3`, parser signal `10`.
+  The dominant class is `291/630 = 46.19%`, below the 50% rule threshold, so no selector
+  candidate rule, counterfactual, runtime change, held-out opening or evaluate-once is allowed.
+- Gates: development/held-out `HOLD`, schema `0`, sensitive false acceptance `0`, accepted
+  coverage `0`, all fields manual review, promotion disabled. Next READY: `OCR-HO-V2-017L`.
+
+### OCR-HO-V2-017L - next diagnostic review (DONE / HOLD)
+
+- Review script: `scripts/review_ocr_ho_v2_017l.py`; synthetic coverage is in
+  `tests/test_ocr_ho_v2_017l.py`. It reads only the aggregate 017K artifact.
+- Artifact: `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017l-20260807\CCCD_OCR_HO_V2_017L_NEXT_DIAGNOSTIC_REVIEW.json`;
+  15/120 scope, 45 target fields, no raw PII, prediction sealed, no Ground Truth at selection.
+- No 017K class reached 50%. Exactly one follow-up is proposed:
+  `OCR-HO-V2-017M` / `LINE_TOKEN_COHORT_SEPARATION`, status `PROPOSED_NOT_AUTHORIZED`.
+  It will separate automatic line/region misses from oracle token/recognizer disagreement by cohort.
+- No selector/runtime/counterfactual/replay/held-out/evaluate-once action is authorized. Gates HOLD,
+  schema/sensitive false acceptance/accepted coverage `0`, manual review only, promotion disabled.
+  Next READY: `OCR-HO-V2-017M`.
+
+### OCR-HO-V2-017M - line/token cohort separation (DONE / HOLD)
+
+- Analyzer: `scripts/analyze_ocr_ho_v2_017m.py`; synthetic coverage is in
+  `tests/test_ocr_ho_v2_017m.py`. It reads sealed 017B candidates for attribution only.
+- Artifact: `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017m-20260807\CCCD_OCR_HO_V2_017M_LINE_TOKEN_COHORT_SEPARATION.json`;
+  15/120 scope, 45 target fields, no raw PII, prediction sealed, no GT at selection.
+- AUTO_REGION_MISS has `LINE_ID_MISS 245/245 = 100%`; AUTO_REGION_HIT has
+  `RECOGNIZER_DISAGREEMENT 291/375 = 77.60%`. This is attribution, not a quality gate.
+- No selector/runtime/counterfactual/replay/held-out/evaluate-once action. Gates HOLD,
+  schema/sensitive false acceptance/accepted coverage `0`, manual review only, promotion disabled.
+  Next READY: `OCR-HO-V2-017N` (`AUTO_LINE_MAPPING_BOUNDARY_ATTRIBUTION`).
+
+### OCR-HO-V2-017N - automatic line-mapping boundary attribution (DONE / HOLD)
+
+- Analyzer: `scripts/analyze_ocr_ho_v2_017n.py`; synthetic coverage is in
+  `tests/test_ocr_ho_v2_017n.py`. It reviews aggregate 017H/017M/017L evidence only.
+- Artifact: `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017n-20260807\CCCD_OCR_HO_V2_017N_AUTO_LINE_MAPPING_BOUNDARY_ATTRIBUTION.json`;
+  15/120 scope, 45 target fields, no raw PII, prediction sealed, attribution-only.
+- Global bottom-boundary is `8/18 = 44.44%`, below the patch threshold. Residence bottom-boundary
+  is `3/5 = 60%`; recorded only as `CANDIDATE_ONLY_NO_RUNTIME_PATCH`.
+- No ROI/runtime/selector/counterfactual/replay/held-out/evaluate-once action. Gates HOLD,
+  schema/sensitive false acceptance/accepted coverage `0`, manual review only, promotion disabled.
+  Next READY: `OCR-HO-V2-017O` (`RESIDENCE_BOTTOM_BOUNDARY_ATTRIBUTION`).
+
+### OCR-HO-V2-017O - residence bottom-boundary attribution (DONE / HOLD)
+
+- Analyzer: `scripts/analyze_ocr_ho_v2_017o.py`; synthetic coverage is in
+  `tests/test_ocr_ho_v2_017o.py`. It reads aggregate 017H/017N evidence only.
+- Artifact: `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017o-20260807\CCCD_OCR_HO_V2_017O_RESIDENCE_BOTTOM_BOUNDARY_ATTRIBUTION.json`;
+  15/120 scope, 45 target fields, no raw PII, prediction sealed, attribution-only.
+- Residence bottom-boundary is `3/5 = 60%`; all three cases use
+  `phase11_10_geometry_line_segmentation`, with six missing and four selected lines.
+- Candidate status is `CANDIDATE_ONLY_NO_RUNTIME_PATCH`; no ROI/runtime/selector/counterfactual/replay/
+  held-out/evaluate-once action. Gates HOLD, schema/sensitive false acceptance/accepted coverage `0`.
+  Next READY: `OCR-HO-V2-017P` (`RESIDENCE_GEOMETRY_SEGMENTATION_BOUNDARY_REVIEW`).
+
+### OCR-HO-V2-017P - residence geometry-segmentation boundary review (DONE / HOLD)
+
+- Analyzer: `scripts/analyze_ocr_ho_v2_017p.py`; synthetic coverage is in
+  `tests/test_ocr_ho_v2_017p.py`. It reads sealed 017B metadata plus aggregate 017H/017N/017O evidence.
+- Artifact: `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017p-20260807\CCCD_OCR_HO_V2_017P_RESIDENCE_GEOMETRY_SEGMENTATION_BOUNDARY_REVIEW.json`;
+  15/120 scope, 45 target fields, no raw PII, prediction sealed, attribution-only.
+- All three residence cases share normalized band `0.28,0.70,0.98,0.90`; bottom bbox overflow is `2/3`,
+  sealed line-ID overlap is `0/6`, and the candidate remains `CANDIDATE_ONLY_NO_RUNTIME_PATCH`.
+- No ROI/runtime/selector/counterfactual/replay/held-out/evaluate-once action. Gates HOLD,
+  schema/sensitive false acceptance/accepted coverage `0`, manual review only, promotion disabled.
+  Next READY: `OCR-HO-V2-017Q` (`RESIDENCE_GEOMETRY_MINIMAL_BOUNDARY_RULE_REVIEW`).
+
+### OCR-HO-V2-017Q - minimal residence geometry boundary-rule review (DONE / HOLD)
+
+- Review script: `scripts/review_ocr_ho_v2_017q.py`; synthetic coverage is in
+  `tests/test_ocr_ho_v2_017q.py`. It reads only aggregate 017P evidence.
+- Artifact: `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017q-20260807\CCCD_OCR_HO_V2_017Q_RESIDENCE_GEOMETRY_MINIMAL_BOUNDARY_RULE_REVIEW.json`;
+  15/120 scope, no raw PII, prediction sealed, attribution-only.
+- Proposed one rule: extend only the geometry region bottom to observed line bbox, capped at `15` pixels,
+  preserve `maxValueLines=2`, and do not remap line IDs. Status is `REVIEW_ONLY_LINE_ID_LIMITATION`.
+- Patch/replay/selector/runtime/held-out/evaluate-once remain unauthorized. Gates HOLD,
+  schema/sensitive false acceptance/accepted coverage `0`, manual review only, promotion disabled.
+  Next READY: `OCR-HO-V2-017R` (`RESIDENCE_GEOMETRY_PATCH_GATED_REVIEW`).
+
+### OCR-HO-V2-017R - residence geometry patch-gated review (DONE / HOLD)
+
+- Review script: `scripts/review_ocr_ho_v2_017r.py`; synthetic coverage is in
+  `tests/test_ocr_ho_v2_017r.py`. It reads only aggregate 017Q evidence.
+- Artifact: `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017r-20260807\CCCD_OCR_HO_V2_017R_RESIDENCE_GEOMETRY_PATCH_GATED_REVIEW.json`;
+  15/120 scope, no raw PII, prediction sealed, attribution-only.
+- Bounded-rule gate `PASS`; independent line-ID evidence gate `HOLD` because overlap is `0`.
+  Therefore `patchAuthorized=false` and `replayAuthorized=false`.
+- No selector/runtime/held-out/evaluate-once action. Gates HOLD, schema/sensitive false acceptance/
+  accepted coverage `0`, manual review only, promotion disabled. Next READY: `OCR-HO-V2-017S`.
+
+### OCR-HO-V2-017S - independent line-ID mapping evidence (DONE / HOLD)
+
+- Analyzer: `scripts/analyze_ocr_ho_v2_017s.py`; synthetic coverage:
+  `tests/test_ocr_ho_v2_017s.py`. It reads 017B/017R lineage and private
+  phase13.3 line indexes/bboxes without consuming OCR text.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017s-20260807\CCCD_OCR_HO_V2_017S_INDEPENDENT_LINE_ID_MAPPING_EVIDENCE.json`.
+  Independent source coverage is `15/15`, sealed line-ID overlap `61/61`;
+  region attribution is aggregate-only.
+- `lineIdEvidenceGate=PASS` only for evidence availability. Development and
+  held-out gates remain `HOLD`; patch/replay/selector/runtime remain unauthorized,
+  accepted coverage is `0`, all fields are manual review, promotion is disabled.
+- Next READY: `OCR-HO-V2-017T` — reconcile the bounded residence rule with this
+  independent evidence; do not run a replay or counterfactual in 017S.
+
+### OCR-HO-V2-017T - patch-gate reconciliation (DONE / HOLD)
+
+- Review script: `scripts/review_ocr_ho_v2_017t.py`; synthetic coverage:
+  `tests/test_ocr_ho_v2_017t.py`. It reads only aggregate 017R/017S artifacts.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017t-20260807\CCCD_OCR_HO_V2_017T_PATCH_GATE_RECONCILIATION.json`.
+  Bounded rule gate and independent line-ID evidence gate are both `PASS`; source overlap is
+  `61/61`. This does not prove quality improvement.
+- `explicitPatchApproval=REQUIRED`; patch/replay/selector/runtime remain unauthorized,
+  development/held-out gates remain `HOLD`, all fields remain manual review, promotion disabled.
+- Next READY: `OCR-HO-V2-017U` - explicit patch authorization review only; no replay in 017T.
+
+### OCR-HO-V2-017U - explicit patch authorization review (DONE / HOLD)
+
+- Review script: `scripts/review_ocr_ho_v2_017u.py`; synthetic coverage:
+  `tests/test_ocr_ho_v2_017u.py`. It reads only aggregate 017T evidence.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017u-20260807\CCCD_OCR_HO_V2_017U_EXPLICIT_PATCH_AUTHORIZATION_REVIEW.json`.
+  017T reconciliation is `PASS`, but `authorizationStatus=MISSING`.
+- Patch/replay/selector/primary runtime/promotion remain unauthorized; development and
+  held-out gates remain `HOLD`, all fields remain manual review.
+- Next READY: `OCR-HO-V2-017Z` - intake explicit runtime patch authorization.
+
+### OCR-HO-V2-017V - authorization-record intake (DONE / HOLD)
+
+- Intake script: `scripts/review_ocr_ho_v2_017v.py`; synthetic coverage:
+  `tests/test_ocr_ho_v2_017v.py`. It validates only a private approval record.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017v-20260807\CCCD_OCR_HO_V2_017V_AUTHORIZATION_INTAKE.json`.
+  Current status is `authorizationStatus=VALID_FOR_PATCH_REVIEW`; patch/replay remain denied.
+- Patch implementation, replay, selector, primary runtime and promotion remain closed;
+  development and held-out gates remain `HOLD`, all fields remain manual review.
+- Next READY: `OCR-HO-V2-017X` - separately review minimal residence patch implementation.
+
+### OCR-HO-V2-017W - bounded residence patch review (DONE / HOLD)
+
+- Review script: `scripts/review_ocr_ho_v2_017w.py`; synthetic coverage:
+  `tests/test_ocr_ho_v2_017w.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017w-20260807\CCCD_OCR_HO_V2_017W_MINIMAL_PATCH_REVIEW.json`.
+  Reconciliation and authorization surface gates are `PASS`; quality remains unproven.
+- Runtime/replay/selector/promotion remain closed; all fields remain manual review.
+- Next READY: `OCR-HO-V2-017X` - separately review minimal patch implementation.
+
+### OCR-HO-V2-017X - minimal residence implementation review (DONE / HOLD)
+
+- Review script: `scripts/review_ocr_ho_v2_017x.py`; synthetic coverage:
+  `tests/test_ocr_ho_v2_017x.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017x-20260807\CCCD_OCR_HO_V2_017X_MINIMAL_IMPLEMENTATION_REVIEW.json`.
+  Rule, line cap and detector isolation pass; guard placement is `HOLD` because the
+  geometry source is assigned after `_geometry_line_bboxes()` is called.
+- No runtime patch, replay, selector change or promotion occurred. Next READY:
+  `OCR-HO-V2-017Y` - resolve guard placement without touching detector-selected lines.
+
+### OCR-HO-V2-017Y - geometry guard placement resolution (DONE / HOLD)
+
+- Review script: `scripts/review_ocr_ho_v2_017y.py`; synthetic coverage:
+  `tests/test_ocr_ho_v2_017y.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017y-20260807\CCCD_OCR_HO_V2_017Y_GUARD_PLACEMENT_RESOLUTION.json`.
+  Guard placement is resolved after selected-line filtering and before the geometry bbox call;
+  detector-selected lines remain outside the guard.
+- Implementation is not applied; patch/replay/selector/promotion remain closed. Next READY:
+  `OCR-HO-V2-017Z` - intake explicit runtime patch authorization.
+
+### OCR-HO-V2-017Z - runtime patch authorization intake (DONE / HOLD)
+
+- Intake script: `scripts/review_ocr_ho_v2_017z.py`; synthetic coverage:
+  `tests/test_ocr_ho_v2_017z.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017z-20260807\CCCD_OCR_HO_V2_017Z_RUNTIME_PATCH_AUTHORIZATION_INTAKE.json`.
+  Status is `VALID_FOR_DEVELOPMENT_PATCH`; no code, replay or promotion occurred.
+- Record matches the 017Y digest and exact guard scope; it authorizes only a development shadow
+  patch and keeps primary runtime, selector, replay and promotion false.
+- Next READY: `OCR-HO-V2-018A` - review/apply the authorized minimal shadow patch.
+
+### OCR-HO-V2-018A - minimal shadow patch (DONE / HOLD)
+
+- Runtime patch applied only to `apps/ocr_lab/api/phase11_10_cccd_v2.py` geometry fallback:
+  residence bottom extension capped at 15px; detector-selected lines, line IDs, selector and
+  primary runtime policy are unchanged.
+- Review script: `scripts/review_ocr_ho_v2_018a.py`; tests:
+  `tests/test_ocr_ho_v2_018a.py`, `tests/test_ocr_ho_v2_018a_review.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018a-20260807\CCCD_OCR_HO_V2_018A_SHADOW_PATCH_REVIEW.json`.
+  Scope gates pass; quality/development/held-out gates remain `HOLD`, replay is unauthorized.
+- Next READY: `OCR-HO-V2-018B` - intake separate development replay authorization.
+
+### OCR-HO-V2-018B - development replay authorization intake (DONE / HOLD)
+
+- Intake script: `scripts/review_ocr_ho_v2_018b.py`; synthetic coverage:
+  `tests/test_ocr_ho_v2_018b.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018b-20260807\CCCD_OCR_HO_V2_018B_DEVELOPMENT_REPLAY_AUTHORIZATION_INTAKE.json`.
+  Status is `VALID_FOR_DEVELOPMENT_REPLAY`; replay has not run and no held-out/evaluate-once opened.
+- Record matches the 018A digest and scope 15/120 CCCD development only, with
+  held-out/evaluate-once/primary-runtime/selector/promotion all false.
+- Next READY: `OCR-HO-V2-018C` - review/run only the authorized development replay.
+
+### OCR-HO-V2-018C - authorized development replay (DONE / HOLD)
+
+- Runner: `scripts/run_cccd_phase11_5.py` configured with `phase11_10_cccd_v2`,
+  candidate `11.10.2`, secondary runtime restored; 15/15 documents and 252/252
+  crop jobs completed on an isolated private copy.
+- Aggregate diagnostic:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018c-20260807\CCCD_OCR_HO_V2_018C_DEVELOPMENT_REPLAY_DIAGNOSTIC.json`.
+  It records `AUTO_DETECTOR`, `predictionOpened=false`, `gtUsedAtSelection=false`,
+  `acceptedCoverage=0`, `manualReviewOnly=true`, and all authorization restrictions.
+- Candidate metrics are exact `63.33%`, ASCII `69.17%`, CER `32.02%`, DER
+  `16.21% (41/253)`, presence `95.83%`; automatic ROI fullName/origin/residence
+  `53.33%/60.00%/66.67%`. There is one exact regression, DER is above baseline,
+  and residence ASCII/ROI remain below threshold, so both gates are `HOLD`.
+- These aggregate metrics and automatic ROI are identical to the prior 017B
+  candidate artifact; 018A's 15px shadow patch has no demonstrated quality gain.
+- Runner summary remains private at
+  `C:\tmp\ocr-ho-v2-018c-stage-20260807\PHASE11_10_V2_RESULTS.json`; no
+  primary-runtime, selector, held-out, evaluate-once or promotion action occurred.
+- Next READY: `OCR-HO-V2-018D` - review gate failures and select one diagnostic layer.
+
+### OCR-HO-V2-018D - gate-failure review (DONE / HOLD)
+
+- Review script: `scripts/review_ocr_ho_v2_018d.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018d.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018d-20260807\CCCD_OCR_HO_V2_018D_GATE_FAILURE_REVIEW.json`.
+  It is aggregate-only over CCCD DATA-HO-014 15/120, with prediction sealed,
+  `gtUsedAtSelection=false`, schema/sensitive/accepted coverage `0` and all fields
+  manual review.
+- The review selected exactly one layer, `DETECTOR_CROP`, with next diagnostic
+  `OCR-HO-V2-018E AUTOMATIC_LINE_MAPPING_BOUNDARY_RECONCILIATION`. Evidence: 18/45
+  target ROI misses; residence ROI `10/15`; residence bottom-boundary `3/5`, all
+  geometry-source cases. 018A's 15px patch had no measurable metric/ROI gain.
+- Recognizer is deferred because its oracle residence ceiling is only `2/15`; selector
+  is closed because 017D worsened DER and 017E/017F had zero eligible/changed fields.
+  No replay, patch, selector, held-out, evaluate-once or promotion action occurred.
+- Next READY: `OCR-HO-V2-018E` - diagnostic-only detector/crop boundary reconciliation.
+
+### OCR-HO-V2-018E - diagnostic-only boundary reconciliation (DONE / HOLD)
+
+- Analyzer: `scripts/analyze_ocr_ho_v2_018e.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018e.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018e-20260807\CCCD_OCR_HO_V2_018E_BOUNDARY_RECONCILIATION.json`.
+  It is aggregate-only, sealed, and uses prior 017N/017O/017P/017K plus 018A/018D
+  evidence; no OCR or prediction replay occurred.
+- Reconciliation is consistent: fullName `8/15`, origin `9/15`, residence `10/15`
+  automatic ROI. Global boundary categories remain bottom `8/18`, line-order `7/18`,
+  with no category at 50%; residence bottom-boundary remains `3/5`, all geometry
+  source, overlap `0%`, overflow `2/3`.
+- Decision: `BOUNDARY_RECONCILED_HOLD`; no new ROI patch is justified. Next proposed
+  task is `OCR-HO-V2-018F RECOGNIZER_TOKEN_ALIGNMENT_REVIEW`, still unauthorized.
+- Gates remain HOLD; schema/sensitive/accepted coverage `0`, all fields manual review,
+  `replayExecuted=false`, `patchAuthorized=false`, `productionPromotionAllowed=false`.
+
+### OCR-HO-V2-018F - recognizer/token attribution (DONE / HOLD)
+
+- Analyzer: `scripts/analyze_ocr_ho_v2_018f.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018f.py`.
+- The analyzer reads only aggregate 017K/017M and 018E artifacts. It does not reopen
+  prediction, OCR, GroundTruth or private field values.
+- AUTO_REGION_HIT contains recognizer disagreement `291/375 = 77.6%`, line-order
+  mismatch `72`, and token mismatch `11`; AUTO_REGION_MISS is `245/245` line-ID miss.
+- Decision is `RECOGNIZER_TOKEN_ATTRIBUTION_HOLD`; selector, counterfactual, replay,
+  runtime patch and promotion remain closed. Next READY is `OCR-HO-V2-018G` owner review.

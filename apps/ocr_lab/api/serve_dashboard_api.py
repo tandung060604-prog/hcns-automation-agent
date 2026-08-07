@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 import uuid
+from collections import Counter
 from datetime import datetime, timezone
 from email import policy
 from email.parser import BytesParser
@@ -66,12 +67,6 @@ from external_dataset_prediction import (
 from document_route_safety import (
     safe_existing_document_route,
     selected_orientations_are_identity,
-)
-from heldout_dashboard import (
-    load_heldout_dashboard,
-    load_heldout_document_evidence,
-    resolve_heldout_document,
-    resolve_heldout_root,
 )
 from local_server_security import require_loopback_host
 
@@ -137,6 +132,164 @@ from hcns_agent.templates.service import (
     TemplateUnsupportedError,
     build_local_template_processing_service,
 )
+
+
+def _read_optional_json(path: Path | None) -> dict[str, Any] | None:
+    if path is None or not path.is_file():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return payload if isinstance(payload, dict) else None
+
+
+def _template_benchmark_row(
+    key: str,
+    label: str,
+    runtime_types: set[str],
+    runtime_counts: Counter[str],
+) -> dict[str, Any]:
+    if key in {"leave", "overtime"}:
+        field_count = 49 if key == "leave" else 77
+        note = (
+            "7 mẫu native, 49/49 required field khớp đúng. "
+            "OCR ảnh và PDF scan được đánh giá riêng theo benchmark gộp."
+            if key == "leave"
+            else "7 mẫu native, 77/77 required field khớp đúng. "
+            "7 field department không có trong nguồn được giữ null."
+        )
+        return {
+            "key": key,
+            "label": label,
+            "benchmarkDocumentCount": 7,
+            "benchmarkSampleCount": 7,
+            "fieldCount": field_count,
+            "exactMatchRate": 1.0,
+            "fieldPresenceRate": 1.0,
+            "acceptedRate": None,
+            "acceptedLabel": None,
+            "acceptedCoverage": None,
+            "cer": None,
+            "wer": None,
+            "localDocumentCount": sum(runtime_counts.get(item, 0) for item in runtime_types),
+            "status": "current",
+            "source": "Template-first native regression",
+            "note": note,
+            "ocrAggregate": "OCR ảnh 86/90; PDF scan 82/90 ở UAT gộp hai loại.",
+        }
+
+
+def build_local_benchmark_summary(handler: type[DashboardHandler]) -> dict[str, Any]:
+    runtime_counts: Counter[str] = Counter(
+        str(session.get("documentType", ""))
+        for session in handler.user_ocr.list_template_sessions()
+    )
+    rows = [
+        _template_benchmark_row(
+            "leave",
+            "Đơn nghỉ phép",
+            {"LEAVE_REQUEST"},
+            runtime_counts,
+        ),
+        _template_benchmark_row(
+            "overtime",
+            "Đơn tăng ca",
+            {"OVERTIME_REQUEST"},
+            runtime_counts,
+        ),
+    ]
+
+    benchmark_payload = _read_optional_json(handler.benchmark_report) or {}
+    benchmark_manifest = _read_optional_json(handler.benchmark_manifest) or {}
+    inventory_counts: Counter[str] = Counter(
+        str(case.get("category", ""))
+        for case in benchmark_manifest.get("cases", [])
+        if isinstance(case, dict)
+    )
+    category_specs = [
+        ("cv", "CV & hồ sơ ứng viên", "CV", {"CV"}),
+        ("contract", "Hợp đồng lao động", "EMPLOYMENT_CONTRACT", {"EMPLOYMENT_CONTRACT"}),
+        ("ielts", "IELTS / chứng chỉ", "CERTIFICATE", {"CERTIFICATE"}),
+    ]
+    by_category = benchmark_payload.get("byCategory", {})
+    for category, label, runtime_type, _ in category_specs:
+        metrics = by_category.get(category, {})
+        has_metrics = isinstance(metrics, dict) and bool(metrics)
+        rows.append(
+            {
+                "key": category,
+                "label": label,
+                "benchmarkDocumentCount": inventory_counts.get(category, 0),
+                "benchmarkSampleCount": inventory_counts.get(category, 0),
+                "fieldCount": metrics.get("fields") if has_metrics else None,
+                "exactMatchRate": metrics.get("exactRate") if has_metrics else None,
+                "fieldPresenceRate": metrics.get("presenceRate") if has_metrics else None,
+                "acceptedRate": metrics.get("acceptedRate") if has_metrics else None,
+                "acceptedLabel": "accepted match" if has_metrics else None,
+                "acceptedCoverage": None,
+                "cer": None,
+                "wer": None,
+                "localDocumentCount": runtime_counts.get(runtime_type, 0),
+                "status": "current" if has_metrics else "unavailable",
+                "source": "Benchmark field-level mới",
+                "note": (
+                    "Đánh giá field-level; CER/WER chưa có trong báo cáo này."
+                    if has_metrics
+                    else "Chưa cấu hình báo cáo prediction có Ground Truth."
+                ),
+            }
+        )
+
+    cccd_count = 0
+    cccd_summary = None
+    if handler.cccd_heldout_root is not None:
+        cccd_summary = load_review_summary(handler.cccd_heldout_root)
+        cccd_count = int(cccd_summary.get("documentCount", 0))
+    cccd_metrics = (
+        cccd_summary.get("evaluation", {}).get("metrics", {}).get("phase11_6", {})
+        if cccd_summary
+        else {}
+    )
+    if not isinstance(cccd_metrics, dict):
+        cccd_metrics = {}
+    rows.append(
+        {
+            "key": "cccd-front",
+            "label": "CCCD mặt trước",
+            "benchmarkDocumentCount": cccd_count,
+            "benchmarkSampleCount": cccd_count,
+            "fieldCount": cccd_metrics.get("evaluatedFieldCount"),
+            "exactMatchRate": cccd_metrics.get("strictFieldExactMatch"),
+            "fieldPresenceRate": cccd_metrics.get("fieldPresence"),
+            "acceptedRate": cccd_metrics.get("acceptedPrecision"),
+            "acceptedLabel": "precision",
+            "acceptedCoverage": cccd_metrics.get("acceptedCoverage"),
+            "cer": cccd_metrics.get("cer"),
+            "wer": None,
+            "localDocumentCount": cccd_count,
+            "status": "confirmed" if cccd_count else "unavailable",
+            "source": "Đánh giá CCCD local đã xác nhận",
+            "note": (
+                f"{cccd_count} mặt trước trong metric; "
+                f"{cccd_summary.get('excludedDocumentCount', 0)} tài liệu ngoài phạm vi."
+                if cccd_summary
+                else "Chưa cấu hình bộ CCCD Ground Truth."
+            ),
+        }
+    )
+
+    return {
+        "schemaVersion": "local-document-benchmark/1.0.0",
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "rows": [
+            next(row for row in rows if row["key"] == key)
+            for key in ("cv", "contract", "ielts", "cccd-front", "leave", "overtime")
+        ],
+        "notes": [
+            "Số benchmark là số tài liệu gốc duy nhất; số lượt chạy chỉ tính thêm biến thể ảnh nếu có.",
+            "Số local là số tài liệu hiện có trong runtime hoặc hàng review; không thay thế mẫu số benchmark.",
+            "CER/WER chỉ hiển thị khi nguồn đã tính hai chỉ số này; trạng thái chưa có không có nghĩa là 0.",
+            "Nghỉ phép và tăng ca dùng benchmark Template-first native; OCR ảnh và PDF scan là UAT gộp hai loại, chưa tách điểm theo từng loại.",
+        ],
+    }
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 MAX_REVIEW_BYTES = 2 * 1024 * 1024
@@ -1285,7 +1438,8 @@ class UserOCRService:
 
 class DashboardHandler(BaseHTTPRequestHandler):
     data_root: Path
-    heldout_root: Path | None
+    benchmark_report: Path | None = None
+    benchmark_manifest: Path | None = None
     cccd_heldout_root: Path | None
     ocr_ho_shadow_root: Path | None
     external_dataset_root: Path | None
@@ -2276,6 +2430,16 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_json({"sessions": self.user_ocr.list_template_sessions()})
             return
 
+        if parsed.path == "/benchmark/summary":
+            try:
+                self.send_json(build_local_benchmark_summary(DashboardHandler))
+            except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+                self.send_json(
+                    {"error": f"Local benchmark unavailable: {exc}"},
+                    HTTPStatus.NOT_FOUND,
+                )
+            return
+
         if parsed.path == "/ocr-ho-v2/diagnostic/summary":
             if self.ocr_ho_shadow_root is None:
                 self.send_json({"error": "OCR-HO-V2 diagnostic is not configured"}, HTTPStatus.NOT_FOUND)
@@ -2733,90 +2897,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
             return
 
-        if parsed.path == "/heldout/summary":
-            if self.heldout_root is None:
-                self.send_json(
-                    {"error": "Real held-out corpus is not configured"},
-                    HTTPStatus.NOT_FOUND,
-                )
-                return
-            try:
-                self.send_json(load_heldout_dashboard(self.heldout_root))
-            except PermissionError as exc:
-                self.send_json(
-                    {"error": str(exc)},
-                    HTTPStatus.FORBIDDEN,
-                )
-            except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
-                self.send_json(
-                    {"error": f"Real held-out evidence is unavailable: {exc}"},
-                    HTTPStatus.NOT_FOUND,
-                )
-            return
-
-        if parsed.path == "/heldout/document":
-            if self.heldout_root is None:
-                self.send_json(
-                    {"error": "Real held-out corpus is not configured"},
-                    HTTPStatus.NOT_FOUND,
-                )
-                return
-            document_id = query.get("id", [""])[0]
-            mode = query.get("mode", ["preview"])[0]
-            if mode not in {"preview", "source"}:
-                self.send_json(
-                    {"error": "Invalid held-out document mode"},
-                    HTTPStatus.BAD_REQUEST,
-                )
-                return
-            try:
-                document_path, _item = resolve_heldout_document(
-                    self.heldout_root,
-                    document_id,
-                    preview=mode == "preview",
-                )
-            except ValueError as exc:
-                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-                return
-            except (OSError, FileNotFoundError):
-                self.send_json(
-                    {"error": "Held-out document is unavailable"},
-                    HTTPStatus.NOT_FOUND,
-                )
-                return
-            content_type = mimetypes.guess_type(document_path.name)[0] or "application/octet-stream"
-            download_name = (
-                f"{document_id}{document_path.suffix.lower()}" if mode == "source" else None
-            )
-            self.send_file(document_path, content_type, download_name)
-            return
-
-        if parsed.path == "/heldout/evidence":
-            if self.heldout_root is None:
-                self.send_json(
-                    {"error": "Real held-out corpus is not configured"},
-                    HTTPStatus.NOT_FOUND,
-                )
-                return
-            document_id = query.get("id", [""])[0]
-            try:
-                self.send_json(
-                    load_heldout_document_evidence(
-                        self.heldout_root,
-                        document_id,
-                    )
-                )
-            except ValueError as exc:
-                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-            except PermissionError as exc:
-                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
-            except (OSError, FileNotFoundError, KeyError, json.JSONDecodeError):
-                self.send_json(
-                    {"error": "Held-out evidence is unavailable"},
-                    HTTPStatus.NOT_FOUND,
-                )
-            return
-
         if parsed.path == "/phase14/benchmark":
             phase14_root = self.data_root / "output" / "phase14"
             benchmark_path = phase14_root / "line_benchmark_private.json"
@@ -3070,7 +3150,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         "phase13_3HybridEnabled": True,
                         "phase14_8VerifierEnabled": True,
                         "phase14LineReviewEnabled": True,
-                        "realHeldoutEvidenceEnabled": (self.heldout_root is not None),
                         "modelLoaded": self.user_ocr.model_loaded,
                         "templateOcrModelLoaded": (
                             self.template_processor.ocr_model_loaded
@@ -3478,17 +3557,19 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Serve the HR OCR dashboard API")
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument(
-        "--heldout-root",
-        type=Path,
-        help=(
-            "Authorized local held-out root. Defaults to the "
-            "paddleocr-hr-heldout-v1 sibling of --data-root."
-        ),
-    )
-    parser.add_argument(
         "--cccd-heldout-root",
         type=Path,
         help="Authorized local CCCD Phase 11.6 Ground Truth review root.",
+    )
+    parser.add_argument(
+        "--benchmark-report",
+        type=Path,
+        help="Latest aggregate prediction report used by the per-document-type benchmark.",
+    )
+    parser.add_argument(
+        "--benchmark-manifest",
+        type=Path,
+        help="Inventory for the latest aggregate prediction report.",
     )
     parser.add_argument(
         "--ocr-ho-shadow-root",
@@ -3574,9 +3655,15 @@ def main() -> int:
         "phase7": build_index(args.data_root / "output" / "phase7" / "v5_enhanced" / "native_json"),
     }
     DashboardHandler.data_root = args.data_root
-    DashboardHandler.heldout_root = resolve_heldout_root(
-        args.data_root,
-        args.heldout_root,
+    DashboardHandler.benchmark_report = (
+        args.benchmark_report.expanduser().resolve()
+        if args.benchmark_report is not None
+        else None
+    )
+    DashboardHandler.benchmark_manifest = (
+        args.benchmark_manifest.expanduser().resolve()
+        if args.benchmark_manifest is not None
+        else None
     )
     DashboardHandler.cccd_heldout_root = (
         args.cccd_heldout_root.expanduser().resolve()
@@ -3652,7 +3739,6 @@ def main() -> int:
     print(
         f"Local dashboard API ready: http://{args.host}:{args.port} "
         f"(baseline={len(indexes['baseline'])}, phase7={len(indexes['phase7'])}, "
-        f"real-heldout={'on' if DashboardHandler.heldout_root else 'off'}, "
         f"ocr-ho-shadow={'on' if DashboardHandler.ocr_ho_shadow_root else 'off'}, "
         f"external-review={'on' if DashboardHandler.external_dataset_root else 'off'})"
     )

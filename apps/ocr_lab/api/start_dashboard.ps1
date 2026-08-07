@@ -1,8 +1,9 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$DataRoot,
-    [string]$HeldoutRoot = "",
     [string]$CccdHeldoutRoot = "",
+    [string]$BenchmarkReport = "",
+    [string]$BenchmarkManifest = "",
     [string]$OcrHoShadowRoot = "",
     [string]$ExternalDatasetRoot = "",
     [string]$ExternalDatasetInventory = "",
@@ -25,11 +26,14 @@ if (-not (Test-Path -LiteralPath $PythonPath)) {
 if (-not (Test-Path -LiteralPath $DataRoot)) {
     throw "Data root not found: $DataRoot"
 }
-if ($HeldoutRoot -and -not (Test-Path -LiteralPath $HeldoutRoot)) {
-    throw "Held-out root not found: $HeldoutRoot"
-}
 if ($CccdHeldoutRoot -and -not (Test-Path -LiteralPath $CccdHeldoutRoot)) {
     throw "CCCD held-out root not found: $CccdHeldoutRoot"
+}
+if ($BenchmarkReport -and -not (Test-Path -LiteralPath $BenchmarkReport)) {
+    throw "Benchmark report not found: $BenchmarkReport"
+}
+if ($BenchmarkManifest -and -not (Test-Path -LiteralPath $BenchmarkManifest)) {
+    throw "Benchmark manifest not found: $BenchmarkManifest"
 }
 if ($ExternalDatasetRoot -and -not (Test-Path -LiteralPath $ExternalDatasetRoot)) {
     throw "External dataset root not found: $ExternalDatasetRoot"
@@ -95,14 +99,26 @@ if ($apiRunning -and $OcrHoShadowRoot) {
         $apiRunning = $false
     }
 }
+if ($apiRunning -and $BenchmarkReport) {
+    $expectedBenchmarkReport = (Resolve-Path -LiteralPath $BenchmarkReport).Path
+    $commandLine = [string]$apiProcess.CommandLine
+    if ($commandLine.IndexOf($expectedBenchmarkReport, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        Stop-Process -Id $apiProcess.ProcessId -Force
+        Start-Sleep -Milliseconds 500
+        $apiRunning = $false
+    }
+}
 
 if (-not $apiRunning) {
     $apiArguments = "-u `"$apiScript`" --data-root `"$DataRoot`" --host 127.0.0.1 --port 8765"
-    if ($HeldoutRoot) {
-        $apiArguments += " --heldout-root `"$HeldoutRoot`""
-    }
     if ($CccdHeldoutRoot) {
         $apiArguments += " --cccd-heldout-root `"$CccdHeldoutRoot`""
+    }
+    if ($BenchmarkReport) {
+        $apiArguments += " --benchmark-report `"$BenchmarkReport`""
+    }
+    if ($BenchmarkManifest) {
+        $apiArguments += " --benchmark-manifest `"$BenchmarkManifest`""
     }
     if ($OcrHoShadowRoot) {
         $apiArguments += " --ocr-ho-shadow-root `"$OcrHoShadowRoot`""

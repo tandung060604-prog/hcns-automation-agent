@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Score the sealed OCR-HO-V2 development replay without exporting PII."""
+"""Score the sealed OCR-HO-V2 development replay without exporting PII.
+
+OCR-HO-V2-015 keeps scoring aggregate-only and separates automatic ROI from
+oracle line diagnostics.
+"""
 
 from __future__ import annotations
 
@@ -166,6 +170,11 @@ def class_report(documents: list[dict[str, Any]], variant: str) -> dict[str, Any
         },
     }
 def main() -> int:
+    from analyze_ocr_ho_v2_015 import main as diagnostic_main
+
+    return diagnostic_main()
+
+    # Legacy OCR-HO-V2-014 report path retained below for historical reference.
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--sealed-manifest", type=Path, required=True)

@@ -102,6 +102,25 @@ Bộ development gồm 12 tài liệu và 112 trường đối chiếu, dùng đ
 
 Exact Match là so sánh nghiêm ngặt sau chuẩn hóa Unicode và khoảng trắng; CER/WER dùng khoảng cách chỉnh sửa trên ký tự/từ. Các kết quả OCR scan vẫn cần human review, không tự động chấp nhận chỉ vì confidence cao.
 
+### Trạng thái OCR CCCD local — OCR-HO-V2 / DATA-HO-014
+
+CCCD được đánh giá riêng trên development set gồm **15 tài liệu / 120 field**. Candidate hiện tại là **11.10.2**, so với baseline **11.9.1**; các metric CCCD không gộp với CV, Contract, IELTS hoặc DATA-17.
+
+| Metric | Candidate development replay |
+|---|---:|
+| Field Exact | 63,33% |
+| ASCII match | 69,17% |
+| CER | 32,02% |
+| DER | 16,21% (41/253) |
+| Field presence | 95,83% |
+| ROI fullName / origin / residence | 53,33% / 60,00% / 66,67% |
+
+Development regression và held-out readiness đều **HOLD**. CCCD vẫn shadow-only, mọi field nhạy cảm và địa chỉ đều `MANUAL_REVIEW`; không có production promotion, automatic acceptance hoặc mở held-out mới.
+
+Các chẩn đoán 018E/018F chỉ đọc aggregate artifact đã seal. Trong cohort mà automatic region mapping thành công, recognizer disagreement là `291/375 = 77,6%`; token mismatch là `11`, line-order mismatch là `72`. Đây là bằng chứng attribution, chưa phải căn cứ để đổi selector hoặc runtime. Ground Truth, prediction raw và artifact evaluate-once thật được giữ ngoài Git.
+
+Chi tiết checkpoint và quyết định gate nằm trong [OCR-HO-V2 handoff](docs/HANDOFF.md) và [backlog](docs/BACKLOG.md). Next READY là review owner trước khi cân nhắc bất kỳ selector counterfactual nào.
+
 ## Công nghệ sử dụng
 
 - Python 3.10+

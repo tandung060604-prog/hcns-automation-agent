@@ -25,7 +25,38 @@
 | OCR-HO-V2-016A-R1 | DONE / HOLD | Independent sealed-line oracle diagnostic; oracle ROI 100%, parser contamination is the provisional 016B layer but exact/DER remain below gate | OCR-HO-V2-016A | P0 |
 | OCR-HO-V2-016B | DONE / HOLD | Parser-only candidate 11.10.2 replayed; exact regression remains 1 and DER 14.62%, so no next layer or promotion | OCR-HO-V2-016A-R1 | P0 |
 | OCR-HO-V2-017A | DONE / HOLD | Restored and lock-verified the existing private EasyOCR/VietOCR runtime; single-document smoke passed without changing primary runtime | OCR-HO-V2-016B | P0 |
-| OCR-HO-V2-017B | READY | Full 15-document/120-field development replay using the restored secondary runtime; keep shadow/manual-review-only and do not open held-out | OCR-HO-V2-017A | P0 |
+| OCR-HO-V2-017B | DONE / HOLD | Full 15/120 secondary replay: exact 63.33%, ASCII 69.17%, CER 32.02%, DER 16.21%; DER regression and residence/ROI gates remain | OCR-HO-V2-017A | P0 |
+| OCR-HO-V2-017C | DONE / HOLD | DER/profile attribution selected recognizer profile-selector/consensus as the only next layer; parser/ROI/primary runtime unchanged | OCR-HO-V2-017B | P0 |
+| OCR-HO-V2-017D | DONE / HOLD | Selector-only counterfactual worsened DER 41 to 43 and retained exact regressions; no runtime change or replay promotion | OCR-HO-V2-017C | P0 |
+| OCR-HO-V2-017E | DONE / HOLD | Defined strict unanimous exact-NFC/profile consensus with current-candidate fallback; target DER unchanged and no fields switched | OCR-HO-V2-017D | P0 |
+| OCR-HO-V2-017F | DONE / HOLD | Selector-only replay changed 0/45 target fields; DER stayed 40/228 and exact regression stayed 0, so no gain or promotion | OCR-HO-V2-017E | P0 |
+| OCR-HO-V2-017G | DONE / HOLD | Reviewed no-gain selector replay; selected ROI boundary/line-selection as the one next bounded layer | OCR-HO-V2-017F | P0 |
+| OCR-HO-V2-017H | DONE / HOLD | AUTO_DETECTOR ROI diagnostic: `27/45` hits, `18` boundary misses, no boundary cause reached the `50%` patch threshold; no runtime patch | OCR-HO-V2-017G | P0 |
+| OCR-HO-V2-017I | DONE / HOLD | Profile/variant oracle diagnostic over 15/120: 4 profiles and 4 variants; residence ceiling `2/15`; no runtime or promotion change | OCR-HO-V2-017H | P0 |
+| OCR-HO-V2-017J | DONE / HOLD | Reviewed 017I and prior selector evidence; no counterfactual authorized because residence ceiling is `2/15`, 017D worsened DER, and 017E/017F had no eligible switch | OCR-HO-V2-017I | P0 |
+| OCR-HO-V2-017K | DONE / HOLD | Aggregate-only line/token evidence: recognizer disagreement `291/630 = 46.19%`, below the 50% rule threshold; no selector/runtime change | OCR-HO-V2-017J | P0 |
+| OCR-HO-V2-017L | DONE / HOLD | Reviewed 017K; no class reached 50%, so proposed one aggregate-only `LINE_TOKEN_COHORT_SEPARATION` diagnostic without authorizing selector/runtime changes | OCR-HO-V2-017K | P0 |
+| OCR-HO-V2-017M | DONE / HOLD | Separated AUTO_REGION_MISS line-id failures from AUTO_REGION_HIT recognizer disagreement; no selector/runtime/replay change | OCR-HO-V2-017L | P0 |
+| OCR-HO-V2-017N | DONE / HOLD | Global boundary cause stayed below 50%; residence bottom-boundary was 3/5 and remains candidate-only; no runtime patch | OCR-HO-V2-017M | P0 |
+| OCR-HO-V2-017O | DONE / HOLD | Residence bottom-boundary is `3/5 = 60%`, all from geometry line segmentation; candidate-only, no ROI/runtime patch | OCR-HO-V2-017N | P0 |
+| OCR-HO-V2-017P | DONE / HOLD | Geometry review found common residence band, bottom overflow `2/3`, sealed line-ID overlap `0`; candidate-only, no ROI patch | OCR-HO-V2-017O | P0 |
+| OCR-HO-V2-017Q | DONE / HOLD | Reviewed bottom-only extension capped at 15 pixels; line-ID remap disabled; no patch or replay authorization | OCR-HO-V2-017P | P0 |
+| OCR-HO-V2-017R | DONE / HOLD | Bounded 15-pixel rule passes shape review, but line-ID evidence gate is HOLD at overlap `0`; no patch/replay | OCR-HO-V2-017Q | P0 |
+| OCR-HO-V2-017S | DONE / HOLD | Independent phase13.3 line-index/bbox evidence covers 15/15 documents with sealed line-ID overlap 61/61; no patch/replay | OCR-HO-V2-017R | P0 |
+| OCR-HO-V2-017T | DONE / HOLD | Reconciled bounded 15px rule with independent 61/61 line-ID evidence; quality improvement unproven and explicit patch approval still required | OCR-HO-V2-017S | P0 |
+| OCR-HO-V2-017U | DONE / HOLD | Authorization review found no independent patch approval record; patch/replay/selector/primary runtime remain closed | OCR-HO-V2-017T | P0 |
+| OCR-HO-V2-017V | DONE / HOLD | Accepted a private local-only record matching source digest/rule for patch review only; no patch or replay | OCR-HO-V2-017U | P0 |
+| OCR-HO-V2-017W | DONE / HOLD | Reviewed the bounded 15px residence surface; no runtime patch, replay, selector or promotion | OCR-HO-V2-017V | P0 |
+| OCR-HO-V2-017X | DONE / HOLD | Reviewed minimal implementation; geometry source is assigned after bbox selection, so no runtime patch | OCR-HO-V2-017W | P0 |
+| OCR-HO-V2-017Y | DONE / HOLD | Resolved insertion between selected-line filtering and geometry bbox call; no code applied | OCR-HO-V2-017X | P0 |
+| OCR-HO-V2-017Z | DONE / HOLD | Accepted private development-only patch authorization matching 017Y digest/scope; no code, replay or promotion | OCR-HO-V2-017Y | P0 |
+| OCR-HO-V2-018A | DONE / HOLD | Applied/reviewed authorized minimal shadow patch; primary runtime, replay, selector and promotion remain closed | OCR-HO-V2-017Z | P0 |
+| OCR-HO-V2-018B | DONE / HOLD | Accepted private development replay authorization matching 018A digest/scope; replay not executed; held-out/evaluate-once closed | OCR-HO-V2-018A | P0 |
+| OCR-HO-V2-018C | DONE / HOLD | Ran authorized 15/120 AUTO_DETECTOR replay on an isolated private copy; metrics match prior 017B, exact/ASCII/CER improve baseline but DER/address gates remain HOLD; no promotion/held-out/evaluate-once | OCR-HO-V2-018B | P0 |
+| OCR-HO-V2-018D | DONE / HOLD | Reviewed 018C gate failures and selected exactly one aggregate-only layer: DETECTOR_CROP automatic line-mapping/boundary reconciliation; no replay/patch/selector/promotion | OCR-HO-V2-018C | P0 |
+| OCR-HO-V2-018E | DONE / HOLD | Reconciled 018C ROI with automatic boundary evidence; global dominant boundary rate 44.44% stays below patch threshold, residence geometry case 3/5; no replay/patch | OCR-HO-V2-018D | P0 |
+| OCR-HO-V2-018F | DONE / HOLD | Aggregate-only attribution: AUTO_REGION_HIT recognizer disagreement `291/375 = 77.6%`; token mismatch `11`, line-order mismatch `72`; no selector/runtime/replay/promotion; owner review required | OCR-HO-V2-018E | P0 |
+| OCR-HO-V2-018G | READY | Review 018F aggregate evidence and decide whether a separately authorized selector counterfactual is warranted; no runtime, replay, held-out or promotion | OCR-HO-V2-018F | P0 |
 | TF-P1-001 | DONE | Template-first cho đơn nghỉ phép và tăng ca DOCX | 14 mẫu synthetic local | P0 |
 | TF-P1-002 | DONE | Commit/push Template-first, chạy API local và live smoke hai DOCX gốc | TF-P1-001 | P0 |
 | TF-P1-003 | DONE | Tích hợp Template-first vào OCR Lab localhost và hiển thị kết quả trích xuất | TF-P1-002 | P0 |
@@ -189,10 +220,10 @@
 - `git diff --check`, repository hygiene và 4 API tests pass.
 ## TF-P1-005 acceptance evidence
 
-- Mentor view mặc định không render nav, metrics, tab hoặc tài liệu held-out.
-- Frontend không gọi held-out summary/evidence khi feature flag tắt.
-- `VITE_SHOW_HELDOUT=true` giữ nguyên chế độ quan sát riêng và build thành công.
-- Browser smoke trên localhost không tìm thấy nhãn/nav/tab held-out; 9 web tests pass.
+- Mentor view không còn render hoặc gọi corpus held-out legacy; route và feature flag
+  cũ đã được gỡ khỏi runtime.
+- CCCD review, OCR-HO shadow và external dataset vẫn giữ cờ riêng theo scope.
+- Browser smoke trên localhost không tìm thấy nhãn/nav/tab held-out legacy; 13 web tests pass.
 
 ## TF-P1-006 acceptance evidence
 

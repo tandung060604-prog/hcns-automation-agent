@@ -185,7 +185,6 @@ def test_out_of_scope_back_is_excluded_without_faking_missing_fields(
 def test_local_review_api_exposes_source_and_no_prediction(tmp_path: Path) -> None:
     root = build_root(tmp_path)
     DashboardHandler.data_root = tmp_path
-    DashboardHandler.heldout_root = None
     DashboardHandler.cccd_heldout_root = root
     DashboardHandler.native_indexes = {}
     DashboardHandler.user_ocr = UserOCRService(tmp_path)

@@ -151,7 +151,6 @@ def test_shadow_review_requires_source_assertions_and_persists_private_review(
 def test_shadow_uat_api_exposes_preview_detail_and_review(tmp_path: Path) -> None:
     root = build_root(tmp_path)
     DashboardHandler.data_root = tmp_path
-    DashboardHandler.heldout_root = None
     DashboardHandler.cccd_heldout_root = None
     DashboardHandler.ocr_ho_shadow_root = root
     DashboardHandler.external_dataset_root = None

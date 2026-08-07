@@ -7,9 +7,9 @@ import {
 import ExternalDatasetReview from "./ExternalDatasetReview";
 import ExternalDatasetPrediction from "./ExternalDatasetPrediction";
 import LocalEvidenceOverview from "./LocalEvidenceOverview";
+import LocalBenchmarkPanel from "./LocalBenchmarkPanel";
 import OcrHoDiagnostic from "./OcrHoDiagnostic";
 
-const SHOW_HELDOUT = import.meta.env.VITE_SHOW_HELDOUT === "true";
 const SHOW_GROUND_TRUTH_REVIEW =
   import.meta.env.VITE_SHOW_GROUND_TRUTH_REVIEW === "true";
 const SHOW_EXTERNAL_DATASET_REVIEW =
@@ -89,89 +89,6 @@ type DashboardData = {
     durationMs: { total: number; mean: number; p50: number; p95: number };
   };
   samples: Sample[];
-};
-
-type HeldoutMetric = {
-  documentCount: number;
-  classificationAccuracy: number;
-  evaluatedFieldCount: number;
-  fieldExactMatchCount: number;
-  fieldExactMatchRate: number;
-  fieldCompleteness: number;
-  acceptedFieldRate: number;
-  cer: number;
-  wer: number;
-  der: number;
-  expectedTableRowCount: number;
-  exactTableRowCount: number;
-  tableExactRowRate: number;
-  expectedTableCellCount: number;
-  exactTableCellCount: number;
-  tableExactCellRate: number;
-  tableCompleteness: number;
-};
-
-type HeldoutDocument = {
-  documentId: string;
-  documentFamily: string;
-  sourceFormat: string;
-  sizeBytes: number;
-  previewAvailable: boolean;
-  sourceAvailable: boolean;
-};
-
-type ReplayAudit = {
-  evaluationKind: string;
-  documentCount: number;
-  visualDocumentsReOcred?: number;
-  nativeDocumentsReparsed?: number;
-  visualDocumentCount?: number;
-  nativeDocumentCount?: number;
-  ocrPipeline?: string;
-  eligibleForPromotion: false;
-  baseline: {
-    overall: HeldoutMetric;
-    sensitiveFieldFalseAcceptanceCount: number;
-  };
-  latest: {
-    overall: HeldoutMetric;
-    sensitiveFieldFalseAcceptanceCount: number;
-  };
-  delta: Record<string, number>;
-  decision: {
-    status: string;
-    production: string;
-    reason: string;
-  };
-};
-
-type HeldoutSummary = {
-  schemaVersion: string;
-  datasetId: string;
-  datasetDigest: string;
-  containsRealPII: true;
-  localAccessAuthorized: true;
-  publicReleaseAuthorized: boolean;
-  predictionsVisibleDuringGroundTruthReview: false;
-  recognitionPolicyDigest: string;
-  parserVersion: string;
-  metricSpecVersion: string;
-  evaluatedAt: string;
-  evaluationRunCount: number;
-  thresholdRetuned: false;
-  predictionsWereHidden: true;
-  documentCount: number;
-  countsByFamily: Record<string, number>;
-  overall: HeldoutMetric;
-  byFamily: Record<string, HeldoutMetric>;
-  sensitiveFieldFalseAcceptanceCount: number;
-  decision: {
-    controlledPilot: string;
-    production: string;
-  };
-  latestReplay?: ReplayAudit | null;
-  latestLiveV5Replay?: ReplayAudit | null;
-  documents: HeldoutDocument[];
 };
 
 type CccdGroundTruthField = {
@@ -301,35 +218,8 @@ type LocalEvidenceDetail = {
   localOnly: true;
   groundTruth: Record<string, unknown>;
   prediction: Record<string, unknown>;
-  sealedPrediction?: Record<string, unknown>;
-  lockedReplayPrediction?: Record<string, unknown> | null;
-  liveV5Prediction?: Record<string, unknown> | null;
   predictionLabel?: string;
   predictionNotice?: string;
-  predictionProvenance?: {
-    defaultSource: "live_v5" | "locked_replay" | "sealed";
-    sealed: {
-      sealedAt?: string;
-      parserVersion?: string;
-      recognitionPolicyDigest?: string;
-      evaluationKind: string;
-    };
-    lockedReplay?: {
-      createdAt?: string;
-      parserVersion?: string;
-      recognitionPolicyDigest?: string;
-      evaluationKind?: string;
-      promotionEligible?: boolean;
-    } | null;
-    liveV5?: {
-      createdAt?: string;
-      parserVersion?: string;
-      recognitionPolicyDigest?: string;
-      evaluationKind?: string;
-      promotionEligible?: boolean;
-      ocrPipeline?: string;
-    } | null;
-  };
 };
 
 type OcrHoShadowSummary = {
@@ -1448,7 +1338,7 @@ const phase17Steps = [
     order: 2,
     title: "Cải thiện trên development-only",
     description:
-      "Huấn luyện/fine-tune recognizer hoặc crop policy trên dữ liệu development riêng; tuyệt đối không chỉnh theo 18 tài liệu đã tiêu thụ.",
+      "Huấn luyện/fine-tune recognizer hoặc crop policy trên dữ liệu development riêng; tuyệt đối không chỉnh theo benchmark held-out đã tiêu thụ.",
   },
   {
     order: 3,
@@ -1474,12 +1364,6 @@ function decimal(value: number | null) {
 
 function duration(ms: number) {
   return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
-}
-
-function signedPoints(value: number | null | undefined) {
-  if (value === null || value === undefined) return "—";
-  const points = value * 100;
-  return `${points >= 0 ? "+" : ""}${points.toFixed(2)} điểm %`;
 }
 
 function objectRecord(value: unknown): Record<string, unknown> {
@@ -1560,27 +1444,7 @@ function EvidenceInspector({
   onViewChange: (view: "fields" | "json") => void;
   downloads?: Array<{ label: string; href: string }>;
 }) {
-  const hasReplayComparison = Boolean(
-    (detail?.liveV5Prediction || detail?.lockedReplayPrediction) &&
-      detail?.sealedPrediction,
-  );
-  const [predictionSource, setPredictionSource] =
-    useState<"live_v5" | "locked_replay" | "sealed">("live_v5");
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset selection for a new evidence document.
-    setPredictionSource(
-      detail?.predictionProvenance?.defaultSource ?? "sealed",
-    );
-  }, [detail?.documentId, detail?.predictionProvenance?.defaultSource]);
-  const selectedPrediction = (() => {
-    if (predictionSource === "sealed") {
-      return detail?.sealedPrediction ?? detail?.prediction;
-    }
-    if (predictionSource === "locked_replay") {
-      return detail?.lockedReplayPrediction ?? detail?.prediction;
-    }
-    return detail?.liveV5Prediction ?? detail?.prediction;
-  })();
+  const selectedPrediction = detail?.prediction;
   const groundTruthFields = objectRecord(detail?.groundTruth.fields);
   const predictionFields = objectRecord(selectedPrediction?.fields);
   const fieldNames = Array.from(
@@ -1599,37 +1463,7 @@ function EvidenceInspector({
         </div>
         <small>{detail?.schemaRef ?? "Dữ liệu chỉ đọc trên localhost"}</small>
       </header>
-      {hasReplayComparison ? (
-        <div className="evidence-prediction-source">
-          <span>NGUỒN PREDICTION</span>
-          {detail?.liveV5Prediction ? (
-            <button
-              className={predictionSource === "live_v5" ? "active" : ""}
-              onClick={() => setPredictionSource("live_v5")}
-            >
-              Live v5 mới nhất · parser 2.0
-            </button>
-          ) : null}
-          {detail?.lockedReplayPrediction ? (
-            <button
-              className={predictionSource === "locked_replay" ? "active" : ""}
-              onClick={() => setPredictionSource("locked_replay")}
-            >
-              Policy khóa v4 · parser 2.0
-            </button>
-          ) : null}
-            <button
-            className={predictionSource === "sealed" ? "active" : ""}
-            onClick={() => setPredictionSource("sealed")}
-          >
-            Sealed · parser 1.0
-          </button>
-          <small>
-            Live v5 và replay parser chạy sau khi Ground Truth đã mở — chỉ dùng
-            audit, không dùng promotion.
-          </small>
-        </div>
-      ) : detail?.predictionLabel ? (
+      {detail?.predictionLabel ? (
         <div className="evidence-prediction-source evidence-prediction-source-single">
           <span>NGUỒN PREDICTION</span>
           <strong>{detail.predictionLabel}</strong>
@@ -1753,10 +1587,8 @@ function EvidenceInspector({
             {
               documentId: detail.documentId,
               schemaRef: detail.schemaRef,
-              predictionSource,
               groundTruth: detail.groundTruth,
               prediction: selectedPrediction,
-              provenance: detail.predictionProvenance,
             },
             null,
             2,
@@ -2085,9 +1917,7 @@ function TemplateResultPanel({
 }
 
 export default function Dashboard({ data }: { data: DashboardData }) {
-  const showLegacyUpload =
-    SHOW_LEGACY_UPLOAD ||
-    (typeof window !== "undefined" && window.location.hostname === "localhost");
+  const showLegacyUpload = SHOW_LEGACY_UPLOAD;
   const [query, setQuery] = useState("");
   const [type, setType] = useState("ALL");
   const [variant, setVariant] = useState("ALL");
@@ -2096,8 +1926,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [detailError, setDetailError] = useState("");
   const [apiOnline, setApiOnline] = useState(false);
-  const [heldout, setHeldout] = useState<HeldoutSummary | null>(null);
-  const [heldoutError, setHeldoutError] = useState("");
   const [ocrHoShadow, setOcrHoShadow] = useState<OcrHoShadowSummary | null>(null);
   const [ocrHoShadowError, setOcrHoShadowError] = useState("");
   const [activeOcrHoShadowId, setActiveOcrHoShadowId] = useState("");
@@ -2132,23 +1960,12 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     useState(false);
   const groundTruthDocumentExcluded =
     groundTruthReviewDocument?.disposition === "OUT_OF_SCOPE_BACK";
-  const replayAudit =
-    heldout?.latestLiveV5Replay ?? heldout?.latestReplay ?? null;
-  const replayIsLiveV5 = Boolean(heldout?.latestLiveV5Replay);
-  const [activeHeldoutId, setActiveHeldoutId] = useState("");
-  const [heldoutEvidence, setHeldoutEvidence] =
-    useState<LocalEvidenceDetail | null>(null);
-  const [heldoutEvidenceLoading, setHeldoutEvidenceLoading] = useState(false);
-  const [heldoutEvidenceError, setHeldoutEvidenceError] = useState("");
   const [evidenceMode, setEvidenceMode] =
-    useState<"overview" | "heldout" | "templates" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "ocr-ho-v2-shadow" | "ocr-ho-v2-diagnostic">(
-      // Legacy default: SHOW_HELDOUT ? "heldout" : "templates"
+    useState<"overview" | "templates" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "ocr-ho-v2-shadow" | "ocr-ho-v2-diagnostic">(
       SHOW_OCR_HO_DIAGNOSTIC_GT
         ? "ocr-ho-v2-diagnostic"
         : SHOW_OCR_HO_SHADOW_UAT
         ? "ocr-ho-v2-shadow"
-        : SHOW_HELDOUT
-        ? "heldout"
         : SHOW_EXTERNAL_DATASET_REVIEW
           ? "external-dataset"
           : "templates",
@@ -2353,29 +2170,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         setSupportedTemplates(payload.templates),
       )
       .catch(() => setSupportedTemplates([]));
-    if (SHOW_HELDOUT) {
-      fetch(`${API_BASE}/heldout/summary`)
-        .then((response) => {
-          if (!response.ok) throw new Error("Real held-out unavailable");
-          return response.json();
-        })
-        .then((payload: HeldoutSummary) => {
-          setApiOnline(true);
-          setHeldout(payload);
-          setHeldoutError("");
-          setActiveHeldoutId(
-            payload.documents.find((item) => item.previewAvailable)?.documentId ??
-              payload.documents[0]?.documentId ??
-              "",
-          );
-        })
-        .catch(() => {
-          setHeldout(null);
-          setHeldoutError(
-            "Chưa kết nối được tập held-out thật đã xác nhận quyền xử lý.",
-          );
-        });
-    }
     refreshUserSessions();
     refreshTemplateSessions();
     if (!SHOW_OCR_HO_SHADOW_UAT) return;
@@ -2399,41 +2193,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       })
       .catch(() => setPhase14(null));
   }, []);
-
-  useEffect(() => {
-    if (!SHOW_HELDOUT || !activeHeldoutId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale evidence when the list becomes empty.
-      setHeldoutEvidence(null);
-      return;
-    }
-    let cancelled = false;
-    setHeldoutEvidenceLoading(true);
-    setHeldoutEvidenceError("");
-    fetch(
-      `${API_BASE}/heldout/evidence?id=${encodeURIComponent(activeHeldoutId)}`,
-    )
-      .then((response) => {
-        if (!response.ok) throw new Error("Không tải được schema held-out");
-        return response.json();
-      })
-      .then((payload: LocalEvidenceDetail) => {
-        if (!cancelled) setHeldoutEvidence(payload);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setHeldoutEvidence(null);
-          setHeldoutEvidenceError(
-            "Không đọc được Ground Truth và prediction cục bộ.",
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setHeldoutEvidenceLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeHeldoutId]);
 
   useEffect(() => {
     if (!SHOW_GROUND_TRUTH_REVIEW) {
@@ -3400,12 +3159,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         "Prediction từ pipeline CCCD chuyên biệt; Ground Truth đã review được giữ nguyên.",
     };
   }, [activeCccdSession, cccdEvidenceResult, cccdEvidenceReview]);
-  const activeHeldoutDocument =
-    SHOW_HELDOUT
-      ? heldout?.documents.find(
-          (document) => document.documentId === activeHeldoutId,
-        ) ?? null
-      : null;
   const unifiedIdp = userResult?.phase15 ?? userResult?.phase12;
   const templateSourceUrl = templateResult
     ? `${API_BASE}/api/documents/source?id=${encodeURIComponent(
@@ -3427,7 +3180,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           <span>VinHRIS</span>
         </a>
         <nav aria-label="Điều hướng chính">
-          {SHOW_HELDOUT ? <a href="#metrics">Held-out thật</a> : null}
           <a href="#upload">OCR tài liệu thật</a>
           <a href="#explorer">Tài liệu &amp; CCCD</a>
           <a href="#phases">Policy</a>
@@ -3481,47 +3233,12 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         </figure>
       </section>
 
-      {SHOW_HELDOUT ? (
-        <section className="proof-strip" aria-label="Bằng chứng vận hành">
-          <div>
-            <span>Bằng chứng thật</span>
-            <strong>
-              {heldout?.documentCount ?? "—"} HR +{" "}
-              {groundTruthReview?.documentCount ?? 0} CCCD
-            </strong>
-          </div>
-          <div>
-            <span>Phạm vi</span>
-            <strong>
-              {heldout ? Object.keys(heldout.byFamily).length : "—"} HR + ID
-            </strong>
-          </div>
-          <div>
-            <span>Field Exact</span>
-            <strong>{pct(heldout?.overall.fieldExactMatchRate ?? null)}</strong>
-          </div>
-          <div>
-            <span>Quyết định</span>
-            <strong>{heldout?.decision.production ?? "Chưa có"}</strong>
-          </div>
-        </section>
-      ) : null}
-
       <section className="section product-section" id="product">
         <figure className="product-context">
-          {activeHeldoutDocument?.previewAvailable ? (
-            <img
-              src={`${API_BASE}/heldout/document?id=${encodeURIComponent(
-                activeHeldoutDocument.documentId,
-              )}&mode=preview`}
-              alt={`Tài liệu held-out thật ${activeHeldoutDocument.documentId}`}
-            />
-          ) : (
-            <div className="native-heldout-file">
-              <strong>Trích xuất tài liệu hành chính nhân sự</strong>
-              <p>Native parsing, OCR, quality gate và human review.</p>
-            </div>
-          )}
+          <img
+            src="/assets/template-first-local-workflow.png"
+            alt="Luồng xử lý tài liệu local từ nguồn vào tới JSON và human review"
+          />
         </figure>
         <div className="product-story">
           <h2>Một luồng xử lý, bằng chứng đi cùng dữ liệu.</h2>
@@ -5077,6 +4794,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         </div>
       </section>
 
+      <LocalBenchmarkPanel />
+
       <section className="section" id="phases">
         <div className="section-heading">
           <div>
@@ -5141,207 +4860,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           </article>
         </div>
       </section>
-
-      {SHOW_HELDOUT ? (
-        <section className="section metrics-section" id="metrics">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">REAL HELD-OUT · EVALUATE ONCE</p>
-            <h2>Kết quả trên 18 tài liệu thật</h2>
-          </div>
-          <p>
-            Chỉ hiển thị tập đã xác nhận Ground Truth và có quyền xử lý local.
-            Không còn trộn số liệu Phase đầu, ảnh che PII hoặc synthetic vào đây.
-          </p>
-        </div>
-        {heldoutError && <div className="api-warning">{heldoutError}</div>}
-        <div className="metric-grid">
-          <article className="metric-card accent">
-            <span>CLASSIFICATION ↑</span>
-            <strong>
-              {pct(heldout?.overall.classificationAccuracy ?? null)}
-            </strong>
-            <p>Đúng nhóm tài liệu</p>
-            <small>{heldout?.documentCount ?? 0} tài liệu / 5 nhóm HCNS</small>
-          </article>
-          <article className="metric-card">
-            <span>FIELD EXACT ↑</span>
-            <strong>
-              {pct(heldout?.overall.fieldExactMatchRate ?? null)}
-            </strong>
-            <p>Giá trị trường khớp tuyệt đối</p>
-            <small>
-              {heldout?.overall.fieldExactMatchCount ?? 0}/
-              {heldout?.overall.evaluatedFieldCount ?? 0} field
-            </small>
-          </article>
-          <article className="metric-card">
-            <span>COMPLETENESS ↑</span>
-            <strong>{pct(heldout?.overall.fieldCompleteness ?? null)}</strong>
-            <p>Trường có giá trị được trích xuất</p>
-            <small>
-              Accepted {pct(heldout?.overall.acceptedFieldRate ?? null)}
-            </small>
-          </article>
-          <article className="metric-card">
-            <span>CER / WER ↓</span>
-            <strong>{pct(heldout?.overall.cer ?? null, 2)}</strong>
-            <p>WER {pct(heldout?.overall.wer ?? null, 2)}</p>
-            <small>DER {pct(heldout?.overall.der ?? null, 2)}</small>
-          </article>
-          <article className="metric-card dark">
-            <span>PRODUCTION DECISION</span>
-            <strong>
-              {heldout?.decision.production === "NOT_PRODUCTION_READY"
-                ? "Chưa sẵn sàng"
-                : heldout?.decision.production ?? "Chưa có"}
-            </strong>
-            <p>{heldout?.decision.controlledPilot ?? "Chưa đánh giá"}</p>
-            <small>
-              {heldout?.decision.production ?? "Prediction ẩn · không retune"}
-            </small>
-          </article>
-        </div>
-        {replayAudit ? (
-          <div className="latest-replay-panel">
-            <header>
-              <div>
-                <span>
-                  {replayIsLiveV5
-                    ? "LIVE PP-OCRV5 REPLAY · AUDIT ONLY"
-                    : "LOCKED V4 REPLAY · AUDIT ONLY"}
-                </span>
-                <strong>
-                  {replayAudit.visualDocumentCount ??
-                    replayAudit.visualDocumentsReOcred ??
-                    0}{" "}
-                  tài liệu OCR
-                  {" · "}
-                  {replayAudit.nativeDocumentCount ??
-                    replayAudit.nativeDocumentsReparsed ??
-                    0}{" "}
-                  tài liệu native
-                </strong>
-              </div>
-              <small>
-                {replayIsLiveV5
-                  ? "Đúng pipeline localhost mới nhất; Ground Truth đã tồn tại nên chỉ dùng để audit."
-                  : "Ground Truth đã tồn tại trước replay — không đủ điều kiện promotion."}
-              </small>
-            </header>
-            <div>
-              <article>
-                <span>Classification</span>
-                <strong>
-                  {pct(replayAudit.baseline.overall.classificationAccuracy)} →{" "}
-                  {pct(replayAudit.latest.overall.classificationAccuracy)}
-                </strong>
-                <small>
-                  {signedPoints(replayAudit.delta.classificationAccuracy)}
-                </small>
-              </article>
-              <article>
-                <span>Field Exact</span>
-                <strong>
-                  {pct(
-                    replayAudit.baseline.overall.fieldExactMatchRate,
-                  )}{" "}
-                  →{" "}
-                  {pct(
-                    replayAudit.latest.overall.fieldExactMatchRate,
-                  )}
-                </strong>
-                <small>
-                  {signedPoints(
-                    replayAudit.delta.fieldExactMatchRate,
-                  )}
-                </small>
-              </article>
-              <article>
-                <span>Completeness</span>
-                <strong>
-                  {pct(
-                    replayAudit.baseline.overall.fieldCompleteness,
-                  )}{" "}
-                  →{" "}
-                  {pct(
-                    replayAudit.latest.overall.fieldCompleteness,
-                  )}
-                </strong>
-                <small>
-                  {signedPoints(
-                    replayAudit.delta.fieldCompleteness,
-                  )}
-                </small>
-              </article>
-              <article>
-                <span>CER ↓</span>
-                <strong>
-                  {pct(replayAudit.baseline.overall.cer, 2)} →{" "}
-                  {pct(replayAudit.latest.overall.cer, 2)}
-                </strong>
-                <small>{signedPoints(replayAudit.delta.cer)}</small>
-              </article>
-              <article>
-                <span>Sensitive false acceptance</span>
-                <strong>
-                  {
-                    replayAudit.baseline
-                      .sensitiveFieldFalseAcceptanceCount
-                  }{" "}
-                  →{" "}
-                  {
-                    replayAudit.latest
-                      .sensitiveFieldFalseAcceptanceCount
-                  }
-                </strong>
-                <small>{replayAudit.decision.status}</small>
-              </article>
-            </div>
-          </div>
-        ) : null}
-        <div className="performance-panel">
-          <div className="panel-title">
-            <div>
-              <h3>Kết quả theo nhóm tài liệu thật</h3>
-              <p>Field Exact Match và completeness</p>
-            </div>
-            <span>{heldout?.datasetId ?? "Real held-out chưa kết nối"}</span>
-          </div>
-          <div className="bars">
-            {Object.entries(heldout?.byFamily ?? {}).map(([name, metric]) => (
-              <div className="bar-row" key={name}>
-                <span>{familyLabels[name] ?? name}</span>
-                <div className="bar-track">
-                  <i
-                    style={{
-                      width: `${Math.max(metric.fieldExactMatchRate * 100, 1)}%`,
-                    }}
-                  />
-                </div>
-                <b>{pct(metric.fieldExactMatchRate)}</b>
-              </div>
-            ))}
-          </div>
-          <aside>
-            <span>TABLE CONTRACT</span>
-            <strong>
-              {heldout?.overall.exactTableCellCount ?? 0}/
-              {heldout?.overall.expectedTableCellCount ?? 0} ô exact
-            </strong>
-            <b>
-              Completeness {pct(heldout?.overall.tableCompleteness ?? null)}
-            </b>
-            <hr />
-            <span>ĐÁNH GIÁ</span>
-            <strong>{heldout?.evaluationRunCount ?? 0} lần duy nhất</strong>
-            <b>
-              {heldout?.thresholdRetuned ? "Có retune" : "Không retune held-out"}
-            </b>
-          </aside>
-        </div>
-        </section>
-      ) : null}
 
       {SHOW_GROUND_TRUTH_REVIEW ? (
         <section className="section ground-truth-review-section" id="ground-truth-review">
@@ -5633,16 +5151,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               OCR-HO-V2 v{ocrHoShadow?.candidateVersion ?? "11.10.0"} · Shadow UAT
             </button>
           ) : null}
-          {SHOW_HELDOUT ? (
-            <button
-              className={evidenceMode === "heldout" ? "active" : ""}
-              onClick={() => setEvidenceMode("heldout")}
-              role="tab"
-              aria-selected={evidenceMode === "heldout"}
-            >
-              18 tài liệu HCNS held-out
-            </button>
-          ) : null}
           <button
             className={evidenceMode === "templates" ? "active" : ""}
             onClick={() => setEvidenceMode("templates")}
@@ -5762,84 +5270,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               loading={ocrHoShadowDetailLoading}
               error={ocrHoShadowDetailError}
               onReviewed={() => setOcrHoShadowRefresh((value) => value + 1)}
-            />
-          </div>
-        ) : SHOW_HELDOUT && evidenceMode === "heldout" ? (
-          <div className="heldout-evidence-grid">
-            <div className="heldout-document-list" role="list">
-              {(heldout?.documents ?? []).map((document) => (
-                <button
-                  className={
-                    document.documentId === activeHeldoutId ? "active" : ""
-                  }
-                  key={document.documentId}
-                  onClick={() => setActiveHeldoutId(document.documentId)}
-                  role="listitem"
-                >
-                  <span>{document.documentId}</span>
-                  <strong>
-                    {familyLabels[document.documentFamily] ??
-                      document.documentFamily}
-                  </strong>
-                  <small>
-                    {document.sourceFormat} ·{" "}
-                    {document.previewAvailable ? "có preview" : "mở file gốc"}
-                  </small>
-                </button>
-              ))}
-            </div>
-            <div className="heldout-preview">
-              {activeHeldoutDocument?.previewAvailable ? (
-                activeHeldoutDocument.sourceFormat === "PDF" ? (
-                  <iframe
-                    title={`Preview ${activeHeldoutDocument.documentId}`}
-                    src={`${API_BASE}/heldout/document?id=${encodeURIComponent(
-                      activeHeldoutDocument.documentId,
-                    )}&mode=preview`}
-                  />
-                ) : (
-                  <img
-                    src={`${API_BASE}/heldout/document?id=${encodeURIComponent(
-                      activeHeldoutDocument.documentId,
-                    )}&mode=preview`}
-                    alt={`Tài liệu thật ${activeHeldoutDocument.documentId}`}
-                  />
-                )
-              ) : (
-                <div className="native-heldout-file">
-                  <span>{activeHeldoutDocument?.sourceFormat ?? "—"}</span>
-                  <strong>Đối chiếu bằng ứng dụng local</strong>
-                  <p>
-                    DOCX/XLSX được đọc native nên không chuyển thành ảnh giả để
-                    trình bày.
-                  </p>
-                </div>
-              )}
-              {activeHeldoutDocument && (
-                <div className="heldout-preview-actions">
-                  <div>
-                    <strong>{activeHeldoutDocument.documentId}</strong>
-                    <span>
-                      {familyLabels[activeHeldoutDocument.documentFamily] ??
-                        activeHeldoutDocument.documentFamily}
-                    </span>
-                  </div>
-                  <a
-                    href={`${API_BASE}/heldout/document?id=${encodeURIComponent(
-                      activeHeldoutDocument.documentId,
-                    )}&mode=source`}
-                  >
-                    Mở / tải file gốc
-                  </a>
-                </div>
-              )}
-            </div>
-            <EvidenceInspector
-              detail={heldoutEvidence}
-              loading={heldoutEvidenceLoading}
-              error={heldoutEvidenceError}
-              view={evidenceInspectorView}
-              onViewChange={setEvidenceInspectorView}
             />
           </div>
         ) : SHOW_EXTERNAL_DATASET_REVIEW && evidenceMode === "external-dataset-prediction" ? (
@@ -6116,19 +5546,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             />
           </div>
         )}
-        {SHOW_HELDOUT ? (
-          <div className="privacy-boundary">
-            <strong>
-              Phạm vi quyền hiện tại: local-only · publicReleaseAuthorized=
-              {String(heldout?.publicReleaseAuthorized ?? false)}
-            </strong>
-            <p>
-              Báo cáo Git chỉ công khai số liệu aggregate không chứa PII. Muốn
-              đưa ảnh thô vào repository công khai phải bổ sung quyền phân phối
-              công khai và sự đồng ý của chủ thể cho từng document ID.
-            </p>
-          </div>
-        ) : null}
       </section>
 
       <section className="section next-section" id="next">
@@ -6138,9 +5555,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             <h2>Giải quyết recognizer bằng bằng chứng thật</h2>
           </div>
           <p>
-            Kết quả 18 tài liệu thật đã cho thấy lỗi không chỉ ở dấu tiếng Việt:
-            classifier, reading order, field parser và table contract đều đang
-            kéo metric xuống. Cần sửa theo tầng, không thể chỉ đổi một model.
+            Các luồng hiện tại vẫn cần kiểm tra theo từng loại tài liệu và field;
+            chỉ chuyển dữ liệu sang workflow sau khi kết quả đã qua human review.
           </p>
         </div>
         <div className="next-grid">

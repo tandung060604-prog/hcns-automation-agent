@@ -1,5 +1,8 @@
 # Báo cáo hiện trạng — Vietnamese HR Document Intelligence
 
+> Đây là báo cáo lịch sử của corpus held-out đã retire, giữ lại để truy vết.
+> Không dùng report này làm nguồn dữ liệu cho local runtime hoặc benchmark hiện tại.
+
 > **Phạm vi báo cáo hiện tại:** chỉ dùng tập held-out 18 tài liệu HCNS có
 > Ground Truth đã xác nhận và quyền xử lý local. Số liệu và hình ảnh synthetic,
 > ảnh che PII và baseline Phase đầu đã được loại khỏi báo cáo này.

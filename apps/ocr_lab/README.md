@@ -28,8 +28,7 @@ Khởi động từ thư mục gốc repository:
 
 ```powershell
 .\apps\ocr_lab\api\start_dashboard.ps1 `
-  -DataRoot "C:\Camunda\private-data\paddleocr-hr-baseline" `
-  -HeldoutRoot "C:\Camunda\private-data\paddleocr-hr-heldout-v1"
+  -DataRoot "C:\Camunda\private-data\paddleocr-hr-baseline"
 ```
 
 Mỗi lần đổi private root hãy dùng lại script này; script kiểm tra API health và
@@ -42,8 +41,8 @@ archive expansion đều bị chặn trước parser/OCR.
 ## Profile localhost mentor-safe
 
 Mặc định giao diện chỉ hiển thị upload/template đang active và không gọi các
-summary của held-out, Ground Truth review, Shadow UAT hoặc external dataset.
-Các cờ `VITE_SHOW_HELDOUT`, `VITE_SHOW_GROUND_TRUTH_REVIEW`,
+summary của Ground Truth review, Shadow UAT hoặc external dataset. Các cờ
+`VITE_SHOW_GROUND_TRUTH_REVIEW`,
 `VITE_SHOW_EXTERNAL_DATASET_REVIEW` và `VITE_SHOW_OCR_HO_SHADOW_UAT` trong
 `web/.env.local` phải để `false` khi mở localhost cho mentor. Bật từng cờ chỉ
 trong phiên quan sát riêng rồi restart Vite; dữ liệu private không bị xóa.
@@ -83,37 +82,11 @@ kiểm tra rồi bấm **Xác nhận các trường Phase 15**. API giữ nguyê
 động và tạo riêng `idp_result_reviewed.json` cùng `business_reviewed.json`.
 Tải lại trang vẫn thấy trạng thái `Field review ✓`.
 
-## Bằng chứng held-out thật trên localhost (private observation)
+## Bằng chứng tài liệu thật trên localhost
 
-Profile mentor-safe mặc định không hiển thị aggregate của 18 tài liệu held-out
-hoặc hàng đợi Ground Truth. Khi bật cờ private tương ứng, dashboard cho phép
-đối chiếu tài liệu gốc từ `private-data`. Endpoint
-`/heldout/summary` không trả raw field value, OCR text, tên file hoặc PII.
-Endpoint `/heldout/document` chỉ hoạt động trên API loopback và chỉ resolve
-document ID đã có trong manifest. Tab CCCD lấy riêng các saved session
-`IDENTITY_DOCUMENT` đã Ground Truth, bỏ trùng theo tên file và phục vụ ảnh gốc
-qua `/user/source`; các session này không bị trộn vào metric held-out 18 tài
-liệu.
-
-Corpus hiện có `authorizedLocalDocumentsOnly=true`: tài liệu thật không được
-đóng gói vào web build hoặc commit Git. Report công khai chỉ chứa aggregate
-không có PII.
-
-Endpoint `/heldout/evidence` chỉ chạy trên loopback và trả Ground Truth,
-prediction cùng `schemaRef` của đúng document cho panel đối chiếu field/JSON.
-Local Real-Document Evidence có ba nguồn tách biệt: held-out HCNS, session upload
-HCNS và CCCD đã Ground Truth; mỗi nguồn hiển thị ảnh/file bên trái, schema/field
-hoặc JSON bên phải và không nhúng artifact private vào web build.
-Định tuyến CCCD chỉ dùng orientation thực sự được chọn. Classifier cuối bác
-route CCCD cũ khi có nhiều marker CV độc lập; audit live-v5 mới nhất vẫn phát
-hiện ba ảnh bằng cấp/chứng chỉ bị route nhầm sang `IDENTITY_DOCUMENT`, nên vấn
-đề route ngoài CV chưa được coi là đã sửa xong.
-
-Local Evidence ưu tiên prediction từ replay 15 tài liệu bằng đúng pipeline
-localhost hiện hành: PP-OCRv5 detector, VietOCR Seq2Seq/Transformer và parser
-Phase 17. Hai nguồn tham chiếu cũ (policy v4 khóa và sealed parser 1.0) vẫn có
-nút chuyển riêng. Replay chạy sau khi Ground Truth đã mở nên chỉ là audit,
-không đủ điều kiện promotion.
+Dashboard chỉ đọc các nguồn local hiện hành: session upload/template, CCCD đã
+review và OCR-HO shadow/diagnostic khi được bật riêng. Các nguồn có scope và
+mẫu số độc lập; dữ liệu thật không được đóng gói vào web build hoặc commit Git.
 
 Riêng CCCD dùng pipeline chuyên biệt Phase 11.5 thay vì parser HCNS tổng quát.
 Tám ROI mặt trước chạy PaddleOCR PP-OCRv5, EasyOCR `vi`, VietOCR Seq2Seq và

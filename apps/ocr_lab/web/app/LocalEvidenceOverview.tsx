@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 
 const API_BASE = "http://127.0.0.1:8765";
-const SHOW_HELDOUT = import.meta.env.VITE_SHOW_HELDOUT === "true";
 const SHOW_GROUND_TRUTH_REVIEW =
   import.meta.env.VITE_SHOW_GROUND_TRUTH_REVIEW === "true";
 const SHOW_EXTERNAL_DATASET_REVIEW =
@@ -12,7 +11,6 @@ const SHOW_OCR_HO_SHADOW_UAT =
   import.meta.env.VITE_SHOW_OCR_HO_SHADOW_UAT === "true";
 
 type EvidenceMode =
-  | "heldout"
   | "templates"
   | "cccd"
   | "external-dataset"
@@ -39,7 +37,6 @@ type EndpointState = {
 
 const ENDPOINTS: Array<{ key: string; path: string }> = [
   { key: "templates", path: "/api/documents/sessions" },
-  ...(SHOW_HELDOUT ? [{ key: "heldout", path: "/heldout/summary" }] : []),
   ...(SHOW_GROUND_TRUTH_REVIEW
     ? [{ key: "cccd", path: "/cccd-heldout/review/summary" }]
     : []),
@@ -113,13 +110,11 @@ export default function LocalEvidenceOverview({ onOpen }: LocalEvidenceOverviewP
     () => Object.fromEntries(states.map((state) => [state.key, state])),
     [states],
   ) as Record<string, EndpointState>;
-  const heldout = object(byKey.heldout?.payload);
   const cccd = object(byKey.cccd?.payload);
   const shadow = object(byKey.shadow?.payload);
   const external = object(byKey.external?.payload);
   const externalPrediction = object(byKey.externalPrediction?.payload);
   const templates = object(byKey.templates?.payload);
-  const heldoutOverall = object(heldout.overall);
   const cccdMetrics = object(object(object(cccd.evaluation).metrics).phase11_6);
   const shadowCandidateMetrics = object(object(shadow.metrics).ocr_ho_v2_014);
   const externalNormalization = object(external.normalization);
@@ -146,25 +141,6 @@ export default function LocalEvidenceOverview({ onOpen }: LocalEvidenceOverviewP
       </div>
 
       <div className="local-evidence-cards">
-        {SHOW_HELDOUT ? <article className="local-evidence-card">
-          <header>
-            <span>HCNS HELD-OUT</span>
-            <strong>{byKey.heldout?.payload ? "PREDICTION + GT" : errorLabel(byKey.heldout?.error ?? "")}</strong>
-          </header>
-          {byKey.heldout?.payload ? (
-            <>
-              <div className="local-evidence-metrics">
-                <Metric label="Tài liệu" value={integer(heldout.documentCount)} />
-                <Metric label="Exact field" value={percent(heldoutOverall.fieldExactMatchRate)} />
-                <Metric label="Completeness" value={percent(heldoutOverall.fieldCompleteness)} />
-                <Metric label="Classification" value={percent(heldoutOverall.classificationAccuracy)} />
-              </div>
-              <p>Điểm yếu: table exact cell {percent(heldoutOverall.tableExactCellRate)} · quyết định {object(heldout.decision).production ? String(object(heldout.decision).production) : "—"}.</p>
-            </>
-          ) : <p>{byKey.heldout?.error || "Chưa có response."}</p>}
-          <button type="button" onClick={() => onOpen("heldout")}>Mở field inspector</button>
-        </article> : null}
-
         {SHOW_GROUND_TRUTH_REVIEW ? <article className="local-evidence-card">
           <header>
             <span>CCCD MẶT TRƯỚC</span>

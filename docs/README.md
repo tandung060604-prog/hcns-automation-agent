@@ -21,7 +21,7 @@ liên kết ổn định. Không đổi tên tài liệu lịch sử nếu khôn
 | [OCR_METHODS_AND_METRICS.md](OCR_METHODS_AND_METRICS.md) | Toàn bộ phương pháp OCR đã thử và metric theo từng phase/dataset |
 | [EVALUATION.md](EVALUATION.md) | Metric, benchmark và cách đọc kết quả |
 | [DATA_SECURITY.md](DATA_SECURITY.md) | PII, storage, provenance và boundary |
-| [MENTOR_4_DAY_PROGRESS_REPORT.md](MENTOR_4_DAY_PROGRESS_REPORT.md) | Báo cáo tiến độ đã tổng hợp |
+| [MENTOR_4_DAY_PROGRESS_REPORT.md](MENTOR_4_DAY_PROGRESS_REPORT.md) | Báo cáo lịch sử — corpus held-out đã retire |
 
 ## Kiến trúc và workflow
 

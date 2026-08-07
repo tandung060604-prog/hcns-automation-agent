@@ -104,21 +104,17 @@ test("exposes the Phase 15 multi-format IDP and field review flow", async () => 
   assert.match(dashboard, /phase12\?:/);
   assert.match(dashboard, /phase15\?:/);
   assert.match(dashboard, /PHASE 15 \/ UNIFIED INTAKE/);
-  assert.match(dashboard, /Kết quả trên 18 tài liệu thật/);
   assert.match(dashboard, /Phương pháp nào đang thực sự chạy/);
   assert.match(dashboard, /primaryProfile=vietocr_vgg_seq2seq/);
   assert.match(dashboard, /Không auto-switch fallback/);
   assert.match(dashboard, /Biểu mẫu HCNS chuẩn và CCCD/);
   assert.match(dashboard, /CCCD đã Ground Truth/);
   assert.match(dashboard, /\/user\/source/);
-  assert.match(dashboard, /\/heldout\/evidence/);
   assert.match(dashboard, /EvidenceInspector/);
   assert.doesNotMatch(dashboard, /upload HCNS local/);
   assert.match(dashboard, /đơn nghỉ phép &amp; tăng ca/);
-  assert.match(dashboard, /Live v5 mới nhất · parser 2\.0/);
   assert.match(dashboard, /CCCD Phase \$\{phase11Label/);
   assert.match(dashboard, /NGUỒN PREDICTION/);
-  assert.match(dashboard, /LIVE PP-OCRV5 REPLAY · AUDIT ONLY/);
   assert.match(dashboard, /Business JSON/);
   assert.doesNotMatch(dashboard, /Phase 7 \/ 114 synthetic samples/);
   assert.match(dashboard, /userResult\.phase15 \? "phase15" : "phase12"/);
@@ -134,30 +130,14 @@ test("exposes the Phase 15 multi-format IDP and field review flow", async () => 
   assert.match(css, /\.evidence-json/);
 });
 
-test("hides held-out evidence by default behind a private local flag", async () => {
+test("does not expose the deleted legacy held-out corpus", async () => {
   const [dashboard, envExample] = await Promise.all([
     readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
   ]);
 
-  assert.match(
-    dashboard,
-    /const SHOW_HELDOUT = import\.meta\.env\.VITE_SHOW_HELDOUT === "true"/,
-  );
-  assert.match(
-    dashboard,
-    /SHOW_HELDOUT \? "heldout" : "templates"/,
-  );
-  assert.match(
-    dashboard,
-    /if \(SHOW_HELDOUT\) \{\s+fetch\(`\$\{API_BASE\}\/heldout\/summary`\)/,
-  );
-  assert.match(
-    dashboard,
-    /SHOW_HELDOUT \? <a href="#metrics">Held-out thật<\/a> : null/,
-  );
-  assert.match(dashboard, /SHOW_HELDOUT && evidenceMode === "heldout"/);
-  assert.match(envExample, /^VITE_SHOW_HELDOUT=false$/m);
+  assert.doesNotMatch(dashboard, /SHOW_HELDOUT|\/heldout\//);
+  assert.doesNotMatch(envExample, /VITE_SHOW_HELDOUT/);
   assert.match(
     dashboard,
     /const SHOW_GROUND_TRUTH_REVIEW =\s+import\.meta\.env\.VITE_SHOW_GROUND_TRUTH_REVIEW === "true"/,
@@ -389,7 +369,7 @@ test("keeps mentor localhost evidence scoped behind private flags", async () => 
     readFile(new URL("../../api/start_dashboard.ps1", import.meta.url), "utf8"),
   ]);
 
-  assert.match(overview, /\.\.\.\(SHOW_HELDOUT \? \[/);
+  assert.doesNotMatch(overview, /SHOW_HELDOUT|\/heldout\//);
   assert.match(overview, /SHOW_GROUND_TRUTH_REVIEW \? <article/);
   assert.match(overview, /SHOW_EXTERNAL_DATASET_REVIEW \? <article/);
   assert.match(dashboard, /SHOW_GROUND_TRUTH_REVIEW \? \(/);
@@ -399,4 +379,18 @@ test("keeps mentor localhost evidence scoped behind private flags", async () => 
   );
   assert.match(envExample, /^VITE_SHOW_EXTERNAL_DATASET_REVIEW=false$/m);
   assert.doesNotMatch(starter, /VITE_SHOW_EXTERNAL_DATASET_REVIEW\s*=\s*"true"/);
+});
+
+test("renders the document benchmark as a visual flow and card grid", async () => {
+  const [component, css, api] = await Promise.all([
+    readFile(new URL("../app/LocalBenchmarkPanel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../../api/serve_dashboard_api.py", import.meta.url), "utf8"),
+  ]);
+  assert.match(component, /local-benchmark-flow/);
+  assert.match(component, /ScoreRing/);
+  assert.match(component, /local-benchmark-visual-grid/);
+  assert.match(css, /\.local-benchmark-ring/);
+  assert.match(css, /\.local-benchmark-flow/);
+  assert.match(api, /\/benchmark\/summary/);
 });
