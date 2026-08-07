@@ -4,6 +4,7 @@ from typing import Any
 
 from apps.ocr_lab.api.external_dataset_prediction import (
     _external_fields,
+    _field,
     build_aggregate_report,
     build_gate_report,
 )
@@ -529,6 +530,18 @@ def test_ielts_layout_parser_uses_form_geometry_and_keeps_manual_review() -> Non
     assert fields["overall_score"]["value"] == "6.0"
     assert fields["issue_date"]["normalizedValue"] == "2023-05-22"
     assert all(field["status"] == "needs_review" for field in fields.values())
+
+
+def test_field_tolerates_missing_ocr_confidence() -> None:
+    field = _field(
+        "masked",
+        method="test",
+        block={"confidence": None},
+        review=True,
+    )
+
+    assert field["value"] == "masked"
+    assert field["confidence"] is None
 
 
 def test_soft_text_policy_accepts_case_and_eighty_percent_coverage_only() -> None:

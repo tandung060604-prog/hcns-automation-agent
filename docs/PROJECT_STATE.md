@@ -69,9 +69,12 @@ Archive: `docs/archive/PROJECT_STATE_HISTORY_2026-08-06.md` preserves prior evid
   `C:\\tmp\\data22-development-20260807-inventory-r3.json`; held-out inventory:
   `C:\\tmp\\data22-heldout-20260807-inventory.json`; policy:
   `C:\\tmp\\data22-policy-20260807-r3.json`.
-- DATA-23 lock validation and DATA-24 create-only evaluator are implemented
-  with synthetic regression coverage. Neither held-out locks nor evaluate-once
-  artifacts have been opened or created.
+- DATA-23 is `IN_PROGRESS`: the 25-document prediction-blind manifest and
+  `PREDICTION_LOCK.json` are sealed privately with `predictionsOpened=false`;
+  no metrics were computed. An independent reviewer must create and confirm
+  the GroundTruth lock before DATA-23 can become `PASS`.
+- DATA-24 create-only evaluator and DATA-23 lock validation remain implemented
+  with synthetic regression coverage; evaluate-once artifacts are untouched.
 
 ## OCR-HO-V2-015/015A - 016A-R1/016B (DONE / HOLD)
 - Sealed 15/120 diagnostics remain shadow-only: detector misses `0`, boundary

@@ -42,11 +42,16 @@
   replaced the nine history-overlapping development candidates; one extra file
   per family remains unassigned. Report:
   `C:\\tmp\\data22-split-report-20260807-r3.json`.
-- DATA-23 remains blocked pending explicit approval; no prediction lock,
-  GroundTruth lock or evaluate-once artifact has been created.
-- DATA-23 lock validation and DATA-24 create-only evaluation code are present.
-  Masked fields are recorded as absent (`null`) and are excluded from
-  applicable completeness.
+- DATA-23 is now `IN_PROGRESS`: the private 25-document manifest and prediction
+  snapshot are sealed with `predictionsOpened=false`, `metricsComputed=false`,
+  and scan `MANUAL_REVIEW`. Artifacts are
+  `C:\\tmp\\data23-heldout-20260807\\HELDOUT_MANIFEST.json`,
+  `C:\\tmp\\data23-heldout-20260807\\PREDICTION.json`, and
+  `C:\\tmp\\data23-heldout-20260807\\PREDICTION_LOCK.json`.
+- An independent reviewer must create `GROUND_TRUTH_LOCK.json` in a separate
+  private store without prediction access; until then DATA-23 is not PASS.
+  DATA-24 evaluate-once remains untouched. Masked fields are recorded as
+  absent (`null`) and excluded from applicable completeness.
 - Approved DATA-21 rerun used a 600-second CPU window. GPU could not be used because
   the installed Paddle wheel is CPU-only; native worker exit `1` after weight load
   produced no prediction. Rerun report/marker are

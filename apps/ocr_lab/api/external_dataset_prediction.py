@@ -177,6 +177,7 @@ def _field(
 ) -> dict[str, Any]:
     value = " ".join(value.split()).strip() if isinstance(value, str) and value.strip() else None
     evidence = block.get("evidence") if block else None
+    raw_confidence = block.get("confidence") if block else None
     source_span = (
         {
             key: evidence.get(key)
@@ -194,7 +195,11 @@ def _field(
         else "accepted"
         if value is not None
         else "not_found",
-        "confidence": round(float(block.get("confidence", 0.0)), 6) if block else None,
+        "confidence": (
+            round(float(raw_confidence), 6)
+            if isinstance(raw_confidence, (int, float))
+            else None
+        ),
         "evidence": evidence,
         "sourceSpan": source_span,
         "method": method,
