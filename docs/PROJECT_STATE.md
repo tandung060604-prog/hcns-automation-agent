@@ -9,7 +9,7 @@ allowed.
 
 Repository:
 - Branch: `codex/data26-parser-recovery`
-- HEAD: `723b209` (DATA-26 local scan refinement checkpoint)
+- HEAD: `3c2eeb349ccbc651b38d212142c57550c52a59b7` (DATA-26 local scan refinement checkpoint)
 - Working tree changes are limited to DATA-26 code, tests and factual state docs.
 
 DATA-26 changes are conservative: CV glued header boundary recovery, geometry
@@ -42,7 +42,7 @@ web `npm test` (13) and `npm run build` passed on the unchanged web surface.
 Next action: keep DATA-27 blocked until a fresh prediction-blind held-out split
 is supplied and separately approved. The unrelated global task remains in
 `BACKLOG.md`.
-Next READY task for this workstream: `DATA-27-FRESH-HELDOUT-V2` after its
-corpus/approval blocker is cleared.
+Next READY task: `OCR-HO-V2-017B`. DATA-27 remains blocked for this workstream
+until its fresh corpus and approval blockers are cleared.
 
 Archive: `docs/archive/PROJECT_STATE_HISTORY_2026-08-06.md`.

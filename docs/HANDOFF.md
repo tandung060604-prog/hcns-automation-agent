@@ -5,7 +5,7 @@
 - Branch: `codex/data26-parser-recovery`; DATA-26 code, synthetic tests and the
   opt-in local VietOCR line-refinement worker are implemented. Changes remain
   development-only and preserve the scan manual-review policy.
-- HEAD: `723b209` (DATA-26 local scan refinement checkpoint).
+- HEAD: `3c2eeb349ccbc651b38d212142c57550c52a59b7` (DATA-26 local scan refinement checkpoint).
 - Fresh private hybrid replay aggregate: strict `102/112`, accepted `112/112`;
   Contract `42/42`, CV `40/50`, IELTS `20/20`; completeness `99/99`,
   classification `12/12`, schema `0`, sensitive false acceptance `0`, parser
@@ -22,9 +22,9 @@
   build pass are retained. Do not tune against DATA-24 held-out artifacts.
 - Next action is to keep DATA-27 blocked pending a fresh held-out split and
   independent approval. No DATA-24 rerun is authorized.
-- Next READY task: `DATA-27-FRESH-HELDOUT-V2` remains blocked until a fresh
-  prediction-blind split is supplied and separately approved; `OCR-HO-V2-017B`
-  remains the unrelated global backlog task.
+- Next READY task: `OCR-HO-V2-017B` remains the unrelated global backlog task;
+  DATA-27-FRESH-HELDOUT-V2 remains blocked until a fresh prediction-blind split
+  is supplied and separately approved.
 
 ## DATA-25 checkpoint (2026-08-07)
 
