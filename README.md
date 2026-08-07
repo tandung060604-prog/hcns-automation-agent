@@ -81,18 +81,32 @@ Các con số trên là bằng chứng kỹ thuật của bộ dữ liệu kiể
 
 ### Benchmark field extraction theo loại tài liệu
 
-Bộ development gồm 12 tài liệu và 112 trường đối chiếu, dùng để tìm lỗi parser/OCR và chưa dùng để tuyên bố chất lượng production.
+DATA-17 là baseline đã sealed và giữ nguyên. DATA-26 là development replay
+riêng, dùng parser recovery và line refinement VietOCR cục bộ cho scan CV;
+không sửa GroundTruth/evaluate-once cũ và không phải kết quả production.
 
-| Nhóm tài liệu | Field Exact Match | Tỷ lệ |
-|---|---:|---:|
-| Hợp đồng | 40/42 | 95,24% |
-| CV | 30/50 | 60,00% |
-| IELTS/chứng chỉ | 20/20 | 100,00% |
-| **Tổng** | **90/112** | **80,36%** |
+| Nhóm tài liệu | DATA-17 strict | DATA-26 strict | DATA-26 accepted |
+|---|---:|---:|---:|
+| Hợp đồng | 40/42 (95,24%) | **42/42 (100%)** | 42/42 |
+| CV | 30/50 (60%) | **40/50 (80%)** | 50/50 |
+| IELTS/chứng chỉ | 20/20 (100%) | **20/20 (100%)** | 20/20 |
+| **Tổng** | **90/112 (80,36%)** | **102/112 (91,07%)** | **112/112** |
+
+DATA-26 gate development: applicable completeness `99/99`, classification
+`12/12`, schema errors `0`, sensitive false acceptance `0`, parser regression
+`0`, scan `5/5 MANUAL_REVIEW`. Fallback remains disabled: fixed scan strict
+improvement is `3,33pp`, below the required `10pp` promotion threshold.
+
+The next workstream step is a fresh prediction-blind DATA-27 held-out split;
+it remains blocked until a new corpus has verified rights, retention and
+lineage. All documents, OCR, predictions and GroundTruth stay outside Git and
+are processed locally.
 
 ### Benchmark OCR trên 77 crop dòng tiếng Việt đã được xác nhận
 
-Đây là benchmark so sánh recognizer trên cùng crop và cùng bộ text tham chiếu. VietOCR chỉ được dùng để benchmark đối chiếu, không phải backend mặc định của luồng xử lý template hiện tại.
+Đây là benchmark so sánh recognizer trên cùng crop và cùng bộ text tham chiếu.
+VietOCR line refinement chỉ là tùy chọn chạy local cho development scan replay,
+không phải backend mặc định và không tự động chuyển scan khỏi `MANUAL_REVIEW`.
 
 | Backend/profile | Exact Match | CER | WER |
 |---|---:|---:|---:|
@@ -125,7 +139,7 @@ Chi tiết checkpoint và quyết định gate nằm trong [OCR-HO-V2 handoff](d
 
 - Python 3.10+
 - PaddleOCR và EasyOCR
-- VietOCR cho benchmark so sánh recognizer
+- VietOCR cho benchmark và line refinement local tùy chọn
 - Native OOXML/PDF parsing
 - JSON Schema và typed data models
 - TypeScript cho giao diện upload và review
