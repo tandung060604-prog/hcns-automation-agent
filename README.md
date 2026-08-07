@@ -11,23 +11,25 @@ Dự án được xây dựng theo hướng có thể self-host, giữ dữ li�
 
 ## Bài toán và luồng xử lý
 
-~~~text
-Tài liệu DOCX / PDF / ảnh
-        ↓
-Kiểm tra định dạng, chất lượng và nguồn dữ liệu
-        ↓
-Đọc text native hoặc OCR local
-        ↓
-Nhận diện loại tài liệu và template
-        ↓
-Trích xuất, chuẩn hóa và kiểm tra các trường thông tin
-        ↓
-Confidence + provenance + JSON theo schema
-        ↓
-Người dùng kiểm tra trường chưa chắc chắn
-        ↓
-Camunda điều phối bước nghiệp vụ tiếp theo
-~~~
+```mermaid
+flowchart TD
+    A["Người dùng tải tài liệu"] --> B["Kiểm tra định dạng, chất lượng và an toàn file"]
+    B -->|"DOCX hoặc PDF có text"| C["Đọc trực tiếp nội dung"]
+    B -->|"Ảnh hoặc PDF scan trong phạm vi hỗ trợ"| D["OCR local + chuyển review"]
+    B -->|"Ảnh hoặc PDF scan ngoài phạm vi"| X["Từ chối xử lý theo policy"]
+    C --> E["Chuẩn hóa nội dung và lưu nguồn của từng trường"]
+    D --> E
+    E --> F["Nhận diện loại tài liệu và template"]
+    F -->|"Không có template phù hợp"| X
+    F -->|"Có template phù hợp"| G["Trích xuất các trường thông tin"]
+    G --> H["Kiểm tra dữ liệu, cấu trúc và độ tin cậy"]
+    H -->|"Tài liệu native hợp lệ"| I["Tạo JSON kết quả"]
+    H -->|"Ảnh, PDF scan hoặc chưa đủ bằng chứng"| J["Người dùng kiểm tra"]
+    J -->|"Sửa hoặc xác nhận"| I
+    J -->|"Yêu cầu tải lại"| A
+    I --> K["Camunda điều phối bước tiếp theo"]
+    K --> L["Cập nhật trạng thái và tham chiếu kết quả"]
+```
 
 Các trường có thể lưu kèm độ tin cậy, nguồn trích xuất, trang và tọa độ vùng chữ để người kiểm tra đối chiếu với tài liệu gốc. Kết quả chi tiết được lưu local; workflow chỉ nhận metadata và tham chiếu kết quả cần thiết.
 
@@ -68,10 +70,43 @@ Không tuyên bố hỗ trợ chữ viết tay, CCCD mặt sau hoặc tài liệ
 
 Các con số trên là bằng chứng kỹ thuật của bộ dữ liệu kiểm thử hiện tại, không phải cam kết chất lượng production cho mọi loại giấy tờ.
 
+### Benchmark theo định dạng tài liệu
+
+| Định dạng | Classification | Required-field exact match | Schema errors | Kết quả xử lý |
+|---|---:|---:|---:|---|
+| DOCX | 10/10 | 90/90 (100%) | 0 | Native |
+| PDF có text | 10/10 | 90/90 (100%) | 0 | Native |
+| Ảnh camera | 6/6 | 31/54 (57,41%) | 0 | 6/6 chuyển review |
+| PDF tạo từ ảnh scan | 6/6 | 31/54 (57,41%) | 0 | 6/6 chuyển review |
+
+### Benchmark field extraction theo loại tài liệu
+
+Bộ development gồm 12 tài liệu và 112 trường đối chiếu, dùng để tìm lỗi parser/OCR và chưa dùng để tuyên bố chất lượng production.
+
+| Nhóm tài liệu | Field Exact Match | Tỷ lệ |
+|---|---:|---:|
+| Hợp đồng | 40/42 | 95,24% |
+| CV | 30/50 | 60,00% |
+| IELTS/chứng chỉ | 20/20 | 100,00% |
+| **Tổng** | **90/112** | **80,36%** |
+
+### Benchmark OCR trên 77 crop dòng tiếng Việt đã được xác nhận
+
+Đây là benchmark so sánh recognizer trên cùng crop và cùng bộ text tham chiếu. VietOCR chỉ được dùng để benchmark đối chiếu, không phải backend mặc định của luồng xử lý template hiện tại.
+
+| Backend/profile | Exact Match | CER | WER |
+|---|---:|---:|---:|
+| Paddle raw | 25,97% | 28,39% | 63,56% |
+| EasyOCR profile tốt nhất | 7,79% | 41,49% | — |
+| VietOCR sequence-to-sequence | **42,86%** | **15,59%** | **32,20%** |
+
+Exact Match là so sánh nghiêm ngặt sau chuẩn hóa Unicode và khoảng trắng; CER/WER dùng khoảng cách chỉnh sửa trên ký tự/từ. Các kết quả OCR scan vẫn cần human review, không tự động chấp nhận chỉ vì confidence cao.
+
 ## Công nghệ sử dụng
 
 - Python 3.10+
 - PaddleOCR và EasyOCR
+- VietOCR cho benchmark so sánh recognizer
 - Native OOXML/PDF parsing
 - JSON Schema và typed data models
 - TypeScript cho giao diện upload và review
