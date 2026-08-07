@@ -75,6 +75,8 @@ def _easyocr_pages(
     work_root: Path,
     python_path: Path,
     model_root: Path,
+    vietocr_model_root: Path | None = None,
+    vietocr_line_refine: bool = False,
 ) -> _MappedEasyOcr:
     inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
     paths: list[Path] = []
@@ -99,19 +101,19 @@ def _easyocr_pages(
     job = work_root / "easyocr-pages-input.json"
     output = work_root / "easyocr-pages-output.json"
     job.write_text(json.dumps([str(path.resolve()) for path in paths]), encoding="utf-8")
-    subprocess.run(
-        [
-            str(python_path),
-            str(ROOT / "scripts" / "run_easyocr_external_dataset.py"),
-            "--input", str(job),
-            "--output", str(output),
-            "--model-root", str(model_root),
-        ],
-        check=True,
-        cwd=str(ROOT),
-    )
+    command = [
+        str(python_path),
+        str(ROOT / "scripts" / "run_easyocr_external_dataset.py"),
+        "--input", str(job),
+        "--output", str(output),
+        "--model-root", str(model_root),
+    ]
+    if vietocr_line_refine and vietocr_model_root is not None:
+        command.extend(["--vietocr-model-root", str(vietocr_model_root), "--vietocr-line-refine"])
+    subprocess.run(command, check=True, cwd=str(ROOT))
     payload = json.loads(output.read_text(encoding="utf-8"))
-    return _MappedEasyOcr(payload.get("pages", {}))
+    engine_name = "easyocr/vi+en+vietocr-line" if vietocr_line_refine else "easyocr/vi+en"
+    return _MappedEasyOcr(payload.get("pages", {}), engine_name=engine_name)
 
 
 def _hybrid_pages(
@@ -120,14 +122,28 @@ def _hybrid_pages(
     work_root: Path,
     python_path: Path,
     model_root: Path,
+    vietocr_model_root: Path | None = None,
+    vietocr_line_refine: bool = False,
 ) -> _MappedEasyOcr:
-    easy = _easyocr_pages(root, inventory_path, work_root, python_path, model_root)
+    easy = _easyocr_pages(
+        root,
+        inventory_path,
+        work_root,
+        python_path,
+        model_root,
+        vietocr_model_root,
+        vietocr_line_refine,
+    )
     paddle = _paddle()
     for key in list(easy.pages):
         if "\\ielts-" not in key.casefold():
             continue
         easy.pages[key] = _ocr_pages([Path(key)], paddle)[0]
-    easy.engine_name = "hybrid/easyocr-vi+en+paddle-ielts"
+    easy.engine_name = (
+        "hybrid/easyocr-vi+en+vietocr-line+paddle-ielts"
+        if vietocr_line_refine
+        else "hybrid/easyocr-vi+en+paddle-ielts"
+    )
     return easy
 
 
@@ -152,6 +168,12 @@ def args() -> argparse.Namespace:
         type=Path,
         default=Path(r"C:\Camunda\private-data\paddleocr-hr-baseline\runtime\easyocr_models"),
     )
+    parser.add_argument(
+        "--vietocr-model-root",
+        type=Path,
+        default=Path(r"C:\Camunda\private-data\paddleocr-hr-baseline\runtime\vietocr_models"),
+    )
+    parser.add_argument("--vietocr-line-refine", action="store_true")
     parser.add_argument("command", choices=("predict", "evaluate"))
     return parser.parse_args()
 
@@ -179,6 +201,8 @@ def main() -> int:
                 work_root,
                 options.easyocr_python.expanduser().resolve(),
                 options.easyocr_model_root.expanduser().resolve(),
+                options.vietocr_model_root.expanduser().resolve(),
+                options.vietocr_line_refine,
             )
             if options.ocr_engine == "hybrid"
             else _easyocr_pages(
@@ -187,6 +211,8 @@ def main() -> int:
                 work_root,
                 options.easyocr_python.expanduser().resolve(),
                 options.easyocr_model_root.expanduser().resolve(),
+                options.vietocr_model_root.expanduser().resolve(),
+                options.vietocr_line_refine,
             )
             if options.ocr_engine == "easyocr"
             else _paddle()

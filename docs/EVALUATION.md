@@ -98,14 +98,16 @@ prediction-blind held-out split after parser recovery.
 
 DATA-26 is a development-only parser candidate. It keeps policy v2 strict
 matching, separates accepted text, preserves `MANUAL_REVIEW` for every scan,
-and does not read GroundTruth in runtime extraction. The private hybrid replay
-reports strict `101/112` overall, Contract `42/42`, CV `39/50`, IELTS `20/20`,
-accepted `111/112`, applicable completeness `99/99`, classification `12/12`,
-schema errors `0`, sensitive false acceptance `0`, parser regression `0`, and
-scan manual review `5/5`. The development gate is `HOLD` because CV strict is
-78%; one scan experience section remains OCR-truncated. This is not an
-evaluate-once result and does not authorize fallback, promotion or a DATA-27
-held-out run.
+and does not read GroundTruth in runtime extraction. An opt-in local VietOCR
+line-refinement path is used only during the private scan replay; it is not a
+production fallback. The private hybrid replay reports strict `102/112`
+overall, Contract `42/42`, CV `40/50`, IELTS `20/20`, accepted `112/112`,
+applicable completeness `99/99`, classification `12/12`, schema errors `0`,
+sensitive false acceptance `0`, parser regression `0`, and scan manual review
+`5/5`. The DATA-20 development gate is `PASS`. Fallback remains disabled
+because the fixed scan subset improved `3.33pp`, below the required `10pp`.
+This is not an evaluate-once result and does not authorize promotion or a
+DATA-27 held-out run.
 
 ## Metrics
 
