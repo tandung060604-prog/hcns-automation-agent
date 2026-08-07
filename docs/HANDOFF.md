@@ -1,5 +1,18 @@
 # Handoff
 
+## Latest checkpoint (2026-08-07)
+
+- DATA-23 lock validation passed for all 25 held-out documents with
+  `predictionsOpened=false` and immutable manifest/prediction/GroundTruth hashes.
+- DATA-24 was approved and executed exactly once. The aggregate-only decision is
+  `HOLD` because strict EM and applicable completeness are below gate; no fallback
+  or promotion was enabled.
+- Private artifacts:
+  `C:\\tmp\\data24-heldout-20260807\\evaluate_once.json` and
+  `C:\\tmp\\data24-heldout-20260807\\EVALUATE_ONCE_LOCK.json`.
+- DATA-17 GroundTruth/evaluate-once and all raw documents, OCR and predictions
+  remain unchanged and outside Git.
+
 ## Repository context
 
 - Repository: `D:\AI Vin Thực Chiến\Side Project\PaddleOCR\hcns-automation-agent`

@@ -1,4 +1,16 @@
 # Project State
+Latest checkpoint (2026-08-07): DATA-24 held-out evaluate-once ran exactly once
+after the prediction-blind DATA-23 lock passed. The private aggregate decision is
+`HOLD`; promotion remains disabled. Report/marker:
+`C:\\tmp\\data24-heldout-20260807\\evaluate_once.json` and
+`C:\\tmp\\data24-heldout-20260807\\EVALUATE_ONCE_LOCK.json`.
+
+DATA-24 aggregate gates: strict `99/265` overall (`37.36%`), Contract `52/140`,
+CV `33/100`, IELTS `14/25`; accepted text `136/265`; applicable completeness
+`173/255`; classification `25/25`; schema errors `0`; sensitive false acceptance
+`0`; parser-correct regression `0`; scan manual review `7/7`; false auto-continue
+`0`. The report contains no raw field values and `promotionAllowed=false`.
+
 Current milestone: OCR-HO-V2-018F CCCD recognizer/token attribution checkpoint 2026-08-07; `DATA-20` DONE / HOLD
 Documentation profile: Standard (`PROJECT_STATE.md`, `BACKLOG.md`, `HANDOFF.md`)
 Checkpoint task: `OCR-HO-V2-018F` recognizer/token evidence attributed; no selector, replay or patch authorized.

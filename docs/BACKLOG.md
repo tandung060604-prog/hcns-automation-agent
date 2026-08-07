@@ -102,8 +102,8 @@
 | DATA-20-REGRESSION-AND-GATE-HARNESS | DONE (DEV HOLD) | Add additive completeness/safety/regression gates and fallback +10pp measurement | DATA-19-CONTRACT-SEMANTIC-NORMALIZATION | P0 |
 | DATA-21-PADDLEOCR-VL-LOCAL-BENCHMARK | DONE (LOCAL HOLD) | Benchmark PaddleOCR-VL locally, CPU-first, with fallback disabled unless gates pass | DATA-20-REGRESSION-AND-GATE-HARNESS | P1 |
 | DATA-22-CORPUS-EXPANSION | DONE / PASS | Refreshed private split passes 30+10 Contract, 30+10 CV and 10+5 IELTS; nine history-overlapping development files were replaced by unique supplement files | DATA-21-PADDLEOCR-VL-LOCAL-BENCHMARK | P0 |
-| DATA-23-PREDICTION-BLIND-HELDOUT-SEAL | IN_PROGRESS | 25-document manifest and prediction lock sealed privately with predictionsOpened=false; independent blind GroundTruth review remains | DATA-22-CORPUS-EXPANSION | P0 |
-| DATA-24-HELDOUT-EVALUATE-ONCE | BLOCKED | Create-only evaluator implemented; wait for DATA-23 lock PASS and explicit approval | DATA-23-PREDICTION-BLIND-HELDOUT-SEAL | P0 |
+| DATA-23-PREDICTION-BLIND-HELDOUT-SEAL | DONE / PASS | 25-document prediction-blind manifest, prediction lock and independent GroundTruth lock validated immutable with predictionsOpened=false | DATA-22-CORPUS-EXPANSION | P0 |
+| DATA-24-HELDOUT-EVALUATE-ONCE | DONE / HOLD | Create-only held-out evaluation executed exactly once; strict/completeness gates failed, promotion remains disabled | DATA-23-PREDICTION-BLIND-HELDOUT-SEAL | P0 |
 
 ## DATA-00..DATA-05 acceptance criteria
 

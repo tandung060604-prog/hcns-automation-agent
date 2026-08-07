@@ -64,10 +64,16 @@ is not applicable for completeness and must not be reconstructed by OCR.
 lineage, rights, retention and history overlap. The refreshed DATA-22 candidate
 passes with 30/30/10 development and 10/10/5 held-out by Contract/CV/IELTS;
 the 15 IELTS images are all included. DATA-23 and DATA-24 validators keep
-prediction locks immutable and evaluate-once create-only. DATA-23 has started
-with a private 25-document prediction snapshot and `predictionsOpened=false`;
-GroundTruth must be created independently before the lock can pass. No metrics
-or evaluate-once artifact has been opened.
+prediction locks immutable and evaluate-once create-only. DATA-23 passed with an
+independent 25-document GroundTruth lock; `predictionsOpened=false` and all
+manifest/prediction/GroundTruth artifacts are immutable. DATA-24 was then
+approved and executed exactly once. Its private aggregate report is `HOLD`:
+strict EM is `99/265` overall, with Contract `52/140`, CV `33/100`, IELTS
+`14/25`; accepted text is `136/265`; applicable completeness is `173/255`.
+Classification is `25/25`, schema errors are `0`, sensitive false acceptance is
+`0`, parser-correct regression is `0`, scan manual review is `7/7`, and false
+auto-continue is `0`. The report is aggregate-only, promotion remains disabled,
+and no rerun is permitted.
 
 ## Metrics
 
