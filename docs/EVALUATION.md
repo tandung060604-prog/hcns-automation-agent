@@ -52,6 +52,20 @@ Scans always remain `MANUAL_REVIEW`; `fallbackEnabled=false` and
 aggregate; benchmark confidence never replaces strict EM and never opens
 held-out/evaluate-once.
 
+### DATA-22..DATA-24 corpus gate
+
+The revised private split policy is Contract `30+10`, CV `30+10`, and IELTS/
+certificate `10+5` (15 total). All 15 newly supplied IELTS images are included;
+scans remain `MANUAL_REVIEW`. A field hidden or unreadable in a source image is
+recorded as `null` in Ground Truth (for example, a masked candidate ID), so it
+is not applicable for completeness and must not be reconstructed by OCR.
+
+`scripts/validate_external_dataset_splits.py` fails closed on source SHA,
+lineage, rights, retention and history overlap. DATA-23 and DATA-24 validators
+keep prediction locks immutable and evaluate-once create-only. The current
+candidate remains `HOLD` because eight source SHA values overlap the prior
+image-expansion history; no held-out or evaluate-once artifact was opened.
+
 ## Metrics
 
 - OCR: CER, WER, reading-order accuracy.

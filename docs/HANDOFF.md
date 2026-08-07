@@ -36,8 +36,15 @@
   `C:\tmp\bo10-data21-paddleocr-vl-benchmark-report-v5.json` and
   `C:\tmp\bo10-data21-paddleocr-vl.marker-v5.json`. Fallback, promotion and
   evaluate-once remain disabled; raw runtime stays outside Git.
-- DATA-22 remains blocked until approved source rights/retention and the minimum
-  corpus are supplied; do not open held-out or evaluate-once.
+- DATA-22 policy is now Contract/CV `30 development + 10 held-out` and
+  IELTS `10 development + 5 held-out` using all 15 new IELTS images. Private
+  inventories and the split validator are available outside Git. The current
+  candidate is `HOLD` because eight source SHA-256 values overlap the prior
+  image-expansion history; do not reuse them or open held-out.
+- DATA-23 lock validation and DATA-24 create-only evaluation code are present,
+  but no prediction lock, GroundTruth lock or evaluate-once artifact has been
+  created. Masked fields are recorded as absent (`null`) and are excluded from
+  applicable completeness.
 - Approved DATA-21 rerun used a 600-second CPU window. GPU could not be used because
   the installed Paddle wheel is CPU-only; native worker exit `1` after weight load
   produced no prediction. Rerun report/marker are

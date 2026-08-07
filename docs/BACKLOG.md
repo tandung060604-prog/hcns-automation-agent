@@ -101,9 +101,9 @@
 | DATA-19-CONTRACT-SEMANTIC-NORMALIZATION | DONE (DEV HOLD) | Normalize employer representative by party boundary without name lexicon or GroundTruth lookup | DATA-18-CV-SCAN-RECOVERY | P0 |
 | DATA-20-REGRESSION-AND-GATE-HARNESS | DONE (DEV HOLD) | Add additive completeness/safety/regression gates and fallback +10pp measurement | DATA-19-CONTRACT-SEMANTIC-NORMALIZATION | P0 |
 | DATA-21-PADDLEOCR-VL-LOCAL-BENCHMARK | DONE (LOCAL HOLD) | Benchmark PaddleOCR-VL locally, CPU-first, with fallback disabled unless gates pass | DATA-20-REGRESSION-AND-GATE-HARNESS | P1 |
-| DATA-22-CORPUS-EXPANSION | BLOCKED | Reach 30 development and 10 held-out documents per family with rights/lineage | DATA-21-PADDLEOCR-VL-LOCAL-BENCHMARK | P0 |
-| DATA-23-PREDICTION-BLIND-HELDOUT-SEAL | BLOCKED | Seal prediction-blind held-out split and independent GroundTruth locks | DATA-22-CORPUS-EXPANSION | P0 |
-| DATA-24-HELDOUT-EVALUATE-ONCE | BLOCKED | Run one immutable held-out evaluation only after DATA-23 lock and approval | DATA-23-PREDICTION-BLIND-HELDOUT-SEAL | P0 |
+| DATA-22-CORPUS-EXPANSION | HOLD | Contract/CV candidate inventories prepared; policy is 30+10 per family and IELTS is 10+5, but eight SHA overlaps with history block independent split | DATA-21-PADDLEOCR-VL-LOCAL-BENCHMARK | P0 |
+| DATA-23-PREDICTION-BLIND-HELDOUT-SEAL | BLOCKED | Validator implemented; wait for DATA-22 PASS before creating prediction/GroundTruth locks | DATA-22-CORPUS-EXPANSION | P0 |
+| DATA-24-HELDOUT-EVALUATE-ONCE | BLOCKED | Create-only evaluator implemented; wait for DATA-23 lock PASS and explicit approval | DATA-23-PREDICTION-BLIND-HELDOUT-SEAL | P0 |
 
 ## DATA-00..DATA-05 acceptance criteria
 

@@ -48,6 +48,22 @@ Next READY task: `OCR-HO-V2-018G`; owner review is required before any selector 
 Validation: 018B tests `3 passed`; Ruff, py_compile, artifact invariants, `git diff --check`, and
 `scripts/validate_longrun_state.py` passed. Full-file Ruff retains baseline findings outside DATA-20.
 Archive: `docs/archive/PROJECT_STATE_HISTORY_2026-08-06.md` preserves prior evidence.
+## DATA-22..DATA-24 - revised corpus gate (2026-08-07)
+
+- Private user-supplied inventories are available outside Git:
+  `C:\tmp\data22-user-contract-cv-20260807-inventory.json` (28 Contract,
+  30 CV) and `C:\tmp\data22-user-ielts-20260807-inventory.json` (15 IELTS
+  images). The IELTS gate is now 10 development + 5 held-out; DATA-17's
+  historical IELTS `20/20` remains unchanged.
+- DATA-22 split policy and validators are implemented, with scans fixed to
+  `MANUAL_REVIEW` and masked fields represented as absent (`null`) for scoring.
+  The current private candidate is `HOLD`: eight candidate documents overlap
+  the prior image-expansion history by SHA-256, so they cannot be reused as
+  independent development data.
+- DATA-23 lock validation and DATA-24 create-only evaluator are implemented
+  with synthetic regression coverage. Neither held-out locks nor evaluate-once
+  artifacts have been opened or created.
+
 ## OCR-HO-V2-015/015A - 016A-R1/016B (DONE / HOLD)
 - Sealed 15/120 diagnostics remain shadow-only: detector misses `0`, boundary
   misses fullName `7/15`, origin `6/15`, residence `13/15`; snapshot drift persists.

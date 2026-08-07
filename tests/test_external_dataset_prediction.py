@@ -173,6 +173,33 @@ def test_data13_aggregate_excludes_non_ocr_scan_cases() -> None:
     assert report["ocrPolicy"]["unsupportedNoOcrCount"] == 1
 
 
+def test_masked_ielts_identifier_is_treated_as_absent() -> None:
+    names = ("recipient_name", "credential_id", "credential_type", "overall_score", "issue_date")
+    prediction = {
+        "datasetId": "synthetic-test",
+        "documents": [{
+            "caseId": "ielts-001",
+            "category": "ielts",
+            "predictedCategory": "ielts",
+            "fields": {name: {"value": None} for name in names},
+            "processing": {"usesOcr": True, "recommendedAction": "MANUAL_REVIEW"},
+        }],
+    }
+    ground_truth = {"cases": [{
+        "caseId": "ielts-001",
+        "fields": [
+            {"name": name, "value": None if name == "credential_id" else "value"}
+            for name in names
+        ],
+    }]}
+
+    report = build_aggregate_report(prediction, ground_truth)
+
+    assert report["metrics"]["applicableFieldCount"] == 4
+    assert report["metrics"]["applicableFieldPresenceCount"] == 0
+    assert report["metrics"]["applicableCompletenessRate"] == 0.0
+
+
 def test_data20_sensitive_false_acceptance_is_additive_and_separate() -> None:
     names = (
         "full_name", "headline", "email", "phone_number", "address", "desired_role",
