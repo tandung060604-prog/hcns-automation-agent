@@ -2,7 +2,7 @@
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:modeler="http://camunda.org/schema/modeler/1.0" xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Definitions_HR_Document_Agent_MVP_V2" targetNamespace="http://example.com/hr-document-agent-mvp-v2" exporter="OpenAI BPMN Review" exporterVersion="2.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.13.0">
   <bpmn:error id="Error_Document_Input_Invalid" name="Document input invalid" errorCode="DOCUMENT_INPUT_INVALID"/>
   <bpmn:error id="Error_Correction_Invalid" name="Correction invalid" errorCode="CORRECTION_INVALID"/>
-  <bpmn:process id="hr_document_agent_mvp_v2" name="HR Document Processing and Onboarding Agent MVP V2" isExecutable="true" camunda:versionTag="2.4.0-shadow">
+  <bpmn:process id="hr_document_agent_mvp_v2" name="HR Document Processing and Onboarding Agent MVP V2" isExecutable="true" camunda:versionTag="2.4.0-shadow" camunda:historyTimeToLive="365">
     <bpmn:documentation>Camunda 7 M5 review-first closed set for six HR document types: leave, overtime, CV, IELTS certificate, probation contract and front-side Vietnamese citizen ID. Raw files, OCR text and full PII remain outside Camunda; autoContinueEnabled=false and HRIS/notification side effects are simulated.</bpmn:documentation>
     <bpmn:startEvent id="Start" name="Bắt đầu">
       <bpmn:documentation>Khởi tạo reuploadCount=0, maxReuploadAttempts=3 và autoContinueEnabled=false trong engine; người nộp không được sửa chính sách này.</bpmn:documentation>
@@ -12,7 +12,9 @@
 execution.setVariable('reuploadCount', Long.valueOf(0));
 execution.setVariable('maxReuploadAttempts', Long.valueOf(3));
 execution.setVariable('caseVersion', Long.valueOf(1));
-execution.setVariable('autoContinueEnabled', false);</camunda:script>
+execution.setVariable('autoContinueEnabled', false);
+var businessKey = execution.getBusinessKey();
+if (businessKey != null &amp;&amp; String(businessKey).trim().length > 0) { execution.setVariable('documentSourcePath', String(businessKey)); }</camunda:script>
         </camunda:executionListener>
       </bpmn:extensionElements>
       <bpmn:outgoing>F_StartSubmit</bpmn:outgoing>
@@ -61,9 +63,26 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
       <bpmn:outgoing>F_FileValidDetect</bpmn:outgoing>
       <bpmn:outgoing>F_FileInvalidReupload</bpmn:outgoing>
     </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway default="F_FormatOther" id="GFormat" name="Phân loại định dạng nguồn?">
+      <bpmn:incoming>F_ParseFormat</bpmn:incoming>
+      <bpmn:outgoing>F_FormatOther</bpmn:outgoing>
+      <bpmn:outgoing>F_FormatNative</bpmn:outgoing>
+      <bpmn:outgoing>F_FormatImageOcr</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask camunda:type="external" camunda:topic="document_parse_content" id="NativeRead" name="Đọc dữ liệu gốc (native parser)">
+      <bpmn:documentation>Nhánh native parser cho DOCX, PDF-text và plain text. Worker đọc bằng parser gốc, không OCR; trả resultReference và sourceFormat. Lỗi đầu vào không đọc được báo BPMN Error DOCUMENT_INPUT_INVALID để tải lại.</bpmn:documentation>
+      <bpmn:incoming>F_FormatNative</bpmn:incoming>
+      <bpmn:outgoing>F_NativeDetect</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask camunda:type="external" camunda:topic="document_ocr_read" id="OcrRead" name="Nhận diện ký tự (OCR)">
+      <bpmn:documentation>Nhánh OCR dành cho IMAGE và PDF_SCAN. Worker đọc lại source khi cần và trả sourceFormat bổ sung ocrStatus; nhánh này dành để nâng cấp OCR chuyên sâu sau này. Lỗi đầu vào/học được báo bằng BPMN Error DOCUMENT_INPUT_INVALID để người nộp tải lại.file.</bpmn:documentation>
+      <bpmn:incoming>F_FormatImageOcr</bpmn:incoming>
+      <bpmn:outgoing>F_OcrNative</bpmn:outgoing>
+    </bpmn:serviceTask>
     <bpmn:serviceTask camunda:type="external" camunda:topic="document_detect_type" id="Detect" name="Nhận diện loại tài liệu">
       <bpmn:documentation>Worker trả classificationStatus thuộc CONFIRMED, MISMATCH, UNKNOWN hoặc INVALID; không trả raw OCR text.</bpmn:documentation>
-      <bpmn:incoming>F_OCRExtract</bpmn:incoming>
+      <bpmn:incoming>F_NativeDetect</bpmn:incoming>
+      <bpmn:incoming>F_OcrNative</bpmn:incoming>
       <bpmn:outgoing>F_DetectClass</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:exclusiveGateway default="F_ClassInvalid" id="GClass" name="Loại tài liệu hợp lệ?">
@@ -106,10 +125,10 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
       <bpmn:outgoing>F_TypeConfirmed</bpmn:outgoing>
       <bpmn:outgoing>F_TypeReupload</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:serviceTask camunda:type="external" camunda:topic="document_parse_content" id="OCR" name="Đọc và chuẩn hóa tài liệu">
-      <bpmn:documentation>Worker ưu tiên native parser và chỉ OCR ảnh/PDF scan. Raw file, raw text và full PII chỉ tồn tại trong private storage hoặc memory. Camunda chỉ nhận opaque resultReference cùng sanitized status.</bpmn:documentation>
+    <bpmn:serviceTask camunda:type="external" camunda:topic="document_parse_content" id="Parse" name="Nhận diện và đọc dữ liệu">
+      <bpmn:documentation>Worker ưu tiên native parser cho DOCX/PDF-text; ảnh và PDF scan được giải thích qua OCR. Trả về sourceFormat (DOCX, PDF_TEXT, IMAGE, PDF_SCAN...) để gateway định dạng phân nhánh. Raw file, raw text và full PII chỉ tồn tại trong private storage hoặc memory.</bpmn:documentation>
       <bpmn:incoming>F_FileValidDetect</bpmn:incoming>
-      <bpmn:outgoing>F_OCRExtract</bpmn:outgoing>
+      <bpmn:outgoing>F_ParseFormat</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask camunda:type="external" camunda:topic="document_extract" id="Extract" name="Trích xuất trường dữ liệu">
       <bpmn:documentation>Trích xuất theo schema từng loại tài liệu. Full values không được ghi vào Camunda history; worker cập nhật artifact sau opaque resultReference.</bpmn:documentation>
@@ -123,7 +142,7 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
       <bpmn:incoming>F_CorrectionsNormalize</bpmn:incoming>
       <bpmn:outgoing>F_NormalizeQuality</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:businessRuleTask camunda:decisionRef="hr-document-quality-routing" camunda:decisionRefBinding="latest" camunda:resultVariable="recommendedAction" camunda:mapDecisionResult="singleEntry" id="QualityDecision" name="Quyết định chất lượng OCR">
+    <bpmn:businessRuleTask camunda:decisionRef="hr-document-quality-routing" camunda:decisionRefBinding="latest" camunda:resultVariable="recommendedAction" camunda:mapDecisionResult="singleEntry" id="QualityDecision" name="Quyết định chất lượng tài liệu">
       <bpmn:documentation>DMN tách threshold khỏi Python worker và trả recommendedAction: AUTO_CONTINUE, USER_REVIEW, HR_REVIEW hoặc REQUEST_REUPLOAD.</bpmn:documentation>
       <bpmn:incoming>F_NormalizeQuality</bpmn:incoming>
       <bpmn:outgoing>F_QualityGateway</bpmn:outgoing>
@@ -143,7 +162,7 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
 if (assignee == null || String(assignee).trim().length == 0) { throw 'REVIEWER_ASSIGNMENT_REQUIRED'; }
 var Instant = Java.type('java.time.Instant');
 task.setVariable('reviewerId', String(assignee));
-task.setVariable('reviewedAt', String(Instant.now()));
+task.setVariable('reviewedAt', String(Instant.now().toString()));
 task.setVariable('reviewStage', 'USER');</camunda:script>
         </camunda:taskListener>
         <camunda:formData>
@@ -202,7 +221,7 @@ task.setVariable('reviewStage', 'USER');</camunda:script>
 if (assignee == null || String(assignee).trim().length == 0) { throw 'REVIEWER_ASSIGNMENT_REQUIRED'; }
 var Instant = Java.type('java.time.Instant');
 task.setVariable('reviewerId', String(assignee));
-task.setVariable('reviewedAt', String(Instant.now()));
+task.setVariable('reviewedAt', String(Instant.now().toString()));
 task.setVariable('reviewStage', 'HR');</camunda:script>
         </camunda:taskListener>
         <camunda:formData>
@@ -271,7 +290,8 @@ task.setVariable('reviewStage', 'HR');</camunda:script>
       <bpmn:incoming>F_ValidateErrorReupload</bpmn:incoming>
       <bpmn:incoming>F_ClassInvalid</bpmn:incoming>
       <bpmn:incoming>F_TypeReupload</bpmn:incoming>
-      <bpmn:incoming>F_OCRErrorReupload</bpmn:incoming>
+      <bpmn:incoming>F_ParseErrorReupload</bpmn:incoming>
+      <bpmn:incoming>F_OcrErrorReupload</bpmn:incoming>
       <bpmn:incoming>F_QReupload</bpmn:incoming>
       <bpmn:incoming>F_UserReupload</bpmn:incoming>
       <bpmn:incoming>F_HRReupload</bpmn:incoming>
@@ -368,8 +388,12 @@ task.setVariable('reviewStage', 'HR');</camunda:script>
       <bpmn:outgoing>F_ValidateErrorReupload</bpmn:outgoing>
       <bpmn:errorEventDefinition errorRef="Error_Document_Input_Invalid"/>
     </bpmn:boundaryEvent>
-    <bpmn:boundaryEvent attachedToRef="OCR" cancelActivity="true" id="OCRInputError" name="Đầu vào đọc tài liệu không hợp lệ">
-      <bpmn:outgoing>F_OCRErrorReupload</bpmn:outgoing>
+    <bpmn:boundaryEvent attachedToRef="Parse" cancelActivity="true" id="ParseInputError" name="Đầu vào đọc tài liệu không hợp lệ">
+      <bpmn:outgoing>F_ParseErrorReupload</bpmn:outgoing>
+      <bpmn:errorEventDefinition errorRef="Error_Document_Input_Invalid"/>
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent attachedToRef="OcrRead" cancelActivity="true" id="OcrReadInputError" name="Đầu vào OCR không hợp lệ">
+      <bpmn:outgoing>F_OcrErrorReupload</bpmn:outgoing>
       <bpmn:errorEventDefinition errorRef="Error_Document_Input_Invalid"/>
     </bpmn:boundaryEvent>
     <bpmn:boundaryEvent attachedToRef="ApplyCorrections" cancelActivity="true" id="CorrectionInvalid" name="Correction không hợp lệ">
@@ -387,7 +411,7 @@ task.setVariable('reviewStage', 'HR');</camunda:script>
     <bpmn:sequenceFlow id="F_StartSubmit" sourceRef="Start" targetRef="Submit"/>
     <bpmn:sequenceFlow id="F_SubmitValidate" sourceRef="Submit" targetRef="Validate"/>
     <bpmn:sequenceFlow id="F_ValidateGateway" sourceRef="Validate" targetRef="GFileValid"/>
-    <bpmn:sequenceFlow id="F_FileValidDetect" sourceRef="GFileValid" targetRef="OCR" name="VALID">
+    <bpmn:sequenceFlow id="F_FileValidDetect" sourceRef="GFileValid" targetRef="Parse" name="VALID">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${fileValidationStatus == 'VALID'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F_FileInvalidReupload" sourceRef="GFileValid" targetRef="RegisterReupload" name="INVALID / UNKNOWN"/>
@@ -405,8 +429,18 @@ task.setVariable('reviewStage', 'HR');</camunda:script>
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${documentTypeDecision == 'CONFIRMED'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F_TypeReupload" sourceRef="GType" targetRef="RegisterReupload" name="REQUEST_REUPLOAD"/>
-    <bpmn:sequenceFlow id="F_OCRExtract" sourceRef="OCR" targetRef="Detect"/>
-    <bpmn:sequenceFlow id="F_OCRErrorReupload" sourceRef="OCRInputError" targetRef="RegisterReupload" name="DOCUMENT_INPUT_INVALID"/>
+    <bpmn:sequenceFlow id="F_ParseFormat" sourceRef="Parse" targetRef="GFormat"/>
+    <bpmn:sequenceFlow id="F_FormatNative" sourceRef="GFormat" targetRef="NativeRead" name="DOCX/PDF_TEXT">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${sourceFormat == 'DOCX' || sourceFormat == 'PDF_TEXT' || sourceFormat == 'PLAIN_TEXT'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_FormatOther" sourceRef="GFormat" targetRef="RegisterReupload" name="KHÁC"/>
+    <bpmn:sequenceFlow id="F_FormatImageOcr" sourceRef="GFormat" targetRef="OcrRead" name="IMAGE/PDF_SCAN">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${sourceFormat == 'IMAGE' || sourceFormat == 'PDF_SCAN'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_NativeDetect" sourceRef="NativeRead" targetRef="Detect"/>
+    <bpmn:sequenceFlow id="F_OcrNative" sourceRef="OcrRead" targetRef="Detect"/>
+    <bpmn:sequenceFlow id="F_ParseErrorReupload" sourceRef="ParseInputError" targetRef="RegisterReupload" name="DOCUMENT_INPUT_INVALID"/>
+    <bpmn:sequenceFlow id="F_OcrErrorReupload" sourceRef="OcrReadInputError" targetRef="RegisterReupload" name="DOCUMENT_INPUT_INVALID"/>
     <bpmn:sequenceFlow id="F_ExtractNormalize" sourceRef="Extract" targetRef="Normalize"/>
     <bpmn:sequenceFlow id="F_NormalizeQuality" sourceRef="Normalize" targetRef="QualityDecision"/>
     <bpmn:sequenceFlow id="F_QualityGateway" sourceRef="QualityDecision" targetRef="GQuality"/>
@@ -468,9 +502,9 @@ task.setVariable('reviewStage', 'HR');</camunda:script>
     <bpmn:sequenceFlow id="F_RejectedNotify" sourceRef="GRejectedMerge" targetRef="NotifyRejected"/>
     <bpmn:sequenceFlow id="F_NotifyRejectedEnd" sourceRef="NotifyRejected" targetRef="EndRejected"/>
     <bpmn:textAnnotation id="TechnicalFailureNote">
-      <bpmn:text>Lỗi kỹ thuật (timeout, worker crash, OCR engine unavailable): worker gọi /failure, giảm retries và tạo incident khi retries=0. Không dùng BPMN Error để che lỗi kỹ thuật.</bpmn:text>
+      <bpmn:text>Lỗi kỹ thuật (timeout, worker crash, parser/OCR engine unavailable): worker gọi /failure, giảm retries và tạo incident khi retries=0. Không dùng BPMN Error để che lỗi kỹ thuật.</bpmn:text>
     </bpmn:textAnnotation>
-    <bpmn:association id="Association_TechnicalFailure" sourceRef="OCR" targetRef="TechnicalFailureNote"/>
+    <bpmn:association id="Association_TechnicalFailure" sourceRef="Parse" targetRef="TechnicalFailureNote"/>
     <bpmn:group id="GroupAuto" categoryValueRef="CVAuto"/>
     <bpmn:group id="GroupHuman" categoryValueRef="CVHuman"/>
     <bpmn:group id="GroupReupload" categoryValueRef="CVReupload"/>
@@ -522,11 +556,23 @@ task.setVariable('reviewStage', 'HR');</camunda:script>
       <bpmndi:BPMNShape id="GType_di" bpmnElement="GType" bioc:fill="#FFFFFF" bioc:stroke="#546E7A">
         <dc:Bounds x="1510" y="90" width="50" height="50"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="OCR_di" bpmnElement="OCR" bioc:fill="#FFF8E1" bioc:stroke="#F9A825">
+      <bpmndi:BPMNShape id="Parse_di" bpmnElement="Parse" bioc:fill="#FFF8E1" bioc:stroke="#F9A825">
         <dc:Bounds x="740" y="220" width="185" height="90"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="OCRInputError_di" bpmnElement="OCRInputError" bioc:fill="#FFF3E0" bioc:stroke="#EF6C00">
+      <bpmndi:BPMNShape id="ParseInputError_di" bpmnElement="ParseInputError" bioc:fill="#FFF3E0" bioc:stroke="#EF6C00">
         <dc:Bounds x="890" y="292" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GFormat_di" bpmnElement="GFormat" bioc:fill="#FFFFFF" bioc:stroke="#546E7A">
+        <dc:Bounds x="985" y="240" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="OcrRead_di" bpmnElement="OcrRead" bioc:fill="#FFF8E1" bioc:stroke="#F9A825">
+        <dc:Bounds x="1085" y="70" width="185" height="90"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="OcrReadInputError_di" bpmnElement="OcrReadInputError" bioc:fill="#FFF3E0" bioc:stroke="#EF6C00">
+        <dc:Bounds x="1242" y="142" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="NativeRead_di" bpmnElement="NativeRead" bioc:fill="#FFF8E1" bioc:stroke="#F9A825">
+        <dc:Bounds x="985" y="470" width="185" height="90"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Extract_di" bpmnElement="Extract" bioc:fill="#FFF8E1" bioc:stroke="#F9A825">
         <dc:Bounds x="1320" y="220" width="180" height="90"/>
@@ -653,11 +699,44 @@ task.setVariable('reviewStage', 'HR');</camunda:script>
         <di:waypoint x="1535" y="705"/>
         <di:waypoint x="1870" y="705"/>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="F_OCRExtract_di" bpmnElement="F_OCRExtract" bioc:stroke="#546E7A">
+      <bpmndi:BPMNEdge id="F_ParseFormat_di" bpmnElement="F_ParseFormat" bioc:stroke="#546E7A">
         <di:waypoint x="925" y="265.0"/>
         <di:waypoint x="985" y="265.0"/>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="F_OCRErrorReupload_di" bpmnElement="F_OCRErrorReupload" bioc:stroke="#546E7A">
+      <bpmndi:BPMNEdge id="F_FormatNative_di" bpmnElement="F_FormatNative" bioc:stroke="#546E7A">
+        <di:waypoint x="1010" y="290"/>
+        <di:waypoint x="1010" y="515"/>
+        <di:waypoint x="985" y="515"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_NativeDetect_di" bpmnElement="F_NativeDetect" bioc:stroke="#546E7A">
+        <di:waypoint x="1170" y="515"/>
+        <di:waypoint x="1270" y="515"/>
+        <di:waypoint x="1270" y="265"/>
+        <di:waypoint x="1170" y="265"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_FormatImageOcr_di" bpmnElement="F_FormatImageOcr" bioc:stroke="#546E7A">
+        <di:waypoint x="1010" y="240"/>
+        <di:waypoint x="1010" y="115"/>
+        <di:waypoint x="1085" y="115"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_FormatOther_di" bpmnElement="F_FormatOther" bioc:stroke="#546E7A">
+        <di:waypoint x="985" y="290"/>
+        <di:waypoint x="870" y="290"/>
+        <di:waypoint x="870" y="645"/>
+        <di:waypoint x="1870" y="645"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_OcrNative_di" bpmnElement="F_OcrNative" bioc:stroke="#546E7A">
+        <di:waypoint x="1270" y="115"/>
+        <di:waypoint x="1270" y="140"/>
+        <di:waypoint x="1270" y="265"/>
+        <di:waypoint x="1170" y="265"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_OcrErrorReupload_di" bpmnElement="F_OcrErrorReupload" bioc:stroke="#546E7A">
+        <di:waypoint x="1278" y="178"/>
+        <di:waypoint x="1278" y="675"/>
+        <di:waypoint x="1870" y="675"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_ParseErrorReupload_di" bpmnElement="F_ParseErrorReupload" bioc:stroke="#546E7A">
         <di:waypoint x="908" y="328"/>
         <di:waypoint x="908" y="675"/>
         <di:waypoint x="1870" y="675"/>

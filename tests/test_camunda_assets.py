@@ -50,8 +50,13 @@ class CamundaAssetContractTests(TestCase):
             for flow in root.findall(".//bpmn:sequenceFlow", _BPMN_NS)
         }
 
-        self.assertEqual(("GFileValid", "OCR"), flows["F_FileValidDetect"])
-        self.assertEqual(("OCR", "Detect"), flows["F_OCRExtract"])
+        self.assertEqual(("GFileValid", "Parse"), flows["F_FileValidDetect"])
+        self.assertEqual(("Parse", "GFormat"), flows["F_ParseFormat"])
+        self.assertEqual(("GFormat", "OcrRead"), flows["F_FormatImageOcr"])
+        self.assertEqual(("GFormat", "NativeRead"), flows["F_FormatNative"])
+        self.assertEqual(("GFormat", "RegisterReupload"), flows["F_FormatOther"])
+        self.assertEqual(("NativeRead", "Detect"), flows["F_NativeDetect"])
+        self.assertEqual(("OcrRead", "Detect"), flows["F_OcrNative"])
         self.assertEqual(("Detect", "GClass"), flows["F_DetectClass"])
         self.assertEqual(("GClass", "Extract"), flows["F_ClassConfirmed"])
         self.assertEqual(("GClass", "ConfirmType"), flows["F_ClassNeedsConfirm"])
@@ -66,9 +71,25 @@ class CamundaAssetContractTests(TestCase):
         self.assertIsNotNone(mismatch_condition)
         self.assertIn("classificationStatus == 'MISMATCH'", mismatch_condition.text)
 
-        parse_task = root.find(".//bpmn:serviceTask[@id='OCR']", _BPMN_NS)
+        parse_task = root.find(".//bpmn:serviceTask[@id='Parse']", _BPMN_NS)
         self.assertIsNotNone(parse_task)
         self.assertEqual("document_parse_content", parse_task.attrib[_CAMUNDA_TOPIC])
+        ocr_task = root.find(".//bpmn:serviceTask[@id='OcrRead']", _BPMN_NS)
+        self.assertIsNotNone(ocr_task)
+        self.assertEqual("document_ocr_read", ocr_task.attrib[_CAMUNDA_TOPIC])
+        native_task = root.find(".//bpmn:serviceTask[@id='NativeRead']", _BPMN_NS)
+        self.assertIsNotNone(native_task)
+        self.assertEqual("document_parse_content", native_task.attrib[_CAMUNDA_TOPIC])
+
+        native_flow = root.find(".//bpmn:sequenceFlow[@id='F_FormatNative']", _BPMN_NS)
+        self.assertIsNotNone(native_flow)
+        native_condition = native_flow.find("bpmn:conditionExpression", _BPMN_NS)
+        self.assertIsNotNone(native_condition)
+        self.assertIn("sourceFormat == 'DOCX'", native_condition.text)
+        self.assertIn("sourceFormat == 'PDF_TEXT'", native_condition.text)
+        gformat = root.find(".//bpmn:exclusiveGateway[@id='GFormat']", _BPMN_NS)
+        self.assertIsNotNone(gformat)
+        self.assertEqual("F_FormatOther", gformat.attrib["default"])
 
     def test_bpmn_incoming_and_outgoing_references_match_sequence_flows(self) -> None:
         root = ElementTree.parse(_BPMN).getroot()

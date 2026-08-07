@@ -18,6 +18,7 @@ StageOperation = Callable[[Mapping[str, ProcessValue]], ProcessVariables]
 DOCUMENT_STAGE_TOPICS = (
     "document_validate_file",
     "document_parse_content",
+    "document_ocr_read",
     "document_detect_type",
     "document_extract",
     "document_normalize_validate",
@@ -35,6 +36,7 @@ _REQUIRED_STAGE_VARIABLES = {
         {"applicationId", "documentReference", "idempotencyKey"}
     ),
     "document_parse_content": frozenset({"documentReference", "idempotencyKey"}),
+    "document_ocr_read": frozenset({"resultReference", "idempotencyKey"}),
     "document_detect_type": frozenset(
         {"resultReference", "declaredDocumentType", "idempotencyKey"}
     ),

@@ -39,3 +39,4 @@ camunda/*.bak
 .vscode/
 .DS_Store
 Thumbs.db
+.private/

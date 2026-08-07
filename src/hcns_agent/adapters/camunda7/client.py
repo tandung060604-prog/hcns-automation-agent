@@ -113,6 +113,7 @@ class ExternalTask:
     topic_name: str
     retries: int | None
     variables: ProcessVariables
+    business_key: str | None = None
 
 
 class CamundaExternalTaskClient(Protocol):
@@ -285,12 +286,16 @@ def _decode_external_task(raw: object) -> ExternalTask:
         if value is not None and not isinstance(value, (str, int, float, bool)):
             raise CamundaRestError("External task variables must be scalar")
         variables[raw_name] = value
+    business_key = raw.get("businessKey")
+    if isinstance(business_key, str) and business_key:
+        variables["documentSourcePath"] = business_key
     validate_process_variables(variables)
     return ExternalTask(
         task_id=task_id,
         topic_name=topic_name,
         retries=retries,
         variables=variables,
+        business_key=business_key if isinstance(business_key, str) else None,
     )
 
 

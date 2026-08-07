@@ -70,6 +70,11 @@ _REVIEW_ONLY_VALIDATION_CODES = frozenset(
         "TEMPLATE_ANCHOR_PARTIAL",
     }
 )
+
+
+def _syntax_is_absolute_path(value: str) -> bool:
+    """Best-effort syntax check; the file must exist when actually loaded."""
+    return value.startswith("/") or value.startswith("~") or value.startswith("./")
 _SENSITIVE_FIELDS_BY_TEMPLATE = {
     "leave-request-v1": frozenset(
         {"employeeName", "employeeId", "phone", "address", "reason"}
@@ -211,6 +216,8 @@ class LocalSessionDocumentSourceStore:
         self._sessions_root = self._private_root / "user_uploads" / "sessions"
 
     def load(self, document_reference: str) -> DocumentSource:
+        if _syntax_is_absolute_path(document_reference):
+            return self._load_absolute_path(document_reference)
         if _DOCUMENT_REFERENCE_PATTERN.fullmatch(document_reference) is None:
             raise DocumentReferenceError("Document reference is invalid")
         input_directory = self._sessions_root / document_reference / "input"
@@ -227,6 +234,25 @@ class LocalSessionDocumentSourceStore:
         source_path = candidates[0].resolve()
         if not source_path.is_relative_to(self._private_root):
             raise DocumentReferenceError("Document reference resolves outside private storage")
+        try:
+            content = source_path.read_bytes()
+        except OSError as error:
+            raise DocumentSourceStoreError("Private document source is unavailable") from error
+        suffix = source_path.suffix.casefold()
+        return DocumentSource(
+            document_id=document_reference,
+            filename=source_path.name,
+            content=content,
+            declared_media_type=_SOURCE_MEDIA_TYPES[suffix],
+            source_reference=document_reference,
+        )
+
+    def _load_absolute_path(self, document_reference: str) -> DocumentSource:
+        source_path = Path(document_reference).expanduser().resolve()
+        if not source_path.is_file():
+            raise DocumentReferenceError("Document source path does not exist")
+        if source_path.suffix.casefold() not in _SUPPORTED_SOURCE_SUFFIXES:
+            raise DocumentReferenceError("Document source format is unsupported")
         try:
             content = source_path.read_bytes()
         except OSError as error:
@@ -436,6 +462,7 @@ class M4TemplateStageOperations:
         operations: dict[str, StageOperation] = {
             "document_validate_file": self._validate_file,
             "document_parse_content": self._parse_content,
+            "document_ocr_read": self._ocr_read,
             "document_detect_type": self._detect_type,
             "document_extract": self._extract,
             "document_normalize_validate": self._normalize_validate,
@@ -509,12 +536,38 @@ class M4TemplateStageOperations:
         }
 
     def _validate_file(self, variables: Mapping[str, ProcessValue]) -> ProcessVariables:
-        document_reference = _required_reference(variables, "documentReference")
+        document_reference = self._source_reference(variables)
         self._load_source(document_reference)
         return {"fileValidationStatus": "VALID"}
 
+    def _source_reference(self, variables: Mapping[str, ProcessValue]) -> str:
+        source_path = variables.get("documentSourcePath")
+        if isinstance(source_path, str) and source_path.strip():
+            return source_path.strip()
+        return _required_reference(variables, "documentReference")
+
+    def _ocr_read(self, variables: Mapping[str, ProcessValue]) -> ProcessVariables:
+        document_reference = self._source_reference(variables)
+        idempotency_key = _required_reference(variables, "idempotencyKey")
+        stored = self._load_result(
+            _required_reference(variables, "resultReference")
+        )
+        processing = _payload_mapping(stored.payload, "processing")
+        source_format = _payload_string(processing, "sourceFormat")
+        uses_ocr = processing.get("usesOcr")
+        if type(uses_ocr) is not bool:
+            raise CamundaTechnicalError("Stored OCR metadata is inconsistent")
+        result: ProcessVariables = {
+            "sourceFormat": source_format,
+            "ocrStatus": "SUCCESS" if uses_ocr else "SKIPPED",
+        }
+        ocr_engine = processing.get("ocrEngine")
+        if isinstance(ocr_engine, str) and ocr_engine:
+            result["ocrEngine"] = ocr_engine
+        return result
+
     def _parse_content(self, variables: Mapping[str, ProcessValue]) -> ProcessVariables:
-        document_reference = _required_reference(variables, "documentReference")
+        document_reference = self._source_reference(variables)
         idempotency_key = _required_reference(variables, "idempotencyKey")
         try:
             existing = self._result_store.find_by_idempotency_key(idempotency_key)

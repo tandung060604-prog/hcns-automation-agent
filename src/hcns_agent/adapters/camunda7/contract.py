@@ -101,6 +101,7 @@ PROCESS_VARIABLE_WHITELIST = frozenset(
     {
         "applicationId",
         "documentType",
+        "documentSourcePath",
         "documentReference",
         "declaredDocumentType",
         "confirmedDocumentType",
@@ -111,6 +112,8 @@ PROCESS_VARIABLE_WHITELIST = frozenset(
         "classificationStatus",
         "classificationConfidence",
         "parseStatus",
+        "sourceFormat",
+        "ocrStatus",
         "qualityStatus",
         "reviewRequired",
         "sensitiveFieldNeedsReview",

@@ -4,48 +4,188 @@
   "title": "Sanitized Camunda 7 Process Variables",
   "type": "object",
   "properties": {
-    "applicationId": {"$ref": "#/$defs/reference"},
-    "documentType": {"type": "string", "minLength": 1, "maxLength": 128},
-    "documentReference": {"$ref": "#/$defs/reference"},
-    "declaredDocumentType": {"$ref": "#/$defs/workflowDocumentType"},
-    "confirmedDocumentType": {"$ref": "#/$defs/workflowDocumentType"},
-    "detectedDocumentType": {"type": "string", "minLength": 1, "maxLength": 128},
-    "workflowDocumentType": {"$ref": "#/$defs/workflowDocumentType"},
-    "sourceFormat": {"type": "string", "minLength": 1, "maxLength": 64},
-    "fileValidationStatus": {"enum": ["VALID", "INVALID", "UNKNOWN"]},
-    "classificationStatus": {"enum": ["CONFIRMED", "MISMATCH", "UNKNOWN", "INVALID"]},
-    "classificationConfidence": {"$ref": "#/$defs/confidence"},
-    "parseStatus": {"enum": ["SUCCESS", "PARTIAL", "CONVERSION_REQUIRED", "REJECTED", "FAILED"]},
-    "qualityStatus": {"enum": ["PASS", "REVIEW_REQUIRED", "REJECTED"]},
-    "reviewRequired": {"type": "boolean"},
-    "sensitiveFieldNeedsReview": {"type": "boolean"},
-    "missingCriticalField": {"type": "boolean"},
-    "missingFields": {"type": "string", "maxLength": 4096},
-    "businessInconsistency": {"type": "boolean"},
-    "validationErrors": {"type": "string", "maxLength": 4096},
-    "requiredFieldsComplete": {"type": "boolean"},
-    "overallConfidence": {"$ref": "#/$defs/confidence"},
-    "resultReference": {"$ref": "#/$defs/reference"},
-    "resultPayloadHash": {"$ref": "#/$defs/sha256"},
-    "schemaVersion": {"type": "string", "minLength": 1, "maxLength": 64},
-    "errorCode": {"type": "string", "minLength": 1, "maxLength": 128},
-    "idempotencyKey": {"$ref": "#/$defs/reference"},
-    "documentTypeDecision": {"enum": ["CONFIRMED", "REQUEST_REUPLOAD"]},
-    "userReviewDecision": {"enum": ["CONFIRMED", "CORRECTED", "REQUEST_REUPLOAD", "UNRESOLVED"]},
-    "correctionsReference": {"$ref": "#/$defs/reference"},
-    "hrReviewDecision": {"enum": ["CONFIRMED", "CORRECTED", "REQUEST_REUPLOAD", "REJECTED"]},
-    "hrReviewNoteReference": {"$ref": "#/$defs/reference"},
-    "reviewStage": {"enum": ["USER", "HR"]},
-    "reviewerId": {"$ref": "#/$defs/reference"},
-    "reviewedAt": {"type": "string", "format": "date-time", "maxLength": 64},
-    "caseVersion": {"type": "integer", "minimum": 1},
-    "reviewAuditReference": {"$ref": "#/$defs/reference"},
-    "reviewedPayloadHash": {"$ref": "#/$defs/sha256"},
-    "reviewReasonCodes": {"type": "string", "maxLength": 4096},
-    "reuploadCount": {"type": "integer", "minimum": 0},
-    "maxReuploadAttempts": {"type": "integer", "minimum": 1},
-    "finalHrDecision": {"enum": ["APPROVED", "REJECTED"]},
-    "finalHrNoteReference": {"$ref": "#/$defs/reference"},
+    "applicationId": {
+      "$ref": "#/$defs/reference"
+    },
+    "documentType": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "documentReference": {
+      "$ref": "#/$defs/reference"
+    },
+    "declaredDocumentType": {
+      "$ref": "#/$defs/workflowDocumentType"
+    },
+    "confirmedDocumentType": {
+      "$ref": "#/$defs/workflowDocumentType"
+    },
+    "detectedDocumentType": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "workflowDocumentType": {
+      "$ref": "#/$defs/workflowDocumentType"
+    },
+    "sourceFormat": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "fileValidationStatus": {
+      "enum": [
+        "VALID",
+        "INVALID",
+        "UNKNOWN"
+      ]
+    },
+    "classificationStatus": {
+      "enum": [
+        "CONFIRMED",
+        "MISMATCH",
+        "UNKNOWN",
+        "INVALID"
+      ]
+    },
+    "classificationConfidence": {
+      "$ref": "#/$defs/confidence"
+    },
+    "parseStatus": {
+      "enum": [
+        "SUCCESS",
+        "PARTIAL",
+        "CONVERSION_REQUIRED",
+        "REJECTED",
+        "FAILED"
+      ]
+    },
+    "qualityStatus": {
+      "enum": [
+        "PASS",
+        "REVIEW_REQUIRED",
+        "REJECTED"
+      ]
+    },
+    "reviewRequired": {
+      "type": "boolean"
+    },
+    "sensitiveFieldNeedsReview": {
+      "type": "boolean"
+    },
+    "missingCriticalField": {
+      "type": "boolean"
+    },
+    "missingFields": {
+      "type": "string",
+      "maxLength": 4096
+    },
+    "businessInconsistency": {
+      "type": "boolean"
+    },
+    "validationErrors": {
+      "type": "string",
+      "maxLength": 4096
+    },
+    "requiredFieldsComplete": {
+      "type": "boolean"
+    },
+    "overallConfidence": {
+      "$ref": "#/$defs/confidence"
+    },
+    "resultReference": {
+      "$ref": "#/$defs/reference"
+    },
+    "resultPayloadHash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "errorCode": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "idempotencyKey": {
+      "$ref": "#/$defs/reference"
+    },
+    "documentTypeDecision": {
+      "enum": [
+        "CONFIRMED",
+        "REQUEST_REUPLOAD"
+      ]
+    },
+    "userReviewDecision": {
+      "enum": [
+        "CONFIRMED",
+        "CORRECTED",
+        "REQUEST_REUPLOAD",
+        "UNRESOLVED"
+      ]
+    },
+    "correctionsReference": {
+      "$ref": "#/$defs/reference"
+    },
+    "hrReviewDecision": {
+      "enum": [
+        "CONFIRMED",
+        "CORRECTED",
+        "REQUEST_REUPLOAD",
+        "REJECTED"
+      ]
+    },
+    "hrReviewNoteReference": {
+      "$ref": "#/$defs/reference"
+    },
+    "reviewStage": {
+      "enum": [
+        "USER",
+        "HR"
+      ]
+    },
+    "reviewerId": {
+      "$ref": "#/$defs/reference"
+    },
+    "reviewedAt": {
+      "type": "string",
+      "format": "date-time",
+      "maxLength": 64
+    },
+    "caseVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "reviewAuditReference": {
+      "$ref": "#/$defs/reference"
+    },
+    "reviewedPayloadHash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "reviewReasonCodes": {
+      "type": "string",
+      "maxLength": 4096
+    },
+    "reuploadCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "maxReuploadAttempts": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "finalHrDecision": {
+      "enum": [
+        "APPROVED",
+        "REJECTED"
+      ]
+    },
+    "finalHrNoteReference": {
+      "$ref": "#/$defs/reference"
+    },
     "recommendedAction": {
       "enum": [
         "AUTO_CONTINUE",
@@ -57,17 +197,73 @@
         "REQUEST_REUPLOAD"
       ]
     },
-    "templateId": {"type": "string", "minLength": 1, "maxLength": 128},
-    "templateVersion": {"type": "string", "minLength": 1, "maxLength": 64},
-    "parserName": {"type": "string", "minLength": 1, "maxLength": 128},
-    "parserVersion": {"type": "string", "minLength": 1, "maxLength": 64},
-    "ocrEngine": {"type": "string", "minLength": 1, "maxLength": 128},
-    "extractionStatus": {"enum": ["SUCCESS", "MANUAL_REVIEW", "REJECT_UNSUPPORTED", "TECHNICAL_ERROR"]},
-    "extractedDataReference": {"$ref": "#/$defs/reference"},
-    "autoContinueEnabled": {"type": "boolean"},
-    "hrisUpdateStatus": {"enum": ["SIMULATED", "COMPLETED", "FAILED"]},
-    "notificationStatus": {"enum": ["SIMULATED", "COMPLETED", "FAILED"]},
-    "processingOutcome": {"enum": ["APPROVED", "REJECTED"]}
+    "templateId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "templateVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "parserName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "parserVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "ocrEngine": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "extractionStatus": {
+      "enum": [
+        "SUCCESS",
+        "MANUAL_REVIEW",
+        "REJECT_UNSUPPORTED",
+        "TECHNICAL_ERROR"
+      ]
+    },
+    "extractedDataReference": {
+      "$ref": "#/$defs/reference"
+    },
+    "autoContinueEnabled": {
+      "type": "boolean"
+    },
+    "hrisUpdateStatus": {
+      "enum": [
+        "SIMULATED",
+        "COMPLETED",
+        "FAILED"
+      ]
+    },
+    "notificationStatus": {
+      "enum": [
+        "SIMULATED",
+        "COMPLETED",
+        "FAILED"
+      ]
+    },
+    "processingOutcome": {
+      "enum": [
+        "APPROVED",
+        "REJECTED"
+      ]
+    },
+    "documentSourcePath": {
+      "type": "string",
+      "description": "Absolute local path of the source document, taken from the process businessKey."
+    },
+    "ocrStatus": {
+      "type": "string",
+      "description": "OCR read status for image/scanned sources (SUCCESS or SKIPPED)."
+    }
   },
   "$defs": {
     "confidence": {
