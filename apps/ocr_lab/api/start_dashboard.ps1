@@ -111,10 +111,15 @@ if ($apiRunning -and $OcrHoShadowRoot) {
         $apiRunning = $false
     }
 }
-if ($apiRunning -and $BenchmarkReport) {
-    $expectedBenchmarkReport = (Resolve-Path -LiteralPath $BenchmarkReport).Path
+if ($apiRunning -and ($BenchmarkReport -or $ExternalDatasetPolicyV2Report -or $ExternalDatasetPolicyV2Marker)) {
     $commandLine = [string]$apiProcess.CommandLine
-    if ($commandLine.IndexOf($expectedBenchmarkReport, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+    $configuredPathsPresent = $true
+    foreach ($configuredPath in @($BenchmarkReport, $ExternalDatasetPolicyV2Report, $ExternalDatasetPolicyV2Marker)) {
+        if ($configuredPath -and $commandLine.IndexOf((Resolve-Path -LiteralPath $configuredPath).Path, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+            $configuredPathsPresent = $false
+        }
+    }
+    if (-not $configuredPathsPresent) {
         Stop-Process -Id $apiProcess.ProcessId -Force
         Start-Sleep -Milliseconds 500
         $apiRunning = $false
