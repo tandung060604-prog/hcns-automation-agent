@@ -434,6 +434,9 @@ def lock_ground_truth(
     confirm: bool,
     inventory_path: Path | None = None,
     ground_truth_path: Path | None = None,
+    data23_manifest_path: Path | None = None,
+    data23_prediction_lock_path: Path | None = None,
+    data23_ground_truth_lock_path: Path | None = None,
 ) -> dict[str, Any]:
     if confirm is not True:
         raise ValueError("Explicit SEALED confirmation is required")
@@ -450,6 +453,41 @@ def lock_ground_truth(
         if _is_reviewable(inventory_by_id[str(case["caseId"])])
     ):
         raise ValueError("Every document and field must be confirmed before sealing")
+    data23_paths = (
+        data23_manifest_path,
+        data23_prediction_lock_path,
+        data23_ground_truth_lock_path,
+    )
+    if any(path is not None for path in data23_paths) and not all(
+        path is not None for path in data23_paths
+    ):
+        raise ValueError("DATA-23 lock paths must be provided together")
+    data23_lock_path = None
+    data23_manifest_sha = None
+    data23_prediction_sha = None
+    if data23_manifest_path is not None:
+        manifest_file = data23_manifest_path.expanduser().resolve(strict=True)
+        prediction_lock_file = data23_prediction_lock_path.expanduser().resolve(strict=True)
+        data23_lock_path = data23_ground_truth_lock_path.expanduser().resolve()
+        manifest = _load_json(manifest_file)
+        prediction_lock = _load_json(prediction_lock_file)
+        data23_manifest_sha = "sha256:" + hashlib.sha256(
+            json.dumps(
+                manifest,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        if prediction_lock.get("manifestSha256") != data23_manifest_sha:
+            raise ValueError("DATA-23 prediction lock manifest hash does not match")
+        if prediction_lock.get("predictionsOpened") is not False:
+            raise ValueError("DATA-23 prediction lock is already open")
+        if prediction_lock.get("immutable") is not True:
+            raise ValueError("DATA-23 prediction lock is not immutable")
+        data23_prediction_sha = prediction_lock.get("predictionSha256")
+        if not isinstance(data23_prediction_sha, str) or not data23_prediction_sha:
+            raise ValueError("DATA-23 prediction lock is missing prediction hash")
     now = utc_now()
     with _WRITE_LOCK:
         current = _load_json(ground_truth_file)
@@ -472,4 +510,22 @@ def lock_ground_truth(
                 "groundTruthSha256": f"sha256:{_sha256(ground_truth_file)}",
             },
         )
-    return {"locked": True, "groundTruthStatus": "SEALED", "predictionsOpened": False}
+        if data23_lock_path is not None:
+            _write_json_atomic(
+                data23_lock_path,
+                {
+                    "schemaVersion": "data23-ground-truth-lock/1.0.0",
+                    "manifestSha256": data23_manifest_sha,
+                    "predictionSha256": data23_prediction_sha,
+                    "groundTruthSha256": f"sha256:{_sha256(ground_truth_file)}",
+                    "artifactPath": str(ground_truth_file),
+                    "groundTruthStatus": "SEALED",
+                    "reviewStatus": "CONFIRMED",
+                    "predictionsOpened": False,
+                    "immutable": True,
+                },
+            )
+    result = {"locked": True, "groundTruthStatus": "SEALED", "predictionsOpened": False}
+    if data23_ground_truth_lock_path is not None:
+        result["data23GroundTruthLockPath"] = str(data23_ground_truth_lock_path)
+    return result

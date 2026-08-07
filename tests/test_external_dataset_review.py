@@ -181,3 +181,53 @@ def test_save_and_seal_require_every_field(tmp_path: Path) -> None:
     )
     assert result["groundTruthStatus"] == "SEALED"
     assert result["predictionsOpened"] is False
+
+
+def test_data23_seal_writes_prediction_blind_ground_truth_lock(tmp_path: Path) -> None:
+    root, inventory, ground_truth = build_dataset(tmp_path)
+    manifest = root.parent / "HELDOUT_MANIFEST.json"
+    prediction_artifact = root.parent / "PREDICTION.json"
+    prediction_lock = root.parent / "PREDICTION_LOCK.json"
+    data23_lock = root.parent / "GROUND_TRUTH_LOCK.json"
+    manifest_payload = {"cases": json.loads(inventory.read_text(encoding="utf-8"))["cases"]}
+    manifest.write_text(json.dumps(manifest_payload), encoding="utf-8")
+    prediction_artifact.write_text("prediction", encoding="utf-8")
+    manifest_sha = "sha256:" + __import__("hashlib").sha256(
+        json.dumps(manifest_payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    prediction_lock.write_text(
+        json.dumps(
+            {
+                "manifestSha256": manifest_sha,
+                "predictionSha256": "sha256:" + __import__("hashlib").sha256(
+                    prediction_artifact.read_bytes()
+                ).hexdigest(),
+                "predictionsOpened": False,
+                "immutable": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+    for category, index in (("cv", 1), ("contract", 2), ("ielts", 3)):
+        save_review(
+            root,
+            f"{category}-{index:03d}",
+            {"fields": all_fields(category)},
+            inventory_path=inventory,
+            ground_truth_path=ground_truth,
+        )
+
+    result = lock_ground_truth(
+        root,
+        confirm=True,
+        inventory_path=inventory,
+        ground_truth_path=ground_truth,
+        data23_manifest_path=manifest,
+        data23_prediction_lock_path=prediction_lock,
+        data23_ground_truth_lock_path=data23_lock,
+    )
+    lock = json.loads(data23_lock.read_text(encoding="utf-8"))
+    assert result["data23GroundTruthLockPath"] == str(data23_lock)
+    assert lock["groundTruthStatus"] == "SEALED"
+    assert lock["reviewStatus"] == "CONFIRMED"
+    assert lock["predictionsOpened"] is False

@@ -1445,6 +1445,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
     external_dataset_root: Path | None
     external_dataset_inventory: Path | None
     external_dataset_ground_truth: Path | None
+    external_dataset_data23_manifest: Path | None
+    external_dataset_data23_prediction_lock: Path | None
+    external_dataset_data23_ground_truth_lock: Path | None
     external_dataset_typed_projection: Path | None
     external_dataset_typed_approval: Path | None
     external_dataset_typed_report: Path | None
@@ -1747,6 +1750,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         confirm=payload.get("confirm") is True,
                         inventory_path=self.external_dataset_inventory,
                         ground_truth_path=self.external_dataset_ground_truth,
+                        data23_manifest_path=self.external_dataset_data23_manifest,
+                        data23_prediction_lock_path=self.external_dataset_data23_prediction_lock,
+                        data23_ground_truth_lock_path=self.external_dataset_data23_ground_truth_lock,
                     )
                 )
             except PermissionError as exc:
@@ -3595,6 +3601,21 @@ def parse_args() -> argparse.Namespace:
         help="Private local Ground Truth draft JSON for the external dataset.",
     )
     parser.add_argument(
+        "--external-dataset-data23-manifest",
+        type=Path,
+        help="Private DATA-23 held-out manifest used when sealing the review UI.",
+    )
+    parser.add_argument(
+        "--external-dataset-data23-prediction-lock",
+        type=Path,
+        help="Private DATA-23 prediction lock used when sealing the review UI.",
+    )
+    parser.add_argument(
+        "--external-dataset-data23-ground-truth-lock",
+        type=Path,
+        help="Private DATA-23 GroundTruth lock to create after blind review.",
+    )
+    parser.add_argument(
         "--external-dataset-typed-projection",
         type=Path,
         help="Private DATA-09 typed canonical projection JSON.",
@@ -3685,6 +3706,21 @@ def main() -> int:
     DashboardHandler.external_dataset_ground_truth = (
         args.external_dataset_ground_truth.expanduser().resolve()
         if args.external_dataset_ground_truth is not None
+        else None
+    )
+    DashboardHandler.external_dataset_data23_manifest = (
+        args.external_dataset_data23_manifest.expanduser().resolve()
+        if args.external_dataset_data23_manifest is not None
+        else None
+    )
+    DashboardHandler.external_dataset_data23_prediction_lock = (
+        args.external_dataset_data23_prediction_lock.expanduser().resolve()
+        if args.external_dataset_data23_prediction_lock is not None
+        else None
+    )
+    DashboardHandler.external_dataset_data23_ground_truth_lock = (
+        args.external_dataset_data23_ground_truth_lock.expanduser().resolve()
+        if args.external_dataset_data23_ground_truth_lock is not None
         else None
     )
     DashboardHandler.external_dataset_typed_projection = (
