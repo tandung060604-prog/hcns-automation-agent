@@ -272,7 +272,13 @@ def test_data20_gate_harness_is_deterministic_and_requires_fallback_ten_points()
             "job_title", "workplace", "weekly_hours", "probation_salary_monthly",
             "allowances_summary", "salary_payment_schedule",
         ),
-        "ielts": ("recipient_name", "credential_id", "credential_type", "overall_score", "issue_date"),
+        "ielts": (
+            "recipient_name",
+            "credential_id",
+            "credential_type",
+            "overall_score",
+            "issue_date",
+        ),
     }
     ground_truth = {"cases": [{
         "caseId": f"{category}-001",

@@ -12,8 +12,9 @@ import platform
 import sys
 import time
 import tracemalloc
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 API = ROOT / "apps" / "ocr_lab" / "api"
@@ -198,7 +199,9 @@ def _empty_fields(category: str) -> dict[str, dict[str, Any]]:
     }
 
 
-def _extract_fields(category: str, markdown_pages: list[str]) -> tuple[str, dict[str, dict[str, Any]]]:
+def _extract_fields(
+    category: str, markdown_pages: list[str]
+) -> tuple[str, dict[str, dict[str, Any]]]:
     canonical = _markdown_canonical(markdown_pages)
     classification = classify_phase15_document(canonical)
     extraction = extract_phase15_document(canonical, classification)

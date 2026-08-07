@@ -81,7 +81,10 @@ def main() -> int:
         raise SystemExit("Seal metadata does not match GroundTruth")
     if prediction.get("datasetId") != dataset.get("datasetId"):
         raise SystemExit("Prediction datasetId does not match GroundTruth")
-    if baseline_prediction is not None and baseline_prediction.get("datasetId") != dataset.get("datasetId"):
+    if (
+        baseline_prediction is not None
+        and baseline_prediction.get("datasetId") != dataset.get("datasetId")
+    ):
         raise SystemExit("Baseline prediction datasetId does not match GroundTruth")
     if baseline_report is not None and baseline_report.get("datasetId") != dataset.get("datasetId"):
         raise SystemExit("Baseline report datasetId does not match GroundTruth")
