@@ -48,6 +48,12 @@ def main() -> int:
     parser.add_argument("--gate-output", type=Path)
     parser.add_argument("--gate-marker", type=Path)
     parser.add_argument("--fallback-candidate", action="store_true")
+    parser.add_argument(
+        "--matching-policy-version",
+        choices=("1.0.0", "2.0.0"),
+        default="1.0.0",
+        help="Versioned field matching policy for this development report.",
+    )
     args = parser.parse_args()
 
     if args.output.exists() or args.marker.exists():
@@ -90,7 +96,10 @@ def main() -> int:
         raise SystemExit("Baseline report datasetId does not match GroundTruth")
 
     report = build_aggregate_report(
-        prediction, ground_truth, baseline_prediction=baseline_prediction
+        prediction,
+        ground_truth,
+        baseline_prediction=baseline_prediction,
+        policy_version=args.matching_policy_version,
     )
     report.update(
         {
@@ -127,7 +136,11 @@ def main() -> int:
     )
     if args.gate_output is not None and args.gate_marker is not None:
         baseline_gate_report = (
-            build_aggregate_report(baseline_prediction, ground_truth)
+            build_aggregate_report(
+                baseline_prediction,
+                ground_truth,
+                policy_version=args.matching_policy_version,
+            )
             if baseline_prediction is not None
             else baseline_report
         )

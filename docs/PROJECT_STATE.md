@@ -1,134 +1,45 @@
 # Project State
-Latest DATA-25 checkpoint (2026-08-07): matching policy v2 is implemented in
-the comparator and exposed as a separate local policy-audit view. Synthetic
-regression and the targeted Python suite pass. The private post-hoc audit is
-`C:\\tmp\\data25-policy-v2-audit-20260807\\policy_v2_audit.json` with lock
-`C:\\tmp\\data25-policy-v2-audit-20260807\\POLICY_V2_AUDIT_LOCK.json`.
-It reports canonical `144/265` (54.34%), accepted `155/265` (58.49%),
-Contract `52/140`, CV `73/100`, IELTS `19/25`; decision remains `HOLD` and
-`promotionAllowed=false`. DATA-24 output/marker and GroundTruth remain
-immutable; no evaluate-once was rerun. Next READY task is DATA-26 parser
-recovery on development only; a fresh held-out is required for DATA-27.
 
-Latest checkpoint (2026-08-07): DATA-24 held-out evaluate-once ran exactly once
-after the prediction-blind DATA-23 lock passed. The private aggregate decision is
-`HOLD`; promotion remains disabled. Report/marker:
-`C:\\tmp\\data24-heldout-20260807\\evaluate_once.json` and
-`C:\\tmp\\data24-heldout-20260807\\EVALUATE_ONCE_LOCK.json`.
+## Current checkpoint (2026-08-07)
 
-DATA-24 aggregate gates: strict `99/265` overall (`37.36%`), Contract `52/140`,
-CV `33/100`, IELTS `14/25`; accepted text `136/265`; applicable completeness
-`173/255`; classification `25/25`; schema errors `0`; sensitive false acceptance
-`0`; parser-correct regression `0`; scan manual review `7/7`; false auto-continue
-`0`. The report contains no raw field values and `promotionAllowed=false`.
+Current milestone: `DATA-26-PARSER-RECOVERY` is implemented on the sealed
+development split and remains `DONE / DEV HOLD` because the CV strict family
+gate is not met. No DATA-24 rerun or held-out tuning is allowed.
 
-Current milestone: OCR-HO-V2-018F CCCD recognizer/token attribution checkpoint 2026-08-07; `DATA-20` DONE / HOLD
-Documentation profile: Standard (`PROJECT_STATE.md`, `BACKLOG.md`, `HANDOFF.md`)
-Checkpoint task: `OCR-HO-V2-018F` recognizer/token evidence attributed; no selector, replay or patch authorized.
 Repository:
-- Branch: `codex/data-18-cv-scan-recovery`
-- HEAD: `6883d68`; unrelated OCR-HO WIP preserved.
-Evidence summary:
-- DATA-19 fresh aggregate: strict `90/112`, semantic `92/112`, accepted `105/112`;
-  Contract `40/42` strict / `42/42` semantic, CV `30/50` strict/`45/50` accepted,
-  IELTS `20/20`, classification `12/12`, schema `0`.
-- Party extraction is bounded to `Bên A`/`Bên B`; fallback strips person prefix/role suffix
-  while preserving source characters. Scan remains `MANUAL_REVIEW`-only: 5/5, false auto `0`.
-- GroundTruth and old evaluate-once are unchanged; all reports/predictions remain private.
-- DATA-20 gate aggregate v4: strict `90/112`, semantic `92/112`, applicable completeness
-  `99/99`, sensitive false acceptance `0`, parser-correct regressions `0`, schema `0`,
-  classification `12/12`, scan strict `27/30`, scan manual-review `5/5`; strict CV family
-  gate and fallback scan `+10pp` gate remain HOLD. Gate report is private and aggregate-only.
-- DATA-20 artifacts: `C:\tmp\bo10-dev-aggregate-data20-regression-gates-v4.json`,
-  `C:\tmp\bo10-dev-data20-gate-report-v4.json` and their markers; evaluate-once untouched.
-## DATA-21 - PaddleOCR-VL local benchmark (DONE / HOLD)
-- The private runner and synthetic coverage are implemented. The public pin
-  `PaddleOCR-VL-1.6` resolves in PaddleOCR 3.7 to runtime model
-  `PaddleOCR-VL-1.6-0.9B`; model/package/runtime hashes are recorded privately.
-- CPU-first initialization downloaded the 1.93 GB model tree but exceeded the
-  local initialization budget before the first scan completed. This is a runtime
-  HOLD, not a quality PASS; no fallback or promotion was enabled.
-- Private aggregate-only report/marker:
-  `C:\tmp\bo10-data21-paddleocr-vl-benchmark-report-v5.json` and
-  `C:\tmp\bo10-data21-paddleocr-vl.marker-v5.json` (`processedCount=0`,
-  `failureRate=1.0`, `promotionAllowed=false`, `evaluateOnceArtifactTouched=false`).
-  Raw model/runtime cache remains outside Git.
-- Approved rerun used a 600-second CPU window with the same private cache. GPU was
-  unavailable because the installed Paddle wheel is CPU-only; the native worker
-  exited `1` after weight load before pipeline initialization. Rerun report/marker:
-  `C:\tmp\bo10-data21-paddleocr-vl-benchmark-report-v8.json` and
-  `C:\tmp\bo10-data21-paddleocr-vl.marker-v8.json`; quality metrics remain `null`.
-- DATA-22 is now `PASS` on the refreshed private split: 30 Contract + 30 CV +
-  10 IELTS development and 10 Contract + 10 CV + 5 IELTS held-out. The
-  supplement added 5 Contract and 6 CV files; 4 Contract and 5 CV unique files
-  replaced the nine history-overlapping development candidates. One extra file
-  per family remains unassigned and is not counted. Report:
-  `C:\\tmp\\data22-split-report-20260807-r3.json`.
-- DATA-23 remains blocked pending explicit approval to create prediction-blind
-  locks; no held-out prediction, GroundTruth lock or evaluate-once was opened.
+- Branch: `codex/data26-parser-recovery`
+- HEAD: `efe8799` (DATA-25 implementation parent; update at commit checkpoint)
+- Working tree changes are limited to DATA-26 code, tests and factual state docs.
 
-OCR-HO-V2-017C artifact: `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017c-20260807\CCCD_OCR_HO_V2_017C_DER_ATTRIBUTION.json`;
-scope is 15 documents / 45 target fields, `containsRawPII=false`, prediction remains sealed.
-Canonical target classes: ROI `18`, recognizer `8`, parser `6`, selector `4`, diacritic `2`.
-Profile oracle DER: VietOCR transformer `10.96%`, seq2seq `12.28%`; selected target DER `17.54%`.
-Decision: 018B authorizationStatus=VALID_FOR_DEVELOPMENT_REPLAY; scope is 15/120 development-only.
-Quality improvement is unproven; patch/replay remain denied.
-Next action: review/run the authorized development replay; do not open held-out/evaluate-once.
-Next READY task: `OCR-HO-V2-018G`; owner review is required before any selector counterfactual; keep primary runtime/held-out/evaluate-once closed.
-Validation: 018B tests `3 passed`; Ruff, py_compile, artifact invariants, `git diff --check`, and
-`scripts/validate_longrun_state.py` passed. Full-file Ruff retains baseline findings outside DATA-20.
-Archive: `docs/archive/PROJECT_STATE_HISTORY_2026-08-06.md` preserves prior evidence.
-## DATA-22..DATA-24 - revised corpus gate (2026-08-07)
+DATA-26 changes are conservative: CV glued header boundary recovery, geometry
+inference for a narrow full-width section heading, duration normalization, and
+the development aggregate matching-policy selector. Schema, API, policy v2,
+GroundTruth access rules and scan `MANUAL_REVIEW` policy are unchanged.
 
-- Private user-supplied inventories are available outside Git:
-  `C:\tmp\data22-user-contract-cv-20260807-inventory.json` (28 Contract,
-  30 CV) and `C:\tmp\data22-user-ielts-20260807-inventory.json` (15 IELTS
-  images). The IELTS gate is now 10 development + 5 held-out; DATA-17's
-  historical IELTS `20/20` remains unchanged.
-- DATA-22 split policy and validators are implemented, with scans fixed to
-  `MANUAL_REVIEW` and masked fields represented as absent (`null`) for scoring.
-  The refreshed private candidate is `PASS`; all source SHA-256, lineage,
-  rights and retention checks pass. Development inventory:
-  `C:\\tmp\\data22-development-20260807-inventory-r3.json`; held-out inventory:
-  `C:\\tmp\\data22-heldout-20260807-inventory.json`; policy:
-  `C:\\tmp\\data22-policy-20260807-r3.json`.
-- DATA-23 is `IN_PROGRESS`: the 25-document prediction-blind manifest and
-  `PREDICTION_LOCK.json` are sealed privately with `predictionsOpened=false`;
-  no metrics were computed. An independent reviewer must create and confirm
-  the GroundTruth lock before DATA-23 can become `PASS`.
-- Local review UI is running at `http://localhost:3000` with loopback API
-  `http://127.0.0.1:8765`; it is wired only to the private held-out source and
-  `GROUND_TRUTH_DRAFT.json`, never to prediction fields.
-- DATA-24 create-only evaluator and DATA-23 lock validation remain implemented
-  with synthetic regression coverage; evaluate-once artifacts are untouched.
+Private hybrid replay artifacts (outside Git):
+- Prediction: `C:\\tmp\\bo10-dev-predictions-data26-parser-recovery-hybrid-v2-20260807.json`
+- Aggregate: `C:\\tmp\\bo10-dev-aggregate-data26-parser-recovery-hybrid-v2-20260807.json`
+- Gate: `C:\\tmp\\bo10-data26-gate-20260807.json`
 
-## OCR-HO-V2-015/015A - 016A-R1/016B (DONE / HOLD)
-- Sealed 15/120 diagnostics remain shadow-only: detector misses `0`, boundary
-  misses fullName `7/15`, origin `6/15`, residence `13/15`; snapshot drift persists.
-- 016A/016B parser-only candidates preserve manual review but remain below gates:
-  AUTO exact `60.00%`, DER `14.62%`, presence `95.83%`, one exact regression;
-  oracle ROI is `100%` but does not authorize promotion or held-out evaluation.
-- Detailed replay artifacts remain in the private archive; no primary runtime or
-  GroundTruth/evaluate-once artifact was changed.
-## OCR-HO-V2-017D..017J - selector, ROI and profile review (DONE / HOLD)
-- 017D worsened DER; 017E/017F made no switch; 017H had no global 50% boundary cause; 017I/017J kept HOLD.
-## OCR-HO-V2-017K..017M - line/token cohort evidence (DONE / HOLD)
-- 017K recognizer disagreement `291/630`; 017M separated AUTO_REGION_MISS line IDs from AUTO_REGION_HIT recognizer errors.
-## OCR-HO-V2-017N..017P - residence boundary evidence (DONE / HOLD)
-- Global bottom boundary `8/18`; residence `3/5`; geometry cases share one band, overflow `2/3`, line-ID overlap `0`.
-## OCR-HO-V2-017Q - minimal boundary-rule review (DONE / HOLD)
-- Artifact: `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017q-20260807\CCCD_OCR_HO_V2_017Q_RESIDENCE_GEOMETRY_MINIMAL_BOUNDARY_RULE_REVIEW.json`; aggregate-only, sealed.
-- Candidate: bottom-only extension capped at `15` pixels, preserve `maxValueLines=2`, no line-ID remap; `patchAuthorized=false`, `replayAuthorized=false`.
-- Gates HOLD, schema/sensitive/accepted `0`, manual review; Next READY: `OCR-HO-V2-017R`.
-## OCR-HO-V2-017R - patch-gated review (DONE / HOLD)
-- Artifact: `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017r-20260807\CCCD_OCR_HO_V2_017R_RESIDENCE_GEOMETRY_PATCH_GATED_REVIEW.json`; bounded rule PASS, line-ID evidence HOLD; patch/replay denied.
-## OCR-HO-V2-017S - independent line-ID mapping evidence (DONE / HOLD)
-- Artifact: `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017s-20260807\CCCD_OCR_HO_V2_017S_INDEPENDENT_LINE_ID_MAPPING_EVIDENCE.json`; source `15/15`, overlap `61/61`; diagnostic-only, patch/replay denied.
-## OCR-HO-V2-017T - patch-gate reconciliation (DONE / HOLD)
-- Artifact: `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017t-20260807\CCCD_OCR_HO_V2_017T_PATCH_GATE_RECONCILIATION.json`; rule/evidence PASS, quality unproven; explicit approval required.
-## OCR-HO-V2-017U - explicit patch authorization review (DONE / HOLD)
-- Artifact: `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017u-20260807\CCCD_OCR_HO_V2_017U_EXPLICIT_PATCH_AUTHORIZATION_REVIEW.json`; authorization record missing; patch/replay denied; Next READY: `OCR-HO-V2-017V`.
-## OCR-HO-V2-017V - authorization-record intake (DONE / HOLD)
-- Artifact: `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017v-20260807\CCCD_OCR_HO_V2_017V_AUTHORIZATION_INTAKE.json`; status `VALID_FOR_PATCH_REVIEW`; patch/replay denied.
-- 017W surface `PASS`; 017X held guard placement; 017Y resolved insertion; Next READY: `OCR-HO-V2-017Z`.
-## OCR-HO-V2-018F - recognizer/token attribution (DONE / HOLD): artifact `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018f-20260807\CCCD_OCR_HO_V2_018F_RECOGNIZER_TOKEN_ATTRIBUTION.json`; AUTO_REGION_HIT recognizer disagreement `291/375 = 77.6%`, token mismatch `11`, line-order mismatch `72`; no selector, replay or patch; Next READY: `OCR-HO-V2-018G` owner review.
+Development aggregate: strict `101/112` (90.18%), accepted `111/112`, Contract
+`42/42`, CV `39/50` (78%), IELTS `20/20`, applicable completeness `99/99`,
+classification `12/12`, schema errors `0`, sensitive false acceptance `0`,
+parser regression `0`, scan manual review `5/5`, false auto-continue `0`.
+The only failed gate is CV strict; one scan experience field remains OCR
+truncated. Accepted text does not replace strict EM, and no fallback/promotion
+is eligible.
+
+DATA-25 policy-v2 post-hoc audit remains non-promotional (`144/265` canonical,
+`155/265` accepted). DATA-24 evaluate-once and GroundTruth remain immutable;
+DATA-23 locks and the 10+5 IELTS split remain unchanged. DATA-27 is blocked
+until a fresh held-out split is supplied and separately approved.
+
+Validation: targeted Python `23 passed`, targeted Ruff passed, `py_compile` and
+`git diff --check` passed; web `npm test` (13) and `npm run build` passed.
+
+Next action: investigate the local OCR path for the remaining CV scan section
+without using GroundTruth or changing the comparator. The unrelated global
+task remains in `BACKLOG.md`.
+Next READY task: `OCR-HO-V2-017B`.
+
+Archive: `docs/archive/PROJECT_STATE_HISTORY_2026-08-06.md`.

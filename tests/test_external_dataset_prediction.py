@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from apps.ocr_lab.api.external_dataset_prediction import (
+    _cv_header_fields,
     _external_fields,
     _field,
     _field_match,
@@ -402,6 +403,13 @@ def test_family_mapping_keeps_multiline_cv_and_contract_evidence() -> None:
     assert contract_fields["effective_date"]["normalizedValue"] == "05/02/2026"
 
 
+def test_cv_header_splits_glued_uppercase_name_from_title() -> None:
+    canonical = _canonical(["SYNTHETIC USERData Analyst"])
+    name, headline = _cv_header_fields(canonical)
+    assert name["value"] == "SYNTHETIC USER"
+    assert headline["value"] == "Data Analyst"
+
+
 def test_contract_party_normalization_does_not_cross_party_boundary() -> None:
     contract = _canonical(
         [
@@ -461,6 +469,23 @@ def test_cv_ocr_sections_follow_geometry_not_engine_order() -> None:
     assert fields["experience"]["value"] == "Công ty Synthetic Chuyên viên nhân sự"
     assert fields["skills"]["value"] == "Python, SQL"
     assert fields["education"]["status"] == "needs_review"
+
+
+def test_cv_ocr_section_infers_full_width_heading_from_body_geometry() -> None:
+    canonical = _positioned_ocr_canonical(
+        [
+            ("KINH NGHIỆM LÀM VIỆC", 10, 0, 120),
+            ("Công ty Synthetic", 10, 40, 220),
+            ("Backend Engineer", 500, 40, 180),
+            ("KỸ NĂNG", 10, 100, 120),
+            ("Python", 10, 140, 100),
+        ]
+    )
+    classification = classify_phase15_document(canonical)
+    extraction = extract_phase15_document(canonical, classification)
+    fields = _external_fields("cv", canonical, extraction, ocr=True)
+
+    assert fields["experience"]["value"] == "Công ty Synthetic Backend Engineer"
 
 
 def test_data13_all_active_families_are_scored_when_prediction_includes_visual_cv() -> None:
@@ -630,6 +655,7 @@ def test_policy_v2_canonicalizes_case_layout_dates_duration_and_scores() -> None
         ("cv", "full_name", "Vũ Tú Anh", "VŨ TÚ ANH", "CANONICAL_EXACT"),
         ("cv", "education", "Đại học; Kinh tế", "ĐẠI HỌC - KINH TẾ", "CANONICAL_EXACT"),
         ("cv", "years_experience", "2 năm", "2 năm kinh nghiệm", "CANONICAL_EXACT"),
+        ("cv", "years_experience", "Hơn 6 năm", "hơn 6 năm", "CANONICAL_EXACT"),
         ("ielts", "issue_date", "06/06/2024", "2024-06-06", "CANONICAL_EXACT"),
         ("ielts", "overall_score", "6.5", "6.50", "CANONICAL_EXACT"),
     )
@@ -660,6 +686,7 @@ def test_policy_v2_keeps_overextraction_partial_and_sensitive_values_strict() ->
         ("cv", "full_name", "Vũ Tú Anh", "Vũ Tú"),
         ("contract", "probation_salary_monthly", "12000000 đồng/tháng", "12000000"),
         ("ielts", "issue_date", "06/06/2024", "06/07/2024"),
+        ("cv", "years_experience", "Hơn 6 năm", "6 năm"),
     ):
         result = _field_match(category, name, truth, guess, policy_version="2.0.0")
         assert result["exact"] is False

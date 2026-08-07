@@ -1,5 +1,29 @@
 # Handoff
 
+## DATA-26 checkpoint (2026-08-07)
+
+- Branch: `codex/data26-parser-recovery`; DATA-26 code and synthetic tests are
+  implemented. Changes are limited to CV geometry/header recovery, duration
+  canonicalization and the development aggregate policy selector.
+- HEAD: `efe8799aa7ecb96e51389bbe04004032dbde797e` (DATA-25 implementation parent; update at commit checkpoint).
+- Fresh private hybrid replay aggregate: strict `101/112`, accepted `111/112`;
+  Contract `42/42`, CV `39/50`, IELTS `20/20`; completeness `99/99`,
+  classification `12/12`, schema `0`, sensitive false acceptance `0`, parser
+  regression `0`, scan manual review `5/5`. DATA-20 gate is `HOLD` because
+  CV strict is `78%`; the remaining miss is OCR truncation in one scan section.
+- Private artifacts: `C:\\tmp\\bo10-dev-predictions-data26-parser-recovery-hybrid-v2-20260807.json`,
+  `C:\\tmp\\bo10-dev-aggregate-data26-parser-recovery-hybrid-v2-20260807.json`,
+  and `C:\\tmp\\bo10-data26-gate-20260807.json`. They contain raw/private
+  values and remain outside Git.
+- Validation: targeted Python tests `23 passed`, targeted Ruff passed,
+  `py_compile` and `git diff --check` passed; web `npm test` passed (13) and
+  `npm run build` passed. Do not tune against DATA-24 held-out artifacts.
+- Next action is a separate local OCR recovery investigation for the one
+  truncated CV scan field; DATA-27 remains blocked pending a fresh held-out
+  split and independent approval. No DATA-24 rerun is authorized.
+- Next READY task: `OCR-HO-V2-017B` remains the unrelated global backlog task;
+  DATA-27 is blocked until the DATA-26 CV gate is resolved.
+
 ## DATA-25 checkpoint (2026-08-07)
 
 - Branch: `codex/data25-matching-policy-v2` at the implementation checkpoint.

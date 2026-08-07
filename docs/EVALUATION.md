@@ -94,6 +94,19 @@ rerun or promotion candidate: `evaluationKind=posthoc-policy-audit`,
 its locks remain immutable. A future official result must use a fresh
 prediction-blind held-out split after parser recovery.
 
+### DATA-26 parser recovery
+
+DATA-26 is a development-only parser candidate. It keeps policy v2 strict
+matching, separates accepted text, preserves `MANUAL_REVIEW` for every scan,
+and does not read GroundTruth in runtime extraction. The private hybrid replay
+reports strict `101/112` overall, Contract `42/42`, CV `39/50`, IELTS `20/20`,
+accepted `111/112`, applicable completeness `99/99`, classification `12/12`,
+schema errors `0`, sensitive false acceptance `0`, parser regression `0`, and
+scan manual review `5/5`. The development gate is `HOLD` because CV strict is
+78%; one scan experience section remains OCR-truncated. This is not an
+evaluate-once result and does not authorize fallback, promotion or a DATA-27
+held-out run.
+
 ## Metrics
 
 - OCR: CER, WER, reading-order accuracy.

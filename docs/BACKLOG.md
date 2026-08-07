@@ -105,7 +105,7 @@
 | DATA-23-PREDICTION-BLIND-HELDOUT-SEAL | DONE / PASS | 25-document prediction-blind manifest, prediction lock and independent GroundTruth lock validated immutable with predictionsOpened=false | DATA-22-CORPUS-EXPANSION | P0 |
 | DATA-24-HELDOUT-EVALUATE-ONCE | DONE / HOLD | Create-only held-out evaluation executed exactly once; strict/completeness gates failed, promotion remains disabled | DATA-23-PREDICTION-BLIND-HELDOUT-SEAL | P0 |
 | DATA-25-MATCHING-POLICY-V2 | DONE / HOLD | Canonical scoring for case/layout, dates, durations and decimal scores; separate non-promotional post-hoc audit; DATA-24 remains immutable | DATA-24-HELDOUT-EVALUATE-ONCE | P0 |
-| DATA-26-PARSER-RECOVERY | PLANNED | Recover genuine CV/Contract/IELTS extraction misses on development without relaxing matching policy or scan safety | DATA-25-MATCHING-POLICY-V2 | P0 |
+| DATA-26-PARSER-RECOVERY | DONE / DEV HOLD | Implemented conservative CV geometry/header recovery and duration normalization; development gate is HOLD at CV 39/50 strict because one scan section remains OCR-truncated | DATA-25-MATCHING-POLICY-V2 | P0 |
 | DATA-27-FRESH-HELDOUT-V2 | BLOCKED | Create a new prediction-blind held-out split and run one approved v2 evaluate-once | DATA-26-PARSER-RECOVERY | P0 |
 
 ## DATA-00..DATA-05 acceptance criteria

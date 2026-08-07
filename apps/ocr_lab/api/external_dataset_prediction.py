@@ -360,6 +360,26 @@ def _cv_name_candidate(value: str) -> bool:
     )
 
 
+def _split_cv_header_text(text: str) -> tuple[str, str] | None:
+    """Split a glued uppercase name from a title without a name lexicon."""
+
+    for index in range(len(text) - 2, 0, -1):
+        prefix = text[:index].strip()
+        suffix = text[index:].strip()
+        if (
+            not text[index - 1].isspace()
+            and not text[index].isspace()
+            and prefix
+            and suffix
+            and suffix[0].isupper()
+            and len(suffix) > 1
+            and suffix[1].islower()
+            and _cv_name_candidate(prefix)
+        ):
+            return prefix, suffix
+    return None
+
+
 def _cv_header_fields(canonical: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     blocks = _canonical_blocks(canonical)
     empty = _field(None, method="cv_header_layout", block=None, review=False)
@@ -368,6 +388,9 @@ def _cv_header_fields(canonical: dict[str, Any]) -> tuple[dict[str, Any], dict[s
         if not text or "@" in text or "|" in text:
             continue
         parts = re.split(r"(?<=[a-zà-ỹ])(?=[A-ZĐ])", text, maxsplit=1)
+        glued = _split_cv_header_text(text)
+        if glued is not None:
+            parts = list(glued)
         if len(parts) == 2 and _cv_name_candidate(parts[0].strip()):
             name = _field(parts[0].strip(), method="cv_header_name", block=block, review=False)
             headline = _field(parts[1].strip(), method="cv_header_headline", block=block, review=False)
@@ -603,6 +626,14 @@ def _cv_ocr_section(
                 and box[1] >= hy1 - 4
                 and (next_heading_y is None or box[1] < next_heading_y)
             ]
+            if (
+                not heading_full_width
+                and not nearby_headings
+                and hx0 <= page_width * 0.15
+                and max((box[2] for box in section_boxes), default=0.0)
+                >= page_width * 0.75
+            ):
+                heading_full_width = True
             left_bound, right_bound = _cv_section_bounds(
                 heading_box,
                 heading_full_width,
@@ -1680,14 +1711,20 @@ def _date_key(value: Any) -> str | None:
     return None
 
 
-def _duration_key(value: Any) -> tuple[str, str] | None:
+def _duration_key(value: Any) -> tuple[str, str, str] | None:
     text = _norm(value).casefold()
-    match = re.fullmatch(r"(\d+(?:[.,]\d+)?)\s*(năm|nam|year|years)(?:\s+kinh\s+nghiệm)?", text)
+    match = re.fullmatch(
+        r"(?:(hơn|trên|ít\s+nhất)\s+)?"
+        r"(\d+(?:[.,]\d+)?)\s*(năm|nam|year|years)"
+        r"(?:\s+kinh\s+nghiệm)?",
+        text,
+    )
     if match is None:
         return None
-    amount = match.group(1).replace(",", ".")
-    unit = "năm" if match.group(2) in {"năm", "nam"} else "year"
-    return amount, unit
+    qualifier = re.sub(r"\s+", " ", match.group(1) or "").strip()
+    amount = match.group(2).replace(",", ".")
+    unit = "năm" if match.group(3) in {"năm", "nam"} else "year"
+    return qualifier, amount, unit
 
 
 def _decimal_key(value: Any) -> Decimal | None:
