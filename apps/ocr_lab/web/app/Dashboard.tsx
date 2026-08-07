@@ -1962,7 +1962,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     groundTruthReviewDocument?.disposition === "OUT_OF_SCOPE_BACK";
   const [evidenceMode, setEvidenceMode] =
     useState<"overview" | "heldout" | "templates" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "external-dataset-policy-v2" | "ocr-ho-v2-shadow" | "ocr-ho-v2-diagnostic">(
-      // Legacy default: SHOW_HELDOUT ? "heldout" : "templates"
       SHOW_OCR_HO_DIAGNOSTIC_GT
         ? "ocr-ho-v2-diagnostic"
         : SHOW_OCR_HO_SHADOW_UAT
