@@ -73,6 +73,9 @@ Archive: `docs/archive/PROJECT_STATE_HISTORY_2026-08-06.md` preserves prior evid
   `PREDICTION_LOCK.json` are sealed privately with `predictionsOpened=false`;
   no metrics were computed. An independent reviewer must create and confirm
   the GroundTruth lock before DATA-23 can become `PASS`.
+- Local review UI is running at `http://localhost:3000` with loopback API
+  `http://127.0.0.1:8765`; it is wired only to the private held-out source and
+  `GROUND_TRUTH_DRAFT.json`, never to prediction fields.
 - DATA-24 create-only evaluator and DATA-23 lock validation remain implemented
   with synthetic regression coverage; evaluate-once artifacts are untouched.
 

@@ -52,6 +52,9 @@
   private store without prediction access; until then DATA-23 is not PASS.
   DATA-24 evaluate-once remains untouched. Masked fields are recorded as
   absent (`null`) and excluded from applicable completeness.
+- Review UI: open `http://localhost:3000`; it uses loopback API
+  `http://127.0.0.1:8765` and the draft at
+  `C:\\tmp\\data23-heldout-20260807-ground-truth-review\\GROUND_TRUTH_DRAFT.json`.
 - Approved DATA-21 rerun used a 600-second CPU window. GPU could not be used because
   the installed Paddle wheel is CPU-only; native worker exit `1` after weight load
   produced no prediction. Rerun report/marker are
