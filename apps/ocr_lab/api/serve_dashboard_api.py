@@ -1457,6 +1457,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
     external_dataset_predictions_data13: Path | None
     external_dataset_prediction_report_data13: Path | None
     external_dataset_prediction_marker_data13: Path | None
+    external_dataset_policy_v2_report: Path | None
+    external_dataset_policy_v2_marker: Path | None
     native_indexes: dict[str, dict[str, Path]]
     user_ocr: UserOCRService
     template_processor: TemplateProcessingService
@@ -2693,6 +2695,57 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": f"DATA-12 prediction unavailable: {exc}"}, HTTPStatus.NOT_FOUND)
             return
 
+        if parsed.path == "/external-dataset/policy-v2/summary":
+            if self.external_dataset_root is None:
+                self.send_json(
+                    {"error": "DATA-25 policy audit is not configured"}, HTTPStatus.NOT_FOUND
+                )
+                return
+            try:
+                self.send_json(
+                    load_prediction_summary(
+                        resolve_prediction_paths(
+                            self.external_dataset_root,
+                            prediction_path=self.external_dataset_predictions,
+                            report_path=self.external_dataset_policy_v2_report,
+                            evaluation_marker_path=self.external_dataset_policy_v2_marker,
+                        )
+                    )
+                )
+            except (OSError, PredictionArtifactError) as exc:
+                self.send_json(
+                    {"error": f"DATA-25 policy audit unavailable: {exc}"}, HTTPStatus.NOT_FOUND
+                )
+            return
+
+        if parsed.path == "/external-dataset/policy-v2/document":
+            if self.external_dataset_root is None:
+                self.send_json(
+                    {"error": "DATA-25 policy audit is not configured"}, HTTPStatus.NOT_FOUND
+                )
+                return
+            try:
+                self.send_json(
+                    load_prediction_document(
+                        resolve_prediction_paths(
+                            self.external_dataset_root,
+                            prediction_path=self.external_dataset_predictions,
+                            report_path=self.external_dataset_policy_v2_report,
+                            evaluation_marker_path=self.external_dataset_policy_v2_marker,
+                        ),
+                        query.get("id", [""])[0],
+                        self.external_dataset_ground_truth,
+                        policy_version="2.0.0",
+                    )
+                )
+            except FileNotFoundError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+            except (OSError, PredictionArtifactError) as exc:
+                self.send_json(
+                    {"error": f"DATA-25 policy audit unavailable: {exc}"}, HTTPStatus.NOT_FOUND
+                )
+            return
+
         if parsed.path in {
             "/external-dataset/prediction-v13/summary",
             "/external-dataset/prediction-v13/document",
@@ -3660,6 +3713,16 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Private DATA-13 evaluate-once marker JSON.",
     )
+    parser.add_argument(
+        "--external-dataset-policy-v2-report",
+        type=Path,
+        help="Private DATA-25 post-hoc policy v2 report JSON.",
+    )
+    parser.add_argument(
+        "--external-dataset-policy-v2-marker",
+        type=Path,
+        help="Private DATA-25 post-hoc policy v2 marker JSON.",
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     return parser.parse_args()
@@ -3766,6 +3829,16 @@ def main() -> int:
     DashboardHandler.external_dataset_prediction_marker_data13 = (
         args.external_dataset_prediction_marker_data13.expanduser().resolve()
         if args.external_dataset_prediction_marker_data13 is not None
+        else None
+    )
+    DashboardHandler.external_dataset_policy_v2_report = (
+        args.external_dataset_policy_v2_report.expanduser().resolve()
+        if args.external_dataset_policy_v2_report is not None
+        else None
+    )
+    DashboardHandler.external_dataset_policy_v2_marker = (
+        args.external_dataset_policy_v2_marker.expanduser().resolve()
+        if args.external_dataset_policy_v2_marker is not None
         else None
     )
     DashboardHandler.native_indexes = indexes

@@ -75,6 +75,25 @@ Classification is `25/25`, schema errors are `0`, sensitive false acceptance is
 auto-continue is `0`. The report is aggregate-only, promotion remains disabled,
 and no rerun is permitted.
 
+### DATA-25 matching policy v2
+
+Policy v2 is an additive, versioned scoring policy. It keeps NFC/whitespace
+normalization and accents, treats equivalent case/layout token sequences as
+canonical exact, normalizes explicit dates to ISO, removes only the approved
+duration label suffix, and compares certificate decimals numerically. IDs,
+emails, money units/periods and truncated values remain strict. Descriptive
+fields with at least 80% GroundTruth token coverage are reported as accepted
+partial and never promoted to strict exact; extra prediction text is marked
+as over-extraction.
+
+The private post-hoc audit of consumed DATA-24 artifacts reports canonical
+`144/265` and accepted `155/265`; Contract `52/140`, CV `73/100`, IELTS
+`19/25`; completeness remains `173/255` (`67.84%`). This is not an official
+rerun or promotion candidate: `evaluationKind=posthoc-policy-audit`,
+`promotionAllowed=false`, `evaluateOnceArtifactTouched=false`. DATA-24 and
+its locks remain immutable. A future official result must use a fresh
+prediction-blind held-out split after parser recovery.
+
 ## Metrics
 
 - OCR: CER, WER, reading-order accuracy.

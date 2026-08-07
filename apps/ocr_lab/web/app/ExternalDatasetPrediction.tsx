@@ -11,7 +11,7 @@ type Summary = {
   documents: Array<{ caseId: string; category: string; sourceFormat: string; sourceFile: string; evaluationIncluded?: boolean; ocrScope?: string }>;
   report?: RecordValue;
 };
-type Props = { version?: "data12" | "data13" };
+type Props = { version?: "data12" | "data13" | "policy-v2" };
 
 function object(value: unknown): RecordValue {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as RecordValue) : {};
@@ -20,7 +20,9 @@ function object(value: unknown): RecordValue {
 export default function ExternalDatasetPrediction({ version = "data12" }: Props) {
   const endpoint = version === "data13"
     ? "/external-dataset/prediction-v13"
-    : "/external-dataset/prediction";
+    : version === "policy-v2"
+      ? "/external-dataset/policy-v2"
+      : "/external-dataset/prediction";
   const [summary, setSummary] = useState<Summary | null>(null);
   const [activeCase, setActiveCase] = useState("");
   const [detail, setDetail] = useState<RecordValue | null>(null);
@@ -62,6 +64,7 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
 
   return (
     <section className="external-review-panel data12-prediction" data-testid="external-dataset-prediction">
+      {version === "policy-v2" ? <div className="external-review-message">DATA-25 Policy v2 post-hoc audit · DATA-24 official evaluate-once remains immutable</div> : null}
       <div className="external-review-heading">
         <div><span>{version === "data13" ? "DATA-13 · OCR SCOPE" : "DATA-12 · LOCAL-ONLY"}</span><h2>Prediction ↔ Ground Truth</h2></div>
         <strong>{summary?.status ?? "LOADING"}</strong>
@@ -71,6 +74,8 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
       {summary ? (
         <>
           <div className="local-evidence-metrics">
+            {version === "policy-v2" ? <span className="local-evidence-metric"><small>Canonical exact</small><strong>{metrics.fieldExactMatchRate !== undefined ? `${(Number(metrics.fieldExactMatchRate) * 100).toFixed(1)}%` : "—"}</strong></span> : null}
+            {version === "policy-v2" ? <span className="local-evidence-metric"><small>Raw exact</small><strong>{metrics.fieldRawExactMatchRate !== undefined ? `${(Number(metrics.fieldRawExactMatchRate) * 100).toFixed(1)}%` : "—"}</strong></span> : null}
             <span className="local-evidence-metric"><small>Tài liệu</small><strong>{summary.documentCount}</strong></span>
             <span className="local-evidence-metric"><small>Field exact (strict)</small><strong>{metrics.fieldExactMatchRate !== undefined ? `${(Number(metrics.fieldExactMatchRate) * 100).toFixed(1)}%` : "—"}</strong></span>
             <span className="local-evidence-metric"><small>Field accepted (text ≥80%)</small><strong>{metrics.fieldAcceptedMatchRate !== undefined ? `${(Number(metrics.fieldAcceptedMatchRate) * 100).toFixed(1)}%` : "—"}</strong></span>
@@ -121,6 +126,8 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
                   <strong>{String(item.value ?? "—")}</strong>
                   <small>Ground Truth: {String(pair.groundTruth ?? "—")} · Prediction: {String(pair.prediction ?? "—")} · {status}</small>
                   {String(pair.matchType ?? "").startsWith("PARTIAL") && pair.coverage !== undefined ? <small>Text coverage: {`${(Number(pair.coverage) * 100).toFixed(1)}%`}</small> : null}
+                  {version === "policy-v2" && pair.normalizationReason ? <small>Normalization: {String(pair.normalizationReason)}</small> : null}
+                  {version === "policy-v2" && pair.overExtraction === true ? <small>Over-extraction: accepted partial, not exact</small> : null}
                   {pair.diagnosis ? <small>Diagnosis: {String(pair.diagnosis)}</small> : null}
                   {Object.keys(evidence).length > 0 ? <small>Evidence: {JSON.stringify(evidence)}</small> : null}
                 </div>;

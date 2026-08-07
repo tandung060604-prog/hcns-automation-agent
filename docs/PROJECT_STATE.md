@@ -1,4 +1,15 @@
 # Project State
+Latest DATA-25 checkpoint (2026-08-07): matching policy v2 is implemented in
+the comparator and exposed as a separate local policy-audit view. Synthetic
+regression and the targeted Python suite pass. The private post-hoc audit is
+`C:\\tmp\\data25-policy-v2-audit-20260807\\policy_v2_audit.json` with lock
+`C:\\tmp\\data25-policy-v2-audit-20260807\\POLICY_V2_AUDIT_LOCK.json`.
+It reports canonical `144/265` (54.34%), accepted `155/265` (58.49%),
+Contract `52/140`, CV `73/100`, IELTS `19/25`; decision remains `HOLD` and
+`promotionAllowed=false`. DATA-24 output/marker and GroundTruth remain
+immutable; no evaluate-once was rerun. Next READY task is DATA-26 parser
+recovery on development only; a fresh held-out is required for DATA-27.
+
 Latest checkpoint (2026-08-07): DATA-24 held-out evaluate-once ran exactly once
 after the prediction-blind DATA-23 lock passed. The private aggregate decision is
 `HOLD`; promotion remains disabled. Report/marker:

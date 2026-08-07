@@ -11,6 +11,8 @@ param(
     [string]$ExternalDatasetTypedProjection = "",
     [string]$ExternalDatasetTypedApproval = "",
     [string]$ExternalDatasetTypedReport = "",
+    [string]$ExternalDatasetPolicyV2Report = "",
+    [string]$ExternalDatasetPolicyV2Marker = "",
     [string]$PythonPath = "D:\venv_paddle\Scripts\python.exe"
 )
 
@@ -52,6 +54,12 @@ if ($ExternalDatasetTypedApproval -and -not (Test-Path -LiteralPath $ExternalDat
 }
 if ($ExternalDatasetTypedReport -and -not (Test-Path -LiteralPath $ExternalDatasetTypedReport)) {
     throw "External dataset typed report not found: $ExternalDatasetTypedReport"
+}
+if ($ExternalDatasetPolicyV2Report -and -not (Test-Path -LiteralPath $ExternalDatasetPolicyV2Report)) {
+    throw "External dataset policy v2 report not found: $ExternalDatasetPolicyV2Report"
+}
+if ($ExternalDatasetPolicyV2Marker -and -not (Test-Path -LiteralPath $ExternalDatasetPolicyV2Marker)) {
+    throw "External dataset policy v2 marker not found: $ExternalDatasetPolicyV2Marker"
 }
 
 $env:PYTHONPATH = Join-Path $repoRoot "src"
@@ -140,6 +148,12 @@ if (-not $apiRunning) {
     }
     if ($ExternalDatasetTypedReport) {
         $apiArguments += " --external-dataset-typed-report `"$ExternalDatasetTypedReport`""
+    }
+    if ($ExternalDatasetPolicyV2Report) {
+        $apiArguments += " --external-dataset-policy-v2-report `"$ExternalDatasetPolicyV2Report`""
+    }
+    if ($ExternalDatasetPolicyV2Marker) {
+        $apiArguments += " --external-dataset-policy-v2-marker `"$ExternalDatasetPolicyV2Marker`""
     }
     Start-Process `
         -FilePath $PythonPath `

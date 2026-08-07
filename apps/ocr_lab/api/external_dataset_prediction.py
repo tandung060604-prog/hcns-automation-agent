@@ -14,6 +14,7 @@ import unicodedata
 import zipfile
 from collections import Counter
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +61,8 @@ PREDICTION_SCHEMA_VERSION = "external-dataset-predictions/1.0.0"
 DATA13_PREDICTION_SCHEMA_VERSION = "external-dataset-predictions/data13/1.0.0"
 REPORT_SCHEMA_VERSION = "external-dataset-data12-aggregate/1.0.0"
 DATA13_REPORT_SCHEMA_VERSION = "external-dataset-data13-aggregate/1.0.0"
+MATCHING_POLICY_V1 = "1.0.0"
+MATCHING_POLICY_V2 = "2.0.0"
 ACTIVE_CATEGORIES = frozenset(FIELD_SPECS)
 # Long free-text sections may be abbreviated by OCR/layout parsing. Structured
 # identifiers, dates, money and names remain strict to avoid false acceptance.
@@ -83,6 +86,32 @@ SEMANTIC_PERSON_FIELDS = frozenset(
         ("contract", "employer_representative"),
     }
 )
+CANONICAL_TOKEN_FIELDS = frozenset(
+    {
+        ("cv", "full_name"),
+        ("cv", "headline"),
+        ("cv", "desired_role"),
+        ("cv", "experience"),
+        ("cv", "skills"),
+        ("cv", "education"),
+        ("contract", "employee_name"),
+        ("contract", "employer_representative"),
+        ("contract", "employer_name"),
+        ("contract", "job_title"),
+        ("contract", "workplace"),
+        ("ielts", "recipient_name"),
+        ("ielts", "credential_type"),
+    }
+)
+CANONICAL_DATE_FIELDS = frozenset(
+    {
+        ("contract", "contract_sign_date"),
+        ("contract", "effective_date"),
+        ("contract", "probation_end_date"),
+        ("ielts", "issue_date"),
+    }
+)
+CANONICAL_DECIMAL_FIELDS = frozenset({("ielts", "overall_score")})
 
 
 class PredictionArtifactError(ValueError):
@@ -1537,7 +1566,7 @@ def _semantic_key(category: str, name: str, value: Any) -> str:
     return " ".join(normalized.casefold().split())
 
 
-def _field_match(
+def _field_match_v1(
     category: str,
     name: str,
     truth: Any,
@@ -1625,6 +1654,186 @@ def _field_match(
     )
 
 
+def _token_sequence(value: Any) -> list[str]:
+    """Return ordered, case-insensitive tokens while preserving accents."""
+
+    return re.findall(r"[^\W_]+", _norm(value).casefold(), flags=re.UNICODE)
+
+
+def _date_key(value: Any) -> str | None:
+    text = _norm(value)
+    if not text:
+        return None
+    formats = (
+        "%Y-%m-%d",
+        "%d/%m/%Y",
+        "%d-%m-%Y",
+        "%d.%m.%Y",
+        "%d/%b/%Y",
+        "%d %B %Y",
+    )
+    for fmt in formats:
+        try:
+            return datetime.strptime(text, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None
+
+
+def _duration_key(value: Any) -> tuple[str, str] | None:
+    text = _norm(value).casefold()
+    match = re.fullmatch(r"(\d+(?:[.,]\d+)?)\s*(năm|nam|year|years)(?:\s+kinh\s+nghiệm)?", text)
+    if match is None:
+        return None
+    amount = match.group(1).replace(",", ".")
+    unit = "năm" if match.group(2) in {"năm", "nam"} else "year"
+    return amount, unit
+
+
+def _decimal_key(value: Any) -> Decimal | None:
+    text = _norm(value).replace(",", ".")
+    if not text:
+        return None
+    try:
+        return Decimal(text)
+    except InvalidOperation:
+        return None
+
+
+def _canonical_key(category: str, name: str, value: Any) -> tuple[Any, str] | None:
+    field = (category, name)
+    if field in CANONICAL_DATE_FIELDS:
+        key = _date_key(value)
+        return (key, "DATE_FORMAT_ONLY") if key is not None else None
+    if field == ("cv", "years_experience"):
+        key = _duration_key(value)
+        return (key, "DURATION_LABEL_ONLY") if key is not None else None
+    if field in CANONICAL_DECIMAL_FIELDS:
+        key = _decimal_key(value)
+        return (key, "DECIMAL_FORMAT_ONLY") if key is not None else None
+    if field in CANONICAL_TOKEN_FIELDS:
+        normalized = _semantic_key(category, name, value)
+        tokens = _token_sequence(normalized)
+        return (tuple(tokens), "CASE_PUNCTUATION_LAYOUT_ONLY") if tokens else None
+    return None
+
+
+def _field_match_v2(
+    category: str,
+    name: str,
+    truth: Any,
+    guess: Any,
+) -> dict[str, Any]:
+    """Apply the immutable, explicit DATA-25 canonical matching policy."""
+
+    truth_norm, guess_norm = _norm(truth), _norm(guess)
+    truth_semantic = _semantic_key(category, name, truth)
+    guess_semantic = _semantic_key(category, name, guess)
+    semantic_exact = truth_norm == guess_norm or bool(
+        truth_norm
+        and guess_norm
+        and truth_semantic
+        and guess_semantic
+        and truth_semantic == guess_semantic
+    )
+
+    def result(**payload: Any) -> dict[str, Any]:
+        payload["semanticExact"] = semantic_exact
+        payload["rawExact"] = truth_norm == guess_norm
+        payload.setdefault("overExtraction", False)
+        payload.setdefault("predictionTokenPrecision", None)
+        payload.setdefault("groundTruthTokenCoverage", payload.get("coverage", 0.0))
+        return payload
+
+    if not truth_norm:
+        return result(
+            exact=not guess_norm,
+            match=not guess_norm,
+            matchType="EXTRA_PREDICTION" if guess_norm else "RAW_EXACT",
+            coverage=0.0,
+            diagnosis="PREDICTION_FOR_ABSENT_FIELD" if guess_norm else None,
+        )
+    if not guess_norm:
+        return result(
+            exact=False,
+            match=False,
+            matchType="NOT_FOUND",
+            coverage=0.0,
+            diagnosis="OCR_NOT_RECOGNIZED",
+        )
+    if truth_norm == guess_norm:
+        return result(
+            exact=True,
+            match=True,
+            matchType="RAW_EXACT",
+            coverage=1.0,
+            diagnosis=None,
+            normalizationReason=None,
+        )
+
+    truth_key = _canonical_key(category, name, truth)
+    guess_key = _canonical_key(category, name, guess)
+    if truth_key is not None and guess_key is not None and truth_key[0] == guess_key[0]:
+        return result(
+            exact=True,
+            match=True,
+            matchType="CANONICAL_EXACT",
+            coverage=1.0,
+            diagnosis=None,
+            normalizationReason=truth_key[1],
+        )
+
+    if (category, name) in SOFT_TEXT_FIELDS:
+        truth_tokens = _token_sequence(truth)
+        guess_tokens = _token_sequence(guess)
+        overlap = sum((Counter(guess_tokens) & Counter(truth_tokens)).values())
+        coverage = overlap / max(1, len(truth_tokens))
+        precision = overlap / max(1, len(guess_tokens))
+        if coverage >= SOFT_TEXT_MIN_COVERAGE:
+            return result(
+                exact=False,
+                match=True,
+                matchType="ACCEPTED_PARTIAL",
+                coverage=round(coverage, 6),
+                diagnosis=None,
+                normalizationReason=None,
+                overExtraction=precision < 1.0,
+                predictionTokenPrecision=round(precision, 6),
+                groundTruthTokenCoverage=round(coverage, 6),
+            )
+        return result(
+            exact=False,
+            match=False,
+            matchType="MISMATCH",
+            coverage=round(coverage, 6),
+            diagnosis="PARTIAL_TEXT_BELOW_80",
+            normalizationReason=None,
+            predictionTokenPrecision=round(precision, 6),
+            groundTruthTokenCoverage=round(coverage, 6),
+        )
+    return result(
+        exact=False,
+        match=False,
+        matchType="MISMATCH",
+        coverage=0.0,
+        diagnosis="OCR_RECOGNIZED_PARSER_MISSED",
+        normalizationReason=None,
+    )
+
+
+def _field_match(
+    category: str,
+    name: str,
+    truth: Any,
+    guess: Any,
+    *,
+    policy_version: str = MATCHING_POLICY_V1,
+) -> dict[str, Any]:
+    if policy_version == MATCHING_POLICY_V2:
+        return _field_match_v2(category, name, truth, guess)
+    return _field_match_v1(category, name, truth, guess)
+
+
 def _included_documents(prediction: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {
         str(document.get("caseId")): document
@@ -1637,6 +1846,8 @@ def _parser_regression_summary(
     prediction: dict[str, Any],
     baseline_prediction: dict[str, Any] | None,
     ground_truth: dict[str, Any],
+    *,
+    policy_version: str = MATCHING_POLICY_V1,
 ) -> tuple[int, int, dict[str, Any]]:
     if baseline_prediction is None:
         return 0, 0, {
@@ -1695,8 +1906,12 @@ def _parser_regression_summary(
                 if isinstance(baseline_fields.get(name), dict)
                 else None
             )
-            baseline_exact = _field_match(category, name, truth, baseline_value)["exact"]
-            candidate_exact = _field_match(category, name, truth, candidate_value)["exact"]
+            baseline_exact = _field_match(
+                category, name, truth, baseline_value, policy_version=policy_version
+            )["exact"]
+            candidate_exact = _field_match(
+                category, name, truth, candidate_value, policy_version=policy_version
+            )["exact"]
             regressions += int(baseline_exact and not candidate_exact)
             if case_id in scan_overlap_ids:
                 scan_regressions += int(baseline_exact and not candidate_exact)
@@ -1719,6 +1934,7 @@ def build_aggregate_report(
     *,
     evaluated_at: str | None = None,
     baseline_prediction: dict[str, Any] | None = None,
+    policy_version: str = MATCHING_POLICY_V1,
 ) -> dict[str, Any]:
     data13_scope = prediction.get("ocrScopePolicy") in {
         "cccd-and-certificate-only",
@@ -1727,6 +1943,7 @@ def build_aggregate_report(
     report_schema = DATA13_REPORT_SCHEMA_VERSION if data13_scope else REPORT_SCHEMA_VERSION
     gt_by_id = {str(case.get("caseId")): case for case in ground_truth.get("cases", [])}
     exact = 0
+    raw_exact = 0
     semantic_exact = 0
     ocr_exact = 0
     ocr_field_count = 0
@@ -1766,7 +1983,14 @@ def build_aggregate_report(
         )
         stats = by_category.setdefault(
             category,
-            {"fields": 0, "exact": 0, "semanticExact": 0, "accepted": 0, "present": 0},
+            {
+                "fields": 0,
+                "exact": 0,
+                "rawExact": 0,
+                "semanticExact": 0,
+                "accepted": 0,
+                "present": 0,
+            },
         )
         for name in expected:
             field_count += 1
@@ -1777,9 +2001,13 @@ def build_aggregate_report(
                 if isinstance(predicted_fields.get(name), dict)
                 else None
             )
-            match = _field_match(category, name, truth, guess)
+            match = _field_match(
+                category, name, truth, guess, policy_version=policy_version
+            )
             exact += int(match["exact"])
             stats["exact"] += int(match["exact"])
+            raw_exact += int(match.get("rawExact", match["exact"]))
+            stats["rawExact"] += int(match.get("rawExact", match["exact"]))
             if processing.get("usesOcr"):
                 ocr_field_count += 1
                 ocr_exact += int(match["exact"])
@@ -1801,7 +2029,10 @@ def build_aggregate_report(
                     reason = "PARSER_MISSED"
                 diagnoses[reason] = diagnoses.get(reason, 0) + 1
     parser_regressions, scan_parser_regressions, parser_comparison = _parser_regression_summary(
-        prediction, baseline_prediction, ground_truth
+        prediction,
+        baseline_prediction,
+        ground_truth,
+        policy_version=policy_version,
     )
     return {
         "schemaVersion": report_schema,
@@ -1824,6 +2055,8 @@ def build_aggregate_report(
         "metrics": {
             "fieldExactMatchCount": exact,
             "fieldExactMatchRate": round(exact / max(1, field_count), 6),
+            "fieldRawExactMatchCount": raw_exact,
+            "fieldRawExactMatchRate": round(raw_exact / max(1, field_count), 6),
             "fieldSemanticMatchCount": semantic_exact,
             "fieldSemanticMatchRate": round(semantic_exact / max(1, field_count), 6),
             "ocrFieldExactMatchCount": ocr_exact,
@@ -1847,6 +2080,7 @@ def build_aggregate_report(
             category: {
                 **stats,
                 "exactRate": round(stats["exact"] / max(1, stats["fields"]), 6),
+                "rawExactRate": round(stats["rawExact"] / max(1, stats["fields"]), 6),
                 "semanticExactRate": round(
                     stats["semanticExact"] / max(1, stats["fields"]), 6
                 ),
@@ -1857,7 +2091,12 @@ def build_aggregate_report(
         },
         "diagnosisCounts": diagnoses,
         "matchingPolicy": {
-            "strictExact": "NFC whitespace-normalized equality",
+            "version": policy_version,
+            "strictExact": (
+                "canonical policy-v2 normalization"
+                if policy_version == MATCHING_POLICY_V2
+                else "NFC whitespace-normalized equality"
+            ),
             "softTextFields": sorted(f"{category}.{name}" for category, name in SOFT_TEXT_FIELDS),
             "softTextMinTokenCoverage": SOFT_TEXT_MIN_COVERAGE,
             "caseInsensitiveForSoftText": True,
@@ -1870,6 +2109,7 @@ def build_aggregate_report(
                 "Chức vụ/Chức danh or dash-delimited role; casefold; accents remain sensitive"
             ),
             "semanticMetricDoesNotReplaceStrict": True,
+            "rawExactReportedSeparately": policy_version == MATCHING_POLICY_V2,
         },
         "schemaErrors": schema_errors,
         "parserRegressionComparison": parser_comparison,
@@ -2021,6 +2261,8 @@ def load_prediction_summary(paths: tuple[Path, Path, Path]) -> dict[str, Any]:
     evaluated_status = (
         "DEVELOPMENT_EVALUATED"
         if marker_payload.get("evaluationKind") == "development-aggregate-comparison"
+        else "POSTHOC_POLICY_AUDIT"
+        if marker_payload.get("evaluationKind") == "posthoc-policy-audit"
         else "EVALUATED_ONCE"
     )
     return {
@@ -2045,7 +2287,11 @@ def load_prediction_summary(paths: tuple[Path, Path, Path]) -> dict[str, Any]:
 
 
 def load_prediction_document(
-    paths: tuple[Path, Path, Path], case_id: str, ground_truth_path: Path | None = None
+    paths: tuple[Path, Path, Path],
+    case_id: str,
+    ground_truth_path: Path | None = None,
+    *,
+    policy_version: str = MATCHING_POLICY_V1,
 ) -> dict[str, Any]:
     artifact = _read_object(paths[0])
     document = next(
@@ -2077,7 +2323,13 @@ def load_prediction_document(
             for name in field_names:
                 field = document.get("fields", {}).get(name)
                 guess = field.get("value") if isinstance(field, dict) else None
-                match = _field_match(str(document.get("category", "")), name, gt.get(name), guess)
+                match = _field_match(
+                    str(document.get("category", "")),
+                    name,
+                    gt.get(name),
+                    guess,
+                    policy_version=policy_version,
+                )
                 if (
                     match["diagnosis"] == "OCR_NOT_RECOGNIZED"
                     and not (document.get("processing") or {}).get("usesOcr")

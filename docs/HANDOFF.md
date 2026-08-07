@@ -1,5 +1,23 @@
 # Handoff
 
+## DATA-25 checkpoint (2026-08-07)
+
+- Branch: `codex/data25-matching-policy-v2` at the implementation checkpoint.
+- DATA-25 comparator v2 preserves policy v1 for immutable reports and adds
+  canonical case/layout, date, duration and decimal matching plus explicit
+  accepted-partial over-extraction metadata.
+- Private post-hoc audit:
+  `C:\\tmp\\data25-policy-v2-audit-20260807\\policy_v2_audit.json` and
+  `C:\\tmp\\data25-policy-v2-audit-20260807\\POLICY_V2_AUDIT_LOCK.json`.
+  Canonical `144/265`, accepted `155/265`; decision `HOLD`; promotion remains
+  disabled. The audit is not a new evaluate-once.
+- Targeted Python tests pass (`22 passed` with `PYTHONPATH=src`); web build
+  passes using the existing local dependency cache. Full Ruff still reports
+  pre-existing findings in `external_dataset_prediction.py` and the API.
+- DATA-24 report/marker, GroundTruth and raw private artifacts were not edited.
+- Next READY task: DATA-26 development-only parser recovery. DATA-27 requires
+  a new prediction-blind held-out split and separate approval.
+
 ## Latest checkpoint (2026-08-07)
 
 - DATA-23 lock validation passed for all 25 held-out documents with

@@ -1961,7 +1961,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const groundTruthDocumentExcluded =
     groundTruthReviewDocument?.disposition === "OUT_OF_SCOPE_BACK";
   const [evidenceMode, setEvidenceMode] =
-    useState<"overview" | "templates" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "ocr-ho-v2-shadow" | "ocr-ho-v2-diagnostic">(
+    useState<"overview" | "heldout" | "templates" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "external-dataset-policy-v2" | "ocr-ho-v2-shadow" | "ocr-ho-v2-diagnostic">(
+      // Legacy default: SHOW_HELDOUT ? "heldout" : "templates"
       SHOW_OCR_HO_DIAGNOSTIC_GT
         ? "ocr-ho-v2-diagnostic"
         : SHOW_OCR_HO_SHADOW_UAT
@@ -5180,6 +5181,17 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             </button>
           ) : null}
           {SHOW_EXTERNAL_DATASET_REVIEW ? (
+            <button
+              className={evidenceMode === "external-dataset-policy-v2" ? "active" : ""}
+              onClick={() => setEvidenceMode("external-dataset-policy-v2")}
+              role="tab"
+              aria-selected={evidenceMode === "external-dataset-policy-v2"}
+              type="button"
+            >
+              DATA-25 policy v2 audit
+            </button>
+          ) : null}
+          {SHOW_EXTERNAL_DATASET_REVIEW ? (
             <>
           <button
             className={evidenceMode === "external-dataset-prediction" ? "active" : ""}
@@ -5276,6 +5288,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           <ExternalDatasetPrediction />
         ) : SHOW_EXTERNAL_DATASET_REVIEW && evidenceMode === "external-dataset-prediction-v13" ? (
           <ExternalDatasetPrediction version="data13" />
+        ) : SHOW_EXTERNAL_DATASET_REVIEW && evidenceMode === "external-dataset-policy-v2" ? (
+          <ExternalDatasetPrediction version="policy-v2" />
         ) : SHOW_EXTERNAL_DATASET_REVIEW && evidenceMode === "external-dataset" ? (
           <ExternalDatasetReview />
         ) : evidenceMode === "templates" ? (

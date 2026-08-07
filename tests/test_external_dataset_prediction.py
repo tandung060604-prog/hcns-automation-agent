@@ -5,6 +5,7 @@ from typing import Any
 from apps.ocr_lab.api.external_dataset_prediction import (
     _external_fields,
     _field,
+    _field_match,
     build_aggregate_report,
     build_gate_report,
 )
@@ -622,3 +623,86 @@ def test_contract_semantic_metric_is_symmetric_and_keeps_raw_strict_metric() -> 
     assert report["metrics"]["fieldSemanticMatchCount"] == 14
     assert report["metrics"]["fieldSemanticMatchRate"] == 1.0
     assert report["byCategory"]["contract"]["semanticExactRate"] == 1.0
+
+
+def test_policy_v2_canonicalizes_case_layout_dates_duration_and_scores() -> None:
+    cases = (
+        ("cv", "full_name", "Vũ Tú Anh", "VŨ TÚ ANH", "CANONICAL_EXACT"),
+        ("cv", "education", "Đại học; Kinh tế", "ĐẠI HỌC - KINH TẾ", "CANONICAL_EXACT"),
+        ("cv", "years_experience", "2 năm", "2 năm kinh nghiệm", "CANONICAL_EXACT"),
+        ("ielts", "issue_date", "06/06/2024", "2024-06-06", "CANONICAL_EXACT"),
+        ("ielts", "overall_score", "6.5", "6.50", "CANONICAL_EXACT"),
+    )
+    for category, name, truth, guess, match_type in cases:
+        result = _field_match(category, name, truth, guess, policy_version="2.0.0")
+        assert result["exact"] is True
+        assert result["match"] is True
+        assert result["matchType"] == match_type
+        assert result["rawExact"] is False
+
+
+def test_policy_v2_keeps_overextraction_partial_and_sensitive_values_strict() -> None:
+    partial = _field_match(
+        "cv",
+        "desired_role",
+        "Chuyên viên chính",
+        "chuyên viên chính và đóng góp vào hiệu quả vận hành bền vững",
+        policy_version="2.0.0",
+    )
+    assert partial["exact"] is False
+    assert partial["match"] is True
+    assert partial["matchType"] == "ACCEPTED_PARTIAL"
+    assert partial["overExtraction"] is True
+    assert partial["groundTruthTokenCoverage"] == 1.0
+
+    for category, name, truth, guess in (
+        ("cv", "full_name", "Vũ Tú Anh", "Vũ Tú Anh Financial Accountant"),
+        ("cv", "full_name", "Vũ Tú Anh", "Vũ Tú"),
+        ("contract", "probation_salary_monthly", "12000000 đồng/tháng", "12000000"),
+        ("ielts", "issue_date", "06/06/2024", "06/07/2024"),
+    ):
+        result = _field_match(category, name, truth, guess, policy_version="2.0.0")
+        assert result["exact"] is False
+        assert result["match"] is False
+        assert result["matchType"] == "MISMATCH"
+
+
+def test_policy_v2_report_separates_canonical_and_raw_exact_metrics() -> None:
+    names = (
+        "full_name", "headline", "email", "phone_number", "address", "desired_role",
+        "years_experience", "experience", "skills", "education",
+    )
+    truth = {name: None for name in names}
+    guess = {name: None for name in names}
+    truth.update({
+        "full_name": "Vũ Tú Anh",
+        "years_experience": "2 năm",
+        "desired_role": "Chuyên viên chính",
+    })
+    guess.update({
+        "full_name": "VŨ TÚ ANH",
+        "years_experience": "2 năm kinh nghiệm",
+        "desired_role": "Chuyên viên chính và vận hành",
+    })
+    report = build_aggregate_report(
+        {
+            "datasetId": "synthetic-test",
+            "documents": [{
+                "caseId": "cv-002",
+                "category": "cv",
+                "predictedCategory": "cv",
+                "fields": {name: {"value": value} for name, value in guess.items()},
+                "processing": {"usesOcr": False, "recommendedAction": "USER_REVIEW"},
+            }],
+        },
+        {"cases": [{
+            "caseId": "cv-002",
+            "fields": [{"name": name, "value": value} for name, value in truth.items()],
+        }]},
+        policy_version="2.0.0",
+    )
+    assert report["matchingPolicy"]["version"] == "2.0.0"
+    assert report["metrics"]["fieldExactMatchCount"] == 9
+    assert report["metrics"]["fieldRawExactMatchCount"] == 7
+    assert report["metrics"]["fieldAcceptedMatchCount"] == 10
+    assert report["metrics"]["fieldExactMatchRate"] != report["metrics"]["fieldAcceptedMatchRate"]
