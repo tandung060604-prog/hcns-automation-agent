@@ -8,6 +8,7 @@ param(
     [string]$ExternalDatasetRoot = "",
     [string]$ExternalDatasetInventory = "",
     [string]$ExternalDatasetGroundTruth = "",
+    [string]$ExternalDatasetPredictions = "",
     [string]$ExternalDatasetTypedProjection = "",
     [string]$ExternalDatasetTypedApproval = "",
     [string]$ExternalDatasetTypedReport = "",
@@ -45,6 +46,9 @@ if ($ExternalDatasetInventory -and -not (Test-Path -LiteralPath $ExternalDataset
 }
 if ($ExternalDatasetGroundTruth -and -not (Test-Path -LiteralPath $ExternalDatasetGroundTruth)) {
     throw "External dataset Ground Truth draft not found: $ExternalDatasetGroundTruth"
+}
+if ($ExternalDatasetPredictions -and -not (Test-Path -LiteralPath $ExternalDatasetPredictions)) {
+    throw "External dataset predictions not found: $ExternalDatasetPredictions"
 }
 if ($ExternalDatasetTypedProjection -and -not (Test-Path -LiteralPath $ExternalDatasetTypedProjection)) {
     throw "External dataset typed projection not found: $ExternalDatasetTypedProjection"
@@ -139,6 +143,9 @@ if (-not $apiRunning) {
     }
     if ($ExternalDatasetGroundTruth) {
         $apiArguments += " --external-dataset-ground-truth `"$ExternalDatasetGroundTruth`""
+    }
+    if ($ExternalDatasetPredictions) {
+        $apiArguments += " --external-dataset-predictions `"$ExternalDatasetPredictions`""
     }
     if ($ExternalDatasetTypedProjection) {
         $apiArguments += " --external-dataset-typed-projection `"$ExternalDatasetTypedProjection`""
