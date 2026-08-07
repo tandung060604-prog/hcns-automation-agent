@@ -9,7 +9,7 @@ allowed.
 
 Repository:
 - Branch: `codex/data26-parser-recovery`
-- HEAD: `6fd1f79` (DATA-26 parser recovery checkpoint; update at commit checkpoint)
+- HEAD: `723b209` (DATA-26 local scan refinement checkpoint)
 - Working tree changes are limited to DATA-26 code, tests and factual state docs.
 
 DATA-26 changes are conservative: CV glued header boundary recovery, geometry

@@ -5,7 +5,7 @@
 - Branch: `codex/data26-parser-recovery`; DATA-26 code, synthetic tests and the
   opt-in local VietOCR line-refinement worker are implemented. Changes remain
   development-only and preserve the scan manual-review policy.
-- HEAD: `6fd1f79` (DATA-26 parser recovery checkpoint; update at commit checkpoint).
+- HEAD: `723b209` (DATA-26 local scan refinement checkpoint).
 - Fresh private hybrid replay aggregate: strict `102/112`, accepted `112/112`;
   Contract `42/42`, CV `40/50`, IELTS `20/20`; completeness `99/99`,
   classification `12/12`, schema `0`, sensitive false acceptance `0`, parser
