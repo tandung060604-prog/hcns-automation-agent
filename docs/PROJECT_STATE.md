@@ -35,8 +35,15 @@ Evidence summary:
   exited `1` after weight load before pipeline initialization. Rerun report/marker:
   `C:\tmp\bo10-data21-paddleocr-vl-benchmark-report-v8.json` and
   `C:\tmp\bo10-data21-paddleocr-vl.marker-v8.json`; quality metrics remain `null`.
-- DATA-22 remains BLOCKED by approved source rights/retention and the minimum
-  corpus; no held-out split or evaluate-once was opened.
+- DATA-22 is now `PASS` on the refreshed private split: 30 Contract + 30 CV +
+  10 IELTS development and 10 Contract + 10 CV + 5 IELTS held-out. The
+  supplement added 5 Contract and 6 CV files; 4 Contract and 5 CV unique files
+  replaced the nine history-overlapping development candidates. One extra file
+  per family remains unassigned and is not counted. Report:
+  `C:\\tmp\\data22-split-report-20260807-r3.json`.
+- DATA-23 remains blocked pending explicit approval to create prediction-blind
+  locks; no held-out prediction, GroundTruth lock or evaluate-once was opened.
+
 OCR-HO-V2-017C artifact: `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-017c-20260807\CCCD_OCR_HO_V2_017C_DER_ATTRIBUTION.json`;
 scope is 15 documents / 45 target fields, `containsRawPII=false`, prediction remains sealed.
 Canonical target classes: ROI `18`, recognizer `8`, parser `6`, selector `4`, diacritic `2`.
@@ -57,9 +64,11 @@ Archive: `docs/archive/PROJECT_STATE_HISTORY_2026-08-06.md` preserves prior evid
   historical IELTS `20/20` remains unchanged.
 - DATA-22 split policy and validators are implemented, with scans fixed to
   `MANUAL_REVIEW` and masked fields represented as absent (`null`) for scoring.
-  The current private candidate is `HOLD`: eight candidate documents overlap
-  the prior image-expansion history by SHA-256, so they cannot be reused as
-  independent development data.
+  The refreshed private candidate is `PASS`; all source SHA-256, lineage,
+  rights and retention checks pass. Development inventory:
+  `C:\\tmp\\data22-development-20260807-inventory-r3.json`; held-out inventory:
+  `C:\\tmp\\data22-heldout-20260807-inventory.json`; policy:
+  `C:\\tmp\\data22-policy-20260807-r3.json`.
 - DATA-23 lock validation and DATA-24 create-only evaluator are implemented
   with synthetic regression coverage. Neither held-out locks nor evaluate-once
   artifacts have been opened or created.

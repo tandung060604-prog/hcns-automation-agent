@@ -61,10 +61,11 @@ recorded as `null` in Ground Truth (for example, a masked candidate ID), so it
 is not applicable for completeness and must not be reconstructed by OCR.
 
 `scripts/validate_external_dataset_splits.py` fails closed on source SHA,
-lineage, rights, retention and history overlap. DATA-23 and DATA-24 validators
-keep prediction locks immutable and evaluate-once create-only. The current
-candidate remains `HOLD` because eight source SHA values overlap the prior
-image-expansion history; no held-out or evaluate-once artifact was opened.
+lineage, rights, retention and history overlap. The refreshed DATA-22 candidate
+passes with 30/30/10 development and 10/10/5 held-out by Contract/CV/IELTS;
+the 15 IELTS images are all included. DATA-23 and DATA-24 validators keep
+prediction locks immutable and evaluate-once create-only. No held-out lock or
+evaluate-once artifact has been opened.
 
 ## Metrics
 
