@@ -147,6 +147,18 @@ Set-Location ..\..\..
 
 Mở http://localhost:3000, tải một tài liệu thuộc phạm vi hỗ trợ và xem preview, field extraction, confidence, evidence và JSON. Không đưa tài liệu thật hoặc output chứa PII vào Git.
 
+### Launcher chạy trên mọi hệ điều hành (Windows/macOS/Linux)
+
+Script `run_local.py` tự khởi động cả OCR API (`127.0.0.1:8765`) và UI
+(`localhost:3000`), chọn interpreter qua `.venv`, kiểm tra health và dừng cả
+hai khi Ctrl+C:
+
+~~~text
+python run_local.py --data-root <đường-dẫn-dữ-liệu-private>
+python run_local.py --data-root <path> --setup     # cài Python deps + npm ci
+python run_local.py --data-root <path> --full      # --setup kèm paddleocr/easyocr
+~~~
+
 ## Kiểm thử
 
 ~~~powershell
