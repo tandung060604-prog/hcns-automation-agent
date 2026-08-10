@@ -1,5 +1,16 @@
 # Evaluation
 
+## DATA-30B local benchmark metric checkpoint (2026-08-10)
+
+The localhost per-document-type benchmark cards now use the sealed DATA-29
+development aggregate for scoring and the DATA-22 inventory only for a separate
+local-document count. Development strict/accepted results remain Contract
+`42/42`/`42/42`, CV `45/50`/`50/50`, and IELTS `20/20`/`20/20`; benchmark
+document counts are `3/5/4`, while prediction-only local counts are `30/30/10`.
+The prediction-only inventory contributes no exact, presence or accepted
+metric. DATA-17 and DATA-24 remain immutable; this checkpoint did not add data,
+read GroundTruth, rerun evaluate-once or open Camunda side effects.
+
 ## DATA-29 CV residual recovery (2026-08-10)
 
 DATA-29 is a development-only replay on the existing five CV documents. The
@@ -167,6 +178,15 @@ remain disabled.
 Aggregate-only handoff artifact:
 `C:\\tmp\\data28-local-review-handoff-20260810.json`. This checkpoint does not
 modify DATA-24, open DATA-27, or run evaluate-once.
+
+### DATA-30A prediction-only localhost review
+
+The existing private DATA-22 development inventory is projected to the local
+prediction inspector as `70` documents (`30` Contract, `30` CV, `10` IELTS):
+`68` prediction records plus `2` explicit unsupported-format manual-review
+records. The API source preview uses inventory and source SHA only; it does not
+read GroundTruth. All `27` scan documents remain `MANUAL_REVIEW`, and the
+projection is not a scoring benchmark or promotion candidate.
 
 ## Metrics
 

@@ -1,5 +1,24 @@
 # Backlog
 
+## DATA-30B-LOCAL-BENCHMARK-METRIC-CHECKPOINT — REVIEW (2026-08-10)
+
+The localhost benchmark cards now load the sealed DATA-29 development
+aggregate: Contract `42/42`, CV `45/50`, IELTS `20/20` strict, with accepted
+reported separately. They show benchmark counts `3/5/4` and local prediction-
+only counts `30/30/10`; prediction-only records never contribute to metrics.
+DATA-17 and DATA-24 remain immutable. No new data, GroundTruth rerun or
+evaluate-once was performed. Commit `8756678` is pushed to PR #22 and CI run
+`31392937914` passed Python 3.10, Python 3.12 and OCR Lab Web.
+
+## DATA-30A-LOCAL-PRIVATE-REPLAY-REVIEW — DONE / HOLD (2026-08-10)
+
+Localhost exposes the existing private DATA-22 development replay: `70`
+documents (`30/30/10`), `68` prediction records and `2` explicit unsupported
+format records. All `27` scans remain `MANUAL_REVIEW`; no GroundTruth,
+evaluate-once or Camunda side effect was opened. The private projection stays
+outside Git/cloud. Promotion and strict scoring remain `HOLD` because this
+projection is prediction-only.
+
 ## DATA-30-MAIN-RECONCILIATION-AND-DEVELOPMENT-FREEZE — DONE / DEVELOPMENT COMPLETE / HELD-OUT HOLD (2026-08-10)
 
 Đã đồng bộ checkout với `origin/main` tại checkpoint DATA-30, cập nhật README tiếng
@@ -704,3 +723,5 @@ confirm every field, then SEALED. Benchmark remains intentionally unrun.
   `scripts/validate_longrun_state.py` and `git diff --check` passed.
 - DATA-21 is implemented but held by the local CPU runtime initialization budget;
   DATA-22 remains blocked pending approved corpus rights/retention and minimum counts.
+
+| LOCAL-PRIVATE-DATA-AUTHORIZED-REPLAY | DONE / HOLD | 2026-08-10 | Existing DATA-22 private development corpus replayed locally with PaddleOCR CPU; 68 predictions, 2 unsupported formats retained as MANUAL_REVIEW, 27/27 scans MANUAL_REVIEW. Aggregate-only report is private; no GroundTruth/evaluate-once opened. | No promotion or held-out claim; strict/accepted/completeness not computed without independent GroundTruth. |

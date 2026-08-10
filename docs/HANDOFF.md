@@ -1,5 +1,17 @@
 # Handoff
 
+## DATA-30B local benchmark metric checkpoint (2026-08-10)
+
+- Local benchmark cards now read the sealed DATA-29 development aggregate and
+  show Contract `42/42`, CV `45/50`, IELTS `20/20` strict; accepted remains
+  separate at `42/42`, `50/50`, `20/20`.
+- Benchmark denominators are `3/5/4`; local DATA-22 prediction-only counts are
+  shown separately as `30/30/10`. No score is derived from that inventory.
+- DATA-17/DATA-24 and their locks remain immutable. No new data, GroundTruth
+  rerun or evaluate-once was run. API summary, Python compile, web build and
+  15 web tests passed. Commit `8756678` is pushed to PR #22 and CI run
+  `31392937914` is green; next action is owner review of PR #22.
+
 ## DATA-30 main reconciliation & development freeze (2026-08-10)
 
 - Checkout hiện hành là `main`; HEAD và `origin/main` đã được xác minh đồng bộ
@@ -42,6 +54,21 @@
 - Existing manifests define source rights/retention where applicable. Scan
   inputs remain `MANUAL_REVIEW`; DATA-24 and its GroundTruth/evaluate-once stay
   immutable.
+
+## DATA-30A local private replay review (DONE / HOLD, 2026-08-10)
+
+- Local API `http://127.0.0.1:8765` and UI `http://localhost:3000/workspace`
+  use a private prediction-only projection of the existing DATA-22 inventory:
+  `70` documents (`30` Contract, `30` CV, `10` IELTS), `68` predictions and
+  `2` unsupported-format placeholders.
+- The review list renders `70` records. Scan disposition is `27/27
+  MANUAL_REVIEW`; unsupported `.txt/.pptx` records show
+  `UNSUPPORTED_FORMAT → MANUAL_REVIEW` and have no OCR/prediction value.
+- Prediction-only source preview resolves inventory + source SHA without
+  reading GroundTruth. DATA-24 and all historical artifacts remain immutable;
+  no Camunda process or side effect is started.
+- Private projection:
+  `C:\\Camunda\\private-data\\local-private-data-authorized-20260810\\data22-development-r3-local-review-predictions-70.json`.
 
 ## M5-CAM-001C expiry/rollback smoke (DONE)
 
@@ -1711,3 +1738,20 @@ git status --short --branch
   mismatch `72`, and token mismatch `11`; AUTO_REGION_MISS is `245/245` line-ID miss.
 - Decision is `RECOGNIZER_TOKEN_ATTRIBUTION_HOLD`; selector, counterfactual, replay,
   runtime patch and promotion remain closed. Next READY is `OCR-HO-V2-018G` owner review.
+
+### LOCAL-PRIVATE-DATA-AUTHORIZED - local gate/replay checkpoint (DONE / HOLD, 2026-08-10)
+
+- Existing private DATA-22 development corpus was replayed locally: Contract
+  `30`, CV `30`, IELTS `10` (`70` total). PaddleOCR CPU produced predictions
+  for `68` Phase-12-supported documents.
+- Two unsupported inventory formats (`.txt`, `.pptx`) remain explicit
+  `MANUAL_REVIEW/UNSUPPORTED_FORMAT`; scan documents are `27/27`
+  `MANUAL_REVIEW`.
+- Aggregate-only report is outside Git at
+  `C:\\Camunda\\private-data\\local-private-data-authorized-20260810\\data22-development-r3-local-gate-replay-aggregate.json`.
+  It has no raw document/OCR/prediction values. No GroundTruth was read, so
+  strict/accepted/completeness metrics are not computed and promotion is
+  `HOLD`.
+- DATA-24 evaluate-once, GroundTruth and historical artifacts remain
+  immutable. Next READY action is local review only; no held-out result may be
+  inferred from this replay.

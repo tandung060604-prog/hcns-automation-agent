@@ -1,5 +1,16 @@
 # Project State
 
+## DATA-30B local benchmark metric checkpoint (2026-08-10)
+
+The localhost benchmark cards now load the sealed DATA-29 development
+aggregate while keeping the DATA-22 prediction-only count separate. Displayed
+development metrics are Contract `42/42` strict, CV `45/50` strict and IELTS
+`20/20` strict; accepted is `42/42`, `50/50` and `20/20`. Cards show benchmark
+counts `3/5/4` and local prediction-only counts `30/30/10` by Contract/CV/IELTS.
+DATA-17 and DATA-24 remain immutable; no new data, GroundTruth rerun or
+evaluate-once was performed. API summary, Python compile, web build and 15 web
+tests passed; raw artifacts remain outside Git/cloud.
+
 ## M5-CAM-001B Phase15 scalar/reference bridge (2026-08-10)
 
 M5-CAM-001B đã nối projection Phase15 tối giản vào Submit task của Camunda
@@ -20,6 +31,16 @@ localhost review runs. This is a local-only operating profile, not a cloud or
 Git data permission: raw documents/OCR/predictions/PII remain outside the
 repository, Camunda receives scalar/reference values only, scan inputs remain
 `MANUAL_REVIEW`, side effects stay disabled, and DATA-24 remains immutable.
+
+## DATA-30A local private replay review (2026-08-10)
+
+Localhost now reads a private prediction-only projection of the existing
+DATA-22 development inventory: `70` documents (`30/30/10` by Contract/CV/IELTS),
+`68` predictions and `2` explicit `UNSUPPORTED_FORMAT` records. All `27` scan
+documents show `MANUAL_REVIEW`; no GroundTruth or evaluate-once artifact is
+read. Projection and source files remain outside Git/cloud at the authorized
+private root. API/UI verification found `70` review buttons and `2` unsupported
+records; promotion remains `HOLD`.
 
 ## M5-CAM-001 authorization state (2026-08-10)
 
@@ -181,3 +202,19 @@ create a held-out claim, rerun DATA-24, or promote a fallback. The unrelated
 global task remains separately tracked in `BACKLOG.md`.
 
 Archive: `docs/archive/PROJECT_STATE_HISTORY_2026-08-06.md`.
+
+## LOCAL-PRIVATE-DATA-AUTHORIZED gate/replay (2026-08-10)
+
+User-authorized local replay used the existing private DATA-22 development
+corpus (`70` documents: Contract `30`, CV `30`, IELTS `10`). PaddleOCR ran
+locally on CPU for `68` Phase-12-supported documents. The remaining `2`
+documents use unsupported `.txt`/`.pptx` formats and remain
+`MANUAL_REVIEW/UNSUPPORTED_FORMAT`; they were not silently dropped.
+
+Aggregate-only replay evidence (outside Git):
+`C:\\Camunda\\private-data\\local-private-data-authorized-20260810\\data22-development-r3-local-gate-replay-aggregate.json`.
+The report contains counts and hashes only; no raw document, OCR, prediction,
+field value or PII. Scan coverage is `27/27 MANUAL_REVIEW`. GroundTruth was not
+provided, so strict EM, accepted text and completeness are intentionally
+`NOT_COMPUTED`; promotion decision is `HOLD`. DATA-24 remains immutable and
+was not reopened.

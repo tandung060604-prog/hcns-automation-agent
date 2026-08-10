@@ -155,6 +155,30 @@ def resolve_prediction_paths(
     )
 
 
+def resolve_prediction_source(
+    root: Path,
+    inventory_path: Path | None,
+    case_id: str,
+) -> Path:
+    """Resolve one private source for prediction-only localhost review."""
+
+    if inventory_path is None:
+        raise FileNotFoundError("Prediction-only source inventory is unavailable")
+    if not re.fullmatch(r"(?:cv|contract|ielts)-\d{3}", case_id):
+        raise PredictionArtifactError("Invalid prediction source case id")
+    inventory = _read_object(inventory_path.expanduser().resolve())
+    records = inventory.get("cases")
+    if not isinstance(records, list):
+        raise PredictionArtifactError("Prediction source inventory is invalid")
+    record = next(
+        (item for item in records if isinstance(item, dict) and item.get("caseId") == case_id),
+        None,
+    )
+    if record is None:
+        raise FileNotFoundError("Prediction source case not found")
+    return _source_path(_safe_root(root), record)
+
+
 def _safe_root(root: Path) -> Path:
     resolved = root.expanduser().resolve()
     if not resolved.is_dir() or (resolved / ".git").exists():
@@ -2490,6 +2514,7 @@ def load_prediction_summary(paths: tuple[Path, Path, Path]) -> dict[str, Any]:
                     "sourceFile": d.get("sourceFile"),
                     "evaluationIncluded": d.get("evaluationIncluded", True),
                     "ocrScope": (d.get("processing") or {}).get("ocrScope"),
+                    "recommendedAction": (d.get("processing") or {}).get("recommendedAction"),
                 }
                 for d in artifact.get("documents", [])
             ],
@@ -2518,6 +2543,7 @@ def load_prediction_summary(paths: tuple[Path, Path, Path]) -> dict[str, Any]:
                 "sourceFile": d.get("sourceFile"),
                 "evaluationIncluded": d.get("evaluationIncluded", True),
                 "ocrScope": (d.get("processing") or {}).get("ocrScope"),
+                "recommendedAction": (d.get("processing") or {}).get("recommendedAction"),
             }
             for d in artifact.get("documents", [])
         ],

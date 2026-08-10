@@ -15,7 +15,7 @@ type BenchmarkRow = {
   cer: number | null;
   wer: number | null;
   localDocumentCount: number;
-  status: "current" | "confirmed" | "baseline" | "unavailable";
+  status: "current" | "confirmed" | "baseline" | "prediction-only" | "unavailable";
   source: string;
   note: string;
   ocrAggregate?: string;
@@ -35,6 +35,7 @@ function statusLabel(status: BenchmarkRow["status"]) {
     current: "Đánh giá mới",
     confirmed: "CCCD đã xác nhận",
     baseline: "Baseline OCR",
+    "prediction-only": "Prediction-only · chưa chấm",
     unavailable: "Chưa có điểm",
   }[status];
 }

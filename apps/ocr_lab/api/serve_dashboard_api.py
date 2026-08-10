@@ -63,6 +63,7 @@ from external_dataset_prediction import (
     load_prediction_document,
     load_prediction_summary,
     resolve_prediction_paths,
+    resolve_prediction_source,
 )
 from document_route_safety import (
     safe_existing_document_route,
@@ -204,6 +205,12 @@ def build_local_benchmark_summary(handler: type[DashboardHandler]) -> dict[str, 
         for case in benchmark_manifest.get("cases", [])
         if isinstance(case, dict)
     )
+    prediction_inventory = _read_optional_json(handler.external_dataset_inventory) or {}
+    prediction_inventory_counts: Counter[str] = Counter(
+        str(case.get("category", ""))
+        for case in prediction_inventory.get("cases", [])
+        if isinstance(case, dict)
+    )
     category_specs = [
         ("cv", "CV & hồ sơ ứng viên", "CV", {"CV"}),
         ("contract", "Hợp đồng lao động", "EMPLOYMENT_CONTRACT", {"EMPLOYMENT_CONTRACT"}),
@@ -213,6 +220,13 @@ def build_local_benchmark_summary(handler: type[DashboardHandler]) -> dict[str, 
     for category, label, runtime_type, _ in category_specs:
         metrics = by_category.get(category, {})
         has_metrics = isinstance(metrics, dict) and bool(metrics)
+        prediction_only_count = prediction_inventory_counts.get(category, 0)
+        local_count = (
+            prediction_only_count
+            if prediction_only_count
+            else runtime_counts.get(runtime_type, 0)
+        )
+        prediction_only = not has_metrics and prediction_only_count > 0
         rows.append(
             {
                 "key": category,
@@ -227,13 +241,30 @@ def build_local_benchmark_summary(handler: type[DashboardHandler]) -> dict[str, 
                 "acceptedCoverage": None,
                 "cer": None,
                 "wer": None,
-                "localDocumentCount": runtime_counts.get(runtime_type, 0),
-                "status": "current" if has_metrics else "unavailable",
-                "source": "Benchmark field-level mới",
+                "localDocumentCount": local_count,
+                "status": (
+                    "current"
+                    if has_metrics
+                    else ("prediction-only" if prediction_only else "unavailable")
+                ),
+                "source": (
+                    "DATA-29 development aggregate · Ground Truth SEALED"
+                    if has_metrics
+                    else (
+                        "DATA-22 development · prediction-only"
+                        if prediction_only
+                        else "Benchmark field-level mới"
+                    )
+                ),
                 "note": (
                     "Đánh giá field-level; CER/WER chưa có trong báo cáo này."
                     if has_metrics
-                    else "Chưa cấu hình báo cáo prediction có Ground Truth."
+                    else (
+                        f"{local_count} tài liệu local prediction-only; "
+                        "Ground Truth chưa cung cấp nên chưa tính exact/presence."
+                        if prediction_only
+                        else "Chưa cấu hình báo cáo prediction có Ground Truth."
+                    )
                 ),
             }
         )
@@ -2693,6 +2724,57 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
             except (OSError, PredictionArtifactError) as exc:
                 self.send_json({"error": f"DATA-12 prediction unavailable: {exc}"}, HTTPStatus.NOT_FOUND)
+            return
+
+        if parsed.path == "/external-dataset/prediction/source":
+            if self.external_dataset_root is None:
+                self.send_json(
+                    {"error": "DATA-12 prediction source is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            case_id = query.get("id", [""])[0]
+            mode = query.get("mode", ["preview"])[0]
+            try:
+                source = resolve_prediction_source(
+                    self.external_dataset_root,
+                    self.external_dataset_inventory,
+                    case_id,
+                )
+                if mode == "source":
+                    self.send_file(
+                        source,
+                        mimetypes.guess_type(source.name)[0] or "application/octet-stream",
+                        f"{case_id}{source.suffix.lower()}",
+                    )
+                elif mode == "preview":
+                    if source.suffix.casefold() in {".txt", ".docx", ".pptx"}:
+                        self.send_json(
+                            {
+                                "kind": "text",
+                                "sourceFile": source.name,
+                                "text": load_external_text_preview(source),
+                            }
+                        )
+                    else:
+                        self.send_file(
+                            source,
+                            mimetypes.guess_type(source.name)[0] or "application/octet-stream",
+                        )
+                else:
+                    self.send_json(
+                        {"error": "Invalid prediction source mode"},
+                        HTTPStatus.BAD_REQUEST,
+                    )
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            except (OSError, FileNotFoundError, KeyError, json.JSONDecodeError):
+                self.send_json(
+                    {"error": "Prediction-only source is unavailable"},
+                    HTTPStatus.NOT_FOUND,
+                )
             return
 
         if parsed.path == "/external-dataset/policy-v2/summary":
