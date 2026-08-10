@@ -1,10 +1,34 @@
 # Project State
 
+## DATA-30 main reconciliation & development freeze (2026-08-10)
+
+Repository đã được đồng bộ fast-forward với `origin/main`:
+
+- Branch hiện hành: `main`.
+- HEAD và `origin/main`: `54eafd0`, merge PR #16.
+- Working tree sạch; không còn thay đổi local chưa commit.
+- PR #15 (DATA-29 implementation) và PR #16 (README tiếng Việt) đã merge; CI
+  Python 3.10, Python 3.12 và OCR Lab Web đều `SUCCESS`.
+
+Development delivery được đóng băng ở trạng thái `DEVELOPMENT COMPLETE /
+HELD-OUT HOLD`. Metrics DATA-29 hiện hành trên 12 tài liệu và 112 field:
+strict `107/112`, accepted `112/112`, Contract `42/42`, CV `45/50`, IELTS
+`20/20`, applicable completeness `99/99`, classification `12/12`, schema
+errors `0`, sensitive false acceptance `0`, parser regression `0`, scan
+`5/5 MANUAL_REVIEW`, false auto-continue `0`. Fallback vẫn disabled vì scan
+strict improvement `3.3334pp` thấp hơn ngưỡng `10pp`.
+
+Không thêm dữ liệu, không sửa parser, không rerun DATA-24, không thay đổi
+GroundTruth/evaluate-once cũ và không promote fallback. DATA-27 held-out
+generalization tiếp tục `HOLD` do existing-pool audit không đủ tài liệu mới.
+Raw document, OCR, prediction và GroundTruth vẫn nằm ngoài Git/cloud.
+
 ## DATA-29 CV residual recovery (2026-08-10)
 
-DATA-29 is complete as a development-only parser checkpoint on branch
-`codex/data29-cv-residual-recovery`, based on `b958021`. It uses the existing
-five CV development documents and adds no data. Runtime extraction does not
+DATA-29 là checkpoint parser development-only đã được tích hợp vào `main` tại
+`54eafd0`; implementation ban đầu nằm trên branch
+`codex/data29-cv-residual-recovery`, dựa trên `b958021`. Nó dùng năm tài liệu
+CV development hiện có và không thêm data. Runtime extraction không
 read GroundTruth; DATA-17, DATA-24 and DATA-27 artifacts remain immutable.
 
 Fresh private aggregate: strict `107/112` (95.54%), accepted `112/112`;

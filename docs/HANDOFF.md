@@ -1,10 +1,29 @@
 # Handoff
 
+## DATA-30 main reconciliation & development freeze (2026-08-10)
+
+- Checkout hiện hành là `main`, HEAD và `origin/main` cùng ở `54eafd0`.
+- PR #15 (DATA-29 implementation) và PR #16 (README tiếng Việt) đã merge;
+  CI Python 3.10, Python 3.12 và OCR Lab Web đều `SUCCESS`.
+- Working tree sạch; không có tracked change hoặc private artifact nào được
+  đưa vào Git.
+- Development delivery: `DEVELOPMENT COMPLETE / HELD-OUT HOLD`.
+- Metrics DATA-29: strict `107/112`, accepted `112/112`, Contract `42/42`,
+  CV `45/50`, IELTS `20/20`, applicable completeness `99/99`, classification
+  `12/12`, schema errors `0`, sensitive false acceptance `0`, parser
+  regression `0`, scan `5/5 MANUAL_REVIEW`, false auto-continue `0`.
+- Không thêm data, không sửa parser, không rerun DATA-24, không promote
+  fallback. DATA-27 held-out generalization vẫn `HOLD`; DATA-17, DATA-24 và
+  các lock/artifact held-out cũ vẫn immutable.
+- Prediction + GT development vẫn được xem local tại
+  `http://localhost:3000/workspace`; raw document/OCR/prediction/GroundTruth
+  không được commit hoặc gửi lên cloud.
+
 ## DATA-29 CV residual recovery (2026-08-10)
 
-- Branch: `codex/data29-cv-residual-recovery`, based on CI-green baseline
-  `b958021`; implementation is development-only and uses the existing five CV
-  documents.
+- Implementation ban đầu trên branch `codex/data29-cv-residual-recovery`, dựa
+  trên CI-green baseline `b958021`; thay đổi đã được merge vào `main` tại
+  `54eafd0`. Đây là implementation development-only trên năm CV hiện có.
 - Fresh private DATA-29 aggregate: strict `107/112`, accepted `112/112`;
   Contract `42/42`, CV `45/50`, IELTS `20/20`; applicable completeness
   `99/99`, classification `12/12`, schema errors `0`, sensitive false

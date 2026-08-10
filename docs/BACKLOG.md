@@ -1,5 +1,14 @@
 # Backlog
 
+## DATA-30-MAIN-RECONCILIATION-AND-DEVELOPMENT-FREEZE — DONE / DEVELOPMENT COMPLETE / HELD-OUT HOLD (2026-08-10)
+
+Đã đồng bộ checkout với `origin/main` tại `54eafd0`, cập nhật README tiếng
+Việt và ghi nhận metrics DATA-29 hiện hành: strict `107/112`, accepted
+`112/112`, applicable completeness `99/99`, classification `12/12`, schema
+errors `0`, parser regression `0`, scan `5/5 MANUAL_REVIEW`. Không thêm data,
+không sửa parser, không rerun DATA-24 và không promote fallback. Held-out
+generalization tiếp tục `HOLD`.
+
 ## DATA-29-CV-RESIDUAL-RECOVERY — DONE / DEV HOLD (2026-08-10)
 
 Development-only recovery on the existing five CV documents. Strict improved to
