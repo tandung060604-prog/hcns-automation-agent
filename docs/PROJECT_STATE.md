@@ -1,5 +1,18 @@
 # Project State
 
+## M5-CAM-001B Phase15 scalar/reference bridge (2026-08-10)
+
+M5-CAM-001B đã nối projection Phase15 tối giản vào Submit task của Camunda
+trên đúng hai fixture synthetic leave/overtime. Bridge chuẩn hóa classification
+status về vocabulary Camunda, thay artifact path bằng opaque reference do caller
+cấp, ép `autoContinueEnabled=false` và fail-closed với raw field/path variables.
+
+- Camunda thực tế: cả hai case đạt `UserReview` và hoàn tất simulated flow.
+- Aggregate gates: `AUTO_CONTINUE=0`, raw exposure `0`, duplicate `0`,
+  unreconciled `0`, real side effects `0`; thời gian case 2.485s và 1.234s.
+- Không dùng Phase12, không đọc cohort thật, không thêm `documentSourcePath`,
+  không sửa DATA-17/24/27 artifacts. Test bridge dùng fixture metadata synthetic.
+
 ## M5-CAM-001A local synthetic shadow preflight (2026-08-10)
 
 Preflight Camunda local is `PASS` on the implementation branch
