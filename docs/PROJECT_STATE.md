@@ -1,5 +1,23 @@
 # Project State
 
+## M5-CAM-001A local synthetic shadow preflight (2026-08-10)
+
+Preflight Camunda local is `PASS` on the implementation branch
+`codex/m5-cam-001a-shadow-preflight`; it is not a production or cohort approval.
+
+- Current BPMN/DMN deployed to local Camunda 7.13; two native DOCX fixtures only
+  (`LEAVE_REQUEST`, `OVERTIME_REQUEST`) reached `UserReview`, were confirmed by a
+  synthetic reviewer, then completed the simulated HRIS/notification path.
+- Gates: `AUTO_CONTINUE=0`, raw exposure `0`, duplicate artifacts `0`,
+  unreconciled cases `0`, real side effects `0`; case durations were 2.781s and
+  1.609s, both below 60s.
+- Worker polling now retries an unavailable local Camunda REST endpoint using
+  bounded exponential backoff. The new runner creates source/result/report files
+  only below the caller-selected private root and emits aggregate-only evidence.
+- No real leave/overtime cohort, no OCR/CV/contract/IELTS dataset, no GroundTruth,
+  and no existing evaluate-once artifact were accessed. The next decision is still
+  owner authorization for a real shadow cohort, not automatic promotion.
+
 ## DATA-30 main reconciliation & development freeze (2026-08-10)
 
 Repository đã được đồng bộ fast-forward với `origin/main`:

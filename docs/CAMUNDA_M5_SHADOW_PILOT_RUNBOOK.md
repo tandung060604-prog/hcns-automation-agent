@@ -1,6 +1,6 @@
 # M5-CAM-001 — Camunda review-first shadow pilot
 
-Status: `READY_FOR_AUTHORIZATION`, not production approval.
+Status: `LOCAL_PREFLIGHT_PASS / READY_FOR_AUTHORIZATION`, not production approval.
 
 ## Scope
 
@@ -42,6 +42,23 @@ $env:PYTHONPATH = "src;tests"
 .\.venv\Scripts\python.exe -m mypy --no-incremental --no-sqlite-cache --cache-dir .venv/mypy src
 .\.venv\Scripts\python.exe scripts/check_repository.py
 .\.venv\Scripts\python.exe scripts/run_camunda_m4_dry_run.py
+```
+
+M5-CAM-001A completed this local preflight on 2026-08-10 with two synthetic native
+DOCX sources only. Both reached `UserReview` and completed the simulated flow;
+`AUTO_CONTINUE=0`, raw exposure `0`, duplicates `0`, unreconciled cases `0`, real
+side effects `0`, and both cases completed below 60 seconds. It does not authorize
+a real cohort.
+
+For a new local-only synthetic run, start the approved local Camunda 7.13 runtime
+and write the create-only aggregate report outside the repository:
+
+```powershell
+$env:PYTHONPATH = "src"
+.\.venv\Scripts\python.exe scripts/run_camunda_m5_shadow_preflight.py `
+  --camunda-url http://127.0.0.1:8080/engine-rest `
+  --private-root C:\Camunda\private-data\m5-cam-001a `
+  --output C:\Camunda\private-data\m5-cam-001a\reports\m5-shadow-preflight.json
 ```
 
 Do not use `C:\tmp` in the runbook. A dependency profile may be used only as a local troubleshooting fallback; it is not a gate artifact.

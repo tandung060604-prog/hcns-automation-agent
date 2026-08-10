@@ -22,6 +22,7 @@ from hcns_agent.adapters.camunda7.worker import (
     Camunda7ExternalTaskWorker,
     CamundaBusinessError,
     CamundaTechnicalError,
+    ReconnectBackoffPolicy,
 )
 
 
@@ -223,6 +224,43 @@ class Camunda7WorkerTests(TestCase):
 
         self.assertEqual(1, worker.run_once())
         self.assertEqual([{"fileValidationStatus": "VALID"}], client.completed)
+
+    def test_worker_reconnects_with_bounded_backoff_after_rest_failure(self) -> None:
+        class _RecoveringClient(_FakeClient):
+            def __init__(self, task: ExternalTask) -> None:
+                super().__init__(task)
+                self.fetch_calls = 0
+
+            def fetch_and_lock(
+                self,
+                subscriptions: tuple[TopicSubscription, ...],
+                *,
+                max_tasks: int = 1,
+                async_response_timeout_ms: int = 10_000,
+            ) -> tuple[ExternalTask, ...]:
+                self.fetch_calls += 1
+                if self.fetch_calls < 3:
+                    raise CamundaRestError("Camunda REST is unavailable")
+                return ()
+
+        client = _RecoveringClient(self._task())
+        worker = Camunda7ExternalTaskWorker(
+            client,
+            (_Handler("document_validate_file", {"fileValidationStatus": "VALID"}),),
+        )
+        delays: list[float] = []
+
+        completed = worker.run_forever(
+            max_polls=3,
+            backoff_policy=ReconnectBackoffPolicy(
+                initial_delay_seconds=0.25,
+                maximum_delay_seconds=0.5,
+            ),
+            sleep=delays.append,
+        )
+
+        self.assertEqual(0, completed)
+        self.assertEqual([0.25, 0.5], delays)
 
     def test_worker_reports_business_error_without_retry(self) -> None:
         client = _FakeClient(self._task())

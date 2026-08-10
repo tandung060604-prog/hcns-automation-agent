@@ -8,10 +8,10 @@ from hcns_agent.adapters.camunda7.runtime import build_m4_worker_from_environmen
 def main() -> int:
     worker = build_m4_worker_from_environment()
     try:
-        while True:
-            worker.run_once(max_tasks=1)
+        worker.run_forever()
     except KeyboardInterrupt:
         return 0
+    return 0
 
 
 if __name__ == "__main__":

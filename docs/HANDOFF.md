@@ -917,6 +917,19 @@
 - Verification: `tests/test_camunda_m4_dry_run.py` passed; no CCCD or private
   dataset files were changed.
 
+### M5-CAM-001A — Local synthetic shadow preflight (DONE)
+
+- Current BPMN/DMN were deployed to local Camunda 7.13 and exercised with exactly
+  two native DOCX fixtures: one leave request and one overtime request. Both reached
+  `UserReview`, were completed as `CONFIRMED`, and completed the simulated
+  HRIS/notification route.
+- Aggregate gates passed: `AUTO_CONTINUE=0`, raw exposure `0`, duplicate result
+  artifacts `0`, unreconciled cases `0`, real side effects `0`; durations were
+  2.781s and 1.609s (both under 60s). Private aggregate report is outside Git.
+- Worker reconnect/backoff and the create-only local runner are covered by Camunda
+  unit tests. No real cohort, private OCR/document data, GroundTruth, or previous
+  evaluate-once artifact was read.
+
 ### M5-CAM-001 — Shadow-pilot authorization (READY)
 
 - User confirmed opening M5. The task is authorization/runbook preparation only;
