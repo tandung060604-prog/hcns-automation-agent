@@ -1,6 +1,6 @@
 # M5-CAM-001 — Camunda review-first shadow pilot
 
-Status: `LOCAL_PREFLIGHT_PASS / READY_FOR_AUTHORIZATION`, not production approval.
+Status: `LOCAL_PREFLIGHT_PASS / AUTHORIZED_SYNTHETIC_ONLY`, not production approval.
 
 ## Scope
 
@@ -28,6 +28,29 @@ Timesheet is removed from code, schema, API, dashboard and active tests. Citizen
 | Citizen-ID front | >=15 eligible front images (current evidence: 14); blind Ground Truth review 100%; every sensitive field reviewed; no automatic acceptance |
 
 Business owner must record cohort, reviewer, retention, time window and rollback authority outside the repository. Pilot performance target is p95 <=60 seconds for an image or scanned PDF and zero unreconciled cases.
+
+## Authorization record (synthetic-only; real cohort not approved)
+
+The following fields are the minimum authorization packet. The current record
+authorizes only the two synthetic cases below; a real cohort remains
+`PENDING_OWNER_INPUT` and is not authorized:
+
+| Field | Required value | Current state |
+|---|---|---|
+| Owner | accountable synthetic business-owner role ID | `m5-synthetic-business-owner` |
+| Reviewer | independent synthetic reviewer role ID | `m5-independent-synthetic-reviewer` |
+| Cohort | synthetic IDs or approved document-family scope | `SYNTHETIC_ONLY` |
+| Time window | start/end with timezone | `2026-08-10 15:55–18:00 +07:00` |
+| Retention | private-store expiry and deletion owner | `2026-08-17 23:59:59 +07:00; owner role` |
+| Rollback authority | named role and trigger | `owner role; any safety-gate violation` |
+| Side effects | HRIS/notification writes | `DISABLED` |
+| Review policy | every result and every scan | `MANUAL_REVIEW` |
+| DATA-24 | old evaluate-once/GT | `IMMUTABLE; NOT OPENED` |
+
+These are synthetic governance role IDs, not personal identities or production
+approval. The private authorization record is
+`C:\Camunda\private-data\m5-cam-001\authorization\M5-CAM-001-AUTHORIZATION.json`.
+It must never be used to open a real cohort or enable side effects.
 
 ## Local preflight
 
