@@ -43,6 +43,21 @@
   inputs remain `MANUAL_REVIEW`; DATA-24 and its GroundTruth/evaluate-once stay
   immutable.
 
+## DATA-30A local private replay review (DONE / HOLD, 2026-08-10)
+
+- Local API `http://127.0.0.1:8765` and UI `http://localhost:3000/workspace`
+  use a private prediction-only projection of the existing DATA-22 inventory:
+  `70` documents (`30` Contract, `30` CV, `10` IELTS), `68` predictions and
+  `2` unsupported-format placeholders.
+- The review list renders `70` records. Scan disposition is `27/27
+  MANUAL_REVIEW`; unsupported `.txt/.pptx` records show
+  `UNSUPPORTED_FORMAT → MANUAL_REVIEW` and have no OCR/prediction value.
+- Prediction-only source preview resolves inventory + source SHA without
+  reading GroundTruth. DATA-24 and all historical artifacts remain immutable;
+  no Camunda process or side effect is started.
+- Private projection:
+  `C:\\Camunda\\private-data\\local-private-data-authorized-20260810\\data22-development-r3-local-review-predictions-70.json`.
+
 ## M5-CAM-001C expiry/rollback smoke (DONE)
 
 - Active synthetic authorization passed two leave/overtime cases with all safety

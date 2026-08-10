@@ -21,6 +21,16 @@ Git data permission: raw documents/OCR/predictions/PII remain outside the
 repository, Camunda receives scalar/reference values only, scan inputs remain
 `MANUAL_REVIEW`, side effects stay disabled, and DATA-24 remains immutable.
 
+## DATA-30A local private replay review (2026-08-10)
+
+Localhost now reads a private prediction-only projection of the existing
+DATA-22 development inventory: `70` documents (`30/30/10` by Contract/CV/IELTS),
+`68` predictions and `2` explicit `UNSUPPORTED_FORMAT` records. All `27` scan
+documents show `MANUAL_REVIEW`; no GroundTruth or evaluate-once artifact is
+read. Projection and source files remain outside Git/cloud at the authorized
+private root. API/UI verification found `70` review buttons and `2` unsupported
+records; promotion remains `HOLD`.
+
 ## M5-CAM-001 authorization state (2026-08-10)
 
 Authorization is `AUTHORIZED_SYNTHETIC_ONLY`; it uses role IDs

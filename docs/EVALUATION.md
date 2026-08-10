@@ -168,6 +168,15 @@ Aggregate-only handoff artifact:
 `C:\\tmp\\data28-local-review-handoff-20260810.json`. This checkpoint does not
 modify DATA-24, open DATA-27, or run evaluate-once.
 
+### DATA-30A prediction-only localhost review
+
+The existing private DATA-22 development inventory is projected to the local
+prediction inspector as `70` documents (`30` Contract, `30` CV, `10` IELTS):
+`68` prediction records plus `2` explicit unsupported-format manual-review
+records. The API source preview uses inventory and source SHA only; it does not
+read GroundTruth. All `27` scan documents remain `MANUAL_REVIEW`, and the
+projection is not a scoring benchmark or promotion candidate.
+
 ## Metrics
 
 - OCR: CER, WER, reading-order accuracy.

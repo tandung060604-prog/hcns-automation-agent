@@ -8,7 +8,7 @@ type Summary = {
   status: string;
   documentCount: number;
   reportAvailable: boolean;
-  documents: Array<{ caseId: string; category: string; sourceFormat: string; sourceFile: string; evaluationIncluded?: boolean; ocrScope?: string }>;
+  documents: Array<{ caseId: string; category: string; sourceFormat: string; sourceFile: string; evaluationIncluded?: boolean; ocrScope?: string; recommendedAction?: string }>;
   report?: RecordValue;
 };
 type Props = { version?: "data12" | "data13" | "policy-v2" };
@@ -86,17 +86,22 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
             <div className="external-review-list" role="list">
               {summary.documents.map((item) => (
                 <button className={item.caseId === activeCase ? "active" : ""} key={item.caseId} onClick={() => setActiveCase(item.caseId)} type="button">
-                  <small>{item.evaluationIncluded === false ? "UNSUPPORTED_NO_OCR · không tính metric" : item.ocrScope ?? "—"}</small>
+                  <small>{item.evaluationIncluded === false ? "UNSUPPORTED_FORMAT · MANUAL_REVIEW" : item.recommendedAction === "MANUAL_REVIEW" ? "MANUAL_REVIEW" : item.ocrScope ?? "—"}</small>
                   <span>{item.caseId}</span><strong>{item.category.toUpperCase()}</strong><small>{item.sourceFormat} · {item.sourceFile}</small>
                 </button>
               ))}
             </div>
             <div className="external-review-source">
-              {active && !["DOCX", "PLAIN_TEXT"].includes(active.sourceFormat) ? (
+              {active?.evaluationIncluded === false ? (
+                <div className="native-heldout-file">
+                  <strong>{active.sourceFile}</strong>
+                  <p>UNSUPPORTED_FORMAT → MANUAL_REVIEW. Không gọi OCR và không tính metric.</p>
+                </div>
+              ) : active && !["DOCX", "PLAIN_TEXT"].includes(active.sourceFormat) ? (
                 active.sourceFormat === "PDF_SCAN" || active.sourceFormat === "PDF_TEXT" ?
-                  <iframe title={`Preview ${active.caseId}`} src={`${API_BASE}/external-dataset/review/document?id=${encodeURIComponent(active.caseId)}&mode=preview`} /> :
+                  <iframe title={`Preview ${active.caseId}`} src={`${API_BASE}/external-dataset/prediction/source?id=${encodeURIComponent(active.caseId)}&mode=preview`} /> :
                   // eslint-disable-next-line @next/next/no-img-element -- loopback-only source preview.
-                  <img src={`${API_BASE}/external-dataset/review/document?id=${encodeURIComponent(active.caseId)}&mode=preview`} alt={active.sourceFile} />
+                  <img src={`${API_BASE}/external-dataset/prediction/source?id=${encodeURIComponent(active.caseId)}&mode=preview`} alt={active.sourceFile} />
               ) : <div className="native-heldout-file"><strong>{active?.sourceFile}</strong><p>Native source; prediction lấy từ parser local.</p></div>}
             </div>
             <div className="external-review-form">

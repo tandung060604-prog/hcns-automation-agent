@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from apps.ocr_lab.api.external_dataset_prediction import (
@@ -10,6 +14,7 @@ from apps.ocr_lab.api.external_dataset_prediction import (
     _field_match,
     build_aggregate_report,
     build_gate_report,
+    resolve_prediction_source,
 )
 from apps.ocr_lab.api.phase15_idp import classify_phase15_document, extract_phase15_document
 
@@ -75,6 +80,32 @@ def _positioned_ocr_canonical(items: list[tuple[str, int, int, int]]) -> dict[st
         "pages": [{"blocks": blocks, "ocrBlocks": blocks}],
         "tables": [],
     }
+
+
+def test_prediction_source_resolution_is_inventory_only() -> None:
+    with tempfile.TemporaryDirectory(prefix="prediction-source-", dir="C:/tmp") as raw_root:
+        root = Path(raw_root)
+        source = root / "cv-001.png"
+        source.write_bytes(b"synthetic-image")
+        inventory = root / "inventory.json"
+        inventory.write_text(
+            json.dumps(
+                {
+                    "cases": [
+                        {
+                            "caseId": "cv-001",
+                            "sourceRelativePath": "cv-001.png",
+                            "sourceSha256": (
+                                "sha256:" + hashlib.sha256(source.read_bytes()).hexdigest()
+                            ),
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert resolve_prediction_source(root, inventory, "cv-001") == source.resolve()
 
 
 def test_data12_aggregate_is_prediction_scoring_only() -> None:

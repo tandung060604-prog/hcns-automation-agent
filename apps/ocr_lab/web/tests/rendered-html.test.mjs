@@ -232,6 +232,18 @@ test("exposes the DATA-08 independent contract review panel behind a private fla
   assert.match(css, /external-review-primary-save:disabled/);
 });
 
+test("keeps prediction-only unsupported formats in explicit manual review", async () => {
+  const [component, api] = await Promise.all([
+    readFile(new URL("../app/ExternalDatasetPrediction.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../../api/serve_dashboard_api.py", import.meta.url), "utf8"),
+  ]);
+  assert.match(component, /UNSUPPORTED_FORMAT/);
+  assert.match(component, /MANUAL_REVIEW/);
+  assert.match(component, /\/external-dataset\/prediction\/source\?id=/);
+  assert.match(api, /\/external-dataset\/prediction\/source/);
+  assert.match(api, /resolve_prediction_source/);
+});
+
 test("exposes one Template-first upload with source preview and structured results", async () => {
   const [dashboard, css, envExample] = await Promise.all([
     readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),

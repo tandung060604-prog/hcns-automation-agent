@@ -1,5 +1,14 @@
 # Backlog
 
+## DATA-30A-LOCAL-PRIVATE-REPLAY-REVIEW — DONE / HOLD (2026-08-10)
+
+Localhost exposes the existing private DATA-22 development replay: `70`
+documents (`30/30/10`), `68` prediction records and `2` explicit unsupported
+format records. All `27` scans remain `MANUAL_REVIEW`; no GroundTruth,
+evaluate-once or Camunda side effect was opened. The private projection stays
+outside Git/cloud. Promotion and strict scoring remain `HOLD` because this
+projection is prediction-only.
+
 ## DATA-30-MAIN-RECONCILIATION-AND-DEVELOPMENT-FREEZE — DONE / DEVELOPMENT COMPLETE / HELD-OUT HOLD (2026-08-10)
 
 Đã đồng bộ checkout với `origin/main` tại checkpoint DATA-30, cập nhật README tiếng
