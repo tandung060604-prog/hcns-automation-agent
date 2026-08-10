@@ -153,7 +153,7 @@ Set-Location ..\..\..
 .\apps\ocr_lab\api\start_dashboard.ps1 -DataRoot "C:\path\to\private-data\ocr-documents" -PythonPath ".\.venv\Scripts\python.exe"
 ~~~
 
-Mở http://localhost:3000, tải một tài liệu thuộc phạm vi hỗ trợ và xem bản xem trước, trường được trích xuất, độ tin cậy, bằng chứng và JSON. Không đưa tài liệu thật hoặc đầu ra chứa PII vào Git.
+Mở http://localhost:3000, tải một tài liệu thuộc phạm vi hỗ trợ và xem bản xem trước, trường được trích xuất, độ tin cậy, bằng chứng và JSON. Tài liệu private do người dùng chỉ định được phép chạy local qua `private-data` root; raw document, OCR, prediction và PII không được commit vào Git.
 
 ## Kiểm thử
 
@@ -164,11 +164,12 @@ python -m mypy src
 python scripts/check_repository.py
 ~~~
 
-Các kiểm thử mặc định sử dụng dữ liệu mô phỏng, không cần tài liệu thật, trọng số mô hình hoặc máy chủ Camunda.
+Các kiểm thử mặc định sử dụng dữ liệu mô phỏng. Gate/replay/localhost review cũng được phép dùng corpus private hiện có khi người dùng đã chỉ định; dữ liệu vẫn phải chạy local, ngoài Git và ngoài cloud.
 
 ## Bảo mật và vận hành
 
 - Dữ liệu, trọng số mô hình, file tải lên và đầu ra OCR thật nằm ngoài Git.
+- Corpus private hiện có được phép dùng cho gate/replay local theo chỉ định của người dùng; retention và quyền truy cập kế thừa manifest/private root tương ứng.
 - Luồng mặc định không gửi tài liệu hoặc nội dung OCR lên cloud/API bên ngoài.
 - Camunda chỉ nhận các biến scalar, trạng thái và tham chiếu; không nhận file gốc hoặc toàn bộ payload OCR.
 - Các quyết định ảnh hưởng nghiệp vụ vẫn cần người có thẩm quyền phê duyệt.

@@ -13,6 +13,14 @@ cấp, ép `autoContinueEnabled=false` và fail-closed với raw field/path vari
 - Không dùng Phase12, không đọc cohort thật, không thêm `documentSourcePath`,
   không sửa DATA-17/24/27 artifacts. Test bridge dùng fixture metadata synthetic.
 
+## User-directed local private corpus authorization (2026-08-10)
+
+The user has authorized the existing project corpus for local gate, replay and
+localhost review runs. This is a local-only operating profile, not a cloud or
+Git data permission: raw documents/OCR/predictions/PII remain outside the
+repository, Camunda receives scalar/reference values only, scan inputs remain
+`MANUAL_REVIEW`, side effects stay disabled, and DATA-24 remains immutable.
+
 ## M5-CAM-001 authorization state (2026-08-10)
 
 Authorization is `AUTHORIZED_SYNTHETIC_ONLY`; it uses role IDs
