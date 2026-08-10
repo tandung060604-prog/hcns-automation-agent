@@ -33,6 +33,18 @@
 - Private authorization record:
   `C:\Camunda\private-data\m5-cam-001\authorization\M5-CAM-001-AUTHORIZATION.json`.
 
+## M5-CAM-001C expiry/rollback smoke (DONE)
+
+- Active synthetic authorization passed two leave/overtime cases with all safety
+  aggregates at zero and `MANUAL_REVIEW` preserved.
+- Expired authorization was refused before Camunda process start (`0` start
+  attempts). Simulated `autoContinueCount > 0` forced rollback and disallowed
+  completion.
+- Private aggregate report:
+  `C:\Camunda\private-data\m5-cam-001c\reports\m5-cam-001c-auth-smoke.json`.
+- No real cohort, data addition, gate change, DATA-24 read or side effect was
+  introduced.
+
 ## DATA-29 CV residual recovery (2026-08-10)
 
 - Implementation ban đầu trên branch `codex/data29-cv-residual-recovery`, dựa

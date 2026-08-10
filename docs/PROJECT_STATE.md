@@ -23,6 +23,16 @@ leave/overtime cases. Real cohort remains closed; side effects are `DISABLED`,
 every result is `MANUAL_REVIEW`, and DATA-24/GroundTruth/evaluate-once remains
 immutable and unopened.
 
+## M5-CAM-001C authorization expiry/rollback smoke (2026-08-10)
+
+M5-CAM-001C is `DONE` for the synthetic-only authorization. The active
+leave/overtime run passed with `MANUAL_REVIEW`, auto-continue `0`, raw exposure
+`0`, duplicates `0`, unreconciled `0` and real side effects `0`. An expired
+authorization was rejected before any Camunda process start (`0` start
+attempts). A simulated `autoContinueCount > 0` violation returned
+`rollbackRequired=true`, `allowedToComplete=false` and the fail-closed stop/delete/
+escalate action. No gate changed and DATA-24 remained unopened.
+
 ## M5-CAM-001A local synthetic shadow preflight (2026-08-10)
 
 Preflight Camunda local is `PASS` on the implementation branch

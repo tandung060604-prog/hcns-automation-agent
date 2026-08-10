@@ -77,6 +77,12 @@ M5-CAM-001B also projects Phase15 metadata through the sanitized scalar/referenc
 boundary. It rejects raw fields and filesystem paths, and supplies an opaque
 result reference instead of Phase15's private artifact path.
 
+M5-CAM-001C validates authorization enforcement without opening a real cohort:
+the active synthetic run passes, an expired authorization is refused before any
+Camunda process start, and a simulated `autoContinueCount > 0` violation returns
+fail-closed rollback. The aggregate smoke report is private-only at
+`C:\Camunda\private-data\m5-cam-001c\reports\m5-cam-001c-auth-smoke.json`.
+
 For a new local-only synthetic run, start the approved local Camunda 7.13 runtime
 and write the create-only aggregate report outside the repository:
 
@@ -86,6 +92,16 @@ $env:PYTHONPATH = "src"
   --camunda-url http://127.0.0.1:8080/engine-rest `
   --private-root C:\Camunda\private-data\m5-cam-001a `
   --output C:\Camunda\private-data\m5-cam-001a\reports\m5-shadow-preflight.json
+```
+
+Run the authorization smoke only with the private synthetic record:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/run_camunda_m5_authorization_smoke.py `
+  --camunda-url http://127.0.0.1:8080/engine-rest `
+  --authorization C:\Camunda\private-data\m5-cam-001\authorization\M5-CAM-001-AUTHORIZATION.json `
+  --private-root C:\Camunda\private-data\m5-cam-001c `
+  --output C:\Camunda\private-data\m5-cam-001c\reports\m5-cam-001c-auth-smoke.json
 ```
 
 Do not use `C:\tmp` in the runbook. A dependency profile may be used only as a local troubleshooting fallback; it is not a gate artifact.

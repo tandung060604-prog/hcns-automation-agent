@@ -13,6 +13,7 @@ import time
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from html import escape
 from io import BytesIO
 from pathlib import Path
@@ -30,6 +31,9 @@ from hcns_agent.adapters.camunda7.client import (
 from hcns_agent.adapters.camunda7.contract import (
     PROCESS_VARIABLE_WHITELIST,
     ProcessValue,
+)
+from hcns_agent.adapters.camunda7.m5_authorization import (
+    M5SyntheticAuthorization,
 )
 from hcns_agent.adapters.camunda7.phase15_bridge import (
     project_phase15_business_json,
@@ -56,6 +60,7 @@ class Camunda7ShadowPreflightGateway:
         self._base_url = config.base_url.rstrip("/") + "/"
         self._authorization_header = config.authorization_header
         self._timeout_seconds = config.timeout_seconds
+        self.process_start_attempts = 0
 
     def deploy(self, bpmn_path: Path, dmn_path: Path) -> str:
         for path in (bpmn_path, dmn_path):
@@ -82,6 +87,7 @@ class Camunda7ShadowPreflightGateway:
         *,
         business_key: str | None = None,
     ) -> str:
+        self.process_start_attempts += 1
         payload: dict[str, object] = {"variables": _encode_variables(variables)}
         if business_key is not None:
             payload["businessKey"] = _opaque_id(business_key)
@@ -311,11 +317,15 @@ def run_shadow_preflight(
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
     timeout_seconds: float = 55.0,
+    authorization: M5SyntheticAuthorization | None = None,
+    authorization_now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
 ) -> ShadowPreflightReport:
     """Execute two synthetic review-first cases against a local Camunda engine."""
 
     if timeout_seconds <= 0 or timeout_seconds >= 60:
         raise ValueError("timeout_seconds must be greater than 0 and below 60")
+    if authorization is not None:
+        authorization.assert_active(authorization_now())
     root = private_root.resolve()
     if not root.is_absolute():
         raise ValueError("private_root must be absolute")
