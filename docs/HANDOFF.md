@@ -1,5 +1,16 @@
 # Handoff
 
+## DATA-30B local benchmark metric checkpoint (2026-08-10)
+
+- Local benchmark cards now read the sealed DATA-29 development aggregate and
+  show Contract `42/42`, CV `45/50`, IELTS `20/20` strict; accepted remains
+  separate at `42/42`, `50/50`, `20/20`.
+- Benchmark denominators are `3/5/4`; local DATA-22 prediction-only counts are
+  shown separately as `30/30/10`. No score is derived from that inventory.
+- DATA-17/DATA-24 and their locks remain immutable. No new data, GroundTruth
+  rerun or evaluate-once was run. API summary, Python compile, web build and
+  15 web tests passed. Next action is commit/CI review.
+
 ## DATA-30 main reconciliation & development freeze (2026-08-10)
 
 - Checkout hiện hành là `main`; HEAD và `origin/main` đã được xác minh đồng bộ

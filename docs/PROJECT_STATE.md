@@ -1,5 +1,16 @@
 # Project State
 
+## DATA-30B local benchmark metric checkpoint (2026-08-10)
+
+The localhost benchmark cards now load the sealed DATA-29 development
+aggregate while keeping the DATA-22 prediction-only count separate. Displayed
+development metrics are Contract `42/42` strict, CV `45/50` strict and IELTS
+`20/20` strict; accepted is `42/42`, `50/50` and `20/20`. Cards show benchmark
+counts `3/5/4` and local prediction-only counts `30/30/10` by Contract/CV/IELTS.
+DATA-17 and DATA-24 remain immutable; no new data, GroundTruth rerun or
+evaluate-once was performed. API summary, Python compile, web build and 15 web
+tests passed; raw artifacts remain outside Git/cloud.
+
 ## M5-CAM-001B Phase15 scalar/reference bridge (2026-08-10)
 
 M5-CAM-001B đã nối projection Phase15 tối giản vào Submit task của Camunda

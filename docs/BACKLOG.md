@@ -1,5 +1,15 @@
 # Backlog
 
+## DATA-30B-LOCAL-BENCHMARK-METRIC-CHECKPOINT — REVIEW (2026-08-10)
+
+The localhost benchmark cards now load the sealed DATA-29 development
+aggregate: Contract `42/42`, CV `45/50`, IELTS `20/20` strict, with accepted
+reported separately. They show benchmark counts `3/5/4` and local prediction-
+only counts `30/30/10`; prediction-only records never contribute to metrics.
+DATA-17 and DATA-24 remain immutable. No new data, GroundTruth rerun or
+evaluate-once was performed. Required web/API validation passed; commit and CI
+review are the next checkpoint.
+
 ## DATA-30A-LOCAL-PRIVATE-REPLAY-REVIEW — DONE / HOLD (2026-08-10)
 
 Localhost exposes the existing private DATA-22 development replay: `70`

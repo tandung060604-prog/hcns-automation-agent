@@ -1,5 +1,16 @@
 # Evaluation
 
+## DATA-30B local benchmark metric checkpoint (2026-08-10)
+
+The localhost per-document-type benchmark cards now use the sealed DATA-29
+development aggregate for scoring and the DATA-22 inventory only for a separate
+local-document count. Development strict/accepted results remain Contract
+`42/42`/`42/42`, CV `45/50`/`50/50`, and IELTS `20/20`/`20/20`; benchmark
+document counts are `3/5/4`, while prediction-only local counts are `30/30/10`.
+The prediction-only inventory contributes no exact, presence or accepted
+metric. DATA-17 and DATA-24 remain immutable; this checkpoint did not add data,
+read GroundTruth, rerun evaluate-once or open Camunda side effects.
+
 ## DATA-29 CV residual recovery (2026-08-10)
 
 DATA-29 is a development-only replay on the existing five CV documents. The

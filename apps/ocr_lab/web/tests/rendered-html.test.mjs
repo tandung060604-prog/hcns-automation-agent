@@ -402,6 +402,7 @@ test("renders the document benchmark as a visual flow and card grid", async () =
   assert.match(component, /local-benchmark-flow/);
   assert.match(component, /ScoreRing/);
   assert.match(component, /local-benchmark-visual-grid/);
+  assert.match(component, /prediction-only/);
   assert.match(css, /\.local-benchmark-ring/);
   assert.match(css, /\.local-benchmark-flow/);
   assert.match(api, /\/benchmark\/summary/);
