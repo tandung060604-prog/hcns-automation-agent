@@ -1,5 +1,22 @@
 # Evaluation
 
+## DATA-29 CV residual recovery (2026-08-10)
+
+DATA-29 is a development-only replay on the existing five CV documents. The
+candidate uses bounded native section extraction, skill-list label cleanup,
+standalone Vietnamese ampersand normalization, desired-role title conjunction
+normalization, and a same-document one-edit OCR anchor repair. It does not use
+GroundTruth in runtime and does not alter schema/API or scan review policy.
+
+The private aggregate reports strict `107/112` and accepted `112/112`;
+Contract `42/42`, CV `45/50`, IELTS `20/20`, applicable completeness `99/99`,
+classification `12/12`, schema errors `0`, sensitive false acceptance `0`,
+parser regression `0`, and scan `5/5 MANUAL_REVIEW`. Five CV `experience`
+fields remain accepted-partial. The DATA-20 development gate is `PASS`, while
+fallback remains disabled at `3.3334pp` fixed-scan improvement versus the
+required `10pp`. Aggregate-only artifact:
+`C:\tmp\data29-cv-residual-recovery-20260810.json`.
+
 > Lưu ý: phần benchmark held-out 18 tài liệu ở cuối file là báo cáo lịch sử của
 > corpus đã retire. Corpus, route dashboard và script Phase 16 không còn được
 > local runtime sử dụng; không dùng các số liệu đó để mô tả trạng thái hiện tại.

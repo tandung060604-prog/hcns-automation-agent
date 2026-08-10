@@ -1,6 +1,32 @@
 # Project State
 
-## Current checkpoint (2026-08-10)
+## DATA-29 CV residual recovery (2026-08-10)
+
+DATA-29 is complete as a development-only parser checkpoint on branch
+`codex/data29-cv-residual-recovery`, based on `b958021`. It uses the existing
+five CV development documents and adds no data. Runtime extraction does not
+read GroundTruth; DATA-17, DATA-24 and DATA-27 artifacts remain immutable.
+
+Fresh private aggregate: strict `107/112` (95.54%), accepted `112/112`;
+Contract `42/42`, CV `45/50`, IELTS `20/20`; applicable completeness `99/99`,
+classification `12/12`, schema errors `0`, sensitive false acceptance `0`,
+parser regression `0`, scan manual review `5/5`, false auto-continue `0`.
+The residual CV accepted-partial set is exactly five `experience` fields;
+`skills` and `desired_role` no longer have accepted-partial fields. DATA-20
+development gate is `PASS`; fallback remains disabled because scan strict
+improvement is `3.3334pp`, below the required `10pp`.
+
+Implementation is bounded to native section stops, native skill-list label and
+ampersand normalization, desired-role title conjunction normalization, and a
+same-document one-edit OCR token repair for scan skills. Schema/API and the
+scan `MANUAL_REVIEW` policy are unchanged.
+
+Aggregate-only handoff artifact (outside Git):
+`C:\tmp\data29-cv-residual-recovery-20260810.json`.
+Private prediction/aggregate/gate files are outside Git; no raw values are
+recorded in this state file.
+
+## DATA-28 historical checkpoint (2026-08-10)
 
 Current milestone: `DATA-28-LOCAL-REVIEW-HANDOFF` is complete as a
 development-only local handoff. `DATA-26-PARSER-RECOVERY` remains `DONE / DEV

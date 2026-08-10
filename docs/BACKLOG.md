@@ -1,5 +1,16 @@
 # Backlog
 
+## DATA-29-CV-RESIDUAL-RECOVERY — DONE / DEV HOLD (2026-08-10)
+
+Development-only recovery on the existing five CV documents. Strict improved to
+`107/112` overall and `45/50` for CV; Contract stayed `42/42`, IELTS stayed
+`20/20`, completeness stayed `99/99`, schema errors and parser regression stayed
+zero, and all five scan documents remain `MANUAL_REVIEW`. The remaining five
+CV accepted-partial fields are `experience`; `skills` and `desired_role` are
+exact under policy v2. No new data, GroundTruth lookup, held-out rerun, fallback
+promotion or evaluate-once change is allowed. Aggregate-only artifact:
+`C:\tmp\data29-cv-residual-recovery-20260810.json`.
+
 > Backlog có một task `IN_PROGRESS` tại mỗi workstream. Chi tiết trạng thái thực
 > tế nằm ở [PROJECT_STATE.md](PROJECT_STATE.md); dữ liệu private không ghi ở đây.
 

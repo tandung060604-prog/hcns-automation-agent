@@ -1,5 +1,26 @@
 # OCR / Document AI Engineer Portfolio
 
+## DATA-29 CV residual recovery (2026-08-10)
+
+DATA-29 is a development-only parser recovery on the existing five CV
+documents. It adds no data, does not read GroundTruth at runtime, does not
+reopen DATA-24 or DATA-27, does not enable fallback, and does not change the
+schema/API. Native CV extraction now bounds sections at the next heading,
+removes list/category labels from skills, normalizes standalone Vietnamese
+ampersands, and normalizes a title conjunction in desired-role text. Scan
+skills use a one-character self-document OCR repair only when the same token
+appears in another section; scans remain `MANUAL_REVIEW`.
+
+Fresh private DATA-29 aggregate: strict `107/112`, accepted `112/112`,
+Contract `42/42`, CV `45/50`, IELTS `20/20`, applicable completeness `99/99`,
+classification `12/12`, schema errors `0`, sensitive false acceptance `0`,
+parser regression `0`, and scan manual review `5/5`. The only remaining CV
+partials are five experience fields. DATA-20 development gate is `PASS`, but
+fallback remains disabled because fixed-scan improvement is `3.3334pp`, below
+the required `10pp`. Aggregate-only handoff:
+`C:\tmp\data29-cv-residual-recovery-20260810.json`; raw prediction/OCR and
+GroundTruth remain outside Git.
+
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![PaddleOCR](https://img.shields.io/badge/OCR-PaddleOCR%20%2B%20EasyOCR-0A8FDC)](https://www.paddleocr.ai/)
 [![Workflow](https://img.shields.io/badge/Workflow-Camunda%207.13-FF5A00)](https://camunda.com/platform-7/)
@@ -60,93 +81,33 @@ Các trường có thể lưu kèm độ tin cậy, nguồn trích xuất, trang
 
 Không tuyên bố hỗ trợ chữ viết tay, CCCD mặt sau hoặc tài liệu chưa có schema/template riêng. Với tài liệu ngoài phạm vi, hệ thống fail-closed thay vì ép tài liệu vào loại gần giống.
 
-## Kết quả kiểm thử tiêu biểu
+## Bằng chứng development hiện tại
 
-- Phân loại hai mẫu tài liệu chính xác **10/10** trên bộ kiểm thử native.
-- Các trường bắt buộc đạt **90/90 exact match** trên bộ kiểm thử native.
-- **0 lỗi JSON Schema** trong regression test được ghi nhận.
-- Ảnh và PDF scan đã có OCR local nhưng vẫn chuyển qua người kiểm tra; confidence không được dùng một mình để tự động chấp nhận dữ liệu.
-- Camunda local đã được kiểm tra với các luồng review, correction, re-upload, retry và idempotent replay.
+DATA-17 là baseline đã `SEALED`, bất biến và được giữ lại để đối chiếu. DATA-29
+là replay development mới nhất trên đúng 12 tài liệu hiện có; không thêm dữ
+liệu, không đọc GroundTruth trong runtime, không mở lại DATA-24 và không bật
+fallback.
 
-Các con số trên là bằng chứng kỹ thuật của bộ dữ liệu kiểm thử hiện tại, không phải cam kết chất lượng production cho mọi loại giấy tờ.
-
-### Benchmark theo định dạng tài liệu
-
-| Định dạng | Classification | Required-field exact match | Schema errors | Kết quả xử lý |
-|---|---:|---:|---:|---|
-| DOCX | 10/10 | 90/90 (100%) | 0 | Native |
-| PDF có text | 10/10 | 90/90 (100%) | 0 | Native |
-| Ảnh camera | 6/6 | 31/54 (57,41%) | 0 | 6/6 chuyển review |
-| PDF tạo từ ảnh scan | 6/6 | 31/54 (57,41%) | 0 | 6/6 chuyển review |
-
-### Benchmark field extraction theo loại tài liệu
-
-DATA-17 là baseline đã sealed và giữ nguyên. DATA-26 là development replay
-riêng, dùng parser recovery và line refinement VietOCR cục bộ cho scan CV;
-không sửa GroundTruth/evaluate-once cũ và không phải kết quả production.
-
-| Nhóm tài liệu | DATA-17 strict | DATA-26 strict | DATA-26 accepted |
+| Nhóm tài liệu | DATA-17 strict | DATA-29 strict | DATA-29 accepted |
 |---|---:|---:|---:|
-| Hợp đồng | 40/42 (95,24%) | **42/42 (100%)** | 42/42 |
-| CV | 30/50 (60%) | **40/50 (80%)** | 50/50 |
-| IELTS/chứng chỉ | 20/20 (100%) | **20/20 (100%)** | 20/20 |
-| **Tổng** | **90/112 (80,36%)** | **102/112 (91,07%)** | **112/112** |
+| Hợp đồng | 40/42 | **42/42** | 42/42 |
+| CV | 30/50 | **45/50** | 50/50 |
+| IELTS/chứng chỉ | 20/20 | **20/20** | 20/20 |
+| **Tổng** | **90/112** | **107/112** | **112/112** |
 
-DATA-26 gate development: applicable completeness `99/99`, classification
-`12/12`, schema errors `0`, sensitive false acceptance `0`, parser regression
-`0`, scan `5/5 MANUAL_REVIEW`. Fallback remains disabled: fixed scan strict
-improvement is `3,33pp`, below the required `10pp` promotion threshold.
+DATA-29 gate: applicable completeness `99/99`, classification `12/12`, schema
+errors `0`, sensitive false acceptance `0`, parser regression `0`, và cả `5/5`
+tài liệu scan vẫn `MANUAL_REVIEW`. Năm field CV còn lại là accepted partial ở
+`experience`; fallback vẫn tắt vì mức cải thiện scan `3,3334` điểm phần trăm
+chưa đạt ngưỡng `10` điểm phần trăm.
 
-DATA-27A audit of the existing private pool is complete. After SHA-256/history
-and lineage exclusion, only 1 fresh Contract, 1 fresh CV and 0 fresh IELTS
-files remain, so the original independent `10/10/5` held-out split is blocked
-without adding eligible data or explicitly changing the policy. DATA-27D
-therefore delivers the DATA-26 development result only; held-out generalization
-remains `HOLD`. All documents, OCR, predictions and GroundTruth stay outside
-Git and are processed locally.
+Prediction + GT development có thể xem local tại
+[`http://localhost:3000/workspace`](http://localhost:3000/workspace). DATA-24
+official và held-out generalization vẫn `HOLD`; không có raw document, OCR,
+prediction hoặc GroundTruth nào được commit hay gửi lên cloud.
 
-DATA-28 local-review handoff is available at
-[`http://localhost:3000/workspace`](http://localhost:3000/workspace) with the
-private external-dataset review flag enabled. The local Prediction + GT view
-exposes all 12 development documents (Contract 3, CV 5, IELTS 4) and 112
-field comparisons. Current strict exact is `102/112`; accepted text is
-`112/112`; the remaining strict gap is CV accepted-partial/over-extraction in
-`experience` (5), `skills` (4) and `desired_role` (1). Contract and IELTS have
-no remaining strict field gap on this development replay. The five scan/image
-documents remain `MANUAL_REVIEW`; DATA-24 and DATA-27 held-out are untouched.
-
-### Benchmark OCR trên 77 crop dòng tiếng Việt đã được xác nhận
-
-Đây là benchmark so sánh recognizer trên cùng crop và cùng bộ text tham chiếu.
-VietOCR line refinement chỉ là tùy chọn chạy local cho development scan replay,
-không phải backend mặc định và không tự động chuyển scan khỏi `MANUAL_REVIEW`.
-
-| Backend/profile | Exact Match | CER | WER |
-|---|---:|---:|---:|
-| Paddle raw | 25,97% | 28,39% | 63,56% |
-| EasyOCR profile tốt nhất | 7,79% | 41,49% | — |
-| VietOCR sequence-to-sequence | **42,86%** | **15,59%** | **32,20%** |
-
-Exact Match là so sánh nghiêm ngặt sau chuẩn hóa Unicode và khoảng trắng; CER/WER dùng khoảng cách chỉnh sửa trên ký tự/từ. Các kết quả OCR scan vẫn cần human review, không tự động chấp nhận chỉ vì confidence cao.
-
-### Trạng thái OCR CCCD local — OCR-HO-V2 / DATA-HO-014
-
-CCCD được đánh giá riêng trên development set gồm **15 tài liệu / 120 field**. Candidate hiện tại là **11.10.2**, so với baseline **11.9.1**; các metric CCCD không gộp với CV, Contract, IELTS hoặc DATA-17.
-
-| Metric | Candidate development replay |
-|---|---:|
-| Field Exact | 63,33% |
-| ASCII match | 69,17% |
-| CER | 32,02% |
-| DER | 16,21% (41/253) |
-| Field presence | 95,83% |
-| ROI fullName / origin / residence | 53,33% / 60,00% / 66,67% |
-
-Development regression và held-out readiness đều **HOLD**. CCCD vẫn shadow-only, mọi field nhạy cảm và địa chỉ đều `MANUAL_REVIEW`; không có production promotion, automatic acceptance hoặc mở held-out mới.
-
-Các chẩn đoán 018E/018F chỉ đọc aggregate artifact đã seal. Trong cohort mà automatic region mapping thành công, recognizer disagreement là `291/375 = 77,6%`; token mismatch là `11`, line-order mismatch là `72`. Đây là bằng chứng attribution, chưa phải căn cứ để đổi selector hoặc runtime. Ground Truth, prediction raw và artifact evaluate-once thật được giữ ngoài Git.
-
-Chi tiết checkpoint và quyết định gate nằm trong [OCR-HO-V2 handoff](docs/HANDOFF.md) và [backlog](docs/BACKLOG.md). Next READY là review owner trước khi cân nhắc bất kỳ selector counterfactual nào.
+Các workstream OCR khác (ví dụ CCCD/OCR-HO) được theo dõi riêng trong
+[`docs/HANDOFF.md`](docs/HANDOFF.md) và không gộp metric vào DATA-29.
 
 ## Công nghệ sử dụng
 
