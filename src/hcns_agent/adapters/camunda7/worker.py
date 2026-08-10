@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
 from hcns_agent.adapters.camunda7.client import (
     CamundaExternalTaskClient,
+    CamundaRestError,
     ExternalTask,
     TopicSubscription,
 )
@@ -70,6 +72,22 @@ class LockExtensionPolicy:
         return topic_name in self.topic_names
 
 
+@dataclass(frozen=True, slots=True)
+class ReconnectBackoffPolicy:
+    """Bound retry delays for a local worker when Camunda is temporarily offline."""
+
+    initial_delay_seconds: float = 1.0
+    maximum_delay_seconds: float = 30.0
+
+    def __post_init__(self) -> None:
+        if self.initial_delay_seconds <= 0:
+            raise ValueError("initial_delay_seconds must be positive")
+        if self.maximum_delay_seconds < self.initial_delay_seconds:
+            raise ValueError(
+                "maximum_delay_seconds must be at least initial_delay_seconds"
+            )
+
+
 class Camunda7ExternalTaskWorker:
     def __init__(
         self,
@@ -98,6 +116,36 @@ class Camunda7ExternalTaskWorker:
         for task in tasks:
             self._handle_task(task)
         return len(tasks)
+
+    def run_forever(
+        self,
+        *,
+        max_polls: int | None = None,
+        backoff_policy: ReconnectBackoffPolicy | None = None,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> int:
+        """Poll indefinitely, recovering from unavailable Camunda REST endpoints.
+
+        ``max_polls`` exists for deterministic local preflight and unit tests.  The
+        CLI omits it and therefore keeps polling until interrupted.
+        """
+
+        if max_polls is not None and max_polls <= 0:
+            raise ValueError("max_polls must be positive when provided")
+        policy = backoff_policy or ReconnectBackoffPolicy()
+        completed = 0
+        poll_count = 0
+        delay = policy.initial_delay_seconds
+        while max_polls is None or poll_count < max_polls:
+            poll_count += 1
+            try:
+                completed += self.run_once(max_tasks=1)
+            except CamundaRestError:
+                sleep(delay)
+                delay = min(delay * 2, policy.maximum_delay_seconds)
+            else:
+                delay = policy.initial_delay_seconds
+        return completed
 
     def _handle_task(self, task: ExternalTask) -> None:
         handler = self._handlers.get(task.topic_name)
