@@ -20,18 +20,18 @@
   `http://localhost:3000/workspace`; raw document/OCR/prediction/GroundTruth
   không được commit hoặc gửi lên cloud.
 
-## M5-CAM-001 authorization handoff (PENDING_OWNER_INPUT)
+## M5-CAM-001 authorization handoff (AUTHORIZED_SYNTHETIC_ONLY)
 
 - M5-CAM-001A/B provide only local synthetic evidence; they do not authorize a
   real cohort.
-- Required private inputs are: accountable owner ID, independent reviewer ID,
-  cohort or synthetic scope, start/end time with timezone, retention expiry and
-  deletion owner, plus rollback authority and trigger.
-- Current locked values: `SYNTHETIC_ONLY`, side effects `DISABLED`, review
-  policy `MANUAL_REVIEW`, and DATA-24 `IMMUTABLE; NOT OPENED`.
-- Do not infer identities, retention or rollback authority from Git history or
-  document contents. Keep M5-CAM-001 open until the owner supplies and signs the
-  packet.
+- Synthetic role IDs are `m5-synthetic-business-owner` and
+  `m5-independent-synthetic-reviewer`; the window is 2026-08-10 15:55–18:00
+  (+07:00), retention ends 2026-08-17 23:59:59 (+07:00), and rollback belongs
+  to the owner role on any safety-gate violation.
+- Locked values are `SYNTHETIC_ONLY`, side effects `DISABLED`, review policy
+  `MANUAL_REVIEW`, real cohort `false`, and DATA-24 `IMMUTABLE; NOT OPENED`.
+- Private authorization record:
+  `C:\Camunda\private-data\m5-cam-001\authorization\M5-CAM-001-AUTHORIZATION.json`.
 
 ## DATA-29 CV residual recovery (2026-08-10)
 

@@ -15,11 +15,12 @@ cấp, ép `autoContinueEnabled=false` và fail-closed với raw field/path vari
 
 ## M5-CAM-001 authorization state (2026-08-10)
 
-Authorization packet is `PENDING_OWNER_INPUT`, not a pilot approval. Owner,
-independent reviewer, time window, retention/deletion owner and rollback
-authority have not been supplied in the private channel. Cohort scope remains
-`SYNTHETIC_ONLY`; side effects are `DISABLED`; every result remains
-`MANUAL_REVIEW`; DATA-24 and its GroundTruth/evaluate-once artifacts remain
+Authorization is `AUTHORIZED_SYNTHETIC_ONLY`; it uses role IDs
+`m5-synthetic-business-owner` and `m5-independent-synthetic-reviewer`, a
+2026-08-10 15:55–18:00 (+07:00) window, seven-day private retention and
+owner-role rollback authority. It authorizes only two synthetic
+leave/overtime cases. Real cohort remains closed; side effects are `DISABLED`,
+every result is `MANUAL_REVIEW`, and DATA-24/GroundTruth/evaluate-once remains
 immutable and unopened.
 
 ## M5-CAM-001A local synthetic shadow preflight (2026-08-10)

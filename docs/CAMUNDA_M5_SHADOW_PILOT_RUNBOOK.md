@@ -1,6 +1,6 @@
 # M5-CAM-001 — Camunda review-first shadow pilot
 
-Status: `LOCAL_PREFLIGHT_PASS / READY_FOR_AUTHORIZATION`, not production approval.
+Status: `LOCAL_PREFLIGHT_PASS / AUTHORIZED_SYNTHETIC_ONLY`, not production approval.
 
 ## Scope
 
@@ -29,28 +29,28 @@ Timesheet is removed from code, schema, API, dashboard and active tests. Citizen
 
 Business owner must record cohort, reviewer, retention, time window and rollback authority outside the repository. Pilot performance target is p95 <=60 seconds for an image or scanned PDF and zero unreconciled cases.
 
-## Authorization record (required; currently not approved)
+## Authorization record (synthetic-only; real cohort not approved)
 
-The following fields are the minimum authorization packet. Until every value is
-provided by the business owner and independently acknowledged by the reviewer,
-the status remains `PENDING_OWNER_INPUT` and no cohort may be opened:
+The following fields are the minimum authorization packet. The current record
+authorizes only the two synthetic cases below; a real cohort remains
+`PENDING_OWNER_INPUT` and is not authorized:
 
 | Field | Required value | Current state |
 |---|---|---|
-| Owner | accountable business owner ID | `UNSET` |
-| Reviewer | independent reviewer ID(s) | `UNSET` |
+| Owner | accountable synthetic business-owner role ID | `m5-synthetic-business-owner` |
+| Reviewer | independent synthetic reviewer role ID | `m5-independent-synthetic-reviewer` |
 | Cohort | synthetic IDs or approved document-family scope | `SYNTHETIC_ONLY` |
-| Time window | start/end with timezone | `UNSET` |
-| Retention | private-store expiry and deletion owner | `UNSET` |
-| Rollback authority | named role and trigger | `UNSET` |
+| Time window | start/end with timezone | `2026-08-10 15:55–18:00 +07:00` |
+| Retention | private-store expiry and deletion owner | `2026-08-17 23:59:59 +07:00; owner role` |
+| Rollback authority | named role and trigger | `owner role; any safety-gate violation` |
 | Side effects | HRIS/notification writes | `DISABLED` |
 | Review policy | every result and every scan | `MANUAL_REVIEW` |
 | DATA-24 | old evaluate-once/GT | `IMMUTABLE; NOT OPENED` |
 
-Role labels such as `business-owner` or `shadow-reviewer` are not approval by
-themselves. Do not replace the unset fields with guessed names, credentials or
-real document paths. The owner must provide the values through the approved
-private channel before a pilot authorization can become `PASS`.
+These are synthetic governance role IDs, not personal identities or production
+approval. The private authorization record is
+`C:\Camunda\private-data\m5-cam-001\authorization\M5-CAM-001-AUTHORIZATION.json`.
+It must never be used to open a real cohort or enable side effects.
 
 ## Local preflight
 
