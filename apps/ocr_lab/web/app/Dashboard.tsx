@@ -8,6 +8,7 @@ import ExternalDatasetReview from "./ExternalDatasetReview";
 import ExternalDatasetPrediction from "./ExternalDatasetPrediction";
 import LocalEvidenceOverview from "./LocalEvidenceOverview";
 import LocalBenchmarkPanel from "./LocalBenchmarkPanel";
+import M5LocalShadowPanel from "./M5LocalShadowPanel";
 import OcrHoDiagnostic from "./OcrHoDiagnostic";
 
 const SHOW_GROUND_TRUTH_REVIEW =
@@ -4795,6 +4796,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       </section>
 
       <LocalBenchmarkPanel />
+
+      <M5LocalShadowPanel />
 
       <section className="section" id="phases">
         <div className="section-heading">

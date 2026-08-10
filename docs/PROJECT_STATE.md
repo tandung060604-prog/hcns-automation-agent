@@ -1,5 +1,15 @@
 # Project State
 
+## M5-CAM-002 UI-only local (2026-08-10)
+
+UI localhost đã hiển thị aggregate-only report của M5-CAM-001D qua route
+`/m5/local-shadow-review/summary`. Panel chỉ đọc milestone, số lượng review và
+safety counters; không hiển thị field/raw source, không gọi Camunda và không có
+POST/side effect. Runtime đã xác nhận 70/70 `MANUAL_REVIEW`, scan 27/27,
+unsupported 2/2, idempotency mismatch 0, raw exposure 0, auto-continue 0,
+process start 0 và real side effect 0. Ground Truth/evaluate-once đều false,
+promotion vẫn disabled. Real cohort chưa được mở.
+
 ## M5-CAM-001D local shadow review-only (2026-08-10)
 
 M5-CAM-001D đã hoàn tất kiểm tra metadata-only trên projection private hiện có

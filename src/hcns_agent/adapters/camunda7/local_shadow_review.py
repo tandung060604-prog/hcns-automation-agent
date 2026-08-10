@@ -30,6 +30,29 @@ _CATEGORY_TO_WORKFLOW = {
 _UNSUPPORTED_FORMATS = frozenset({"PLAIN_TEXT", "PPTX"})
 _SCAN_FORMATS = frozenset({"IMAGE", "PDF_SCAN"})
 _SCALAR_TYPES = (str, int, float, bool, type(None))
+_REPORT_KEYS = (
+    "milestone",
+    "evaluationKind",
+    "mode",
+    "passed",
+    "datasetDigest",
+    "documentCount",
+    "categoryCounts",
+    "sourceFormatCounts",
+    "manualReviewCount",
+    "scanManualReviewCount",
+    "unsupportedManualReviewCount",
+    "idempotencyMismatchCount",
+    "duplicateReferenceCount",
+    "rawExposureCount",
+    "autoContinueCount",
+    "camundaProcessStartAttempts",
+    "realSideEffectCount",
+    "groundTruthUsed",
+    "evaluateOnceArtifactTouched",
+    "containsRawFieldValues",
+    "promotionAllowed",
+)
 
 
 class LocalShadowReviewError(ValueError):
@@ -248,6 +271,20 @@ def load_projection(path: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise LocalShadowReviewError("projection root must be an object")
     return payload
+
+
+def load_shadow_review_report(path: str) -> dict[str, object]:
+    """Read and whitelist one aggregate-only shadow report for local UI."""
+
+    with open(path, encoding="utf-8") as source:
+        payload = json.load(source)
+    if not isinstance(payload, dict):
+        raise LocalShadowReviewError("shadow report root must be an object")
+    if payload.get("evaluationKind") != "m5-local-shadow-review-only":
+        raise LocalShadowReviewError("unexpected shadow report kind")
+    if payload.get("containsRawFieldValues") is not False:
+        raise LocalShadowReviewError("shadow report is not aggregate-only")
+    return {key: payload[key] for key in _REPORT_KEYS if key in payload}
 
 
 def _opaque(value: object, name: str) -> str:

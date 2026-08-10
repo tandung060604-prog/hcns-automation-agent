@@ -14,6 +14,7 @@ param(
     [string]$ExternalDatasetTypedReport = "",
     [string]$ExternalDatasetPolicyV2Report = "",
     [string]$ExternalDatasetPolicyV2Marker = "",
+    [string]$M5LocalShadowReport = "",
     [string]$PythonPath = "D:\venv_paddle\Scripts\python.exe"
 )
 
@@ -65,6 +66,9 @@ if ($ExternalDatasetPolicyV2Report -and -not (Test-Path -LiteralPath $ExternalDa
 if ($ExternalDatasetPolicyV2Marker -and -not (Test-Path -LiteralPath $ExternalDatasetPolicyV2Marker)) {
     throw "External dataset policy v2 marker not found: $ExternalDatasetPolicyV2Marker"
 }
+if ($M5LocalShadowReport -and -not (Test-Path -LiteralPath $M5LocalShadowReport)) {
+    throw "M5 local shadow report not found: $M5LocalShadowReport"
+}
 
 $env:PYTHONPATH = Join-Path $repoRoot "src"
 
@@ -111,10 +115,10 @@ if ($apiRunning -and $OcrHoShadowRoot) {
         $apiRunning = $false
     }
 }
-if ($apiRunning -and ($BenchmarkReport -or $ExternalDatasetPolicyV2Report -or $ExternalDatasetPolicyV2Marker)) {
+if ($apiRunning -and ($BenchmarkReport -or $ExternalDatasetPolicyV2Report -or $ExternalDatasetPolicyV2Marker -or $M5LocalShadowReport)) {
     $commandLine = [string]$apiProcess.CommandLine
     $configuredPathsPresent = $true
-    foreach ($configuredPath in @($BenchmarkReport, $ExternalDatasetPolicyV2Report, $ExternalDatasetPolicyV2Marker)) {
+    foreach ($configuredPath in @($BenchmarkReport, $ExternalDatasetPolicyV2Report, $ExternalDatasetPolicyV2Marker, $M5LocalShadowReport)) {
         if ($configuredPath -and $commandLine.IndexOf((Resolve-Path -LiteralPath $configuredPath).Path, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
             $configuredPathsPresent = $false
         }
@@ -166,6 +170,9 @@ if (-not $apiRunning) {
     }
     if ($ExternalDatasetPolicyV2Marker) {
         $apiArguments += " --external-dataset-policy-v2-marker `"$ExternalDatasetPolicyV2Marker`""
+    }
+    if ($M5LocalShadowReport) {
+        $apiArguments += " --m5-local-shadow-report `"$M5LocalShadowReport`""
     }
     Start-Process `
         -FilePath $PythonPath `
