@@ -1,5 +1,26 @@
 # Handoff
 
+## DATA-27D development-only delivery (2026-08-10)
+
+- `DATA-27A-EXISTING-POOL-AUDIT` is complete with decision `HOLD`.
+- Existing private pools contain 33 Contract, 36 CV and 15 IELTS files. After
+  SHA-256/history and lineage exclusion, only 1 Contract, 1 CV and 0 IELTS
+  files are eligible as fresh material; the original `10/10/5` held-out gate
+  therefore cannot be formed without new eligible data or an approved policy
+  change.
+- The development handoff preserves DATA-26 results: strict `102/112`,
+  accepted `112/112`, Contract `42/42`, CV `40/50`, IELTS `20/20`, applicable
+  completeness `99/99`, classification `12/12`, schema errors `0`, sensitive
+  false acceptance `0`, parser regression `0`, scan manual review `5/5`, and
+  false auto-continue `0`.
+- Fallback remains disabled because fixed-scan strict improvement is `3.33pp`,
+  below the required `10pp`. Promotion is disabled.
+- Aggregate delivery artifact: `C:\\tmp\\data27d-development-delivery-20260810.json`.
+- DATA-24 evaluate-once, GroundTruth, prediction locks and raw private data
+  were not changed. No OCR, prediction or evaluate-once rerun was performed.
+- Next status: DATA-27 fresh held-out generalization remains `HOLD`; do not
+  claim a production or independent held-out result from this delivery.
+
 ## DATA-26 checkpoint (2026-08-07)
 
 - Branch: `codex/data26-parser-recovery`; DATA-26 code, synthetic tests and the

@@ -106,7 +106,9 @@
 | DATA-24-HELDOUT-EVALUATE-ONCE | DONE / HOLD | Create-only held-out evaluation executed exactly once; strict/completeness gates failed, promotion remains disabled | DATA-23-PREDICTION-BLIND-HELDOUT-SEAL | P0 |
 | DATA-25-MATCHING-POLICY-V2 | DONE / HOLD | Canonical scoring for case/layout, dates, durations and decimal scores; separate non-promotional post-hoc audit; DATA-24 remains immutable | DATA-24-HELDOUT-EVALUATE-ONCE | P0 |
 | DATA-26-PARSER-RECOVERY | DONE / DEV HOLD | Added conservative CV geometry/header recovery, duration normalization and opt-in local VietOCR line refinement; development gate PASS at CV 40/50 strict, fallback remains disabled below +10pp | DATA-25-MATCHING-POLICY-V2 | P0 |
-| DATA-27-FRESH-HELDOUT-V2 | BLOCKED | Create a new prediction-blind held-out split and run one approved v2 evaluate-once | DATA-26-PARSER-RECOVERY | P0 |
+| DATA-27A-EXISTING-POOL-AUDIT | DONE / HOLD | Audit existing private pool by SHA-256/history/lineage without reading OCR, prediction or GroundTruth; only 1 Contract, 1 CV and 0 IELTS files are fresh | DATA-26-PARSER-RECOVERY | P0 |
+| DATA-27D-DEVELOPMENT-DELIVERY | DONE / DEV HOLD | Package DATA-26 development PASS as the current local handoff; held-out generalization remains explicitly HOLD | DATA-27A-EXISTING-POOL-AUDIT | P0 |
+| DATA-27-FRESH-HELDOUT-V2 | BLOCKED | Create a new prediction-blind held-out split and run one approved v2 evaluate-once; blocked because the existing pool cannot form 10/10/5 fresh files | DATA-27A-EXISTING-POOL-AUDIT | P0 |
 
 ## DATA-00..DATA-05 acceptance criteria
 

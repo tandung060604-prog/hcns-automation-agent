@@ -97,10 +97,13 @@ DATA-26 gate development: applicable completeness `99/99`, classification
 `0`, scan `5/5 MANUAL_REVIEW`. Fallback remains disabled: fixed scan strict
 improvement is `3,33pp`, below the required `10pp` promotion threshold.
 
-The next workstream step is a fresh prediction-blind DATA-27 held-out split;
-it remains blocked until a new corpus has verified rights, retention and
-lineage. All documents, OCR, predictions and GroundTruth stay outside Git and
-are processed locally.
+DATA-27A audit of the existing private pool is complete. After SHA-256/history
+and lineage exclusion, only 1 fresh Contract, 1 fresh CV and 0 fresh IELTS
+files remain, so the original independent `10/10/5` held-out split is blocked
+without adding eligible data or explicitly changing the policy. DATA-27D
+therefore delivers the DATA-26 development result only; held-out generalization
+remains `HOLD`. All documents, OCR, predictions and GroundTruth stay outside
+Git and are processed locally.
 
 ### Benchmark OCR trên 77 crop dòng tiếng Việt đã được xác nhận
 

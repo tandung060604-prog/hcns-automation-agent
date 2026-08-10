@@ -109,6 +109,27 @@ because the fixed scan subset improved `3.33pp`, below the required `10pp`.
 This is not an evaluate-once result and does not authorize promotion or a
 DATA-27 held-out run.
 
+### DATA-27A/D existing-pool audit and development delivery
+
+The existing private pool was audited using local source metadata, SHA-256,
+history and lineage exclusion only. The audit did not read OCR, predictions or
+GroundTruth and did not add documents. The source folders contain 33 Contract,
+36 CV and 15 IELTS files; only 1 Contract, 1 CV and 0 IELTS files remain fresh
+after exclusion. This is insufficient for the original independent DATA-27
+held-out requirement of Contract/CV/IELTS `10/10/5`, so the held-out status is
+`HOLD` and no DATA-24 artifact may be reused.
+
+DATA-27D packages the DATA-26 development result as the current local delivery:
+strict `102/112` overall, accepted `112/112`, Contract `42/42`, CV `40/50`,
+IELTS `20/20`, applicable completeness `99/99`, classification `12/12`, schema
+errors `0`, sensitive false acceptance `0`, parser regression `0`, scan manual
+review `5/5`, and false auto-continue `0`. Fallback and production promotion
+remain disabled because fixed-scan improvement is `3.33pp`, below the `10pp`
+threshold. The aggregate delivery artifact is private at
+`C:\\tmp\\data27d-development-delivery-20260810.json`; it contains no raw
+document values. This is a development handoff, not an independent held-out
+or evaluate-once result.
+
 ## Metrics
 
 - OCR: CER, WER, reading-order accuracy.
