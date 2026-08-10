@@ -44,11 +44,15 @@ $env:PYTHONPATH = "src;tests"
 .\.venv\Scripts\python.exe scripts/run_camunda_m4_dry_run.py
 ```
 
-M5-CAM-001A completed this local preflight on 2026-08-10 with two synthetic native
+M5-CAM-001A and M5-CAM-001B completed this local preflight on 2026-08-10 with two synthetic native
 DOCX sources only. Both reached `UserReview` and completed the simulated flow;
 `AUTO_CONTINUE=0`, raw exposure `0`, duplicates `0`, unreconciled cases `0`, real
 side effects `0`, and both cases completed below 60 seconds. It does not authorize
 a real cohort.
+
+M5-CAM-001B also projects Phase15 metadata through the sanitized scalar/reference
+boundary. It rejects raw fields and filesystem paths, and supplies an opaque
+result reference instead of Phase15's private artifact path.
 
 For a new local-only synthetic run, start the approved local Camunda 7.13 runtime
 and write the create-only aggregate report outside the repository:

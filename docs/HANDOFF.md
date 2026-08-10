@@ -917,6 +917,19 @@
 - Verification: `tests/test_camunda_m4_dry_run.py` passed; no CCCD or private
   dataset files were changed.
 
+### M5-CAM-001B — Phase15 scalar/reference bridge (DONE)
+
+- Phase15 metadata now crosses Camunda only through a sanitized projection. It
+  normalizes `accepted/needs_review` into Camunda classification vocabulary,
+  replaces Phase15 private artifact paths with caller-supplied opaque references,
+  rejects raw field/path variables, and forces `autoContinueEnabled=false`.
+- The local Camunda run exercised exactly two synthetic native DOCX cases. Both
+  reached `UserReview` and completed simulated HRIS/notification flow; aggregate
+  gates remained zero for auto-continue, raw exposure, duplicates, unreconciled
+  cases and real side effects. Durations were 2.485s and 1.234s.
+- No Phase12 payload, real cohort, private OCR/document data or old evaluate-once
+  artifact was used.
+
 ### M5-CAM-001A — Local synthetic shadow preflight (DONE)
 
 - Current BPMN/DMN were deployed to local Camunda 7.13 and exercised with exactly

@@ -35,7 +35,7 @@ class ShadowPreflightReportTests(TestCase):
         )
 
         self.assertTrue(report.passed)
-        self.assertEqual("M5-CAM-001A", report.as_dict()["milestone"])
+        self.assertEqual("M5-CAM-001B", report.as_dict()["milestone"])
 
     def test_report_holds_when_a_case_is_slow_or_unreconciled(self) -> None:
         report = ShadowPreflightReport(

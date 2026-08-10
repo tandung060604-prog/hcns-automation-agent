@@ -1,8 +1,9 @@
 """Local-only synthetic preflight for the Camunda M5 shadow workflow.
 
-This module deliberately has no bridge to the web intake.  It creates only two
-synthetic native DOCX sources under a caller-owned private root, deploys the
-checked-in BPMN/DMN, and proves the review-first path end to end.
+This module deliberately has no bridge to the web intake. It creates only two
+synthetic native DOCX sources under a caller-owned private root, projects a
+synthetic Phase15 Business JSON through the scalar/reference boundary, deploys
+the checked-in BPMN/DMN, and proves the review-first path end to end.
 """
 
 from __future__ import annotations
@@ -29,6 +30,9 @@ from hcns_agent.adapters.camunda7.client import (
 from hcns_agent.adapters.camunda7.contract import (
     PROCESS_VARIABLE_WHITELIST,
     ProcessValue,
+)
+from hcns_agent.adapters.camunda7.phase15_bridge import (
+    project_phase15_business_json,
 )
 from hcns_agent.adapters.camunda7.runtime import (
     JsonFileTemplateResultStore,
@@ -72,11 +76,19 @@ class Camunda7ShadowPreflightGateway:
             raise CamundaRestError("Camunda deployment response is invalid")
         return deployment_id
 
-    def start_process(self, variables: Mapping[str, ProcessValue]) -> str:
+    def start_process(
+        self,
+        variables: Mapping[str, ProcessValue],
+        *,
+        business_key: str | None = None,
+    ) -> str:
+        payload: dict[str, object] = {"variables": _encode_variables(variables)}
+        if business_key is not None:
+            payload["businessKey"] = _opaque_id(business_key)
         response = self._json_request(
             "POST",
             f"/process-definition/key/{_PROCESS_DEFINITION_KEY}/start",
-            {"variables": _encode_variables(variables)},
+            payload,
         )
         instance_id = response.get("id") if isinstance(response, dict) else None
         if not isinstance(instance_id, str) or not instance_id:
@@ -276,7 +288,7 @@ class ShadowPreflightReport:
 
     def as_dict(self) -> dict[str, object]:
         return {
-            "milestone": "M5-CAM-001A",
+            "milestone": "M5-CAM-001B",
             "mode": "LOCAL_SYNTHETIC_SHADOW_PREFLIGHT",
             "passed": self.passed,
             "deploymentCompleted": self.deployment_completed,
@@ -420,19 +432,25 @@ def _run_case(
 ) -> tuple[ShadowPreflightCaseReport, str]:
     source_reference = f"{case_id}-{uuid.uuid4().hex[:12]}"
     _write_source(root, source_reference, _docx_bytes(lines))
+    projection = project_phase15_business_json(
+        _synthetic_phase15_business_json(source_reference, document_type),
+        application_id=case_id,
+        document_reference=source_reference,
+        declared_document_type=document_type,
+        result_reference=f"{source_reference}-PHASE15-RESULT",
+    )
     start = clock()
-    instance_id = gateway.start_process({"applicationId": case_id})
+    instance_id = gateway.start_process(
+        {"applicationId": case_id},
+        business_key=projection.business_key,
+    )
     submit_task = _wait_for_task(
         gateway, instance_id, _SUBMIT_TASK_KEY, worker, clock, sleep, timeout_seconds
     )
     gateway.claim_task(submit_task, "synthetic-submit-reviewer")
     gateway.complete_task(
         submit_task,
-        {
-            "applicationId": case_id,
-            "documentReference": source_reference,
-            "declaredDocumentType": document_type,
-        },
+        projection.variables,
     )
     user_task = _wait_for_task(
         gateway, instance_id, _USER_REVIEW_TASK_KEY, worker, clock, sleep, timeout_seconds
@@ -456,6 +474,37 @@ def _run_case(
         notification_simulated=values.get("notificationStatus") == "SIMULATED",
     )
     return report, instance_id
+
+
+def _synthetic_phase15_business_json(
+    document_reference: str,
+    document_type: str,
+) -> dict[str, object]:
+    """Build only sanitized metadata for the local Phase15 bridge test."""
+
+    return {
+        "schemaVersion": "2.0.0",
+        "schemaRef": "synthetic/phase15-schema",
+        "documentId": document_reference,
+        "documentType": document_type,
+        "documentFamily": "leave" if document_type == "LEAVE_REQUEST" else "overtime",
+        "workflowDocumentType": document_type,
+        "idpStatus": "NEEDS_REVIEW",
+        "camunda": {
+            "businessKey": document_reference,
+            "variables": {
+                "workflowDocumentType": document_type,
+                "sourceFormat": "DOCX",
+                "classificationStatus": "accepted",
+                "classificationConfidence": 1.0,
+                "parseStatus": "SUCCESS",
+                "qualityStatus": "REVIEW_REQUIRED",
+                "reviewRequired": True,
+                "sensitiveFieldNeedsReview": False,
+                "requiredFieldsComplete": True,
+            },
+        },
+    }
 
 
 def _wait_for_task(
