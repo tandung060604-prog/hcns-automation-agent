@@ -684,6 +684,178 @@ def _cv_ocr_section(
     return _field(None, method=method, block=None, review=review)
 
 
+def _cv_native_section_lines(
+    canonical: dict[str, Any],
+    headings: tuple[str, ...],
+) -> tuple[list[str], dict[str, Any] | None]:
+    """Return native CV section lines bounded by the next section heading."""
+
+    normalized_headings = tuple(_fold(item) for item in headings)
+    blocks = _canonical_blocks(canonical)
+    for index, heading in enumerate(blocks):
+        heading_key = _fold(heading.get("text"))
+        if not any(
+            heading_key == item or heading_key.startswith(f"{item} ")
+            for item in normalized_headings
+        ):
+            continue
+        values: list[str] = []
+        evidence = None
+        for candidate in blocks[index + 1 :]:
+            if _is_section_heading(_fold(candidate.get("text"))):
+                break
+            text = str(candidate.get("text") or "").strip()
+            if text:
+                evidence = evidence or candidate
+                values.append(text)
+        if values:
+            return values, evidence
+    return [], None
+
+
+def _cv_native_section(
+    canonical: dict[str, Any],
+    headings: tuple[str, ...],
+    *,
+    review: bool,
+    method: str,
+) -> dict[str, Any]:
+    lines, evidence = _cv_native_section_lines(canonical, headings)
+    return _field(
+        "\n".join(lines) if lines else None,
+        method=method,
+        block=evidence,
+        review=review,
+    )
+
+
+def _cv_native_skills(canonical: dict[str, Any], *, review: bool) -> dict[str, Any]:
+    """Normalize list labels without changing skill tokens or OCR output."""
+
+    lines, evidence = _cv_native_section_lines(canonical, ("ky nang",))
+    cleaned: list[str] = []
+    for line in lines:
+        value = re.sub(r"^[\s\u2022\u00b7\u25aa\u2013\u2014-]+", "", line).strip()
+        if ":" in value:
+            label, remainder = value.split(":", 1)
+            if 1 <= len(label.split()) <= 5:
+                value = remainder.strip(" ;")
+        if _fold(value).startswith("phan mem "):
+            value = value.split(None, 2)[-1]
+        if re.search(r"[\u00c0-\u024f\u1e00-\u1eff]", value):
+            value = re.sub(r"(?<!\w)\s*&\s*(?!\w)", "\u0076\u00e0", value)
+        if value:
+            cleaned.append(value)
+    return _field(
+        "\n".join(cleaned) if cleaned else None,
+        method="cv_skills_native_section",
+        block=evidence,
+        review=review,
+    )
+
+
+def _edit_distance_at_most_one(left: str, right: str) -> bool:
+    left, right = left.casefold(), right.casefold()
+    if abs(len(left) - len(right)) > 1:
+        return False
+    if len(left) > len(right):
+        left, right = right, left
+    index_left = index_right = differences = 0
+    while index_left < len(left) and index_right < len(right):
+        if left[index_left] == right[index_right]:
+            index_left += 1
+            index_right += 1
+            continue
+        differences += 1
+        if differences > 1:
+            return False
+        if len(left) == len(right):
+            index_left += 1
+        index_right += 1
+    return differences + (len(right) - index_right) <= 1
+
+
+def _cv_ocr_skill_repair(
+    canonical: dict[str, Any],
+    field: dict[str, Any],
+    *,
+    review: bool,
+) -> dict[str, Any]:
+    """Repair one-character OCR drift only when the same document repeats a token."""
+
+    value = field.get("value")
+    if not isinstance(value, str) or not value:
+        return field
+    experience = _cv_ocr_section(
+        canonical,
+        ("Kinh nghiá»‡m lÃ m viá»‡c", "Kinh nghiá»‡m"),
+        review=review,
+        method="cv_experience_ocr_anchor",
+    )
+    if experience["value"] is None:
+        experience = _cv_ocr_section(
+            canonical,
+            ("kinh nghiem lam viec", "kinh nghiem"),
+            review=review,
+            method="cv_experience_ocr_anchor",
+        )
+    anchors = set(
+        re.findall(r"[^\W_]+", str(experience.get("value") or ""), flags=re.UNICODE)
+    )
+    if not anchors:
+        return field
+    folded_anchors = {candidate.casefold() for candidate in anchors}
+    replacements: dict[str, str] = {}
+    for token in re.findall(r"[^\W_]+", value, flags=re.UNICODE):
+        if token.casefold() in folded_anchors:
+            continue
+        candidates = [
+            candidate
+            for candidate in anchors
+            if len(candidate) >= 6
+            and _edit_distance_at_most_one(token, candidate)
+        ]
+        if len(candidates) == 1:
+            replacements[token] = candidates[0]
+    if not replacements:
+        return field
+    repaired = value
+    for source, target in replacements.items():
+        repaired = re.sub(
+            rf"(?<!\w){re.escape(source)}(?!\w)",
+            target,
+            repaired,
+            flags=re.IGNORECASE,
+        )
+    return _field(
+        repaired,
+        method="cv_skills_ocr_document_anchor",
+        block=field,
+        review=review,
+    )
+
+
+def _cv_normalize_desired_role(field: dict[str, Any], *, review: bool) -> dict[str, Any]:
+    value = field.get("value")
+    if not isinstance(value, str) or " va " not in _fold(value):
+        return field
+    conjunction = "v\u00e0"
+    normalized = re.sub(
+        rf"\s+{re.escape(conjunction)}\s+(?=[A-Z\u00c0-\u024f])",
+        " / ",
+        value,
+        flags=re.IGNORECASE,
+    )
+    if normalized == value:
+        return field
+    return _field(
+        normalized,
+        method=str(field.get("method") or "cv_objective_role_layout"),
+        block=field,
+        review=review,
+    )
+
+
 def _ocr_value_after_label(
     blocks: list[dict[str, Any]],
     labels: tuple[str, ...],
@@ -1085,6 +1257,15 @@ def _external_fields(
             )
             if geometry_education["value"] is not None:
                 education = geometry_education
+        if not ocr:
+            native_education = _cv_native_section(
+                canonical,
+                ("hoc van",),
+                review=ocr,
+                method="cv_education_native_section",
+            )
+            if native_education["value"] is not None:
+                education = native_education
         if education["value"] is None:
             education = _from_phase_field(
                 extraction.get("fields", {}).get("education", {"value": None}),
@@ -1101,6 +1282,15 @@ def _external_fields(
             )
             if geometry_experience["value"] is not None:
                 experience = geometry_experience
+        if not ocr:
+            native_experience = _cv_native_section(
+                canonical,
+                ("kinh nghiem lam viec", "kinh nghiem"),
+                review=ocr,
+                method="cv_experience_native_section",
+            )
+            if native_experience["value"] is not None:
+                experience = native_experience
         if experience["value"] is None:
             experience = _from_phase_field(
                 extraction.get("fields", {}).get("experience", {"value": None}),
@@ -1113,14 +1303,25 @@ def _external_fields(
                 canonical, ("Kỹ năng",), review=ocr, method="cv_skills_ocr_geometry"
             )
             if geometry_skills["value"] is not None:
-                skills = geometry_skills
+                skills = _cv_ocr_skill_repair(
+                    canonical,
+                    geometry_skills,
+                    review=ocr,
+                )
+        if not ocr:
+            native_skills = _cv_native_skills(canonical, review=ocr)
+            if native_skills["value"] is not None:
+                skills = native_skills
         if skills["value"] is None:
             skills = _from_phase_field(
                 extraction.get("fields", {}).get("skills", {"value": None}),
                 method="section",
                 review=ocr,
             )
-        desired = _cv_desired_role(canonical, review=ocr)
+        desired = _cv_normalize_desired_role(
+            _cv_desired_role(canonical, review=ocr),
+            review=ocr,
+        )
         if desired["value"] is None:
             desired = _bounded_external(
                 canonical,

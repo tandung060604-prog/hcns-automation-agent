@@ -1,5 +1,26 @@
 # OCR / Document AI Engineer Portfolio
 
+## DATA-29 CV residual recovery (2026-08-10)
+
+DATA-29 is a development-only parser recovery on the existing five CV
+documents. It adds no data, does not read GroundTruth at runtime, does not
+reopen DATA-24 or DATA-27, does not enable fallback, and does not change the
+schema/API. Native CV extraction now bounds sections at the next heading,
+removes list/category labels from skills, normalizes standalone Vietnamese
+ampersands, and normalizes a title conjunction in desired-role text. Scan
+skills use a one-character self-document OCR repair only when the same token
+appears in another section; scans remain `MANUAL_REVIEW`.
+
+Fresh private DATA-29 aggregate: strict `107/112`, accepted `112/112`,
+Contract `42/42`, CV `45/50`, IELTS `20/20`, applicable completeness `99/99`,
+classification `12/12`, schema errors `0`, sensitive false acceptance `0`,
+parser regression `0`, and scan manual review `5/5`. The only remaining CV
+partials are five experience fields. DATA-20 development gate is `PASS`, but
+fallback remains disabled because fixed-scan improvement is `3.3334pp`, below
+the required `10pp`. Aggregate-only handoff:
+`C:\tmp\data29-cv-residual-recovery-20260810.json`; raw prediction/OCR and
+GroundTruth remain outside Git.
+
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![PaddleOCR](https://img.shields.io/badge/OCR-PaddleOCR%20%2B%20EasyOCR-0A8FDC)](https://www.paddleocr.ai/)
 [![Workflow](https://img.shields.io/badge/Workflow-Camunda%207.13-FF5A00)](https://camunda.com/platform-7/)

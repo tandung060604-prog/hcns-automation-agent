@@ -1,5 +1,31 @@
 # Handoff
 
+## DATA-29 CV residual recovery (2026-08-10)
+
+- Branch: `codex/data29-cv-residual-recovery`, based on CI-green baseline
+  `b958021`; implementation is development-only and uses the existing five CV
+  documents.
+- Fresh private DATA-29 aggregate: strict `107/112`, accepted `112/112`;
+  Contract `42/42`, CV `45/50`, IELTS `20/20`; applicable completeness
+  `99/99`, classification `12/12`, schema errors `0`, sensitive false
+  acceptance `0`, parser regression `0`, scan manual review `5/5`, and false
+  auto-continue `0`.
+- CV residual accepted-partial count is `5`, all in `experience`; `skills` and
+  `desired_role` are exact under matching policy v2. Native section boundaries,
+  skill-list label normalization, desired-role conjunction normalization and a
+  same-document one-edit OCR anchor repair were added without GroundTruth
+  lookup or schema/API changes.
+- DATA-20 development gate is `PASS`; fallback remains disabled because fixed
+  scan strict improvement is `3.3334pp`, below the `10pp` threshold. All five
+  scan/image documents remain `MANUAL_REVIEW`.
+- Aggregate-only artifact: `C:\tmp\data29-cv-residual-recovery-20260810.json`.
+  Raw prediction/OCR and GroundTruth remain outside Git.
+- DATA-17 GroundTruth/evaluate-once, DATA-24 evaluate-once and DATA-27 held-out
+  artifacts were not changed. No evaluate-once rerun or promotion occurred.
+- Next status: development delivery is ready for owner review; held-out
+  generalization remains `HOLD` because DATA-27A found no eligible fresh IELTS
+  pool and no new data is being added.
+
 ## DATA-28 local-review handoff (2026-08-10)
 
 - Baseline is CI-green at `5d85780` (`main`); Python 3.10/3.12, web tests,

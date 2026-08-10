@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from apps.ocr_lab.api.external_dataset_prediction import (
+    MATCHING_POLICY_V2,
     _cv_header_fields,
     _external_fields,
     _field,
@@ -410,6 +411,71 @@ def test_cv_header_splits_glued_uppercase_name_from_title() -> None:
     assert headline["value"] == "Data Analyst"
 
 
+def test_cv_native_skills_stop_at_next_heading_and_remove_layout_labels() -> None:
+    canonical = _canonical(
+        [
+            "CURRICULUM VITAE",
+            "K\u1ef8 N\u0102NG",
+            "\u2022 H\u1ea1ch to\u00e1n & l\u1eadp b\u00e1o c\u00e1o t\u00e0i ch\u00ednh",
+            "\u2022 Ph\u1ea7n m\u1ec1m MISA, FAST",
+            "\u2022 Tin h\u1ecdc v\u0103n ph\u00f2ng: Word, Excel",
+            "CH\u1ee8NG CH\u1ec8",
+            "\u2022 IELTS 6.5",
+        ]
+    )
+    classification = classify_phase15_document(canonical)
+    extraction = extract_phase15_document(canonical, classification)
+    fields = _external_fields("cv", canonical, extraction, ocr=False)
+
+    assert fields["skills"]["value"] == (
+        "H\u1ea1ch to\u00e1n v\u00e0 l\u1eadp b\u00e1o c\u00e1o t\u00e0i ch\u00ednh "
+        "MISA, FAST Word, Excel"
+    )
+    assert "IELTS" not in fields["skills"]["value"]
+
+
+def test_cv_native_skill_normalization_matches_flattened_skill_tokens() -> None:
+    canonical = _canonical(
+        [
+            "CURRICULUM VITAE",
+            "K\u1ef8 N\u0102NG",
+            "\u2022 Ng\u00f4n ng\u1eef: Java, Python",
+            "\u2022 Backend: Spring Boot, Node.js",
+            "CH\u1ee8NG CH\u1ec8",
+        ]
+    )
+    classification = classify_phase15_document(canonical)
+    extraction = extract_phase15_document(canonical, classification)
+    fields = _external_fields("cv", canonical, extraction, ocr=False)
+    match = _field_match(
+        "cv",
+        "skills",
+        "Java; Python; Spring Boot; Node.js",
+        fields["skills"]["value"],
+        policy_version=MATCHING_POLICY_V2,
+    )
+
+    assert match["matchType"] == "CANONICAL_EXACT"
+    assert match["exact"] is True
+
+
+def test_cv_desired_role_normalizes_title_conjunction_without_touching_prose() -> None:
+    canonical = _canonical(
+        [
+            "CURRICULUM VITAE",
+            "M\u1ee4C TI\u00caU NGH\u1ec0 NGHI\u1ec6P",
+            "Mong mu\u1ed1n theo h\u01b0\u1edbng Senior Data Analyst v\u00e0 Analytics Engineer",
+            "H\u1eccC V\u1ea4N",
+            "\u2022 University",
+        ]
+    )
+    classification = classify_phase15_document(canonical)
+    extraction = extract_phase15_document(canonical, classification)
+    fields = _external_fields("cv", canonical, extraction, ocr=False)
+
+    assert fields["desired_role"]["value"] == "Senior Data Analyst / Analytics Engineer"
+
+
 def test_contract_party_normalization_does_not_cross_party_boundary() -> None:
     contract = _canonical(
         [
@@ -486,6 +552,25 @@ def test_cv_ocr_section_infers_full_width_heading_from_body_geometry() -> None:
     fields = _external_fields("cv", canonical, extraction, ocr=True)
 
     assert fields["experience"]["value"] == "Công ty Synthetic Backend Engineer"
+
+
+def test_cv_ocr_skills_repair_uses_repeated_document_token_only() -> None:
+    canonical = _positioned_ocr_canonical(
+        [
+            ("CURRICULUM VITAE", 10, 0, 650),
+            ("KINH NGHI\u1ec6M L\u00c0M VI\u1ec6C", 10, 40, 300),
+            ("Backend Engineer PostgreSQL", 10, 80, 300),
+            ("K\u1ef8 N\u0102NG", 10, 140, 200),
+            ("Java, Postgresqu", 10, 180, 200),
+        ]
+    )
+    classification = classify_phase15_document(canonical)
+    extraction = extract_phase15_document(canonical, classification)
+    fields = _external_fields("cv", canonical, extraction, ocr=True)
+
+    assert fields["skills"]["value"] == "Java, PostgreSQL"
+    assert fields["skills"]["method"] == "cv_skills_ocr_document_anchor"
+    assert fields["skills"]["status"] == "needs_review"
 
 
 def test_data13_all_active_families_are_scored_when_prediction_includes_visual_cv() -> None:
