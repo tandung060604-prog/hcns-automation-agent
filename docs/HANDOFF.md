@@ -1,5 +1,17 @@
 # Handoff
 
+## M5-CAM-003 post-merge localhost acceptance (DONE / PASS, 2026-08-10)
+
+- PR #24 đã merge tại `aee3ffd`; checkout `main` sạch và đồng bộ
+  `origin/main`.
+- `/workspace` render panel M5-CAM-002; route local shadow trả aggregate-only
+  report với 70/70 manual review, scan 27/27 và unsupported 2/2.
+- Idempotency/duplicate/raw/auto-continue/process-start/side-effect đều 0;
+  Ground Truth/evaluate-once không được chạm tới; promotion vẫn disabled.
+- Local smoke: 7 Python test pass, Ruff/compileall pass, web build và 16 test
+  rendered pass. CI và Pages sau merge đều SUCCESS.
+- Không có bước Camunda effectful hoặc real cohort sau checkpoint này.
+
 ## M5-CAM-002 UI-only local (DONE / LOCAL HOLD, 2026-08-10)
 
 - Localhost đã render panel M5 shadow safety từ aggregate-only report private;
