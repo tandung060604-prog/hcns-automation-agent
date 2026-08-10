@@ -1,5 +1,18 @@
 # Handoff
 
+## M5-CAM-001D local shadow review-only (DONE / LOCAL HOLD, 2026-08-10)
+
+- Đã chạy metadata-only trên projection private hiện có: 70 tài liệu, gồm
+  Contract 30, CV 30 và IELTS/chứng chỉ 10.
+- Safety evidence: 70/70 `MANUAL_REVIEW`; scan 27/27 và unsupported 2/2 vẫn
+  manual review; idempotency mismatch 0, duplicate reference 0, raw exposure 0,
+  auto-continue 0, Camunda process start 0, real side effect 0.
+- Không đọc Ground Truth, không chạm evaluate-once, không gọi Camunda REST và
+  không tạo prediction/metric mới. Opaque references và scalar variables chỉ
+  tồn tại trong aggregate report private; `promotionAllowed=false`.
+- Bước tiếp theo cần owner review nếu muốn mở workstream tích hợp; không được
+  dùng kết quả này làm accuracy benchmark hoặc mở real cohort.
+
 ## DATA-30B local benchmark metric checkpoint (2026-08-10)
 
 - Local benchmark cards now read the sealed DATA-29 development aggregate and

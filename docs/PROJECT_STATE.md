@@ -1,5 +1,16 @@
 # Project State
 
+## M5-CAM-001D local shadow review-only (2026-08-10)
+
+M5-CAM-001D đã hoàn tất kiểm tra metadata-only trên projection private hiện có
+70 tài liệu (Contract 30, CV 30, IELTS/chứng chỉ 10). Luồng chỉ tạo opaque
+reference và scalar process variables; không mở Camunda, không đọc Ground Truth
+hay evaluate-once. Kết quả aggregate: `70/70 MANUAL_REVIEW`, scan `27/27`
+`MANUAL_REVIEW`, unsupported `2/2` giữ manual review, idempotency mismatch `0`,
+duplicate reference `0`, raw exposure `0`, auto-continue `0`, process start `0`
+và real side effect `0`. `passed=true`, nhưng `promotionAllowed=false` theo
+thiết kế local shadow review-only. Báo cáo private không nằm trong Git/cloud.
+
 ## DATA-30B local benchmark metric checkpoint (2026-08-10)
 
 The localhost benchmark cards now load the sealed DATA-29 development

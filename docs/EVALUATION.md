@@ -1,5 +1,16 @@
 # Evaluation
 
+## M5-CAM-001D local shadow review-only (2026-08-10)
+
+Đây là safety checkpoint aggregate-only, không phải accuracy evaluation. Runner
+đã đọc metadata của projection private hiện có (70 record: Contract 30, CV 30,
+IELTS/chứng chỉ 10), tạo opaque references và scalar process variables rồi dừng
+trước Camunda. Kết quả: `70/70 MANUAL_REVIEW`, scan `27/27`, unsupported `2/2`,
+idempotency mismatch `0`, duplicate reference `0`, raw exposure `0`,
+auto-continue `0`, process start `0`, real side effect `0`. Ground Truth và
+evaluate-once đều `false`; `promotionAllowed=false`. Báo cáo private không được
+đưa vào Git/cloud và không thay đổi DATA-17/DATA-24.
+
 ## DATA-30B local benchmark metric checkpoint (2026-08-10)
 
 The localhost per-document-type benchmark cards now use the sealed DATA-29

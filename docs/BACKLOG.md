@@ -1,5 +1,13 @@
 # Backlog
 
+## M5-CAM-001D-LOCAL-SHADOW-REVIEW-ONLY — DONE / LOCAL HOLD (2026-08-10)
+
+Projection-only review đã kiểm tra 70 record private hiện có bằng opaque
+reference/scalar variables. Tất cả giữ `MANUAL_REVIEW`; idempotency, raw
+exposure, auto-continue, process start và side effect đều bằng 0. Không đọc
+Ground Truth/evaluate-once và không cho phép promotion. Báo cáo aggregate-only
+ở private root, không commit raw artifact.
+
 ## DATA-30B-LOCAL-BENCHMARK-METRIC-CHECKPOINT — REVIEW (2026-08-10)
 
 The localhost benchmark cards now load the sealed DATA-29 development
@@ -122,6 +130,7 @@ promotion or evaluate-once change is allowed. Aggregate-only artifact:
 | M5-CAM-001A | DONE | Local synthetic leave/overtime preflight: deploy Camunda 7.13, User Review confirmation, simulated reconciliation and aggregate safety gates | M4-CAM-006 | P1 |
 | M5-CAM-001B | DONE | Nối Phase15 scalar/opaque-reference projection vào Submit task trên synthetic leave/overtime; giữ auto-continue và side effect safety gates | M5-CAM-001A | P1 |
 | M5-CAM-001C | DONE | Synthetic authorization expiry/rollback smoke: expired auth refused before process start; gate violation fail-closed rollback | M5-CAM-001 | P1 |
+| M5-CAM-001D | DONE / LOCAL HOLD | Metadata-only shadow review over existing private projection; manual-review, idempotency and zero-side-effect gates pass; promotion disabled | M5-CAM-001C | P1 |
 | M5-CAM-001 | AUTHORIZED_SYNTHETIC_ONLY | Synthetic-only authorization is locked with role IDs, 2026-08-10 window, seven-day retention and fail-closed rollback; real cohort remains closed | M5-CAM-001B | P1 |
 | LOCAL-PRIVATE-DATA-AUTH | AUTHORIZED_LOCAL_ONLY | User-authorized existing private corpus may run through local gate/replay/localhost review; raw values stay outside Git/cloud and scan remains MANUAL_REVIEW | DATA-29 / M5-CAM-001C | P1 |
 | M5-CAM-002 | PLANNED | Hoàn tất Ground Truth/cohort được cấp quyền cho CV, IELTS, probation contract và CCCD mặt trước; evaluate-once aggregate-only | M5-CAM-001 | P0 |
