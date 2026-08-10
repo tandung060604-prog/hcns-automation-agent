@@ -181,3 +181,19 @@ create a held-out claim, rerun DATA-24, or promote a fallback. The unrelated
 global task remains separately tracked in `BACKLOG.md`.
 
 Archive: `docs/archive/PROJECT_STATE_HISTORY_2026-08-06.md`.
+
+## LOCAL-PRIVATE-DATA-AUTHORIZED gate/replay (2026-08-10)
+
+User-authorized local replay used the existing private DATA-22 development
+corpus (`70` documents: Contract `30`, CV `30`, IELTS `10`). PaddleOCR ran
+locally on CPU for `68` Phase-12-supported documents. The remaining `2`
+documents use unsupported `.txt`/`.pptx` formats and remain
+`MANUAL_REVIEW/UNSUPPORTED_FORMAT`; they were not silently dropped.
+
+Aggregate-only replay evidence (outside Git):
+`C:\\Camunda\\private-data\\local-private-data-authorized-20260810\\data22-development-r3-local-gate-replay-aggregate.json`.
+The report contains counts and hashes only; no raw document, OCR, prediction,
+field value or PII. Scan coverage is `27/27 MANUAL_REVIEW`. GroundTruth was not
+provided, so strict EM, accepted text and completeness are intentionally
+`NOT_COMPUTED`; promotion decision is `HOLD`. DATA-24 remains immutable and
+was not reopened.

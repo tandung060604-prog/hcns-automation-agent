@@ -704,3 +704,5 @@ confirm every field, then SEALED. Benchmark remains intentionally unrun.
   `scripts/validate_longrun_state.py` and `git diff --check` passed.
 - DATA-21 is implemented but held by the local CPU runtime initialization budget;
   DATA-22 remains blocked pending approved corpus rights/retention and minimum counts.
+
+| LOCAL-PRIVATE-DATA-AUTHORIZED-REPLAY | DONE / HOLD | 2026-08-10 | Existing DATA-22 private development corpus replayed locally with PaddleOCR CPU; 68 predictions, 2 unsupported formats retained as MANUAL_REVIEW, 27/27 scans MANUAL_REVIEW. Aggregate-only report is private; no GroundTruth/evaluate-once opened. | No promotion or held-out claim; strict/accepted/completeness not computed without independent GroundTruth. |

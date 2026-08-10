@@ -1711,3 +1711,20 @@ git status --short --branch
   mismatch `72`, and token mismatch `11`; AUTO_REGION_MISS is `245/245` line-ID miss.
 - Decision is `RECOGNIZER_TOKEN_ATTRIBUTION_HOLD`; selector, counterfactual, replay,
   runtime patch and promotion remain closed. Next READY is `OCR-HO-V2-018G` owner review.
+
+### LOCAL-PRIVATE-DATA-AUTHORIZED - local gate/replay checkpoint (DONE / HOLD, 2026-08-10)
+
+- Existing private DATA-22 development corpus was replayed locally: Contract
+  `30`, CV `30`, IELTS `10` (`70` total). PaddleOCR CPU produced predictions
+  for `68` Phase-12-supported documents.
+- Two unsupported inventory formats (`.txt`, `.pptx`) remain explicit
+  `MANUAL_REVIEW/UNSUPPORTED_FORMAT`; scan documents are `27/27`
+  `MANUAL_REVIEW`.
+- Aggregate-only report is outside Git at
+  `C:\\Camunda\\private-data\\local-private-data-authorized-20260810\\data22-development-r3-local-gate-replay-aggregate.json`.
+  It has no raw document/OCR/prediction values. No GroundTruth was read, so
+  strict/accepted/completeness metrics are not computed and promotion is
+  `HOLD`.
+- DATA-24 evaluate-once, GroundTruth and historical artifacts remain
+  immutable. Next READY action is local review only; no held-out result may be
+  inferred from this replay.
