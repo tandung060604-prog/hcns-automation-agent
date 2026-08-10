@@ -2,7 +2,7 @@
 
 ## DATA-30 main reconciliation & development freeze (2026-08-10)
 
-- Checkout hiện hành là `main`, HEAD và `origin/main` cùng ở `54eafd0`.
+- Checkout hiện hành là `main`, HEAD và `origin/main` cùng ở `a3fc960`.
 - PR #15 (DATA-29 implementation) và PR #16 (README tiếng Việt) đã merge;
   CI Python 3.10, Python 3.12 và OCR Lab Web đều `SUCCESS`.
 - Working tree sạch; không có tracked change hoặc private artifact nào được
