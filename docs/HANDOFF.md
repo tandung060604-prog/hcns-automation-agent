@@ -33,6 +33,16 @@
 - Private authorization record:
   `C:\Camunda\private-data\m5-cam-001\authorization\M5-CAM-001-AUTHORIZATION.json`.
 
+## User-directed local private corpus authorization
+
+- The user authorizes the existing project corpus for local gate, replay and
+  localhost review runs without requesting a new permission each time.
+- This authorization is local-only: no cloud upload, Git commit of raw
+  document/OCR/prediction/PII, or real HRIS/notification side effect.
+- Existing manifests define source rights/retention where applicable. Scan
+  inputs remain `MANUAL_REVIEW`; DATA-24 and its GroundTruth/evaluate-once stay
+  immutable.
+
 ## M5-CAM-001C expiry/rollback smoke (DONE)
 
 - Active synthetic authorization passed two leave/overtime cases with all safety

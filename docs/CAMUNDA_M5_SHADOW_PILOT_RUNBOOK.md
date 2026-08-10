@@ -29,7 +29,7 @@ Timesheet is removed from code, schema, API, dashboard and active tests. Citizen
 
 Business owner must record cohort, reviewer, retention, time window and rollback authority outside the repository. Pilot performance target is p95 <=60 seconds for an image or scanned PDF and zero unreconciled cases.
 
-## Authorization record (synthetic-only; real cohort not approved)
+## Authorization record (synthetic smoke; local-private data may be authorized separately)
 
 The following fields are the minimum authorization packet. The current record
 authorizes only the two synthetic cases below; a real cohort remains
@@ -50,7 +50,10 @@ authorizes only the two synthetic cases below; a real cohort remains
 These are synthetic governance role IDs, not personal identities or production
 approval. The private authorization record is
 `C:\Camunda\private-data\m5-cam-001\authorization\M5-CAM-001-AUTHORIZATION.json`.
-It must never be used to open a real cohort or enable side effects.
+It must never be used to enable side effects. A separate user-directed
+`LOCAL_PRIVATE_DATA_AUTHORIZED` profile may run the existing private corpus
+through local gate/review paths; it does not change Camunda's scalar/reference
+boundary or the `MANUAL_REVIEW` policy.
 
 ## Local preflight
 

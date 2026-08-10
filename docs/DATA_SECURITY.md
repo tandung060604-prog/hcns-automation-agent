@@ -50,11 +50,12 @@ và credential không được commit.
 
 ## Dataset
 
-Chỉ dùng tài liệu thật khi có quyền sử dụng và mục đích được xác định. Dataset
-benchmark phải có manifest nguồn/quyền/retention; report public chỉ chứa metric
-tổng hợp.
+Tài liệu thật/private hiện có được phép dùng cho gate, replay và localhost review
+khi người dùng đã chỉ định rõ corpus local. Dataset benchmark vẫn phải có
+manifest nguồn/quyền/retention; report public chỉ chứa metric tổng hợp.
 
-Fixture unit/contract test phải synthetic. Không đọc/copy private-data, upload,
+Fixture unit/contract test vẫn phải synthetic để giữ test deterministic. Gate/replay
+được phép đọc private-data local theo manifest; không copy private-data, upload,
 model weights hoặc OCR output thật vào repository.
 
 Ground Truth và prediction benchmark chứa field value nên kế thừa mức nhạy cảm của
