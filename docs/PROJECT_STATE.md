@@ -2,14 +2,14 @@
 
 ## Current checkpoint (2026-08-10)
 
-Current milestone: `DATA-27D-DEVELOPMENT-DELIVERY` is complete as a
-development-only handoff. `DATA-26-PARSER-RECOVERY` remains `DONE / DEV HOLD`
-with a passing development gate; no fallback or production promotion is
+Current milestone: `DATA-28-LOCAL-REVIEW-HANDOFF` is complete as a
+development-only local handoff. `DATA-26-PARSER-RECOVERY` remains `DONE / DEV
+HOLD` with a passing development gate; no fallback or production promotion is
 enabled.
 
 Repository:
 - Branch: `main`
-- HEAD: `2ddd851` (`fix(web): keep legacy heldout flag out of rendered source`)
+- HEAD: `5d85780` (`fix(web): refresh nanoid security patch`)
 - Working tree was clean at checkpoint creation.
 
 DATA-27A existing-pool audit is complete and `HOLD`. After SHA-256/history and
@@ -24,6 +24,20 @@ Development-only delivery artifact (aggregate, outside Git):
 DATA-24 evaluate-once, GroundTruth and all raw private artifacts remain
 immutable. DATA-27 fresh held-out generalization is `HOLD`; no evaluate-once
 rerun is authorized.
+
+DATA-28 localhost review evidence:
+- URL: `http://localhost:3000/workspace`
+- API: `http://127.0.0.1:8765`
+- Scope: 12 development documents / 112 fields; Contract `3/42`, CV `5/50`,
+  IELTS `4/20`.
+- Remaining strict gap: CV accepted-partial/over-extraction in `experience`
+  `5`, `skills` `4`, and `desired_role` `1`; Contract and IELTS have no strict
+  field gap in this replay.
+- Scan policy: 5/5 manual review, false auto-continue `0`.
+- Aggregate handoff artifact: `C:\\tmp\\data28-local-review-handoff-20260810.json`.
+
+The private `.env.local` only enables the external review tab for this local
+observation session and is ignored by Git.
 
 DATA-26 changes are conservative: CV glued header boundary recovery, geometry
 inference for a narrow full-width section heading, duration normalization, and
@@ -52,8 +66,8 @@ fresh held-out generalization is blocked by the existing-pool audit.
 Validation: targeted Python `25 passed`, worker Ruff and `py_compile` passed;
 web `npm test` (13) and `npm run build` passed on the unchanged web surface.
 
-Next action: use the DATA-27D development-only delivery for local review and
-handoff. Do not create a held-out claim, rerun DATA-24, or promote a fallback.
-The unrelated global task remains separately tracked in `BACKLOG.md`.
+Next action: keep the localhost review surface available for handoff. Do not
+create a held-out claim, rerun DATA-24, or promote a fallback. The unrelated
+global task remains separately tracked in `BACKLOG.md`.
 
 Archive: `docs/archive/PROJECT_STATE_HISTORY_2026-08-06.md`.

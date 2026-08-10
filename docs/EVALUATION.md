@@ -130,6 +130,27 @@ threshold. The aggregate delivery artifact is private at
 document values. This is a development handoff, not an independent held-out
 or evaluate-once result.
 
+### DATA-28 local-review handoff
+
+The CI-green `main` baseline `5d85780` was launched locally with the sealed
+DATA-26 development prediction/report and the 12-document private review
+bundle. The loopback UI/API exposed all 12 documents and 112 field-level
+comparisons: Contract `3` documents / `42` fields, CV `5` / `50`, and IELTS
+`4` / `20`. The review surface is local-only and contains no cloud upload.
+
+The development aggregate remains strict `102/112` (`91.07%`) and accepted
+`112/112` (`100%`), with applicable completeness `99/99`, classification
+`12/12`, schema errors `0`, sensitive false acceptance `0`, parser regression
+`0`, and false auto-continue `0`. The remaining strict gap is limited to CV
+accepted-partial/over-extraction: `experience` 5 fields, `skills` 4, and
+`desired_role` 1. Contract and IELTS have no strict field gap in this replay.
+The five scan/image documents remain `MANUAL_REVIEW`; fallback and promotion
+remain disabled.
+
+Aggregate-only handoff artifact:
+`C:\\tmp\\data28-local-review-handoff-20260810.json`. This checkpoint does not
+modify DATA-24, open DATA-27, or run evaluate-once.
+
 ## Metrics
 
 - OCR: CER, WER, reading-order accuracy.

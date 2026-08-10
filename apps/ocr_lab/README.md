@@ -84,6 +84,18 @@ Tải lại trang vẫn thấy trạng thái `Field review ✓`.
 
 ## Bằng chứng tài liệu thật trên localhost
 
+### DATA-28 local-review handoff
+
+For the current CI-green development handoff, run the API and web locally with
+the private DATA-26 development bundle, then open
+`http://localhost:3000/workspace` and choose **DATA-12 · Prediction + GT**.
+The private session exposes 12 development documents (3 Contract, 5 CV, 4
+IELTS) and 112 field comparisons. The remaining strict CV gap is recorded only
+as aggregate review evidence: `experience` 5, `skills` 4 and `desired_role` 1;
+Contract and IELTS have no remaining strict gap in this replay. Keep all five
+scan/image documents on `MANUAL_REVIEW`. Do not use this view to reopen
+DATA-24, create DATA-27 held-out evidence or enable fallback.
+
 Dashboard chỉ đọc các nguồn local hiện hành: session upload/template, CCCD đã
 review và OCR-HO shadow/diagnostic khi được bật riêng. Các nguồn có scope và
 mẫu số độc lập; dữ liệu thật không được đóng gói vào web build hoặc commit Git.

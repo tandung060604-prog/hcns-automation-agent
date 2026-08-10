@@ -105,6 +105,16 @@ therefore delivers the DATA-26 development result only; held-out generalization
 remains `HOLD`. All documents, OCR, predictions and GroundTruth stay outside
 Git and are processed locally.
 
+DATA-28 local-review handoff is available at
+[`http://localhost:3000/workspace`](http://localhost:3000/workspace) with the
+private external-dataset review flag enabled. The local Prediction + GT view
+exposes all 12 development documents (Contract 3, CV 5, IELTS 4) and 112
+field comparisons. Current strict exact is `102/112`; accepted text is
+`112/112`; the remaining strict gap is CV accepted-partial/over-extraction in
+`experience` (5), `skills` (4) and `desired_role` (1). Contract and IELTS have
+no remaining strict field gap on this development replay. The five scan/image
+documents remain `MANUAL_REVIEW`; DATA-24 and DATA-27 held-out are untouched.
+
 ### Benchmark OCR trên 77 crop dòng tiếng Việt đã được xác nhận
 
 Đây là benchmark so sánh recognizer trên cùng crop và cùng bộ text tham chiếu.

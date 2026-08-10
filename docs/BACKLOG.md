@@ -109,6 +109,7 @@
 | DATA-27A-EXISTING-POOL-AUDIT | DONE / HOLD | Audit existing private pool by SHA-256/history/lineage without reading OCR, prediction or GroundTruth; only 1 Contract, 1 CV and 0 IELTS files are fresh | DATA-26-PARSER-RECOVERY | P0 |
 | DATA-27D-DEVELOPMENT-DELIVERY | DONE / DEV HOLD | Package DATA-26 development PASS as the current local handoff; held-out generalization remains explicitly HOLD | DATA-27A-EXISTING-POOL-AUDIT | P0 |
 | DATA-27-FRESH-HELDOUT-V2 | BLOCKED | Create a new prediction-blind held-out split and run one approved v2 evaluate-once; blocked because the existing pool cannot form 10/10/5 fresh files | DATA-27A-EXISTING-POOL-AUDIT | P0 |
+| DATA-28-LOCAL-REVIEW-HANDOFF | DONE / DEV HOLD | Keep CI-green baseline, expose the 12-document development Prediction + GT review locally, record aggregate-only residual CV gaps and preserve manual-review/held-out locks | DATA-27D-DEVELOPMENT-DELIVERY | P0 |
 
 ## DATA-00..DATA-05 acceptance criteria
 

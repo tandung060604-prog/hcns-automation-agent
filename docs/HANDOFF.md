@@ -1,5 +1,26 @@
 # Handoff
 
+## DATA-28 local-review handoff (2026-08-10)
+
+- Baseline is CI-green at `5d85780` (`main`); Python 3.10/3.12, web tests,
+  build, lint and `npm audit --omit=dev` passed. GitHub Pages also passed.
+- Localhost is running at `http://localhost:3000/workspace` with API
+  `http://127.0.0.1:8765`. The private flag `VITE_SHOW_EXTERNAL_DATASET_REVIEW`
+  is enabled only in ignored `.env.local` for this observation session.
+- Prediction + GT inspector exposes all 12 development documents: Contract 3,
+  CV 5 and IELTS 4, totaling 112 fields. API verification opened all 12
+  document endpoints and returned 112 field comparisons, local-only.
+- Current development result remains strict `102/112` and accepted `112/112`.
+  Contract is `42/42`; IELTS is `20/20`. The residual CV strict gap is 10
+  accepted-partial fields: `experience` 5, `skills` 4 and `desired_role` 1;
+  over-extraction appears in 4/5 `experience`, 4/4 `skills` and `1/1`
+  `desired_role`. These are review candidates, not production promotion.
+- Five scan/image documents remain `MANUAL_REVIEW`; false auto-continue is `0`.
+  Fallback and production promotion remain disabled.
+- Aggregate-only artifact: `C:\\tmp\\data28-local-review-handoff-20260810.json`.
+- DATA-24 official evaluate-once/GroundTruth, DATA-27 held-out state and raw
+  private documents were not changed. No new data or evaluate-once was used.
+
 ## DATA-27D development-only delivery (2026-08-10)
 
 - `DATA-27A-EXISTING-POOL-AUDIT` is complete with decision `HOLD`.
