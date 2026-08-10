@@ -5,7 +5,8 @@
 Repository đã được đồng bộ fast-forward với `origin/main`:
 
 - Branch hiện hành: `main`.
-- HEAD và `origin/main`: `a3fc960`, checkpoint DATA-30 sau merge PR #16.
+- HEAD và `origin/main`: đang đồng bộ tại checkpoint DATA-30 sau merge PR #16;
+  xác minh bằng cách đối chiếu `git rev-parse HEAD` và `git rev-parse origin/main`.
 - Working tree sạch; không còn thay đổi local chưa commit.
 - PR #15 (DATA-29 implementation) và PR #16 (README tiếng Việt) đã merge; CI
   Python 3.10, Python 3.12 và OCR Lab Web đều `SUCCESS`.
