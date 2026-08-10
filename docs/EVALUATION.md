@@ -1,5 +1,14 @@
 # Evaluation
 
+## M5-CAM-002 UI-only local (2026-08-10)
+
+Đây là lớp hiển thị safety aggregate, không phải evaluator. API whitelist báo
+cáo M5-CAM-001D và UI không đọc field/raw source. Kiểm tra localhost cho thấy
+70/70 manual review, scan 27/27, unsupported 2/2; idempotency mismatch,
+duplicate reference, raw exposure, auto-continue, Camunda process start và real
+side effect đều bằng 0. Ground Truth/evaluate-once không được chạm tới và
+`promotionAllowed=false`. Không mở real cohort.
+
 ## M5-CAM-001D local shadow review-only (2026-08-10)
 
 Đây là safety checkpoint aggregate-only, không phải accuracy evaluation. Runner

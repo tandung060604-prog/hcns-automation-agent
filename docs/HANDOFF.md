@@ -1,5 +1,17 @@
 # Handoff
 
+## M5-CAM-002 UI-only local (DONE / LOCAL HOLD, 2026-08-10)
+
+- Localhost đã render panel M5 shadow safety từ aggregate-only report private;
+  API chỉ expose whitelist scalar/aggregate values.
+- Đã xác nhận runtime route `/m5/local-shadow-review/summary` và HTML
+  `/workspace` đều hoạt động. Không có raw field/source, Camunda call, POST,
+  HRIS/notification hoặc side effect.
+- Gates giữ nguyên: 70/70 `MANUAL_REVIEW`, scan 27/27, unsupported 2/2,
+  idempotency/duplicate/raw/auto-continue/process-start/side-effect đều 0.
+- Không dùng panel này làm accuracy benchmark. Real cohort và Camunda
+  integration vẫn chờ duyệt riêng.
+
 ## M5-CAM-001D local shadow review-only (DONE / LOCAL HOLD, 2026-08-10)
 
 - Đã chạy metadata-only trên projection private hiện có: 70 tài liệu, gồm

@@ -1,5 +1,11 @@
 # Backlog
 
+## M5-CAM-002-UI-ONLY-LOCAL — DONE / LOCAL HOLD (2026-08-10)
+
+Đã thêm panel localhost và read-only API route cho aggregate-only M5 shadow
+report. UI chỉ hiển thị manual-review/safety counters; raw values, Camunda,
+HRIS/notification và real cohort vẫn bị khóa.
+
 ## M5-CAM-001D-LOCAL-SHADOW-REVIEW-ONLY — DONE / LOCAL HOLD (2026-08-10)
 
 Projection-only review đã kiểm tra 70 record private hiện có bằng opaque
@@ -133,7 +139,8 @@ promotion or evaluate-once change is allowed. Aggregate-only artifact:
 | M5-CAM-001D | DONE / LOCAL HOLD | Metadata-only shadow review over existing private projection; manual-review, idempotency and zero-side-effect gates pass; promotion disabled | M5-CAM-001C | P1 |
 | M5-CAM-001 | AUTHORIZED_SYNTHETIC_ONLY | Synthetic-only authorization is locked with role IDs, 2026-08-10 window, seven-day retention and fail-closed rollback; real cohort remains closed | M5-CAM-001B | P1 |
 | LOCAL-PRIVATE-DATA-AUTH | AUTHORIZED_LOCAL_ONLY | User-authorized existing private corpus may run through local gate/replay/localhost review; raw values stay outside Git/cloud and scan remains MANUAL_REVIEW | DATA-29 / M5-CAM-001C | P1 |
-| M5-CAM-002 | PLANNED | Hoàn tất Ground Truth/cohort được cấp quyền cho CV, IELTS, probation contract và CCCD mặt trước; evaluate-once aggregate-only | M5-CAM-001 | P0 |
+| M5-CAM-002 | DONE / LOCAL HOLD | UI-only local aggregate view for M5-CAM-001D; no Camunda call, raw exposure or real cohort | M5-CAM-001D | P1 |
+| M5-CAM-002-REAL-COHORT | BLOCKED | Real cohort/effectful Camunda integration remains closed pending explicit approval and separate safety plan | M5-CAM-002 | P0 |
 | DATA-00 | DONE | Pin external source, isolate staging and reconcile dataset workstream | User-directed dataset commit | P0 |
 | DATA-01 | DONE (PUBLIC TEST PROFILE) | Record explicit public/synthetic classification; keep unknown/private sources fail-closed | DATA-00 | P0 |
 | DATA-02 | DONE | Build SHA-256/page-count inventory outside Git | DATA-01 | P0 |

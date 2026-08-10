@@ -407,3 +407,23 @@ test("renders the document benchmark as a visual flow and card grid", async () =
   assert.match(css, /\.local-benchmark-flow/);
   assert.match(api, /\/benchmark\/summary/);
 });
+
+test("renders M5 local shadow review as aggregate-only UI", async () => {
+  const [component, dashboard, css, api, starter] = await Promise.all([
+    readFile(new URL("../app/M5LocalShadowPanel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../../api/serve_dashboard_api.py", import.meta.url), "utf8"),
+    readFile(new URL("../../api/start_dashboard.ps1", import.meta.url), "utf8"),
+  ]);
+  assert.match(component, /M5-CAM-002/);
+  assert.match(component, /MANUAL_REVIEW ONLY/);
+  assert.match(component, /promotionAllowed/);
+  assert.match(component, /\/m5\/local-shadow-review\/summary/);
+  assert.match(dashboard, /<M5LocalShadowPanel \/>/);
+  assert.match(css, /\.local-shadow-section/);
+  assert.match(api, /\/m5\/local-shadow-review\/summary/);
+  assert.match(api, /--m5-local-shadow-report/);
+  assert.match(starter, /M5LocalShadowReport/);
+  assert.doesNotMatch(component, /Camunda REST|startProcess|HRIS|notification/);
+});
