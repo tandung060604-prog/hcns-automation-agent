@@ -1,5 +1,13 @@
 # Evaluation
 
+## M5-CAM-003 post-merge localhost acceptance (2026-08-10)
+
+Checkpoint này xác nhận deployment local sau merge, không phải accuracy
+evaluation. `/workspace` và API M5 shadow hoạt động với aggregate-only data:
+70/70 `MANUAL_REVIEW`, scan 27/27, unsupported 2/2; idempotency, duplicate,
+raw exposure, auto-continue, process start và side effect đều 0. Ground Truth
+và evaluate-once không được đọc, `promotionAllowed=false`, real cohort đóng.
+
 ## M5-CAM-002 UI-only local (2026-08-10)
 
 Đây là lớp hiển thị safety aggregate, không phải evaluator. API whitelist báo

@@ -1,5 +1,14 @@
 # Project State
 
+## M5-CAM-003 post-merge localhost acceptance (2026-08-10)
+
+Sau merge PR #24 tại `aee3ffd`, `main` và `origin/main` đồng bộ. Localhost
+acceptance PASS: panel M5-CAM-002 hiện diện trên `/workspace`; API shadow report
+trả 70/70 `MANUAL_REVIEW`, scan 27/27, unsupported 2/2. Idempotency mismatch,
+duplicate reference, raw exposure, auto-continue, Camunda process start và real
+side effect đều 0. Ground Truth/evaluate-once false và promotion disabled.
+Smoke tests Python/web và CI sau merge đều xanh. Real cohort vẫn đóng.
+
 ## M5-CAM-002 UI-only local (2026-08-10)
 
 UI localhost đã hiển thị aggregate-only report của M5-CAM-001D qua route
