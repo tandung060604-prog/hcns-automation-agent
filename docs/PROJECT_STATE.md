@@ -13,6 +13,15 @@ cấp, ép `autoContinueEnabled=false` và fail-closed với raw field/path vari
 - Không dùng Phase12, không đọc cohort thật, không thêm `documentSourcePath`,
   không sửa DATA-17/24/27 artifacts. Test bridge dùng fixture metadata synthetic.
 
+## M5-CAM-001 authorization state (2026-08-10)
+
+Authorization packet is `PENDING_OWNER_INPUT`, not a pilot approval. Owner,
+independent reviewer, time window, retention/deletion owner and rollback
+authority have not been supplied in the private channel. Cohort scope remains
+`SYNTHETIC_ONLY`; side effects are `DISABLED`; every result remains
+`MANUAL_REVIEW`; DATA-24 and its GroundTruth/evaluate-once artifacts remain
+immutable and unopened.
+
 ## M5-CAM-001A local synthetic shadow preflight (2026-08-10)
 
 Preflight Camunda local is `PASS` on the implementation branch

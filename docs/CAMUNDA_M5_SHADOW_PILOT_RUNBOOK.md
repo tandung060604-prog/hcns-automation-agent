@@ -29,6 +29,29 @@ Timesheet is removed from code, schema, API, dashboard and active tests. Citizen
 
 Business owner must record cohort, reviewer, retention, time window and rollback authority outside the repository. Pilot performance target is p95 <=60 seconds for an image or scanned PDF and zero unreconciled cases.
 
+## Authorization record (required; currently not approved)
+
+The following fields are the minimum authorization packet. Until every value is
+provided by the business owner and independently acknowledged by the reviewer,
+the status remains `PENDING_OWNER_INPUT` and no cohort may be opened:
+
+| Field | Required value | Current state |
+|---|---|---|
+| Owner | accountable business owner ID | `UNSET` |
+| Reviewer | independent reviewer ID(s) | `UNSET` |
+| Cohort | synthetic IDs or approved document-family scope | `SYNTHETIC_ONLY` |
+| Time window | start/end with timezone | `UNSET` |
+| Retention | private-store expiry and deletion owner | `UNSET` |
+| Rollback authority | named role and trigger | `UNSET` |
+| Side effects | HRIS/notification writes | `DISABLED` |
+| Review policy | every result and every scan | `MANUAL_REVIEW` |
+| DATA-24 | old evaluate-once/GT | `IMMUTABLE; NOT OPENED` |
+
+Role labels such as `business-owner` or `shadow-reviewer` are not approval by
+themselves. Do not replace the unset fields with guessed names, credentials or
+real document paths. The owner must provide the values through the approved
+private channel before a pilot authorization can become `PASS`.
+
 ## Local preflight
 
 Use the declared `.venv` profile from the repository root:

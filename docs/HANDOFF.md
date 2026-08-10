@@ -20,6 +20,19 @@
   `http://localhost:3000/workspace`; raw document/OCR/prediction/GroundTruth
   không được commit hoặc gửi lên cloud.
 
+## M5-CAM-001 authorization handoff (PENDING_OWNER_INPUT)
+
+- M5-CAM-001A/B provide only local synthetic evidence; they do not authorize a
+  real cohort.
+- Required private inputs are: accountable owner ID, independent reviewer ID,
+  cohort or synthetic scope, start/end time with timezone, retention expiry and
+  deletion owner, plus rollback authority and trigger.
+- Current locked values: `SYNTHETIC_ONLY`, side effects `DISABLED`, review
+  policy `MANUAL_REVIEW`, and DATA-24 `IMMUTABLE; NOT OPENED`.
+- Do not infer identities, retention or rollback authority from Git history or
+  document contents. Keep M5-CAM-001 open until the owner supplies and signs the
+  packet.
+
 ## DATA-29 CV residual recovery (2026-08-10)
 
 - Implementation ban đầu trên branch `codex/data29-cv-residual-recovery`, dựa

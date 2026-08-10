@@ -102,7 +102,7 @@ promotion or evaluate-once change is allowed. Aggregate-only artifact:
 | M4-CAM-006 | DONE | Dry-run 10/10 scenario; approve shadow pilot có điều kiện, giữ shadow routing và side effect giả lập | M4-CAM-005 | P1 |
 | M5-CAM-001A | DONE | Local synthetic leave/overtime preflight: deploy Camunda 7.13, User Review confirmation, simulated reconciliation and aggregate safety gates | M4-CAM-006 | P1 |
 | M5-CAM-001B | DONE | Nối Phase15 scalar/opaque-reference projection vào Submit task trên synthetic leave/overtime; giữ auto-continue và side effect safety gates | M5-CAM-001A | P1 |
-| M5-CAM-001 | READY | Shadow-only pilot authorization; owner must approve cohort, reviewer, retention, time window and rollback before any real cohort | M5-CAM-001A | P1 |
+| M5-CAM-001 | WAITING_OWNER_INPUT | Shadow-only pilot authorization packet is prepared; owner must supply owner/reviewer, cohort, retention, time window and rollback before any real cohort | M5-CAM-001B | P1 |
 | M5-CAM-002 | PLANNED | Hoàn tất Ground Truth/cohort được cấp quyền cho CV, IELTS, probation contract và CCCD mặt trước; evaluate-once aggregate-only | M5-CAM-001 | P0 |
 | DATA-00 | DONE | Pin external source, isolate staging and reconcile dataset workstream | User-directed dataset commit | P0 |
 | DATA-01 | DONE (PUBLIC TEST PROFILE) | Record explicit public/synthetic classification; keep unknown/private sources fail-closed | DATA-00 | P0 |
