@@ -7,8 +7,8 @@ aggregate: Contract `42/42`, CV `45/50`, IELTS `20/20` strict, with accepted
 reported separately. They show benchmark counts `3/5/4` and local prediction-
 only counts `30/30/10`; prediction-only records never contribute to metrics.
 DATA-17 and DATA-24 remain immutable. No new data, GroundTruth rerun or
-evaluate-once was performed. Required web/API validation passed; commit and CI
-review are the next checkpoint.
+evaluate-once was performed. Commit `8756678` is pushed to PR #22 and CI run
+`31392937914` passed Python 3.10, Python 3.12 and OCR Lab Web.
 
 ## DATA-30A-LOCAL-PRIVATE-REPLAY-REVIEW — DONE / HOLD (2026-08-10)
 

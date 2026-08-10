@@ -9,7 +9,8 @@
   shown separately as `30/30/10`. No score is derived from that inventory.
 - DATA-17/DATA-24 and their locks remain immutable. No new data, GroundTruth
   rerun or evaluate-once was run. API summary, Python compile, web build and
-  15 web tests passed. Next action is commit/CI review.
+  15 web tests passed. Commit `8756678` is pushed to PR #22 and CI run
+  `31392937914` is green; next action is owner review of PR #22.
 
 ## DATA-30 main reconciliation & development freeze (2026-08-10)
 
