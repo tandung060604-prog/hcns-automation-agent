@@ -1,5 +1,13 @@
 # Backlog
 
+## M5-CAM-005-SCALAR-OPAQUE-HANDOFF-CONTRACT-REGRESSION — DONE / PASS (2026-08-11)
+
+Đã khóa regression API fixture synthetic → Phase15 bridge → Camunda boundary
+bằng hai fixture leave/overtime. Scalar/opaque-only, MANUAL_REVIEW và
+`autoContinueEnabled=false` đều pass; `7/7` field/OCR/path/raw payload bị từ
+chối, idempotency và schema whitelist pass. Không start process, không side
+effect, không mở real cohort.
+
 ## M5-CAM-004-SYNTHETIC-MANUAL-REVIEW-REHEARSAL — DONE / PASS (2026-08-11)
 
 Hai fixture synthetic leave/overtime đã chạy qua Camunda local review-first;

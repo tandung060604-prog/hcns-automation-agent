@@ -19,8 +19,18 @@ _FORBIDDEN_CAMUNDA_NAMES = frozenset(
         "ocrText",
         "recognizedText",
         "fields",
+        "fieldValues",
+        "extractedFields",
         "tables",
+        "rawPayload",
+        "rawOcrText",
+        "ocrPayload",
+        "rawText",
         "documentSourcePath",
+        "sourceFile",
+        "sourcePath",
+        "filePath",
+        "documentPath",
     }
 )
 _PROJECTION_NAMES = frozenset(

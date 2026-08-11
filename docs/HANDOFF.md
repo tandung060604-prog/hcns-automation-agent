@@ -1,5 +1,18 @@
 # Handoff
 
+## M5-CAM-005 scalar/opaque handoff contract regression (DONE / PASS, 2026-08-11)
+
+- Regression contract đi từ API fixture synthetic vào Phase15 bridge rồi dừng ở
+  boundary Camunda; không start process và không gọi HRIS/notification.
+- Hai fixture `LEAVE_REQUEST` và `OVERTIME_REQUEST` đều pass scalar-only,
+  opaque-reference-only, `MANUAL_REVIEW`, `autoContinueEnabled=false`.
+- `7/7` payload case field/OCR/path/raw bị từ chối; schema whitelist lỗi `0`,
+  non-scalar `0`, idempotency mismatch `0`, process start `0`, side effect `0`.
+- Artifact aggregate-only tạo mới ngoài Git/cloud:
+  `C:\\Camunda\\private-data\\m5-cam-005\\reports\\m5-cam-005-contract-regression-20260811-v2.json`.
+- DATA-17/DATA-24/GroundTruth/evaluate-once giữ nguyên; real cohort vẫn đóng,
+  `promotionAllowed=false`.
+
 ## M5-CAM-004 synthetic Camunda manual-review rehearsal (DONE / PASS, 2026-08-11)
 
 - Camunda 7.13 local loopback đã deploy BPMN/DMN và chạy đúng 2 fixture
