@@ -2,7 +2,8 @@
 
 ## FINAL-PROJECT-CHECKPOINT - DONE (2026-08-11)
 
-PR #30 is merged at `14b78bc`; post-merge CI and Pages are successful. Main is
+PR #30 is merged at `14b78bc`; the final docs checkpoint is `77d47d6`, with
+post-merge CI and Pages successful. Main is
 clean/synchronized, localhost shows M5-CAM-007 `PASS · READ-ONLY`, and the
 optional unconfigured M5-CAM-002 panel is hidden. Workstream is closed without
 new data, gate changes, GroundTruth/evaluate-once changes, or effectful Camunda.

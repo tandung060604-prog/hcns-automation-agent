@@ -2,9 +2,9 @@
 
 ## Final project checkpoint (2026-08-11)
 
-`main` and `origin/main` are clean and synchronized at merge commit `14b78bc`
-(PR #30). Post-merge CI run `31457488778` and Pages run `31457488796` both
-completed successfully.
+PR #30 merged at `14b78bc`; the docs-only final checkpoint is now clean and
+synchronized on `main`/`origin/main` at `77d47d6`. Post-merge CI run
+`31457488778` and Pages run `31457488796` both completed successfully.
 
 Localhost final check passed: the optional M5-CAM-002 unconfigured-report warning
 and panel are hidden, while M5-CAM-007 remains `PASS · READ-ONLY`. Accuracy and

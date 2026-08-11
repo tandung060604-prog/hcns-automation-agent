@@ -2,8 +2,9 @@
 
 ## Final project checkpoint (2026-08-11)
 
-This is a release/state checkpoint, not a new evaluation. Main is synchronized at
-`14b78bc`; CI `31457488778` and Pages `31457488796` passed. Localhost confirms the
+This is a release/state checkpoint, not a new evaluation. PR #30 merged at
+`14b78bc`; the docs checkpoint is synchronized at `77d47d6`. CI `31457488778`
+and Pages `31457488796` passed. Localhost confirms the
 M5-CAM-002 unconfigured state is silent and M5-CAM-007 remains `PASS · READ-ONLY`.
 Accuracy and held-out generalization are unchanged; Camunda safety smoke is PASS,
 and real cohort/effectful integration remains unopened.

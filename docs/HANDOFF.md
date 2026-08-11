@@ -2,7 +2,8 @@
 
 ## Final project checkpoint (DONE / 2026-08-11)
 
-- `main` and `origin/main` are clean and synchronized at `14b78bc` after PR #30.
+- PR #30 merged at `14b78bc`; the docs-only checkpoint leaves `main` and
+  `origin/main` clean and synchronized at `77d47d6`.
 - Post-merge CI `31457488778` and Pages `31457488796` are successful.
 - Localhost `/workspace` hides the unconfigured M5-CAM-002 panel and keeps
   M5-CAM-007 at `PASS · READ-ONLY`.
