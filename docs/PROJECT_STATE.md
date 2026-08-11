@@ -1,5 +1,16 @@
 # Project State
 
+## M5-CAM-004 synthetic Camunda manual-review rehearsal (2026-08-11)
+
+Đã chạy lại hai fixture synthetic `LEAVE_REQUEST` và `OVERTIME_REQUEST` trên
+Camunda 7.13 loopback bằng wrapper M5-CAM-004. Cả 2/2 case tới `UserReview` và
+hoàn tất; process start local `2`, manual review `2/2`, auto-continue `0`, raw
+exposure `0`, duplicate result `0`, unreconciled `0`, real side effect `0`.
+Handoff qua Phase15 scalar/reference pass với opaque reference-only và
+`autoContinueEnabled=false`. Rollback probe với `autoContinueCount > 0` trả
+`rollbackRequired=true`, `allowedToComplete=false`. Không đọc Ground Truth/
+evaluate-once, không có real cohort; report aggregate-only nằm ngoài Git/cloud.
+
 ## M5-CAM-003 post-merge localhost acceptance (2026-08-10)
 
 Sau merge PR #24 tại `aee3ffd`, `main` và `origin/main` đồng bộ. Localhost

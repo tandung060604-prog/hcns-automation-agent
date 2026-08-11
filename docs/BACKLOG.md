@@ -1,5 +1,11 @@
 # Backlog
 
+## M5-CAM-004-SYNTHETIC-MANUAL-REVIEW-REHEARSAL — DONE / PASS (2026-08-11)
+
+Hai fixture synthetic leave/overtime đã chạy qua Camunda local review-first;
+scalar/opaque-reference handoff, MANUAL_REVIEW, idempotency và rollback gates
+đều pass. Không có real cohort hoặc side effect.
+
 ## M5-CAM-003-POST-MERGE-LOCALHOST-ACCEPTANCE — DONE / PASS (2026-08-10)
 
 Đã xác nhận `main` sau merge PR #24, API shadow aggregate-only và panel
@@ -146,6 +152,7 @@ promotion or evaluate-once change is allowed. Aggregate-only artifact:
 | LOCAL-PRIVATE-DATA-AUTH | AUTHORIZED_LOCAL_ONLY | User-authorized existing private corpus may run through local gate/replay/localhost review; raw values stay outside Git/cloud and scan remains MANUAL_REVIEW | DATA-29 / M5-CAM-001C | P1 |
 | M5-CAM-002 | DONE / LOCAL HOLD | UI-only local aggregate view for M5-CAM-001D; no Camunda call, raw exposure or real cohort | M5-CAM-001D | P1 |
 | M5-CAM-003 | DONE / PASS | Post-merge localhost acceptance: panel/API present, manual-review and zero-side-effect gates verified | M5-CAM-002 | P1 |
+| M5-CAM-004 | DONE / PASS | Synthetic Camunda leave/overtime manual-review rehearsal; scalar/reference handoff, idempotency and fail-closed rollback verified | M5-CAM-003 | P1 |
 | M5-CAM-002-REAL-COHORT | BLOCKED | Real cohort/effectful Camunda integration remains closed pending explicit approval and separate safety plan | M5-CAM-002 | P0 |
 | DATA-00 | DONE | Pin external source, isolate staging and reconcile dataset workstream | User-directed dataset commit | P0 |
 | DATA-01 | DONE (PUBLIC TEST PROFILE) | Record explicit public/synthetic classification; keep unknown/private sources fail-closed | DATA-00 | P0 |
