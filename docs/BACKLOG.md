@@ -1,5 +1,11 @@
 # Backlog
 
+## M5-CAM-006-LOCALHOST-API-BRIDGE-READ-ONLY-SMOKE — DONE / PASS (2026-08-11)
+
+Đã kiểm tra GET localhost `/user/phase15-business` → Phase15 bridge bằng hai
+fixture synthetic. Scalar/opaque-only, MANUAL_REVIEW và auto-continue false đều
+pass; không POST, không start Camunda, không side effect và không mở real cohort.
+
 ## M5-CAM-005-SCALAR-OPAQUE-HANDOFF-CONTRACT-REGRESSION — DONE / PASS (2026-08-11)
 
 Đã khóa regression API fixture synthetic → Phase15 bridge → Camunda boundary

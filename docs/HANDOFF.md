@@ -1,5 +1,16 @@
 # Handoff
 
+## M5-CAM-006 localhost API → Phase15 bridge smoke (DONE / PASS, 2026-08-11)
+
+- Đã chạy loopback API read-only với hai UUID fixture synthetic leave/overtime;
+  GET `/user/phase15-business` trả Business JSON cho bridge.
+- `2/2` projection pass scalar-only, opaque-reference-only, MANUAL_REVIEW và
+  `autoContinueEnabled=false`; schema whitelist/non-scalar/source mutation đều 0.
+- Không có POST, Camunda process start, HRIS/notification side effect hay real
+  cohort; GroundTruth/evaluate-once không được chạm tới.
+- Artifact aggregate-only ngoài Git/cloud:
+  `C:\\Camunda\\private-data\\m5-cam-006\\reports\\m5-cam-006-api-bridge-smoke-20260811-v1.json`.
+
 ## M5-CAM-005 scalar/opaque handoff contract regression (DONE / PASS, 2026-08-11)
 
 - Regression contract đi từ API fixture synthetic vào Phase15 bridge rồi dừng ở

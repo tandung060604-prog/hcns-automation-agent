@@ -1,5 +1,16 @@
 # Evaluation
 
+## M5-CAM-006 localhost API → Phase15 bridge smoke (2026-08-11)
+
+Đây là read-only contract smoke, không phải accuracy evaluation. Loopback GET
+`/user/phase15-business` đọc hai fixture synthetic leave/overtime và đưa vào
+Phase15 bridge; `2/2` pass scalar-only, opaque-reference-only,
+`MANUAL_REVIEW`, `autoContinueEnabled=false`, whitelist lỗi `0`,
+non-scalar `0`, source mutation `0`.
+
+Không có POST, Camunda process start, HRIS/notification side effect hoặc real
+cohort; GroundTruth/evaluate-once không được đọc; `promotionAllowed=false`.
+
 ## M5-CAM-005 scalar/opaque handoff contract regression (2026-08-11)
 
 Đây là contract/safety regression, không phải accuracy evaluation. Hai fixture
