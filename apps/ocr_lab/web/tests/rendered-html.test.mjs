@@ -427,3 +427,25 @@ test("renders M5 local shadow review as aggregate-only UI", async () => {
   assert.match(starter, /M5LocalShadowReport/);
   assert.doesNotMatch(component, /Camunda REST|startProcess|HRIS|notification/);
 });
+
+test("renders M5-CAM-007 as a read-only aggregate panel", async () => {
+  const [component, dashboard, css, api, starter] = await Promise.all([
+    readFile(new URL("../app/M5Cam006SmokePanel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../../api/serve_dashboard_api.py", import.meta.url), "utf8"),
+    readFile(new URL("../../api/start_dashboard.ps1", import.meta.url), "utf8"),
+  ]);
+  assert.match(component, /M5-CAM-007/);
+  assert.match(component, /\/m5\/cam-006\/summary/);
+  assert.match(component, /promotionAllowed/);
+  assert.match(component, /manualReviewCount/);
+  assert.match(component, /autoContinueCount/);
+  assert.match(component, /hrisSideEffectCount/);
+  assert.match(dashboard, /<M5Cam006SmokePanel \/>/);
+  assert.match(css, /\.m5-cam-006-section/);
+  assert.match(api, /\/m5\/cam-006\/summary/);
+  assert.match(api, /--m5-cam-006-smoke-report/);
+  assert.match(starter, /M5Cam006SmokeReport/);
+  assert.doesNotMatch(component, /businessJson|ocrText|documentPath|rawPayload/);
+});

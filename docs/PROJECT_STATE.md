@@ -1,5 +1,17 @@
 # Project State
 
+## M5-CAM-007 localhost UI read-only smoke aggregate (2026-08-11)
+
+The `/workspace` dashboard now shows the existing M5-CAM-006 smoke report through
+GET-only `/m5/cam-006/summary`. The API loader returns an aggregate whitelist only:
+fixture/bridge counts, scalar and opaque-reference flags, manual-review and
+auto-continue counters, and side-effect counters. POST/DELETE for this route return
+405. The UI does not render business payloads, fields, OCR, paths, or PII.
+
+GroundTruth and evaluate-once artifacts are not read or changed; Camunda, HRIS,
+notification, and real-cohort actions remain disabled. `promotionAllowed=false`.
+Web build, 17 rendered tests, 175 Python unit tests, and CI-scoped Ruff checks pass.
+
 ## M5-CAM-006 localhost API → Phase15 bridge read-only smoke (2026-08-11)
 
 Smoke test local loopback bằng hai fixture synthetic Phase15 leave/overtime:

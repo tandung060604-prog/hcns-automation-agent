@@ -15,6 +15,7 @@ param(
     [string]$ExternalDatasetPolicyV2Report = "",
     [string]$ExternalDatasetPolicyV2Marker = "",
     [string]$M5LocalShadowReport = "",
+    [string]$M5Cam006SmokeReport = "",
     [string]$PythonPath = "D:\venv_paddle\Scripts\python.exe"
 )
 
@@ -69,6 +70,9 @@ if ($ExternalDatasetPolicyV2Marker -and -not (Test-Path -LiteralPath $ExternalDa
 if ($M5LocalShadowReport -and -not (Test-Path -LiteralPath $M5LocalShadowReport)) {
     throw "M5 local shadow report not found: $M5LocalShadowReport"
 }
+if ($M5Cam006SmokeReport -and -not (Test-Path -LiteralPath $M5Cam006SmokeReport)) {
+    throw "M5-CAM-006 smoke report not found: $M5Cam006SmokeReport"
+}
 
 $env:PYTHONPATH = Join-Path $repoRoot "src"
 
@@ -115,10 +119,10 @@ if ($apiRunning -and $OcrHoShadowRoot) {
         $apiRunning = $false
     }
 }
-if ($apiRunning -and ($BenchmarkReport -or $ExternalDatasetPolicyV2Report -or $ExternalDatasetPolicyV2Marker -or $M5LocalShadowReport)) {
+if ($apiRunning -and ($BenchmarkReport -or $ExternalDatasetPolicyV2Report -or $ExternalDatasetPolicyV2Marker -or $M5LocalShadowReport -or $M5Cam006SmokeReport)) {
     $commandLine = [string]$apiProcess.CommandLine
     $configuredPathsPresent = $true
-    foreach ($configuredPath in @($BenchmarkReport, $ExternalDatasetPolicyV2Report, $ExternalDatasetPolicyV2Marker, $M5LocalShadowReport)) {
+    foreach ($configuredPath in @($BenchmarkReport, $ExternalDatasetPolicyV2Report, $ExternalDatasetPolicyV2Marker, $M5LocalShadowReport, $M5Cam006SmokeReport)) {
         if ($configuredPath -and $commandLine.IndexOf((Resolve-Path -LiteralPath $configuredPath).Path, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
             $configuredPathsPresent = $false
         }
@@ -173,6 +177,9 @@ if (-not $apiRunning) {
     }
     if ($M5LocalShadowReport) {
         $apiArguments += " --m5-local-shadow-report `"$M5LocalShadowReport`""
+    }
+    if ($M5Cam006SmokeReport) {
+        $apiArguments += " --m5-cam-006-smoke-report `"$M5Cam006SmokeReport`""
     }
     Start-Process `
         -FilePath $PythonPath `

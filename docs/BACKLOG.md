@@ -1,5 +1,13 @@
 # Backlog
 
+## M5-CAM-007-LOCALHOST-UI-READ-ONLY-SMOKE-AGGREGATE - DONE / PASS (2026-08-11)
+
+Added a GET-only aggregate panel for the existing M5-CAM-006 Phase15 bridge smoke
+report. The panel exposes only safe counters and safety flags; POST/DELETE are
+blocked, `promotionAllowed=false`, and no GroundTruth/evaluate-once, Camunda,
+HRIS, notification, or real-cohort action is available. No raw or private artifact
+was added to Git or cloud.
+
 ## M5-CAM-006-LOCALHOST-API-BRIDGE-READ-ONLY-SMOKE — DONE / PASS (2026-08-11)
 
 Đã kiểm tra GET localhost `/user/phase15-business` → Phase15 bridge bằng hai

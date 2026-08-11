@@ -8,6 +8,7 @@ import ExternalDatasetReview from "./ExternalDatasetReview";
 import ExternalDatasetPrediction from "./ExternalDatasetPrediction";
 import LocalEvidenceOverview from "./LocalEvidenceOverview";
 import LocalBenchmarkPanel from "./LocalBenchmarkPanel";
+import M5Cam006SmokePanel from "./M5Cam006SmokePanel";
 import M5LocalShadowPanel from "./M5LocalShadowPanel";
 import OcrHoDiagnostic from "./OcrHoDiagnostic";
 
@@ -4798,6 +4799,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       <LocalBenchmarkPanel />
 
       <M5LocalShadowPanel />
+
+      <M5Cam006SmokePanel />
 
       <section className="section" id="phases">
         <div className="section-heading">

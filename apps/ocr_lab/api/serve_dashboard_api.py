@@ -126,7 +126,10 @@ from hcns_agent.application.ocr_scope import (
     ocr_allowed_for_document_type,
     ocr_scope_for,
 )
-from hcns_agent.adapters.camunda7.local_shadow_review import load_shadow_review_report
+from hcns_agent.adapters.camunda7.local_shadow_review import (
+    load_m5_cam_006_smoke_report,
+    load_shadow_review_report,
+)
 from hcns_agent.ports.document_parser import DocumentSource
 from hcns_agent.templates.service import (
     TemplateProcessingService,
@@ -1492,6 +1495,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
     external_dataset_policy_v2_report: Path | None
     external_dataset_policy_v2_marker: Path | None
     m5_local_shadow_report: Path | None = None
+    m5_cam_006_smoke_report: Path | None = None
     native_indexes: dict[str, dict[str, Path]]
     user_ocr: UserOCRService
     template_processor: TemplateProcessingService
@@ -1545,6 +1549,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/m5/cam-006/summary":
+            self.send_json(
+                {"error": "M5-CAM-006 smoke aggregate is read-only; use GET"},
+                HTTPStatus.METHOD_NOT_ALLOWED,
+            )
+            return
         if parsed.path.startswith("/external-dataset/typed/"):
             self.send_json(
                 {"error": "Typed canonical projection is read-only; use GET"},
@@ -2425,6 +2435,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/m5/cam-006/summary":
+            self.send_json(
+                {"error": "M5-CAM-006 smoke aggregate is read-only; use GET"},
+                HTTPStatus.METHOD_NOT_ALLOWED,
+            )
+            return
         if parsed.path.startswith("/external-dataset/typed/"):
             self.send_json(
                 {"error": "Typed canonical projection is read-only; use GET"},
@@ -2495,6 +2511,26 @@ class DashboardHandler(BaseHTTPRequestHandler):
             except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
                 self.send_json(
                     {"error": f"M5 local shadow report unavailable: {exc}"},
+                    HTTPStatus.NOT_FOUND,
+                )
+            return
+
+        if parsed.path == "/m5/cam-006/summary":
+            if self.m5_cam_006_smoke_report is None:
+                self.send_json(
+                    {"error": "M5-CAM-006 smoke aggregate is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            try:
+                self.send_json(
+                    load_m5_cam_006_smoke_report(str(self.m5_cam_006_smoke_report))
+                )
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+                self.send_json(
+                    {"error": f"M5-CAM-006 smoke aggregate unavailable: {exc}"},
                     HTTPStatus.NOT_FOUND,
                 )
             return
@@ -3830,6 +3866,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Private aggregate-only M5-CAM-001D local shadow report JSON.",
     )
+    parser.add_argument(
+        "--m5-cam-006-smoke-report",
+        type=Path,
+        help="Private aggregate-only M5-CAM-006 read-only smoke report JSON.",
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     return parser.parse_args()
@@ -3951,6 +3992,11 @@ def main() -> int:
     DashboardHandler.m5_local_shadow_report = (
         args.m5_local_shadow_report.expanduser().resolve()
         if args.m5_local_shadow_report is not None
+        else None
+    )
+    DashboardHandler.m5_cam_006_smoke_report = (
+        args.m5_cam_006_smoke_report.expanduser().resolve()
+        if args.m5_cam_006_smoke_report is not None
         else None
     )
     DashboardHandler.native_indexes = indexes
