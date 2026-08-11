@@ -89,7 +89,7 @@ class M5Cam007UiAggregateApiTests(unittest.TestCase):
                     )
                     connection.request(method, "/m5/cam-006/summary")
                     response = connection.getresponse()
-                    body = response.read()
+                    response.read()
                     connection.close()
                     self.assertEqual(response.status, 404)
             finally:
