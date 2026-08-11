@@ -59,7 +59,6 @@ def _report(path: Path) -> Path:
 
 class M5Cam007UiAggregateApiTests(unittest.TestCase):
     def test_read_only_summary_has_no_raw_payload_or_mutation(self) -> None:
-        # This test uses a real temporary directory without depending on any private artifact.
         import tempfile
 
         with tempfile.TemporaryDirectory() as root:
