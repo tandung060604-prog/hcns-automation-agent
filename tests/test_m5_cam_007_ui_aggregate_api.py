@@ -58,7 +58,7 @@ def _report(path: Path) -> Path:
 
 
 class M5Cam007UiAggregateApiTests(unittest.TestCase):
-    def test_read_only_summary_has_no_raw_payload_or_mutation(self) -> None:
+    def test_removed_summary_endpoint_returns_not_found_without_mutation(self) -> None:
         import tempfile
 
         with tempfile.TemporaryDirectory() as root:
@@ -91,15 +91,7 @@ class M5Cam007UiAggregateApiTests(unittest.TestCase):
                     response = connection.getresponse()
                     body = response.read()
                     connection.close()
-                    if method == "GET":
-                        self.assertEqual(response.status, 200)
-                        response_payload = json.loads(body)
-                        self.assertEqual(response_payload["httpMethodPolicy"], "GET_ONLY")
-                        self.assertNotIn("fields", body.decode())
-                        self.assertNotIn("documentPath", body.decode())
-                        self.assertNotIn("SYNTHETIC PRIVATE VALUE", body.decode())
-                    else:
-                        self.assertEqual(response.status, 405)
+                    self.assertEqual(response.status, 404)
             finally:
                 server.shutdown()
                 server.server_close()
