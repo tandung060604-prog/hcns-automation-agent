@@ -1,5 +1,15 @@
 # Handoff
 
+## Final project checkpoint (DONE / 2026-08-11)
+
+- `main` and `origin/main` are clean and synchronized at `14b78bc` after PR #30.
+- Post-merge CI `31457488778` and Pages `31457488796` are successful.
+- Localhost `/workspace` hides the unconfigured M5-CAM-002 panel and keeps
+  M5-CAM-007 at `PASS · READ-ONLY`.
+- Accuracy/held-out generalization retain the current state; Camunda safety smoke
+  is PASS; real cohort/effectful integration remains closed. No new data or
+  evaluation artifact was created.
+
 ## M5-CAM-008 UI status cleanup (DONE / LOCAL, 2026-08-11)
 
 - M5-CAM-002 now hides itself for the expected 404 “report not configured” state.

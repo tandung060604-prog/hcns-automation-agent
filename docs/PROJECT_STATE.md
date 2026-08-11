@@ -1,5 +1,17 @@
 # Project State
 
+## Final project checkpoint (2026-08-11)
+
+`main` and `origin/main` are clean and synchronized at merge commit `14b78bc`
+(PR #30). Post-merge CI run `31457488778` and Pages run `31457488796` both
+completed successfully.
+
+Localhost final check passed: the optional M5-CAM-002 unconfigured-report warning
+and panel are hidden, while M5-CAM-007 remains `PASS · READ-ONLY`. Accuracy and
+held-out generalization remain at their current HOLD/state; Camunda safety smoke
+remains PASS; no real cohort or effectful integration was opened. No new data,
+gate, GroundTruth, or evaluate-once artifact was added or changed.
+
 ## M5-CAM-008 UI status cleanup (2026-08-11)
 
 The optional M5-CAM-002 local shadow panel now stays hidden when its aggregate
