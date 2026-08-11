@@ -28,7 +28,7 @@ Chỉ đọc các file cần cho tác vụ:
 | Test/benchmark | `docs/EVALUATION.md`, `tests/AGENTS.md` |
 | Tài liệu | `docs/AGENTS.md` |
 | Trạng thái và handoff | `docs/README.md`, `docs/PROJECT_STATE.md`, `docs/BACKLOG.md`, `docs/HANDOFF.md` |
-| Báo cáo tiến độ mentor | `docs/MENTOR_4_DAY_PROGRESS_REPORT.md`, `docs/EVALUATION.md` |
+| Báo cáo tiến độ mentor | `docs/MENTOR_CAMUNDA_HITL_REPORT.md`, `docs/MENTOR_4_DAY_PROGRESS_REPORT.md`, `docs/EVALUATION.md` |
 
 Không quét toàn repository, dataset, output OCR hoặc `node_modules`.
 
