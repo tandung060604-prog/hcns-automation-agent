@@ -35,15 +35,25 @@ function Gate({ label, value }: { label: string; value: number }) {
 export default function M5LocalShadowPanel() {
   const [report, setReport] = useState<ShadowReport | null>(null);
   const [error, setError] = useState("");
+  const [configured, setConfigured] = useState(true);
 
   useEffect(() => {
     fetch(`${API_BASE}/m5/local-shadow-review/summary`)
       .then(async (response) => {
         const payload = await response.json();
+        if (
+          response.status === 404
+          && typeof payload?.error === "string"
+          && payload.error.includes("not configured")
+        ) {
+          setConfigured(false);
+          return null;
+        }
         if (!response.ok) throw new Error(payload.error ?? "M5 shadow report unavailable");
         return payload as ShadowReport;
       })
       .then((payload) => {
+        if (!payload) return;
         setReport(payload);
         setError("");
       })
@@ -51,6 +61,8 @@ export default function M5LocalShadowPanel() {
         setError(reason instanceof Error ? reason.message : "M5 shadow report unavailable");
       });
   }, []);
+
+  if (!configured) return null;
 
   return (
     <section className="section local-shadow-section" id="m5-local-shadow-review">

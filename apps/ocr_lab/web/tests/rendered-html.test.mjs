@@ -420,6 +420,8 @@ test("renders M5 local shadow review as aggregate-only UI", async () => {
   assert.match(component, /MANUAL_REVIEW ONLY/);
   assert.match(component, /promotionAllowed/);
   assert.match(component, /\/m5\/local-shadow-review\/summary/);
+  assert.match(component, /not configured/);
+  assert.match(component, /if \(!configured\) return null/);
   assert.match(dashboard, /<M5LocalShadowPanel \/>/);
   assert.match(css, /\.local-shadow-section/);
   assert.match(api, /\/m5\/local-shadow-review\/summary/);

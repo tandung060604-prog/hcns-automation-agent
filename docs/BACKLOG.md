@@ -1,5 +1,11 @@
 # Backlog
 
+## M5-CAM-008-UI-STATUS-CLEANUP - DONE / LOCAL (2026-08-11)
+
+Hide the optional M5-CAM-002 panel when its report is not configured, while
+keeping unexpected runtime errors visible. M5-CAM-007 remains the authoritative
+read-only smoke status.
+
 ## M5-CAM-007-LOCALHOST-UI-READ-ONLY-SMOKE-AGGREGATE - DONE / PASS (2026-08-11)
 
 Added a GET-only aggregate panel for the existing M5-CAM-006 Phase15 bridge smoke

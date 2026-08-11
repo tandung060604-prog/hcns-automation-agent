@@ -1,5 +1,11 @@
 # Evaluation
 
+## M5-CAM-008 UI status cleanup (2026-08-11)
+
+This is a presentation-only cleanup, not an accuracy or safety evaluation. A
+missing optional M5-CAM-002 report no longer produces a dashboard warning; other
+API errors remain visible. M5-CAM-007 smoke metrics and safety gates are unchanged.
+
 ## M5-CAM-007 localhost UI read-only smoke aggregate (2026-08-11)
 
 This is a safety/UI checkpoint, not an accuracy evaluation. The localhost UI reads
