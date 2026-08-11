@@ -300,6 +300,7 @@ def ingest(args: argparse.Namespace) -> int:
                 f"{record['documentId']}.{str(record['sourceFormat']).casefold()}",
                 source.suffix.casefold(),
                 source.read_bytes(),
+                "IDENTITY_DOCUMENT",
             )
         completed += 1
         print(

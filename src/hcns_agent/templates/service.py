@@ -20,6 +20,11 @@ from hcns_agent.domain.documents import SourceFormat
 from hcns_agent.domain.errors import DocumentIntakeError, IntakeErrorCode
 from hcns_agent.ports.document_parser import DocumentSource
 from hcns_agent.ports.ocr import OcrEngine, OcrResult
+from hcns_agent.templates.compatibility import (
+    canonical_template_id,
+    canonicalize_corrections,
+    canonicalize_template_payload,
+)
 from hcns_agent.templates.model import (
     ParsedTemplate,
     RecommendedAction,
@@ -212,6 +217,9 @@ class TemplateProcessingService:
         """Apply private field corrections and rerun the frozen template validator."""
 
         template_id = _required_payload_string(stored_payload, "templateId")
+        original_template_id = template_id
+        stored_payload = canonicalize_template_payload(stored_payload)
+        template_id = canonical_template_id(template_id)
         template_version = _required_payload_string(stored_payload, "templateVersion")
         definition = self._registry.get(template_id)
         if definition is None or definition.version != template_version:
@@ -220,6 +228,7 @@ class TemplateProcessingService:
         allowed_fields = frozenset(
             (*definition.required_fields, *definition.optional_fields)
         )
+        corrections = canonicalize_corrections(original_template_id, corrections)
         if not corrections or not set(corrections).issubset(allowed_fields):
             raise TemplateUnsupportedError("Correction contains unsupported fields")
         if any(not _is_correction_value(value) for value in corrections.values()):

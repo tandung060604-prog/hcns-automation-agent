@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hcns:template:ielts-certificate:2.0.0",
+  "title": "HCNS IELTS certificate Template-first v2 result",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["documentId", "documentType", "templateId", "templateVersion", "schemaVersion", "recipient_name", "credential_id", "credential_type", "overall_score", "issue_date"],
+  "properties": {
+    "documentId": {"type": "string"},
+    "documentType": {"const": "CERTIFICATE"},
+    "templateId": {"const": "ielts-certificate-v2"},
+    "templateVersion": {"const": "2.0"},
+    "schemaVersion": {"const": "2.0.0"},
+    "recipient_name": {"type": ["string", "null"]},
+    "credential_id": {"type": ["string", "null"]},
+    "credential_type": {"type": ["string", "null"]},
+    "overall_score": {"type": ["number", "string", "null"]},
+    "issue_date": {"type": ["string", "null"]}
+  }
+}

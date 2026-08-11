@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:hcns:external:probation-contract:1.0.0",
-  "title": "External Dataset Probation Contract Business JSON",
+  "$id": "urn:hcns:external:probation-contract:2.0.0",
+  "title": "External Dataset Probation Contract Business JSON v2",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "documentFamily", "documentType", "idpStatus", "payload"],
   "properties": {
-    "schemaVersion": {"const": "1.0.0"},
+    "schemaVersion": {"const": "2.0.0"},
     "documentFamily": {"const": "CONTRACT_DECISION"},
     "documentType": {"const": "EMPLOYMENT_CONTRACT"},
     "idpStatus": {"enum": ["READY", "NEEDS_REVIEW"]},

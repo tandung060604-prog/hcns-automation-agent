@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hcns:template:cv:2.0.0",
+  "title": "HCNS CV Template-first v2 result",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["documentId", "documentType", "templateId", "templateVersion", "schemaVersion", "full_name", "headline", "email", "phone_number", "address", "desired_role", "years_experience", "experience", "skills", "education"],
+  "properties": {
+    "documentId": {"type": "string"},
+    "documentType": {"const": "CV"},
+    "templateId": {"const": "cv-v2"},
+    "templateVersion": {"const": "2.0"},
+    "schemaVersion": {"const": "2.0.0"},
+    "full_name": {"type": ["string", "null"]},
+    "headline": {"type": ["string", "null"]},
+    "email": {"type": ["string", "null"]},
+    "phone_number": {"type": ["string", "null"]},
+    "address": {"type": ["string", "null"]},
+    "desired_role": {"type": ["string", "null"]},
+    "years_experience": {"type": ["string", "number", "null"]},
+    "experience": {"type": ["string", "null"]},
+    "skills": {"type": ["string", "null"]},
+    "education": {"type": ["string", "null"]}
+  }
+}

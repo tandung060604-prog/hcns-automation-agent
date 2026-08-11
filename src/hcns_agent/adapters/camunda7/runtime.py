@@ -80,11 +80,26 @@ _SENSITIVE_FIELDS_BY_TEMPLATE = {
     "probation-contract-v1": frozenset(
         {"employeeName", "employeeId", "salary", "effectiveDate", "employerName"}
     ),
+    "probation-contract-v2": frozenset(
+        {
+            "employee_name",
+            "employee_id_number",
+            "probation_salary_monthly",
+            "effective_date",
+            "employer_name",
+        }
+    ),
     "cv-v1": frozenset(
         {"fullName", "email", "phoneNumber", "address", "experience"}
     ),
+    "cv-v2": frozenset(
+        {"full_name", "email", "phone_number", "address", "experience"}
+    ),
     "ielts-certificate-v1": frozenset(
         {"recipientName", "credentialId", "overallScore", "issueDate"}
+    ),
+    "ielts-certificate-v2": frozenset(
+        {"recipient_name", "credential_id", "overall_score", "issue_date"}
     ),
     "vietnam-citizen-id-front-v1": frozenset(
         {"idNumber", "fullName", "dateOfBirth", "placeOfOrigin", "placeOfResidence"}

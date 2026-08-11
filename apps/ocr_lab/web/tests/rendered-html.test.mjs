@@ -100,19 +100,21 @@ test("exposes the Phase 15 multi-format IDP and field review flow", async () => 
   ]);
 
   assert.match(dashboard, /\.docx,\.pdf/);
-  assert.match(dashboard, /DOCX, PDF native parser/);
+  assert.match(dashboard, /DOCX hoặc PDF theo biểu mẫu đã cấu hình/);
+  assert.match(dashboard, /CV \/ hồ sơ ứng viên/);
+  assert.match(dashboard, /Hợp đồng lao động/);
   assert.match(dashboard, /phase12\?:/);
   assert.match(dashboard, /phase15\?:/);
   assert.match(dashboard, /PHASE 15 \/ UNIFIED INTAKE/);
   assert.match(dashboard, /Phương pháp nào đang thực sự chạy/);
   assert.match(dashboard, /primaryProfile=vietocr_vgg_seq2seq/);
   assert.match(dashboard, /Không auto-switch fallback/);
-  assert.match(dashboard, /Biểu mẫu HCNS chuẩn và CCCD/);
+  assert.match(dashboard, /Sáu family tài liệu HCNS/);
   assert.match(dashboard, /CCCD đã Ground Truth/);
   assert.match(dashboard, /\/user\/source/);
   assert.match(dashboard, /EvidenceInspector/);
   assert.doesNotMatch(dashboard, /upload HCNS local/);
-  assert.match(dashboard, /đơn nghỉ phép &amp; tăng ca/);
+  assert.match(dashboard, /E2E thật · Leave \+ OT/);
   assert.match(dashboard, /CCCD Phase \$\{phase11Label/);
   assert.match(dashboard, /NGUỒN PREDICTION/);
   assert.match(dashboard, /Business JSON/);
@@ -210,6 +212,7 @@ test("exposes the DATA-08 independent contract review panel behind a private fla
   ]);
   assert.match(dashboard, /VITE_SHOW_EXTERNAL_DATASET_REVIEW === "true"/);
   assert.match(envExample, /^VITE_SHOW_EXTERNAL_DATASET_REVIEW=false$/m);
+  assert.match(envExample, /^VITE_SHOW_LEGACY_EXPLORER_TABS=false$/m);
   assert.match(dashboard, /<ExternalDatasetReview \/>/);
   assert.match(component, /\/external-dataset\/review\/summary/);
   assert.match(component, /\/external-dataset\/review\/save\?id=/);
@@ -266,6 +269,9 @@ test("exposes one Template-first upload with source preview and structured resul
   assert.match(dashboard, /Không có trong tài liệu/);
   assert.match(dashboard, /TemplateResultPanel/);
   assert.match(dashboard, /TemplateDocumentPreview/);
+  assert.match(dashboard, /inspectCamundaDocument/);
+  assert.match(dashboard, /Đang mở bản gốc và JSON local/);
+  assert.match(dashboard, /window\.location\.hash = "upload"/);
   assert.match(dashboard, /TemplateEvidenceInspector/);
   assert.match(dashboard, /activeTemplateEvidencePreviewUrl/);
   assert.match(dashboard, /\/api\/documents\/preview\?id=/);

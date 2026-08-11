@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import mimetypes
+import os
 import re
 import shutil
 import subprocess
@@ -23,6 +25,8 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 import cv2
 
@@ -63,7 +67,6 @@ from external_dataset_prediction import (
     load_prediction_document,
     load_prediction_summary,
     resolve_prediction_paths,
-    resolve_prediction_source,
 )
 from document_route_safety import (
     safe_existing_document_route,
@@ -126,10 +129,6 @@ from hcns_agent.application.ocr_scope import (
     ocr_allowed_for_document_type,
     ocr_scope_for,
 )
-from hcns_agent.adapters.camunda7.local_shadow_review import (
-    load_m5_cam_006_smoke_report,
-    load_shadow_review_report,
-)
 from hcns_agent.ports.document_parser import DocumentSource
 from hcns_agent.templates.service import (
     TemplateProcessingService,
@@ -137,6 +136,37 @@ from hcns_agent.templates.service import (
     TemplateUnsupportedError,
     build_local_template_processing_service,
 )
+from hcns_agent.templates.compatibility import canonicalize_template_payload
+
+
+def _camunda_post(url: str, payload: dict[str, Any]) -> Any:
+    request = Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urlopen(request, timeout=10) as response:  # nosec B310: local Camunda URL only
+        body = response.read()
+        return json.loads(body.decode("utf-8")) if body else None
+
+
+def _camunda_get(url: str) -> Any:
+    with urlopen(url, timeout=10) as response:  # nosec B310: local Camunda URL only
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _camunda_value(variables: object, name: str) -> str | None:
+    if not isinstance(variables, dict):
+        return None
+    value = variables.get(name)
+    if not isinstance(value, dict) or not isinstance(value.get("value"), str):
+        return None
+    return value["value"]
+
+
+def _local_camunda_url() -> str:
+    return os.getenv("CAMUNDA_REST_URL", "http://127.0.0.1:8080/engine-rest").rstrip("/")
 
 
 def _read_optional_json(path: Path | None) -> dict[str, Any] | None:
@@ -144,6 +174,39 @@ def _read_optional_json(path: Path | None) -> dict[str, Any] | None:
         return None
     payload = json.loads(path.read_text(encoding="utf-8"))
     return payload if isinstance(payload, dict) else None
+
+
+def _file_digest(path: Path | None) -> str | None:
+    if path is None or not path.is_file():
+        return None
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _benchmark_evidence_metadata(
+    report_path: Path | None,
+    manifest_path: Path | None,
+    report: dict[str, Any],
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    """Expose only safe aggregate evidence metadata to the local UI."""
+
+    return {
+        "displayOnly": True,
+        "reportConfigured": bool(report),
+        "manifestConfigured": bool(manifest),
+        "reportSchemaVersion": report.get("schemaVersion"),
+        "datasetId": report.get("datasetId") or manifest.get("datasetId"),
+        "reportDigest": _file_digest(report_path),
+        "manifestDigest": _file_digest(manifest_path),
+        "decision": report.get("decision", "HOLD"),
+        "promotionAllowed": False,
+        "containsRawFieldValues": report.get("containsRawFieldValues") is True,
+        "groundTruthUsedForScoringOnly": report.get("groundTruthUsedForScoringOnly") is True,
+    }
 
 
 def _template_benchmark_row(
@@ -314,6 +377,12 @@ def build_local_benchmark_summary(handler: type[DashboardHandler]) -> dict[str, 
     return {
         "schemaVersion": "local-document-benchmark/1.0.0",
         "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "evidence": _benchmark_evidence_metadata(
+            handler.benchmark_report,
+            handler.benchmark_manifest,
+            benchmark_payload,
+            benchmark_manifest,
+        ),
         "rows": [
             next(row for row in rows if row["key"] == key)
             for key in ("cv", "contract", "ielts", "cccd-front", "leave", "overtime")
@@ -1384,7 +1453,7 @@ class UserOCRService:
             "documentType"
         ) not in {"LEAVE_REQUEST", "OVERTIME_REQUEST"}:
             return None
-        return payload
+        return canonicalize_template_payload(payload)
 
     def template_source(self, session_id: str) -> Path | None:
         if self.template_result(session_id) is None:
@@ -1480,9 +1549,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
     external_dataset_root: Path | None
     external_dataset_inventory: Path | None
     external_dataset_ground_truth: Path | None
-    external_dataset_data23_manifest: Path | None
-    external_dataset_data23_prediction_lock: Path | None
-    external_dataset_data23_ground_truth_lock: Path | None
     external_dataset_typed_projection: Path | None
     external_dataset_typed_approval: Path | None
     external_dataset_typed_report: Path | None
@@ -1492,10 +1558,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
     external_dataset_predictions_data13: Path | None
     external_dataset_prediction_report_data13: Path | None
     external_dataset_prediction_marker_data13: Path | None
-    external_dataset_policy_v2_report: Path | None
-    external_dataset_policy_v2_marker: Path | None
-    m5_local_shadow_report: Path | None = None
-    m5_cam_006_smoke_report: Path | None = None
     native_indexes: dict[str, dict[str, Path]]
     user_ocr: UserOCRService
     template_processor: TemplateProcessingService
@@ -1549,11 +1611,94 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path == "/m5/cam-006/summary":
-            self.send_json(
-                {"error": "M5-CAM-006 smoke aggregate is read-only; use GET"},
-                HTTPStatus.METHOD_NOT_ALLOWED,
-            )
+        if parsed.path == "/api/camunda/review":
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                task_id = str(payload.get("taskId", ""))
+                role = str(payload.get("role", ""))
+                decision = str(payload.get("decision", ""))
+                if not task_id:
+                    raise ValueError("Camunda task is required")
+                review_policy = {
+                    "employee": ("UserReview", "local-employee", "userReviewDecision", {"CONFIRMED", "UNRESOLVED", "REQUEST_REUPLOAD"}),
+                    "hr": ("HRReview", "local-hr", "hrReviewDecision", {"CONFIRMED", "REQUEST_REUPLOAD", "REJECTED"}),
+                }.get(role)
+                if review_policy is None or decision not in review_policy[3]:
+                    raise ValueError("Decision is not allowed for this local demo role")
+                engine_url = _local_camunda_url()
+                task = _camunda_get(f"{engine_url}/task/{task_id}")
+                if not isinstance(task, dict) or task.get("taskDefinitionKey") != review_policy[0]:
+                    raise ValueError("Task is unavailable for this role")
+                assignee = task.get("assignee")
+                if assignee not in {None, "", review_policy[1]}:
+                    raise ValueError("Task is already claimed by another reviewer")
+                if assignee != review_policy[1]:
+                    _camunda_post(
+                        f"{engine_url}/task/{task_id}/claim",
+                        {"userId": review_policy[1]},
+                    )
+                _camunda_post(
+                    f"{engine_url}/task/{task_id}/complete",
+                    {
+                        "variables": {
+                            review_policy[2]: {"value": decision, "type": "String"}
+                        }
+                    },
+                )
+                self.send_json({"status": "COMPLETED", "decision": decision})
+            except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            except (HTTPError, URLError, RuntimeError) as exc:
+                self.send_json({"error": f"Camunda local is unavailable: {exc}"}, HTTPStatus.SERVICE_UNAVAILABLE)
+            return
+        if parsed.path == "/api/camunda/start":
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                document_id = str(payload.get("documentId", ""))
+                uuid.UUID(document_id)
+                result = self.user_ocr.template_result(document_id)
+                if result is None:
+                    raise ValueError("Template session not found")
+                document_type = result.get("documentType")
+                if document_type not in {"LEAVE_REQUEST", "OVERTIME_REQUEST"}:
+                    raise ValueError("Only Leave Request and Overtime Request are available")
+                source = self.user_ocr.template_source(document_id)
+                if source is None:
+                    raise ValueError("Private document source not found")
+                application_id = f"LOCAL-{uuid.uuid4()}"
+                variables = {
+                    "applicationId": {"value": application_id, "type": "String"},
+                    "documentReference": {"value": document_id, "type": "String"},
+                    "declaredDocumentType": {"value": document_type, "type": "String"},
+                }
+                engine_url = _local_camunda_url()
+                instance = _camunda_post(
+                    f"{engine_url}/process-definition/key/hr_document_agent_mvp_v2/start",
+                    {"variables": variables},
+                )
+                process_id = instance.get("id")
+                if not isinstance(process_id, str):
+                    raise RuntimeError("Camunda did not return a process instance")
+                tasks = _camunda_get(
+                    f"{engine_url}/task?processInstanceId={process_id}&taskDefinitionKey=Submit"
+                )
+                if not isinstance(tasks, list) or len(tasks) != 1:
+                    raise RuntimeError("Camunda submission task is unavailable")
+                task_id = tasks[0].get("id")
+                if not isinstance(task_id, str):
+                    raise RuntimeError("Camunda submission task is invalid")
+                _camunda_post(f"{engine_url}/task/{task_id}/complete", {"variables": variables})
+                self.send_json({
+                    "status": "SUBMITTED",
+                    "applicationId": application_id,
+                    "tasklistUrl": "http://localhost:8080/camunda/app/tasklist/default/",
+                })
+            except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            except (HTTPError, URLError, RuntimeError) as exc:
+                self.send_json({"error": f"Camunda local is unavailable: {exc}"}, HTTPStatus.SERVICE_UNAVAILABLE)
             return
         if parsed.path.startswith("/external-dataset/typed/"):
             self.send_json(
@@ -1795,9 +1940,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         confirm=payload.get("confirm") is True,
                         inventory_path=self.external_dataset_inventory,
                         ground_truth_path=self.external_dataset_ground_truth,
-                        data23_manifest_path=self.external_dataset_data23_manifest,
-                        data23_prediction_lock_path=self.external_dataset_data23_prediction_lock,
-                        data23_ground_truth_lock_path=self.external_dataset_data23_ground_truth_lock,
                     )
                 )
             except PermissionError as exc:
@@ -2325,7 +2467,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         "status": "REJECT_UNSUPPORTED",
                         "recommendedAction": "REJECT_UNSUPPORTED",
                         "errorCode": "OCR_DISABLED_BY_POLICY",
-                        "message": "Ảnh/PDF scan chỉ nhận OCR cho CCCD hoặc chứng chỉ.",
+                        "message": (
+                            "Ảnh/PDF scan chỉ nhận OCR cho CV, hợp đồng, phụ lục hợp đồng, "
+                            "quyết định nhân sự, CCCD hoặc chứng chỉ."
+                        ),
                     },
                     HTTPStatus.UNPROCESSABLE_ENTITY,
                 )
@@ -2435,12 +2580,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path == "/m5/cam-006/summary":
-            self.send_json(
-                {"error": "M5-CAM-006 smoke aggregate is read-only; use GET"},
-                HTTPStatus.METHOD_NOT_ALLOWED,
-            )
-            return
         if parsed.path.startswith("/external-dataset/typed/"):
             self.send_json(
                 {"error": "Typed canonical projection is read-only; use GET"},
@@ -2483,6 +2622,44 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
+        if parsed.path == "/api/camunda/queue":
+            try:
+                engine_url = _local_camunda_url()
+                tasks = _camunda_get(
+                    f"{engine_url}/task?processDefinitionKey=hr_document_agent_mvp_v2"
+                )
+                queue: list[dict[str, Any]] = []
+                for task in tasks if isinstance(tasks, list) else []:
+                    if not isinstance(task, dict):
+                        continue
+                    definition_key = task.get("taskDefinitionKey")
+                    if definition_key not in {"UserReview", "HRReview"}:
+                        continue
+                    task_id = task.get("id")
+                    if not isinstance(task_id, str):
+                        continue
+                    variables = _camunda_get(f"{engine_url}/task/{task_id}/variables")
+                    document_id = _camunda_value(variables, "documentReference")
+                    if document_id is None:
+                        continue
+                    queue.append(
+                        {
+                            "taskId": task_id,
+                            "role": "employee" if definition_key == "UserReview" else "hr",
+                            "taskName": str(task.get("name", "Human review")),
+                            "documentId": document_id,
+                            "documentType": _camunda_value(variables, "documentType")
+                            or _camunda_value(variables, "declaredDocumentType")
+                            or "HR_DOCUMENT",
+                            "created": str(task.get("created", "")),
+                            "inspectable": self.user_ocr.template_result(document_id) is not None,
+                        }
+                    )
+                self.send_json({"queue": queue})
+            except (HTTPError, URLError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
+                self.send_json({"error": f"Camunda local is unavailable: {exc}"}, HTTPStatus.SERVICE_UNAVAILABLE)
+            return
+
         if parsed.path == "/api/documents/sessions":
             self.send_json({"sessions": self.user_ocr.list_template_sessions()})
             return
@@ -2493,44 +2670,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
             except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
                 self.send_json(
                     {"error": f"Local benchmark unavailable: {exc}"},
-                    HTTPStatus.NOT_FOUND,
-                )
-            return
-
-        if parsed.path == "/m5/local-shadow-review/summary":
-            if self.m5_local_shadow_report is None:
-                self.send_json(
-                    {"error": "M5-CAM-001D local shadow report is not configured"},
-                    HTTPStatus.NOT_FOUND,
-                )
-                return
-            try:
-                self.send_json(load_shadow_review_report(str(self.m5_local_shadow_report)))
-            except PermissionError as exc:
-                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
-            except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
-                self.send_json(
-                    {"error": f"M5 local shadow report unavailable: {exc}"},
-                    HTTPStatus.NOT_FOUND,
-                )
-            return
-
-        if parsed.path == "/m5/cam-006/summary":
-            if self.m5_cam_006_smoke_report is None:
-                self.send_json(
-                    {"error": "M5-CAM-006 smoke aggregate is not configured"},
-                    HTTPStatus.NOT_FOUND,
-                )
-                return
-            try:
-                self.send_json(
-                    load_m5_cam_006_smoke_report(str(self.m5_cam_006_smoke_report))
-                )
-            except PermissionError as exc:
-                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
-            except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
-                self.send_json(
-                    {"error": f"M5-CAM-006 smoke aggregate unavailable: {exc}"},
                     HTTPStatus.NOT_FOUND,
                 )
             return
@@ -2780,108 +2919,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
             except (OSError, PredictionArtifactError) as exc:
                 self.send_json({"error": f"DATA-12 prediction unavailable: {exc}"}, HTTPStatus.NOT_FOUND)
-            return
-
-        if parsed.path == "/external-dataset/prediction/source":
-            if self.external_dataset_root is None:
-                self.send_json(
-                    {"error": "DATA-12 prediction source is not configured"},
-                    HTTPStatus.NOT_FOUND,
-                )
-                return
-            case_id = query.get("id", [""])[0]
-            mode = query.get("mode", ["preview"])[0]
-            try:
-                source = resolve_prediction_source(
-                    self.external_dataset_root,
-                    self.external_dataset_inventory,
-                    case_id,
-                )
-                if mode == "source":
-                    self.send_file(
-                        source,
-                        mimetypes.guess_type(source.name)[0] or "application/octet-stream",
-                        f"{case_id}{source.suffix.lower()}",
-                    )
-                elif mode == "preview":
-                    if source.suffix.casefold() in {".txt", ".docx", ".pptx"}:
-                        self.send_json(
-                            {
-                                "kind": "text",
-                                "sourceFile": source.name,
-                                "text": load_external_text_preview(source),
-                            }
-                        )
-                    else:
-                        self.send_file(
-                            source,
-                            mimetypes.guess_type(source.name)[0] or "application/octet-stream",
-                        )
-                else:
-                    self.send_json(
-                        {"error": "Invalid prediction source mode"},
-                        HTTPStatus.BAD_REQUEST,
-                    )
-            except PermissionError as exc:
-                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
-            except ValueError as exc:
-                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-            except (OSError, FileNotFoundError, KeyError, json.JSONDecodeError):
-                self.send_json(
-                    {"error": "Prediction-only source is unavailable"},
-                    HTTPStatus.NOT_FOUND,
-                )
-            return
-
-        if parsed.path == "/external-dataset/policy-v2/summary":
-            if self.external_dataset_root is None:
-                self.send_json(
-                    {"error": "DATA-25 policy audit is not configured"}, HTTPStatus.NOT_FOUND
-                )
-                return
-            try:
-                self.send_json(
-                    load_prediction_summary(
-                        resolve_prediction_paths(
-                            self.external_dataset_root,
-                            prediction_path=self.external_dataset_predictions,
-                            report_path=self.external_dataset_policy_v2_report,
-                            evaluation_marker_path=self.external_dataset_policy_v2_marker,
-                        )
-                    )
-                )
-            except (OSError, PredictionArtifactError) as exc:
-                self.send_json(
-                    {"error": f"DATA-25 policy audit unavailable: {exc}"}, HTTPStatus.NOT_FOUND
-                )
-            return
-
-        if parsed.path == "/external-dataset/policy-v2/document":
-            if self.external_dataset_root is None:
-                self.send_json(
-                    {"error": "DATA-25 policy audit is not configured"}, HTTPStatus.NOT_FOUND
-                )
-                return
-            try:
-                self.send_json(
-                    load_prediction_document(
-                        resolve_prediction_paths(
-                            self.external_dataset_root,
-                            prediction_path=self.external_dataset_predictions,
-                            report_path=self.external_dataset_policy_v2_report,
-                            evaluation_marker_path=self.external_dataset_policy_v2_marker,
-                        ),
-                        query.get("id", [""])[0],
-                        self.external_dataset_ground_truth,
-                        policy_version="2.0.0",
-                    )
-                )
-            except FileNotFoundError as exc:
-                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
-            except (OSError, PredictionArtifactError) as exc:
-                self.send_json(
-                    {"error": f"DATA-25 policy audit unavailable: {exc}"}, HTTPStatus.NOT_FOUND
-                )
             return
 
         if parsed.path in {
@@ -3347,6 +3384,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         "phase13_3HybridEnabled": True,
                         "phase14_8VerifierEnabled": True,
                         "phase14LineReviewEnabled": True,
+                        "paddleOcrAvailable": PaddleOCR is not None,
+                        "templateOcrBackend": os.getenv(
+                            "HCNS_TEMPLATE_OCR_BACKEND", "easyocr"
+                        ),
                         "modelLoaded": self.user_ocr.model_loaded,
                         "templateOcrModelLoaded": (
                             self.template_processor.ocr_model_loaded
@@ -3792,21 +3833,6 @@ def parse_args() -> argparse.Namespace:
         help="Private local Ground Truth draft JSON for the external dataset.",
     )
     parser.add_argument(
-        "--external-dataset-data23-manifest",
-        type=Path,
-        help="Private DATA-23 held-out manifest used when sealing the review UI.",
-    )
-    parser.add_argument(
-        "--external-dataset-data23-prediction-lock",
-        type=Path,
-        help="Private DATA-23 prediction lock used when sealing the review UI.",
-    )
-    parser.add_argument(
-        "--external-dataset-data23-ground-truth-lock",
-        type=Path,
-        help="Private DATA-23 GroundTruth lock to create after blind review.",
-    )
-    parser.add_argument(
         "--external-dataset-typed-projection",
         type=Path,
         help="Private DATA-09 typed canonical projection JSON.",
@@ -3850,26 +3876,6 @@ def parse_args() -> argparse.Namespace:
         "--external-dataset-prediction-marker-data13",
         type=Path,
         help="Private DATA-13 evaluate-once marker JSON.",
-    )
-    parser.add_argument(
-        "--external-dataset-policy-v2-report",
-        type=Path,
-        help="Private DATA-25 post-hoc policy v2 report JSON.",
-    )
-    parser.add_argument(
-        "--external-dataset-policy-v2-marker",
-        type=Path,
-        help="Private DATA-25 post-hoc policy v2 marker JSON.",
-    )
-    parser.add_argument(
-        "--m5-local-shadow-report",
-        type=Path,
-        help="Private aggregate-only M5-CAM-001D local shadow report JSON.",
-    )
-    parser.add_argument(
-        "--m5-cam-006-smoke-report",
-        type=Path,
-        help="Private aggregate-only M5-CAM-006 read-only smoke report JSON.",
     )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
@@ -3919,21 +3925,6 @@ def main() -> int:
         if args.external_dataset_ground_truth is not None
         else None
     )
-    DashboardHandler.external_dataset_data23_manifest = (
-        args.external_dataset_data23_manifest.expanduser().resolve()
-        if args.external_dataset_data23_manifest is not None
-        else None
-    )
-    DashboardHandler.external_dataset_data23_prediction_lock = (
-        args.external_dataset_data23_prediction_lock.expanduser().resolve()
-        if args.external_dataset_data23_prediction_lock is not None
-        else None
-    )
-    DashboardHandler.external_dataset_data23_ground_truth_lock = (
-        args.external_dataset_data23_ground_truth_lock.expanduser().resolve()
-        if args.external_dataset_data23_ground_truth_lock is not None
-        else None
-    )
     DashboardHandler.external_dataset_typed_projection = (
         args.external_dataset_typed_projection.expanduser().resolve()
         if args.external_dataset_typed_projection is not None
@@ -3977,26 +3968,6 @@ def main() -> int:
     DashboardHandler.external_dataset_prediction_marker_data13 = (
         args.external_dataset_prediction_marker_data13.expanduser().resolve()
         if args.external_dataset_prediction_marker_data13 is not None
-        else None
-    )
-    DashboardHandler.external_dataset_policy_v2_report = (
-        args.external_dataset_policy_v2_report.expanduser().resolve()
-        if args.external_dataset_policy_v2_report is not None
-        else None
-    )
-    DashboardHandler.external_dataset_policy_v2_marker = (
-        args.external_dataset_policy_v2_marker.expanduser().resolve()
-        if args.external_dataset_policy_v2_marker is not None
-        else None
-    )
-    DashboardHandler.m5_local_shadow_report = (
-        args.m5_local_shadow_report.expanduser().resolve()
-        if args.m5_local_shadow_report is not None
-        else None
-    )
-    DashboardHandler.m5_cam_006_smoke_report = (
-        args.m5_cam_006_smoke_report.expanduser().resolve()
-        if args.m5_cam_006_smoke_report is not None
         else None
     )
     DashboardHandler.native_indexes = indexes

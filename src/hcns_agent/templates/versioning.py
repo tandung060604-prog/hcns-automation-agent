@@ -30,8 +30,8 @@ def validate_template_version_manifest(
     manifest = load_version_manifest(manifest_path)
     if manifest.get("schemaVersion") != "template-version-governance/1.0.0":
         raise TemplateVersionGovernanceError("Unsupported version manifest schema")
-    if manifest.get("lifecycle") != "FROZEN_V1":
-        raise TemplateVersionGovernanceError("Only the frozen v1 lifecycle is allowed")
+    if manifest.get("lifecycle") not in {"FROZEN_V1", "FROZEN_V2"}:
+        raise TemplateVersionGovernanceError("Only a frozen v1 or v2 lifecycle is allowed")
     rows = manifest.get("templates")
     if not isinstance(rows, list) or not rows:
         raise TemplateVersionGovernanceError("Version manifest has no templates")
@@ -75,10 +75,11 @@ def validate_template_version_manifest(
             raise TemplateVersionGovernanceError(
                 f"Schema templateId mismatch for {template_id}"
             )
-        if properties.get("templateVersion", {}).get("const") != manifest_row["version"]:
-            raise TemplateVersionGovernanceError(
-                f"Schema version mismatch for {template_id}"
-            )
+            if properties.get("templateVersion", {}).get("const") != manifest_row["version"]:
+                raise TemplateVersionGovernanceError(
+                    f"Schema version mismatch for {template_id}"
+                )
+    _validate_compatibility(manifest)
     _validate_uat_policy(manifest)
     return manifest
 
@@ -117,3 +118,19 @@ def _validate_uat_policy(manifest: dict[str, Any]) -> None:
         raise TemplateVersionGovernanceError("UAT gates differ from the approved policy")
     if uat.get("reportContainsRawFieldValues") is not False:
         raise TemplateVersionGovernanceError("UAT report must remain aggregate-only")
+
+
+def _validate_compatibility(manifest: dict[str, Any]) -> None:
+    compatibility = manifest.get("compatibility")
+    if not isinstance(compatibility, dict):
+        raise TemplateVersionGovernanceError("Template compatibility map is missing")
+    if compatibility.get("canonicalSchemaVersion") != "2.0.0":
+        raise TemplateVersionGovernanceError("Canonical schema version is missing")
+    legacy = compatibility.get("legacyTemplateIds")
+    expected = {
+        "cv-v1": "cv-v2",
+        "probation-contract-v1": "probation-contract-v2",
+        "ielts-certificate-v1": "ielts-certificate-v2",
+    }
+    if legacy != expected:
+        raise TemplateVersionGovernanceError("Legacy template compatibility map differs")

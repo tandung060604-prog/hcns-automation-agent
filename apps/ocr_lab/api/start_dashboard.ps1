@@ -8,15 +8,12 @@ param(
     [string]$ExternalDatasetRoot = "",
     [string]$ExternalDatasetInventory = "",
     [string]$ExternalDatasetGroundTruth = "",
-    [string]$ExternalDatasetPredictions = "",
     [string]$ExternalDatasetTypedProjection = "",
     [string]$ExternalDatasetTypedApproval = "",
     [string]$ExternalDatasetTypedReport = "",
-    [string]$ExternalDatasetPolicyV2Report = "",
-    [string]$ExternalDatasetPolicyV2Marker = "",
-    [string]$M5LocalShadowReport = "",
-    [string]$M5Cam006SmokeReport = "",
-    [string]$PythonPath = "D:\venv_paddle\Scripts\python.exe"
+    [string]$PythonPath = "D:\venv_paddle\Scripts\python.exe",
+    [ValidateSet("paddle", "easyocr")]
+    [string]$TemplateOcrBackend = "paddle"
 )
 
 $ErrorActionPreference = "Stop"
@@ -49,9 +46,6 @@ if ($ExternalDatasetInventory -and -not (Test-Path -LiteralPath $ExternalDataset
 if ($ExternalDatasetGroundTruth -and -not (Test-Path -LiteralPath $ExternalDatasetGroundTruth)) {
     throw "External dataset Ground Truth draft not found: $ExternalDatasetGroundTruth"
 }
-if ($ExternalDatasetPredictions -and -not (Test-Path -LiteralPath $ExternalDatasetPredictions)) {
-    throw "External dataset predictions not found: $ExternalDatasetPredictions"
-}
 if ($ExternalDatasetTypedProjection -and -not (Test-Path -LiteralPath $ExternalDatasetTypedProjection)) {
     throw "External dataset typed projection not found: $ExternalDatasetTypedProjection"
 }
@@ -61,20 +55,9 @@ if ($ExternalDatasetTypedApproval -and -not (Test-Path -LiteralPath $ExternalDat
 if ($ExternalDatasetTypedReport -and -not (Test-Path -LiteralPath $ExternalDatasetTypedReport)) {
     throw "External dataset typed report not found: $ExternalDatasetTypedReport"
 }
-if ($ExternalDatasetPolicyV2Report -and -not (Test-Path -LiteralPath $ExternalDatasetPolicyV2Report)) {
-    throw "External dataset policy v2 report not found: $ExternalDatasetPolicyV2Report"
-}
-if ($ExternalDatasetPolicyV2Marker -and -not (Test-Path -LiteralPath $ExternalDatasetPolicyV2Marker)) {
-    throw "External dataset policy v2 marker not found: $ExternalDatasetPolicyV2Marker"
-}
-if ($M5LocalShadowReport -and -not (Test-Path -LiteralPath $M5LocalShadowReport)) {
-    throw "M5 local shadow report not found: $M5LocalShadowReport"
-}
-if ($M5Cam006SmokeReport -and -not (Test-Path -LiteralPath $M5Cam006SmokeReport)) {
-    throw "M5-CAM-006 smoke report not found: $M5Cam006SmokeReport"
-}
 
 $env:PYTHONPATH = Join-Path $repoRoot "src"
+$env:HCNS_TEMPLATE_OCR_BACKEND = $TemplateOcrBackend
 
 function Get-ApiListener {
     $connection = Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -110,6 +93,22 @@ function Wait-ApiHealth {
 
 $apiProcess = Get-ApiListener
 $apiRunning = $null -ne $apiProcess
+if ($apiRunning) {
+    try {
+        $health = Invoke-RestMethod "http://127.0.0.1:8765/health" -TimeoutSec 2
+        $runtimeReady = [bool]$health.userUpload.paddleOcrAvailable
+        $backendMatches = [string]$health.userUpload.templateOcrBackend -eq $TemplateOcrBackend
+        if (-not $runtimeReady -or -not $backendMatches) {
+            Stop-Process -Id $apiProcess.ProcessId -Force
+            Start-Sleep -Milliseconds 500
+            $apiRunning = $false
+        }
+    } catch {
+        Stop-Process -Id $apiProcess.ProcessId -Force
+        Start-Sleep -Milliseconds 500
+        $apiRunning = $false
+    }
+}
 if ($apiRunning -and $OcrHoShadowRoot) {
     $expectedShadowRoot = (Resolve-Path -LiteralPath $OcrHoShadowRoot).Path
     $commandLine = [string]$apiProcess.CommandLine
@@ -119,15 +118,10 @@ if ($apiRunning -and $OcrHoShadowRoot) {
         $apiRunning = $false
     }
 }
-if ($apiRunning -and ($BenchmarkReport -or $ExternalDatasetPolicyV2Report -or $ExternalDatasetPolicyV2Marker -or $M5LocalShadowReport -or $M5Cam006SmokeReport)) {
+if ($apiRunning -and $BenchmarkReport) {
+    $expectedBenchmarkReport = (Resolve-Path -LiteralPath $BenchmarkReport).Path
     $commandLine = [string]$apiProcess.CommandLine
-    $configuredPathsPresent = $true
-    foreach ($configuredPath in @($BenchmarkReport, $ExternalDatasetPolicyV2Report, $ExternalDatasetPolicyV2Marker, $M5LocalShadowReport, $M5Cam006SmokeReport)) {
-        if ($configuredPath -and $commandLine.IndexOf((Resolve-Path -LiteralPath $configuredPath).Path, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
-            $configuredPathsPresent = $false
-        }
-    }
-    if (-not $configuredPathsPresent) {
+    if ($commandLine.IndexOf($expectedBenchmarkReport, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
         Stop-Process -Id $apiProcess.ProcessId -Force
         Start-Sleep -Milliseconds 500
         $apiRunning = $false
@@ -157,9 +151,6 @@ if (-not $apiRunning) {
     if ($ExternalDatasetGroundTruth) {
         $apiArguments += " --external-dataset-ground-truth `"$ExternalDatasetGroundTruth`""
     }
-    if ($ExternalDatasetPredictions) {
-        $apiArguments += " --external-dataset-predictions `"$ExternalDatasetPredictions`""
-    }
     if ($ExternalDatasetTypedProjection) {
         $apiArguments += " --external-dataset-typed-projection `"$ExternalDatasetTypedProjection`""
     }
@@ -168,18 +159,6 @@ if (-not $apiRunning) {
     }
     if ($ExternalDatasetTypedReport) {
         $apiArguments += " --external-dataset-typed-report `"$ExternalDatasetTypedReport`""
-    }
-    if ($ExternalDatasetPolicyV2Report) {
-        $apiArguments += " --external-dataset-policy-v2-report `"$ExternalDatasetPolicyV2Report`""
-    }
-    if ($ExternalDatasetPolicyV2Marker) {
-        $apiArguments += " --external-dataset-policy-v2-marker `"$ExternalDatasetPolicyV2Marker`""
-    }
-    if ($M5LocalShadowReport) {
-        $apiArguments += " --m5-local-shadow-report `"$M5LocalShadowReport`""
-    }
-    if ($M5Cam006SmokeReport) {
-        $apiArguments += " --m5-cam-006-smoke-report `"$M5Cam006SmokeReport`""
     }
     Start-Process `
         -FilePath $PythonPath `

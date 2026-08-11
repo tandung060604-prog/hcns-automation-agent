@@ -20,6 +20,7 @@ from hcns_agent.templates.service import (
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "apps" / "ocr_lab" / "api"))
 
+import apps.ocr_lab.api.serve_dashboard_api as dashboard_api  # noqa: E402
 from apps.ocr_lab.api.serve_dashboard_api import (  # noqa: E402
     DashboardHandler,
     UserOCRService,
@@ -51,11 +52,11 @@ def test_template_endpoints_process_docx_without_ocr(tmp_path: Path) -> None:
         templates_payload = json.loads(response.read().decode("utf-8"))
         assert response.status == 200
         assert [item["templateId"] for item in templates_payload["templates"]] == [
-            "cv-v1",
-            "ielts-certificate-v1",
+            "cv-v2",
+            "ielts-certificate-v2",
             "leave-request-v1",
             "overtime-request-v1",
-            "probation-contract-v1",
+            "probation-contract-v2",
             "vietnam-citizen-id-front-v1",
         ]
 
@@ -157,6 +158,72 @@ def test_api_root_redirects_to_local_dashboard(tmp_path: Path) -> None:
         response.read()
         assert response.status == 307
         assert response.getheader("Location") == "http://localhost:3000"
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_local_camunda_queue_and_employee_review_use_opaque_reference(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    configure_handler(tmp_path)
+    posted: list[tuple[str, dict[str, object]]] = []
+
+    def fake_get(url: str) -> object:
+        if "processDefinitionKey" in url:
+            return [{"id": "task-1", "taskDefinitionKey": "UserReview", "name": "Confirm"}]
+        if url.endswith("/variables"):
+            return {
+                "documentReference": {"value": "00000000-0000-0000-0000-000000000001"},
+                "documentType": {"value": "LEAVE_REQUEST"},
+            }
+        if url.endswith("/task/task-1"):
+            return {"id": "task-1", "taskDefinitionKey": "UserReview", "assignee": None}
+        raise AssertionError(url)
+
+    def fake_post(url: str, payload: dict[str, object]) -> None:
+        posted.append((url, payload))
+        return None
+
+    monkeypatch.setattr(dashboard_api, "_camunda_get", fake_get)  # type: ignore[attr-defined]
+    monkeypatch.setattr(dashboard_api, "_camunda_post", fake_post)  # type: ignore[attr-defined]
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+    try:
+        connection.request("GET", "/api/camunda/queue")
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read().decode("utf-8")) == {
+            "queue": [{
+                "taskId": "task-1", "role": "employee", "taskName": "Confirm",
+                "documentId": "00000000-0000-0000-0000-000000000001",
+                "documentType": "LEAVE_REQUEST", "created": "", "inspectable": False,
+            }]
+        }
+        body = json.dumps({"taskId": "task-1", "role": "employee", "decision": "UNRESOLVED"})
+        connection.request(
+            "POST",
+            "/api/camunda/review",
+            body=body,
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read().decode("utf-8")) == {
+            "status": "COMPLETED",
+            "decision": "UNRESOLVED",
+        }
+        assert posted == [
+            ("http://127.0.0.1:8080/engine-rest/task/task-1/claim", {"userId": "local-employee"}),
+            (
+                "http://127.0.0.1:8080/engine-rest/task/task-1/complete",
+                {"variables": {"userReviewDecision": {"value": "UNRESOLVED", "type": "String"}}},
+            ),
+        ]
     finally:
         connection.close()
         server.shutdown()

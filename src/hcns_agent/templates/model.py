@@ -76,7 +76,7 @@ class TemplateDefinition:
             raise ValueError("Template anchor threshold is invalid")
 
     def public_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "templateId": self.template_id,
             "documentType": self.document_type.value,
             "version": self.version,
@@ -87,6 +87,9 @@ class TemplateDefinition:
             "requiredFields": list(self.required_fields),
             "optionalFields": list(self.optional_fields),
         }
+        if self.version.startswith("2."):
+            payload["schemaVersion"] = "2.0.0"
+        return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,7 +121,7 @@ class TemplateProcessingResult:
     processing: dict[str, object]
 
     def public_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "status": "SUCCESS",
             "documentType": self.detection.definition.document_type.value,
             "templateId": self.detection.definition.template_id,
@@ -134,3 +137,6 @@ class TemplateProcessingResult:
             "processing": self.processing,
             "camundaVariables": self.camunda_variables,
         }
+        if self.detection.definition.version.startswith("2."):
+            payload["schemaVersion"] = "2.0.0"
+        return payload

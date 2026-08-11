@@ -22,7 +22,7 @@ def test_frozen_template_manifest_matches_registry_and_schemas() -> None:
         manifest_path=MANIFEST,
     )
 
-    assert manifest["lifecycle"] == "FROZEN_V1"
+    assert manifest["lifecycle"] == "FROZEN_V2"
     assert manifest["uat"]["reportContainsRawFieldValues"] is False
 
 
@@ -38,3 +38,23 @@ def test_template_version_mismatch_fails_closed(tmp_path: Path) -> None:
             registry=build_default_template_registry(),
             manifest_path=mutated,
         )
+
+
+def test_v2_business_fields_match_the_benchmark_contract() -> None:
+    registry = {
+        row["templateId"]: row
+        for row in build_default_template_registry().list_templates()
+    }
+    assert registry["cv-v2"]["requiredFields"] == [
+        "full_name", "headline", "email", "phone_number", "address",
+        "desired_role", "years_experience", "experience", "skills", "education",
+    ]
+    assert registry["probation-contract-v2"]["requiredFields"] == [
+        "contract_number", "contract_sign_date", "effective_date", "probation_end_date",
+        "employer_name", "employer_representative", "employee_name", "employee_id_number",
+        "job_title", "workplace", "weekly_hours", "probation_salary_monthly",
+        "allowances_summary", "salary_payment_schedule",
+    ]
+    assert registry["ielts-certificate-v2"]["requiredFields"] == [
+        "recipient_name", "credential_id", "credential_type", "overall_score", "issue_date",
+    ]

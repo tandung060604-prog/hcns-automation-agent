@@ -150,6 +150,16 @@ aggregate-only, luôn `promotionAllowed=false` và không được gọi là acc
 benchmark. Mapping folder/type là nhãn vận hành tạm thời, không thay thế review
 Ground Truth.
 
+### DATA-29 — canonical evidence used by the local dashboard
+
+The current development aggregate is the source for the CV, probation-contract
+and IELTS cards, not the older README snapshot. It covers 12 documents / 112
+fields: Contract `42/42`, CV `45/50`, IELTS `20/20`, total strict `107/112`.
+The API reads only aggregate report and inventory metadata, exposes no raw
+prediction/Ground Truth values, and forces `promotionAllowed=false`; the gate
+decision remains `HOLD`. New Template-first results use v2 snake_case fields,
+while v1 result files are projected at read time through a compatibility map.
+
 ### DATA-21 — PaddleOCR-VL local benchmark
 
 `scripts/run_paddleocr_vl_external_dataset.py` runs pinned PaddleOCR-VL-1.6 through

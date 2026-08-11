@@ -24,11 +24,19 @@ _OCR_TEMPLATE_FILE_TYPES = ("pdf", "png", "jpg", "jpeg")
 class TemplateRegistry:
     def __init__(self) -> None:
         self._definitions: dict[str, TemplateDefinition] = {}
+        self._aliases: dict[str, str] = {}
 
     def register(self, definition: TemplateDefinition) -> None:
         if definition.template_id in self._definitions:
             raise ValueError(f"Template already registered: {definition.template_id}")
         self._definitions[definition.template_id] = definition
+
+    def register_alias(self, alias: str, target: str) -> None:
+        if alias in self._definitions or alias in self._aliases:
+            raise ValueError(f"Template alias already registered: {alias}")
+        if target not in self._definitions:
+            raise ValueError(f"Template alias target is not registered: {target}")
+        self._aliases[alias] = target
 
     def detect(self, document: CanonicalDocument) -> TemplateDetection | None:
         normalize = (
@@ -96,7 +104,7 @@ class TemplateRegistry:
     def get(self, template_id: str) -> TemplateDefinition | None:
         """Return one frozen template definition by its stable identifier."""
 
-        return self._definitions.get(template_id)
+        return self._definitions.get(self._aliases.get(template_id, template_id))
 
 
 def build_default_template_registry() -> TemplateRegistry:
@@ -170,12 +178,11 @@ def build_default_template_registry() -> TemplateRegistry:
                 "standardWorkSchedule",
             ),
             schema_ref="schemas/templates/overtime_request_v1.schema.json",
-            parser_version="1.0.0",
+            parser_version="1.1.0",
             anchors=(
                 "ĐƠN XIN TĂNG CA",
                 "Thời gian đề nghị",
                 "Nội dung công việc",
-                "tăng thêm",
             ),
             minimum_anchor_matches=3,
             parser=OvertimeRequestParser(),
@@ -192,16 +199,18 @@ def build_default_template_registry() -> TemplateRegistry:
         anchors: tuple[str, ...],
         minimum_anchor_matches: int,
         field_labels: dict[str, tuple[str, ...]],
+        version: str = "1.0",
+        parser_version: str = "1.0.0",
     ) -> TemplateDefinition:
         return TemplateDefinition(
             template_id=template_id,
             document_type=document_type,
-            version="1.0",
+            version=version,
             supported_file_types=supported_file_types,
             required_fields=required_fields,
             optional_fields=(),
             schema_ref=schema_ref,
-            parser_version="1.0.0",
+            parser_version=parser_version,
             anchors=anchors,
             minimum_anchor_matches=minimum_anchor_matches,
             parser=ReviewOnlyParser(field_labels),
@@ -210,14 +219,17 @@ def build_default_template_registry() -> TemplateRegistry:
 
     registry.register(
         review_template(
-            template_id="probation-contract-v1",
+            template_id="probation-contract-v2",
             document_type=DocumentType.EMPLOYMENT_CONTRACT,
             supported_file_types=_NATIVE_TEMPLATE_FILE_TYPES,
             required_fields=(
-                "employeeName", "employeeId", "jobTitle", "salary",
-                "effectiveDate", "probationEndDate", "employerName",
+                "contract_number", "contract_sign_date", "effective_date",
+                "probation_end_date", "employer_name", "employer_representative",
+                "employee_name", "employee_id_number", "job_title", "workplace",
+                "weekly_hours", "probation_salary_monthly", "allowances_summary",
+                "salary_payment_schedule",
             ),
-            schema_ref="schemas/templates/probation_contract_v1.schema.json",
+            schema_ref="schemas/templates/probation_contract_v2.schema.json",
             anchors=(
                 "probation",
                 "HỢP ĐỒNG THỬ VIỆC",
@@ -225,35 +237,48 @@ def build_default_template_registry() -> TemplateRegistry:
                 "MỨC LƯƠNG",
             ),
             minimum_anchor_matches=2,
+            version="2.0",
+            parser_version="2.0.0",
             field_labels={
-                "employeeName": ("employee name", "nguoi lao dong", "ho va ten"),
-                "employeeId": ("employee id", "ma nhan vien", "so cccd"),
-                "jobTitle": ("job title", "chuc danh", "vi tri cong viec"),
-                "salary": ("salary", "muc luong", "luong thu viec"),
-                "effectiveDate": ("effective date", "ngay hieu luc"),
-                "probationEndDate": ("probation end", "ket thuc thu viec"),
-                "employerName": ("employer", "nguoi su dung lao dong"),
+                "contract_number": ("contract number", "so hop dong"),
+                "contract_sign_date": ("contract sign date", "ngay ky hop dong"),
+                "effective_date": ("effective date", "ngay hieu luc"),
+                "probation_end_date": ("probation end", "ket thuc thu viec"),
+                "employer_name": ("employer", "nguoi su dung lao dong"),
+                "employer_representative": ("employer representative", "nguoi dai dien"),
+                "employee_name": ("employee name", "nguoi lao dong", "ho va ten"),
+                "employee_id_number": ("employee id", "ma nhan vien", "so cccd"),
+                "job_title": ("job title", "chuc danh", "vi tri cong viec"),
+                "workplace": ("workplace", "dia diem lam viec"),
+                "weekly_hours": ("weekly hours", "gio lam viec"),
+                "probation_salary_monthly": ("salary", "muc luong", "luong thu viec"),
+                "allowances_summary": ("allowances", "phu cap"),
+                "salary_payment_schedule": ("salary payment", "ky tra luong"),
             },
         )
     )
     registry.register(
         review_template(
-            template_id="cv-v1",
+            template_id="cv-v2",
             document_type=DocumentType.CV,
             supported_file_types=_NATIVE_TEMPLATE_FILE_TYPES,
             required_fields=(
-                "fullName", "headline", "email", "phoneNumber", "address",
-                "education", "experience", "skills",
+                "full_name", "headline", "email", "phone_number", "address",
+                "desired_role", "years_experience", "experience", "skills", "education",
             ),
-            schema_ref="schemas/templates/cv_v1.schema.json",
+            schema_ref="schemas/templates/cv_v2.schema.json",
             anchors=("curriculum vitae", "kinh nghiem", "ky nang"),
             minimum_anchor_matches=2,
+            version="2.0",
+            parser_version="2.0.0",
             field_labels={
-                "fullName": ("full name", "ho va ten", "name"),
+                "full_name": ("full name", "ho va ten", "name"),
                 "headline": ("headline", "muc tieu nghe nghiep", "position"),
                 "email": ("email", "thu dien tu"),
-                "phoneNumber": ("phone", "dien thoai", "so dien thoai"),
+                "phone_number": ("phone", "dien thoai", "so dien thoai"),
                 "address": ("address", "dia chi"),
+                "desired_role": ("desired role", "muc tieu nghe nghiep", "position"),
+                "years_experience": ("years experience", "so nam kinh nghiem"),
                 "education": ("education", "hoc van"),
                 "experience": ("experience", "kinh nghiem"),
                 "skills": ("skills", "ky nang"),
@@ -262,22 +287,24 @@ def build_default_template_registry() -> TemplateRegistry:
     )
     registry.register(
         review_template(
-            template_id="ielts-certificate-v1",
+            template_id="ielts-certificate-v2",
             document_type=DocumentType.CERTIFICATE,
             supported_file_types=_OCR_TEMPLATE_FILE_TYPES,
             required_fields=(
-                "recipientName", "credentialId", "credentialType",
-                "overallScore", "issueDate",
+                "recipient_name", "credential_id", "credential_type",
+                "overall_score", "issue_date",
             ),
-            schema_ref="schemas/templates/ielts_certificate_v1.schema.json",
+            schema_ref="schemas/templates/ielts_certificate_v2.schema.json",
             anchors=("ielts", "test report form", "overall band score"),
             minimum_anchor_matches=2,
+            version="2.0",
+            parser_version="2.0.0",
             field_labels={
-                "recipientName": ("recipient name", "candidate name", "name"),
-                "credentialId": ("credential id", "test report form number", "trf number"),
-                "credentialType": ("test type", "credential type", "ielts"),
-                "overallScore": ("overall band score", "overall score"),
-                "issueDate": ("issue date", "test date", "date of test"),
+                "recipient_name": ("recipient name", "candidate name", "name"),
+                "credential_id": ("credential id", "test report form number", "trf number"),
+                "credential_type": ("test type", "credential type", "ielts"),
+                "overall_score": ("overall band score", "overall score"),
+                "issue_date": ("issue date", "test date", "date of test"),
             },
         )
     )
@@ -304,4 +331,7 @@ def build_default_template_registry() -> TemplateRegistry:
             },
         )
     )
+    registry.register_alias("probation-contract-v1", "probation-contract-v2")
+    registry.register_alias("cv-v1", "cv-v2")
+    registry.register_alias("ielts-certificate-v1", "ielts-certificate-v2")
     return registry

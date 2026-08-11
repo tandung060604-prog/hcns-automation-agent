@@ -1,328 +1,17 @@
 # Handoff
 
-## Final project checkpoint (DONE / 2026-08-11)
-
-- PR #30 merged at `14b78bc`; the docs-only checkpoint leaves `main` and
-  `origin/main` clean and synchronized at `77d47d6`.
-- Post-merge CI `31457488778` and Pages `31457488796` are successful.
-- Localhost `/workspace` hides the unconfigured M5-CAM-002 panel and keeps
-  M5-CAM-007 at `PASS · READ-ONLY`.
-- Accuracy/held-out generalization retain the current state; Camunda safety smoke
-  is PASS; real cohort/effectful integration remains closed. No new data or
-  evaluation artifact was created.
-
-## M5-CAM-008 UI status cleanup (DONE / LOCAL, 2026-08-11)
-
-- M5-CAM-002 now hides itself for the expected 404 “report not configured” state.
-- Unexpected API failures still render a warning; M5-CAM-007 read-only smoke
-  aggregate behavior is unchanged.
-
-## M5-CAM-007 localhost UI read-only smoke aggregate (DONE / PASS, 2026-08-11)
-
-- `/workspace` renders an aggregate-only M5-CAM-006 panel using GET
-  `/m5/cam-006/summary`; the route rejects POST and DELETE with 405.
-- Displayed values are limited to fixture/bridge counts, scalar and opaque-reference
-  flags, manual-review/auto-continue, whitelist, source-mutation, and side-effect
-  counters. Business payloads, fields, OCR, paths, and PII are not exposed.
-- GroundTruth/evaluate-once are not read, `promotionAllowed=false`, and no Camunda,
-  HRIS, notification, or real-cohort action is started. Existing private report is
-  read-only; no private artifact is modified.
-- Validation: 175 Python unittest cases, 5 focused API pytest cases, web build and
-  17 rendered tests pass; lint has no errors (existing warnings only).
-
-## M5-CAM-006 localhost API → Phase15 bridge smoke (DONE / PASS, 2026-08-11)
-
-- Đã chạy loopback API read-only với hai UUID fixture synthetic leave/overtime;
-  GET `/user/phase15-business` trả Business JSON cho bridge.
-- `2/2` projection pass scalar-only, opaque-reference-only, MANUAL_REVIEW và
-  `autoContinueEnabled=false`; schema whitelist/non-scalar/source mutation đều 0.
-- Không có POST, Camunda process start, HRIS/notification side effect hay real
-  cohort; GroundTruth/evaluate-once không được chạm tới.
-- Artifact aggregate-only ngoài Git/cloud:
-  `C:\\Camunda\\private-data\\m5-cam-006\\reports\\m5-cam-006-api-bridge-smoke-20260811-v1.json`.
-
-## M5-CAM-005 scalar/opaque handoff contract regression (DONE / PASS, 2026-08-11)
-
-- Regression contract đi từ API fixture synthetic vào Phase15 bridge rồi dừng ở
-  boundary Camunda; không start process và không gọi HRIS/notification.
-- Hai fixture `LEAVE_REQUEST` và `OVERTIME_REQUEST` đều pass scalar-only,
-  opaque-reference-only, `MANUAL_REVIEW`, `autoContinueEnabled=false`.
-- `7/7` payload case field/OCR/path/raw bị từ chối; schema whitelist lỗi `0`,
-  non-scalar `0`, idempotency mismatch `0`, process start `0`, side effect `0`.
-- Artifact aggregate-only tạo mới ngoài Git/cloud:
-  `C:\\Camunda\\private-data\\m5-cam-005\\reports\\m5-cam-005-contract-regression-20260811-v2.json`.
-- DATA-17/DATA-24/GroundTruth/evaluate-once giữ nguyên; real cohort vẫn đóng,
-  `promotionAllowed=false`.
-
-## M5-CAM-004 synthetic Camunda manual-review rehearsal (DONE / PASS, 2026-08-11)
-
-- Camunda 7.13 local loopback đã deploy BPMN/DMN và chạy đúng 2 fixture
-  synthetic: leave và overtime.
-- 2/2 case tới `UserReview` và hoàn tất; manual review 2/2, process start local
-  2, raw exposure/auto-continue/duplicate/unreconciled/real side effect đều 0.
-- Handoff dùng Phase15 scalar/reference boundary, chỉ opaque reference, không
-  truyền field/OCR/path; `autoContinueEnabled=false`.
-- Rollback probe `autoContinueCount > 0` bị chặn fail-closed: rollback required,
-  không được complete. Report private create-only, aggregate-only.
-- Không đọc Ground Truth/DATA-24, không mở real cohort, HRIS/notification chỉ
-  simulated trong local sandbox.
-
-## M5-CAM-003 post-merge localhost acceptance (DONE / PASS, 2026-08-10)
-
-- PR #24 đã merge tại `aee3ffd`; checkout `main` sạch và đồng bộ
-  `origin/main`.
-- `/workspace` render panel M5-CAM-002; route local shadow trả aggregate-only
-  report với 70/70 manual review, scan 27/27 và unsupported 2/2.
-- Idempotency/duplicate/raw/auto-continue/process-start/side-effect đều 0;
-  Ground Truth/evaluate-once không được chạm tới; promotion vẫn disabled.
-- Local smoke: 7 Python test pass, Ruff/compileall pass, web build và 16 test
-  rendered pass. CI và Pages sau merge đều SUCCESS.
-- Không có bước Camunda effectful hoặc real cohort sau checkpoint này.
-
-## M5-CAM-002 UI-only local (DONE / LOCAL HOLD, 2026-08-10)
-
-- Localhost đã render panel M5 shadow safety từ aggregate-only report private;
-  API chỉ expose whitelist scalar/aggregate values.
-- Đã xác nhận runtime route `/m5/local-shadow-review/summary` và HTML
-  `/workspace` đều hoạt động. Không có raw field/source, Camunda call, POST,
-  HRIS/notification hoặc side effect.
-- Gates giữ nguyên: 70/70 `MANUAL_REVIEW`, scan 27/27, unsupported 2/2,
-  idempotency/duplicate/raw/auto-continue/process-start/side-effect đều 0.
-- Không dùng panel này làm accuracy benchmark. Real cohort và Camunda
-  integration vẫn chờ duyệt riêng.
-
-## M5-CAM-001D local shadow review-only (DONE / LOCAL HOLD, 2026-08-10)
-
-- Đã chạy metadata-only trên projection private hiện có: 70 tài liệu, gồm
-  Contract 30, CV 30 và IELTS/chứng chỉ 10.
-- Safety evidence: 70/70 `MANUAL_REVIEW`; scan 27/27 và unsupported 2/2 vẫn
-  manual review; idempotency mismatch 0, duplicate reference 0, raw exposure 0,
-  auto-continue 0, Camunda process start 0, real side effect 0.
-- Không đọc Ground Truth, không chạm evaluate-once, không gọi Camunda REST và
-  không tạo prediction/metric mới. Opaque references và scalar variables chỉ
-  tồn tại trong aggregate report private; `promotionAllowed=false`.
-- Bước tiếp theo cần owner review nếu muốn mở workstream tích hợp; không được
-  dùng kết quả này làm accuracy benchmark hoặc mở real cohort.
-
-## DATA-30B local benchmark metric checkpoint (2026-08-10)
-
-- Local benchmark cards now read the sealed DATA-29 development aggregate and
-  show Contract `42/42`, CV `45/50`, IELTS `20/20` strict; accepted remains
-  separate at `42/42`, `50/50`, `20/20`.
-- Benchmark denominators are `3/5/4`; local DATA-22 prediction-only counts are
-  shown separately as `30/30/10`. No score is derived from that inventory.
-- DATA-17/DATA-24 and their locks remain immutable. No new data, GroundTruth
-  rerun or evaluate-once was run. API summary, Python compile, web build and
-  15 web tests passed. Commit `8756678` is pushed to PR #22 and CI run
-  `31392937914` is green; next action is owner review of PR #22.
-
-## DATA-30 main reconciliation & development freeze (2026-08-10)
-
-- Checkout hiện hành là `main`; HEAD và `origin/main` đã được xác minh đồng bộ
-  tại checkpoint DATA-30.
-- PR #15 (DATA-29 implementation) và PR #16 (README tiếng Việt) đã merge;
-  CI Python 3.10, Python 3.12 và OCR Lab Web đều `SUCCESS`.
-- Working tree sạch; không có tracked change hoặc private artifact nào được
-  đưa vào Git.
-- Development delivery: `DEVELOPMENT COMPLETE / HELD-OUT HOLD`.
-- Metrics DATA-29: strict `107/112`, accepted `112/112`, Contract `42/42`,
-  CV `45/50`, IELTS `20/20`, applicable completeness `99/99`, classification
-  `12/12`, schema errors `0`, sensitive false acceptance `0`, parser
-  regression `0`, scan `5/5 MANUAL_REVIEW`, false auto-continue `0`.
-- Không thêm data, không sửa parser, không rerun DATA-24, không promote
-  fallback. DATA-27 held-out generalization vẫn `HOLD`; DATA-17, DATA-24 và
-  các lock/artifact held-out cũ vẫn immutable.
-- Prediction + GT development vẫn được xem local tại
-  `http://localhost:3000/workspace`; raw document/OCR/prediction/GroundTruth
-  không được commit hoặc gửi lên cloud.
-
-## M5-CAM-001 authorization handoff (AUTHORIZED_SYNTHETIC_ONLY)
-
-- M5-CAM-001A/B provide only local synthetic evidence; they do not authorize a
-  real cohort.
-- Synthetic role IDs are `m5-synthetic-business-owner` and
-  `m5-independent-synthetic-reviewer`; the window is 2026-08-10 15:55–18:00
-  (+07:00), retention ends 2026-08-17 23:59:59 (+07:00), and rollback belongs
-  to the owner role on any safety-gate violation.
-- Locked values are `SYNTHETIC_ONLY`, side effects `DISABLED`, review policy
-  `MANUAL_REVIEW`, real cohort `false`, and DATA-24 `IMMUTABLE; NOT OPENED`.
-- Private authorization record:
-  `C:\Camunda\private-data\m5-cam-001\authorization\M5-CAM-001-AUTHORIZATION.json`.
-
-## User-directed local private corpus authorization
-
-- The user authorizes the existing project corpus for local gate, replay and
-  localhost review runs without requesting a new permission each time.
-- This authorization is local-only: no cloud upload, Git commit of raw
-  document/OCR/prediction/PII, or real HRIS/notification side effect.
-- Existing manifests define source rights/retention where applicable. Scan
-  inputs remain `MANUAL_REVIEW`; DATA-24 and its GroundTruth/evaluate-once stay
-  immutable.
-
-## DATA-30A local private replay review (DONE / HOLD, 2026-08-10)
-
-- Local API `http://127.0.0.1:8765` and UI `http://localhost:3000/workspace`
-  use a private prediction-only projection of the existing DATA-22 inventory:
-  `70` documents (`30` Contract, `30` CV, `10` IELTS), `68` predictions and
-  `2` unsupported-format placeholders.
-- The review list renders `70` records. Scan disposition is `27/27
-  MANUAL_REVIEW`; unsupported `.txt/.pptx` records show
-  `UNSUPPORTED_FORMAT → MANUAL_REVIEW` and have no OCR/prediction value.
-- Prediction-only source preview resolves inventory + source SHA without
-  reading GroundTruth. DATA-24 and all historical artifacts remain immutable;
-  no Camunda process or side effect is started.
-- Private projection:
-  `C:\\Camunda\\private-data\\local-private-data-authorized-20260810\\data22-development-r3-local-review-predictions-70.json`.
-
-## M5-CAM-001C expiry/rollback smoke (DONE)
-
-- Active synthetic authorization passed two leave/overtime cases with all safety
-  aggregates at zero and `MANUAL_REVIEW` preserved.
-- Expired authorization was refused before Camunda process start (`0` start
-  attempts). Simulated `autoContinueCount > 0` forced rollback and disallowed
-  completion.
-- Private aggregate report:
-  `C:\Camunda\private-data\m5-cam-001c\reports\m5-cam-001c-auth-smoke.json`.
-- No real cohort, data addition, gate change, DATA-24 read or side effect was
-  introduced.
-
-## DATA-29 CV residual recovery (2026-08-10)
-
-- Implementation ban đầu trên branch `codex/data29-cv-residual-recovery`, dựa
-  trên CI-green baseline `b958021`; thay đổi đã được merge vào `main` tại
-  `54eafd0`. Đây là implementation development-only trên năm CV hiện có.
-- Fresh private DATA-29 aggregate: strict `107/112`, accepted `112/112`;
-  Contract `42/42`, CV `45/50`, IELTS `20/20`; applicable completeness
-  `99/99`, classification `12/12`, schema errors `0`, sensitive false
-  acceptance `0`, parser regression `0`, scan manual review `5/5`, and false
-  auto-continue `0`.
-- CV residual accepted-partial count is `5`, all in `experience`; `skills` and
-  `desired_role` are exact under matching policy v2. Native section boundaries,
-  skill-list label normalization, desired-role conjunction normalization and a
-  same-document one-edit OCR anchor repair were added without GroundTruth
-  lookup or schema/API changes.
-- DATA-20 development gate is `PASS`; fallback remains disabled because fixed
-  scan strict improvement is `3.3334pp`, below the `10pp` threshold. All five
-  scan/image documents remain `MANUAL_REVIEW`.
-- Aggregate-only artifact: `C:\tmp\data29-cv-residual-recovery-20260810.json`.
-  Raw prediction/OCR and GroundTruth remain outside Git.
-- DATA-17 GroundTruth/evaluate-once, DATA-24 evaluate-once and DATA-27 held-out
-  artifacts were not changed. No evaluate-once rerun or promotion occurred.
-- Next status: development delivery is ready for owner review; held-out
-  generalization remains `HOLD` because DATA-27A found no eligible fresh IELTS
-  pool and no new data is being added.
-
-## DATA-28 local-review handoff (2026-08-10)
-
-- Baseline is CI-green at `5d85780` (`main`); Python 3.10/3.12, web tests,
-  build, lint and `npm audit --omit=dev` passed. GitHub Pages also passed.
-- Localhost is running at `http://localhost:3000/workspace` with API
-  `http://127.0.0.1:8765`. The private flag `VITE_SHOW_EXTERNAL_DATASET_REVIEW`
-  is enabled only in ignored `.env.local` for this observation session.
-- Prediction + GT inspector exposes all 12 development documents: Contract 3,
-  CV 5 and IELTS 4, totaling 112 fields. API verification opened all 12
-  document endpoints and returned 112 field comparisons, local-only.
-- Current development result remains strict `102/112` and accepted `112/112`.
-  Contract is `42/42`; IELTS is `20/20`. The residual CV strict gap is 10
-  accepted-partial fields: `experience` 5, `skills` 4 and `desired_role` 1;
-  over-extraction appears in 4/5 `experience`, 4/4 `skills` and `1/1`
-  `desired_role`. These are review candidates, not production promotion.
-- Five scan/image documents remain `MANUAL_REVIEW`; false auto-continue is `0`.
-  Fallback and production promotion remain disabled.
-- Aggregate-only artifact: `C:\\tmp\\data28-local-review-handoff-20260810.json`.
-- DATA-24 official evaluate-once/GroundTruth, DATA-27 held-out state and raw
-  private documents were not changed. No new data or evaluate-once was used.
-
-## DATA-27D development-only delivery (2026-08-10)
-
-- `DATA-27A-EXISTING-POOL-AUDIT` is complete with decision `HOLD`.
-- Existing private pools contain 33 Contract, 36 CV and 15 IELTS files. After
-  SHA-256/history and lineage exclusion, only 1 Contract, 1 CV and 0 IELTS
-  files are eligible as fresh material; the original `10/10/5` held-out gate
-  therefore cannot be formed without new eligible data or an approved policy
-  change.
-- The development handoff preserves DATA-26 results: strict `102/112`,
-  accepted `112/112`, Contract `42/42`, CV `40/50`, IELTS `20/20`, applicable
-  completeness `99/99`, classification `12/12`, schema errors `0`, sensitive
-  false acceptance `0`, parser regression `0`, scan manual review `5/5`, and
-  false auto-continue `0`.
-- Fallback remains disabled because fixed-scan strict improvement is `3.33pp`,
-  below the required `10pp`. Promotion is disabled.
-- Aggregate delivery artifact: `C:\\tmp\\data27d-development-delivery-20260810.json`.
-- DATA-24 evaluate-once, GroundTruth, prediction locks and raw private data
-  were not changed. No OCR, prediction or evaluate-once rerun was performed.
-- Next status: DATA-27 fresh held-out generalization remains `HOLD`; do not
-  claim a production or independent held-out result from this delivery.
-
-## DATA-26 checkpoint (2026-08-07)
-
-- Branch: `codex/data26-parser-recovery`; DATA-26 code, synthetic tests and the
-  opt-in local VietOCR line-refinement worker are implemented. Changes remain
-  development-only and preserve the scan manual-review policy.
-- HEAD: `3c2eeb349ccbc651b38d212142c57550c52a59b7` (DATA-26 local scan refinement checkpoint).
-- Fresh private hybrid replay aggregate: strict `102/112`, accepted `112/112`;
-  Contract `42/42`, CV `40/50`, IELTS `20/20`; completeness `99/99`,
-  classification `12/12`, schema `0`, sensitive false acceptance `0`, parser
-  regression `0`, scan manual review `5/5`. DATA-20 gate is `PASS`.
-- Fallback remains disabled: the fixed scan subset improved `3.33pp`, below the
-  required `10pp` threshold. Accepted text is additive and does not replace
-  strict EM.
-- Private artifacts: `C:\\tmp\\bo10-dev-predictions-data26-parser-recovery-vietocr-20260807.json`,
-  `C:\\tmp\\bo10-dev-aggregate-data26-parser-recovery-vietocr-20260807.json`,
-  and `C:\\tmp\\bo10-data26-gate-vietocr-20260807.json`. They contain
-  raw/private values and remain outside Git.
-- Validation: targeted Python tests `25 passed`, worker Ruff and `py_compile`
-  passed; the web surface remains unchanged and its prior `npm test` (13) and
-  build pass are retained. Do not tune against DATA-24 held-out artifacts.
-- Next action is to keep DATA-27 blocked pending a fresh held-out split and
-  independent approval. No DATA-24 rerun is authorized.
-- Next READY task: `OCR-HO-V2-017B` remains the unrelated global backlog task;
-  DATA-27-FRESH-HELDOUT-V2 remains blocked until a fresh prediction-blind split
-  is supplied and separately approved.
-
-## DATA-25 checkpoint (2026-08-07)
-
-- Branch: `codex/data25-matching-policy-v2` at the implementation checkpoint.
-- DATA-25 comparator v2 preserves policy v1 for immutable reports and adds
-  canonical case/layout, date, duration and decimal matching plus explicit
-  accepted-partial over-extraction metadata.
-- Private post-hoc audit:
-  `C:\\tmp\\data25-policy-v2-audit-20260807\\policy_v2_audit.json` and
-  `C:\\tmp\\data25-policy-v2-audit-20260807\\POLICY_V2_AUDIT_LOCK.json`.
-  Canonical `144/265`, accepted `155/265`; decision `HOLD`; promotion remains
-  disabled. The audit is not a new evaluate-once.
-- Targeted Python tests pass (`22 passed` with `PYTHONPATH=src`); web build
-  passes using the existing local dependency cache. Full Ruff still reports
-  pre-existing findings in `external_dataset_prediction.py` and the API.
-- DATA-24 report/marker, GroundTruth and raw private artifacts were not edited.
-- Next READY task: DATA-26 development-only parser recovery. DATA-27 requires
-  a new prediction-blind held-out split and separate approval.
-
-## Latest checkpoint (2026-08-07)
-
-- DATA-23 lock validation passed for all 25 held-out documents with
-  `predictionsOpened=false` and immutable manifest/prediction/GroundTruth hashes.
-- DATA-24 was approved and executed exactly once. The aggregate-only decision is
-  `HOLD` because strict EM and applicable completeness are below gate; no fallback
-  or promotion was enabled.
-- Private artifacts:
-  `C:\\tmp\\data24-heldout-20260807\\evaluate_once.json` and
-  `C:\\tmp\\data24-heldout-20260807\\EVALUATE_ONCE_LOCK.json`.
-- DATA-17 GroundTruth/evaluate-once and all raw documents, OCR and predictions
-  remain unchanged and outside Git.
-
 ## Repository context
 
 - Repository: `D:\AI Vin Thực Chiến\Side Project\PaddleOCR\hcns-automation-agent`
 - Branch: `codex/data-18-cv-scan-recovery`
-- HEAD: `6883d68335a0619f69e117b733d6ab116639f31c` (`docs: add README workflow and OCR benchmarks`)
+- HEAD: `ac157564e3b7d456ba41d06eb189a8d66521f567` (`chore: publish OCR-HO-V2 diagnostic updates`)
 - Routing: [docs/README.md](README.md)
 - Acceptance criteria: [docs/BACKLOG.md](BACKLOG.md)
 
-## Current checkpoint (2026-08-07)
+## Current checkpoint (2026-08-10)
 
-- Checkpoint task: `OCR-HO-V2-018F` attributed recognizer/token evidence after the
-  018E boundary reconciliation. CCCD quality gates remain `HOLD`.
+- Checkpoint task: `OCR-HO-V2-019L` reconfirmed no independent package/lock exists and kept
+  replay/evaluate-once/selector/runtime/promotion closed; CCCD quality gates remain `HOLD`.
 - Prior checkpoint `DATA-19-CONTRACT-SEMANTIC-NORMALIZATION` remains implemented;
   its development status is `HOLD` because raw Contract strict remains 40/42;
   additive semantic scoring is 42/42 and does not replace raw strict EM.
@@ -347,25 +36,8 @@
   `C:\tmp\bo10-data21-paddleocr-vl-benchmark-report-v5.json` and
   `C:\tmp\bo10-data21-paddleocr-vl.marker-v5.json`. Fallback, promotion and
   evaluate-once remain disabled; raw runtime stays outside Git.
-- DATA-22 policy is now Contract/CV `30 development + 10 held-out` and
-  IELTS `10 development + 5 held-out` using all 15 new IELTS images. The
-  refreshed private candidate is `PASS`: 4 Contract and 5 CV supplement files
-  replaced the nine history-overlapping development candidates; one extra file
-  per family remains unassigned. Report:
-  `C:\\tmp\\data22-split-report-20260807-r3.json`.
-- DATA-23 is now `IN_PROGRESS`: the private 25-document manifest and prediction
-  snapshot are sealed with `predictionsOpened=false`, `metricsComputed=false`,
-  and scan `MANUAL_REVIEW`. Artifacts are
-  `C:\\tmp\\data23-heldout-20260807\\HELDOUT_MANIFEST.json`,
-  `C:\\tmp\\data23-heldout-20260807\\PREDICTION.json`, and
-  `C:\\tmp\\data23-heldout-20260807\\PREDICTION_LOCK.json`.
-- An independent reviewer must create `GROUND_TRUTH_LOCK.json` in a separate
-  private store without prediction access; until then DATA-23 is not PASS.
-  DATA-24 evaluate-once remains untouched. Masked fields are recorded as
-  absent (`null`) and excluded from applicable completeness.
-- Review UI: open `http://localhost:3000`; it uses loopback API
-  `http://127.0.0.1:8765` and the draft at
-  `C:\\tmp\\data23-heldout-20260807-ground-truth-review\\GROUND_TRUTH_DRAFT.json`.
+- DATA-22 remains blocked until approved source rights/retention and the minimum
+  corpus are supplied; do not open held-out or evaluate-once.
 - Approved DATA-21 rerun used a 600-second CPU window. GPU could not be used because
   the installed Paddle wheel is CPU-only; native worker exit `1` after weight load
   produced no prediction. Rerun report/marker are
@@ -414,11 +86,38 @@
   token mismatch totals `11`, line-order mismatch is `72`. AUTO_REGION_MISS remains
   a separate `245/245` line-ID cohort. The report is aggregate-only and does not
   authorize a profile selector, counterfactual, runtime patch or replay.
-- Decision: `RECOGNIZER_TOKEN_ATTRIBUTION_HOLD`. Owner review is required before
-  any separately approved selector counterfactual; keep held-out, evaluate-once,
+- Decision: `RECOGNIZER_TOKEN_ATTRIBUTION_HOLD`. The follow-up 018G review found that
+  dominance alone is insufficient: prior counterfactual DER worsened and strict
+  rule/replay produced no switch or changed field. Keep held-out, evaluate-once,
   patch and promotion closed.
-- Next READY task: `OCR-HO-V2-018G`; review this aggregate evidence and decide whether
-  a separately authorized selector counterfactual is warranted. Do not run it in 018F.
+- 018M regression was DER `+0.007905`, diacritic errors `+2`, strict exact `-1`,
+  with no OCR rerun, replay, selector change or runtime change. The 018N artifact is
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018n-20260810\CCCD_OCR_HO_V2_018N_SELECTOR_PATH_CLOSURE_REVIEW.json`;
+  status `SELECTOR_PATH_CLOSED_HOLD`, selector path is closed, schema/sensitive/
+  accepted `0`, manual review only, promotion disabled.
+- 018O artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018o-20260810\CCCD_OCR_HO_V2_018O_LAYER_SELECTION_REVIEW.json`;
+  status `NON_SELECTOR_LAYER_SELECTED_HOLD`, SHA-256
+  `0120F871E83D440D9BE21CFAA3C280101CC2A20481ABA08F8BBA65F5AAF8D0A4`.
+- 018P artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018p-20260810\CCCD_OCR_HO_V2_018P_RECOGNIZER_TOKEN_ATTRIBUTION.json`;
+  status `RECOGNIZER_TOKEN_ATTRIBUTION_HOLD`, SHA-256
+  `0663B6DEE5E8815B41C2FD1C07C79E065D15B90735AB4C67759F4919E2FA2BFE`.
+- 018Q artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018q-20260810\CCCD_OCR_HO_V2_018Q_RECOGNIZER_SUBLAYER_SELECTION.json`;
+  status `RECOGNIZER_SUBLAYER_SELECTED_HOLD`, SHA-256
+  `BCDC51479D575011B67B43FEFC723A903D4C9C8EF87D354F1DD2DCE3D1704DD2`.
+- 018R artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018r-20260810\CCCD_OCR_HO_V2_018R_RESIDENCE_PROFILE_VARIANT_REVIEW.json`;
+  status `RESIDENCE_PROFILE_VARIANT_REVIEW_HOLD`, SHA-256
+  `9DF4D958B8B6E3215E183A42ECBAB864D0F587AB6C8CBD57FF21B8C3D5475747`.
+- 018S artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018s-20260810\CCCD_OCR_HO_V2_018S_RESIDENCE_PROFILE_VARIANT_CROSSTAB_VALIDATION.json`;
+  status `RESIDENCE_PROFILE_VARIANT_CROSSTAB_VALIDATED_HOLD`, SHA-256
+  `6164B137E887256E954520C8D9A5E5A683D96311FEE18E63BD228E5ED8A8BEA6`.
+- Next READY task: `OCR-HO-V2-019M`; wait for a complete independent package/lock before any
+  replay review. No raw prediction opening, selector, counterfactual, replay, parser,
+  normalization, runtime, held-out/evaluate-once or promotion action is authorized.
   Keep shadow/manual-review-only and do not run held-out/evaluate-once.
 
 ## Active workstreams
@@ -1082,32 +781,6 @@
   authorization is still required for production/public endpoint/real writes.
 - Verification: `tests/test_camunda_m4_dry_run.py` passed; no CCCD or private
   dataset files were changed.
-
-### M5-CAM-001B — Phase15 scalar/reference bridge (DONE)
-
-- Phase15 metadata now crosses Camunda only through a sanitized projection. It
-  normalizes `accepted/needs_review` into Camunda classification vocabulary,
-  replaces Phase15 private artifact paths with caller-supplied opaque references,
-  rejects raw field/path variables, and forces `autoContinueEnabled=false`.
-- The local Camunda run exercised exactly two synthetic native DOCX cases. Both
-  reached `UserReview` and completed simulated HRIS/notification flow; aggregate
-  gates remained zero for auto-continue, raw exposure, duplicates, unreconciled
-  cases and real side effects. Durations were 2.485s and 1.234s.
-- No Phase12 payload, real cohort, private OCR/document data or old evaluate-once
-  artifact was used.
-
-### M5-CAM-001A — Local synthetic shadow preflight (DONE)
-
-- Current BPMN/DMN were deployed to local Camunda 7.13 and exercised with exactly
-  two native DOCX fixtures: one leave request and one overtime request. Both reached
-  `UserReview`, were completed as `CONFIRMED`, and completed the simulated
-  HRIS/notification route.
-- Aggregate gates passed: `AUTO_CONTINUE=0`, raw exposure `0`, duplicate result
-  artifacts `0`, unreconciled cases `0`, real side effects `0`; durations were
-  2.781s and 1.609s (both under 60s). Private aggregate report is outside Git.
-- Worker reconnect/backoff and the create-only local runner are covered by Camunda
-  unit tests. No real cohort, private OCR/document data, GroundTruth, or previous
-  evaluate-once artifact was read.
 
 ### M5-CAM-001 — Shadow-pilot authorization (READY)
 
@@ -1841,21 +1514,590 @@ git status --short --branch
 - AUTO_REGION_HIT contains recognizer disagreement `291/375 = 77.6%`, line-order
   mismatch `72`, and token mismatch `11`; AUTO_REGION_MISS is `245/245` line-ID miss.
 - Decision is `RECOGNIZER_TOKEN_ATTRIBUTION_HOLD`; selector, counterfactual, replay,
-  runtime patch and promotion remain closed. Next READY is `OCR-HO-V2-018G` owner review.
+  runtime patch and promotion remain closed.
 
-### LOCAL-PRIVATE-DATA-AUTHORIZED - local gate/replay checkpoint (DONE / HOLD, 2026-08-10)
+### OCR-HO-V2-018G - selector-opening review (DONE / HOLD)
 
-- Existing private DATA-22 development corpus was replayed locally: Contract
-  `30`, CV `30`, IELTS `10` (`70` total). PaddleOCR CPU produced predictions
-  for `68` Phase-12-supported documents.
-- Two unsupported inventory formats (`.txt`, `.pptx`) remain explicit
-  `MANUAL_REVIEW/UNSUPPORTED_FORMAT`; scan documents are `27/27`
-  `MANUAL_REVIEW`.
-- Aggregate-only report is outside Git at
-  `C:\\Camunda\\private-data\\local-private-data-authorized-20260810\\data22-development-r3-local-gate-replay-aggregate.json`.
-  It has no raw document/OCR/prediction values. No GroundTruth was read, so
-  strict/accepted/completeness metrics are not computed and promotion is
-  `HOLD`.
-- DATA-24 evaluate-once, GroundTruth and historical artifacts remain
-  immutable. Next READY action is local review only; no held-out result may be
-  inferred from this replay.
+- Analyzer: `scripts/review_ocr_ho_v2_018g.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018g.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018g-20260810\CCCD_OCR_HO_V2_018G_SELECTOR_COUNTERFACTUAL_REVIEW.json`.
+  It reads only aggregate 018F and prior selector evidence 017D/017E/017F.
+- Recognizer dominance is `PASS` at `291/375 = 77.6%`, but prior counterfactual
+  non-regression is `FAIL`: DER delta `+0.007905`, diacritic errors `+2`, strict
+  exact delta `-1`. Strict rule and replay each have zero eligible switches and
+  zero changed fields.
+- Decision: `NO_COUNTERFACTUAL_AUTHORIZATION_HOLD`; `counterfactualAuthorized=false`,
+  `runtimeChanged=false`, `replayExecuted=false`, all fields remain manual review.
+- Next READY: `OCR-HO-V2-018H`; gather separately approved selector safety evidence only.
+
+### OCR-HO-V2-018H - selector safety evidence (DONE / HOLD)
+
+- Analyzer: `scripts/review_ocr_ho_v2_018h.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018h.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018h-20260810\CCCD_OCR_HO_V2_018H_SELECTOR_SAFETY_EVIDENCE_REVIEW.json`.
+  It reads only aggregate 018G; no prediction, OCR, GroundTruth or field value was opened.
+- Recognizer dominance remains `PASS` at `77.6%`, but non-regression is `FAIL`
+  (`DER +0.007905`, diacritic errors `+2`), eligible-switch evidence is `FAIL`
+  (`0`), replay-change evidence is `FAIL` (`0`), and owner authorization is absent.
+- Decision: `SELECTOR_SAFETY_EVIDENCE_HOLD`; independent safety evidence is not ready,
+  `counterfactualOpeningAllowed=false`, and all runtime/replay/held-out/promotion gates remain closed.
+- Next READY: `OCR-HO-V2-018I`; explicit selector safety-evidence authorization intake only.
+
+### OCR-HO-V2-018I - selector safety authorization intake (DONE / HOLD)
+
+- Analyzer: `scripts/review_ocr_ho_v2_018i.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018i.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018i-20260810\CCCD_OCR_HO_V2_018I_SELECTOR_SAFETY_AUTHORIZATION_INTAKE_R1.json`.
+- Intake status is `VALID_FOR_SAFETY_REVIEW`; source digest and scope match. Required private schema is
+  `ocr-ho-v2-018i-selector-safety-authorization-record/1.0.0`; it must match the
+  sealed 018H SHA-256 and 15/120/45 `AUTO_DETECTOR` scope.
+- A valid record may authorize safety-evidence review only. It must explicitly keep
+  selector change, counterfactual, development replay, held-out, evaluate-once,
+  primary-runtime change and promotion `false`.
+- Authorization is limited to safety-evidence review. No selector change, counterfactual,
+  replay, runtime patch or promotion occurred. Next READY: `OCR-HO-V2-018J`.
+
+### OCR-HO-V2-018J - aggregate selector safety evidence (DONE / HOLD)
+
+- Analyzer: `scripts/review_ocr_ho_v2_018j.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018j.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018j-20260810\CCCD_OCR_HO_V2_018J_AGGREGATE_SELECTOR_SAFETY_EVIDENCE.json`.
+  It reads only aggregate 018I/018H/018G artifacts and keeps prediction sealed.
+- Safety evidence is collected, but prior non-regression is `FAIL` (DER delta
+  `+0.007905`, diacritic errors `+2`, strict exact delta `-1`); eligible switches and
+  replay changed fields are both `0`. Schema errors, sensitive false acceptance and
+  accepted coverage remain `0`; every field stays manual review.
+- Decision: `AGGREGATE_SELECTOR_SAFETY_EVIDENCE_HOLD`; counterfactual opening is denied,
+  and no selector change, replay, runtime change, held-out/evaluate-once or promotion
+  occurred. Next READY: `OCR-HO-V2-018K`.
+
+### OCR-HO-V2-018K - selector safety decision review (DONE / HOLD)
+
+- Analyzer: `scripts/review_ocr_ho_v2_018k.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018k.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018k-20260810\CCCD_OCR_HO_V2_018K_SELECTOR_SAFETY_DECISION_REVIEW.json`.
+  It reads only the aggregate 018J artifact; prediction and Ground Truth remain sealed.
+- Decision: `SELECTOR_COUNTERFACTUAL_NOT_RECOMMENDED_HOLD`. The prior DER
+  non-regression failed (`+0.007905`, diacritic `+2`, strict exact `-1`), and eligible
+  switches/replay changed fields are both `0`.
+- No counterfactual is authorized or recommended. A new explicit owner authorization
+  record would be required before any selector trial. Runtime, replay, held-out,
+  evaluate-once and promotion remain closed. Next READY: `OCR-HO-V2-018L`.
+
+### OCR-HO-V2-018L - selector-counterfactual authorization intake (DONE / HOLD)
+
+- Analyzer: `scripts/intake_ocr_ho_v2_018l.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018l.py`.
+- Private authorization record:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018l-20260810\OCR_HO_V2_018L_SELECTOR_COUNTERFACTUAL_AUTHORIZATION_RECORD.json`.
+- Intake artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018l-20260810\CCCD_OCR_HO_V2_018L_SELECTOR_COUNTERFACTUAL_AUTHORIZATION_INTAKE_R1.json`.
+  It reads only aggregate 018K and contains no prediction, OCR text or Ground Truth value.
+- Intake status is `VALID_FOR_COUNTERFACTUAL_REVIEW`; source digest and exact 15/120/45
+  `AUTO_DETECTOR` scope match. The record authorizes only a future diagnostic review;
+  `counterfactualExecutionAllowed=false`, selector/runtime/replay/held-out/evaluate-once
+  and promotion remain closed. Next READY: `OCR-HO-V2-018M`.
+
+### OCR-HO-V2-018M - sealed-aggregate counterfactual diagnostic (DONE / HOLD)
+
+- Analyzer: `scripts/execute_ocr_ho_v2_018m.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018m_execution.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018m-20260810\CCCD_OCR_HO_V2_018M_SELECTOR_COUNTERFACTUAL_DIAGNOSTIC.json`.
+  It materializes only the authorized selector simulation from sealed aggregate 017D;
+  no OCR rerun or prediction replay occurred.
+- Decision: `COUNTERFACTUAL_DIAGNOSTIC_COMPLETE_HOLD`. DER worsened `+0.007905`,
+  diacritic errors increased `2`, strict exact decreased `1`, and `2` target fields
+  changed in the simulation. Selector/runtime/replay/held-out/evaluate-once/promotion
+  remain closed. Next READY: `OCR-HO-V2-018N`.
+
+### OCR-HO-V2-018N - selector path closure review (DONE / HOLD)
+
+- Analyzer: `scripts/review_ocr_ho_v2_018n.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018n.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018n-20260810\CCCD_OCR_HO_V2_018N_SELECTOR_PATH_CLOSURE_REVIEW.json`.
+  Status is `SELECTOR_PATH_CLOSED_HOLD`; 018M regression is DER `+0.007905`,
+  diacritic `+2`, strict exact `-1`. Schema/sensitive/accepted are `0`, all fields
+  remain manual review, and promotion is disabled.
+- No selector/runtime/replay/held-out/evaluate-once action is authorized. Next READY:
+  `OCR-HO-V2-018O` — select one bounded detector/crop or recognizer/token-alignment
+  layer without reopening selector counterfactuals.
+
+### OCR-HO-V2-018O - non-selector layer selection (DONE / HOLD)
+
+- Analyzer: `scripts/review_ocr_ho_v2_018o.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018o.py`.
+- The review reads sealed aggregate 018N/018E/018F evidence only. It selects exactly
+  one layer: `RECOGNIZER_TOKEN_ALIGNMENT`, because recognizer disagreement is
+  `291/375 = 77.6%` in `AUTO_REGION_HIT`; detector/crop has no direct miss and its
+  dominant boundary category is `8/18 = 44.44%`, below the 50% threshold.
+- Decision is `NON_SELECTOR_LAYER_SELECTED_HOLD`; patch, replay, selector,
+  counterfactual, runtime, held-out/evaluate-once and promotion remain false. Next
+  READY: `OCR-HO-V2-018P`, aggregate-only recognizer/token attribution.
+
+### OCR-HO-V2-018P - recognizer/token alignment attribution (DONE / HOLD)
+
+- Analyzer: `scripts/review_ocr_ho_v2_018p.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018p.py`.
+- The sealed aggregate report records `AUTO_REGION_HIT` recognizer disagreement
+  `291/375 = 77.6%`, line-order mismatch `72`, token mismatch `11`; by field the
+  disagreement counts are residence `116`, origin `96`, fullName `79`.
+- `AUTO_REGION_MISS` remains a separate `245/245` line-ID cohort. The artifact has
+  no OCR text or PII, keeps the token definition NFC/whitespace-only, and does not
+  authorize selector, counterfactual, replay, runtime, held-out or promotion.
+- Decision: `RECOGNIZER_TOKEN_ATTRIBUTION_HOLD`. Next READY: `OCR-HO-V2-018Q`,
+  review the cohorts and choose one bounded recognizer/token sub-layer.
+
+### OCR-HO-V2-018Q - bounded residence recognizer sub-layer (DONE / HOLD)
+
+- Analyzer: `scripts/review_ocr_ho_v2_018q.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018q.py`.
+- The sealed 018P cohort comparison selects exactly
+  `PLACE_OF_RESIDENCE_RECOGNIZER_DISAGREEMENT`: residence has `116` recognizer
+  disagreements, compared with `32` line-order mismatches and `11` token mismatches;
+  origin has `96` and fullName `79` recognizer disagreements.
+- Decision: `RECOGNIZER_SUBLAYER_SELECTED_HOLD`. Profile/variant selector,
+  counterfactual, line-order change, token-alignment change, replay, runtime,
+  held-out/evaluate-once and promotion remain false. Next READY: `OCR-HO-V2-018R`.
+
+### OCR-HO-V2-018R - residence profile/variant cohort review (DONE / HOLD)
+
+- Analyzer: `scripts/review_ocr_ho_v2_018r.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018r.py`.
+- The residence cohort is `116` recognizer disagreements, `32` line-order mismatches
+  and `11` token mismatches. Existing profile aggregates range from `67.86%` to
+  `88.35%`, and variant aggregates from `76.60%` to `79.17%`, but these aggregates
+  cover all target fields rather than residence specifically.
+- Decision: `RESIDENCE_PROFILE_VARIANT_REVIEW_HOLD`; no profile/variant winner is
+  selected, `profileVariantWinner=null`, selector/counterfactual/replay/runtime and
+  promotion remain false. Next READY: `OCR-HO-V2-018S`, validate an independent
+  residence-by-profile/variant aggregate cross-tab or keep HOLD if unavailable.
+
+### OCR-HO-V2-018S - residence profile/variant cross-tab validation (DONE / HOLD)
+
+- Analyzer: `scripts/review_ocr_ho_v2_018s.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018s.py`.
+- Artifact 017I supplies a valid sealed residence-specific cross-tab: `16` profile×variant
+  combinations, each evaluated on `15` residence cases. The best oracle rows reach only
+  `2/15` ASCII exact (`13.33%`) versus the residence gate `13/15` (`85%`).
+- Decision: `RESIDENCE_PROFILE_VARIANT_CROSSTAB_VALIDATED_HOLD`; cross-tab is verified
+  for attribution, but no profile/variant winner or selector/counterfactual is allowed.
+  All fields remain manual review. Next READY: `OCR-HO-V2-018T`.
+
+### OCR-HO-V2-018T - bounded non-selector diagnostic selection (DONE / HOLD)
+
+- Analyzer: `scripts/review_ocr_ho_v2_018t.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018t.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018t-20260810\CCCD_OCR_HO_V2_018T_BOUNDED_NON_SELECTOR_DIAGNOSTIC_REVIEW.json`;
+  status `NON_SELECTOR_DIAGNOSTIC_SELECTED_HOLD`, SHA-256
+  `92c8bc7ecdc272ecad1a4075c52f87fd80bb2388dc9885a4ce34ddc178696b40`.
+- Cross-tab ceiling remains `2/15` ASCII exact versus gate `13/15`. Within the
+  residence `AUTO_REGION_HIT` cohort, recognizer disagreement is `116`, ahead of
+  line-order mismatch `32` and token mismatch `11`; therefore the single bounded
+  diagnostic is `RESIDENCE_RECOGNIZER_ERROR_CLASS_ATTRIBUTION`.
+- This is aggregate-only evidence selection, not profile/variant selection. Selector,
+  counterfactual, replay, runtime, held-out/evaluate-once and promotion remain false;
+  all fields remain manual review. Next READY: `OCR-HO-V2-018U`.
+
+### OCR-HO-V2-018U - residence error-class attribution (DONE / HOLD)
+
+- Analyzer: `scripts/review_ocr_ho_v2_018u.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018u.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018u-20260810\CCCD_OCR_HO_V2_018U_RESIDENCE_ERROR_CLASS_ATTRIBUTION.json`;
+  status `RESIDENCE_ERROR_CLASS_ATTRIBUTED_HOLD`, SHA-256
+  `f4a4884c2a63d788bd1b8d313a15ed84da7109358eeeaae4c6971f43bc441a22`.
+- The sealed residence `AUTO_REGION_HIT` cohort has `160` error groups and `127`
+  eligible line/token groups. Class counts are recognizer disagreement `116`,
+  line-order mismatch `32`, token extra `8`, token swap `3`, and line-ID miss `1`;
+  recognizer disagreement is `72.5%` of error groups and `91.34%` of eligible groups.
+- 018P field-level classes and 018S residence profile/variant exact metrics do not
+  form a joint profile/variant-by-error-class cross-tab. No winner or selector is
+  inferred. All gates remain HOLD/manual-review-only; Next READY: `OCR-HO-V2-018V`.
+
+### OCR-HO-V2-018V - profile/variant error-class review (DONE / HOLD)
+
+- Analyzer: `scripts/intake_ocr_ho_v2_018v.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018v.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018v-20260810\CCCD_OCR_HO_V2_018V_PROFILE_VARIANT_ERROR_CLASS_AUTHORIZATION_INTAKE.json`;
+  status `PROFILE_VARIANT_ERROR_CLASS_AUTHORIZATION_REQUIRED`, SHA-256
+  `b0fc69d6d9a249c7710097d7eb854358301abdc47afadc65040703de453e48c4`.
+- Required authorization schema:
+  `ocr-ho-v2-018v-profile-variant-error-class-authorization-record/1.0.0`.
+  The record must match source 018U SHA-256
+  `f4a4884c2a63d788bd1b8d313a15ed84da7109358eeeaae4c6971f43bc441a22`, scope
+  `CCCD/DATA-HO-014`, candidate `11.10.2`, baseline `11.9.1`, and 15/120/45.
+- Authorization may cover only aggregate profile/variant-by-error-class evidence.
+  Selector change, counterfactual, development replay, held-out/evaluate-once,
+  primary-runtime change and production promotion must all be explicitly `false`.
+- Authorization record was accepted with source 018U SHA and the review was executed.
+  Intake artifact SHA-256 is `f1f5712cc22c75599558bf77cb6596dee872fc0de915541876bd0d4f8ab55100`.
+- Diagnostic artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018v-20260810\CCCD_OCR_HO_V2_018V_PROFILE_VARIANT_ERROR_CLASS_DIAGNOSTIC.json`;
+  status `PROFILE_VARIANT_ERROR_CLASS_REVIEW_HOLD`, SHA-256
+  `31d099c72ca90e2178773adca8d82491e03dac1fe49cde5e6528ebe29e1f87e9`.
+- The review confirms residence error-class counts and the 16×15 profile/variant
+  residence metric rows, but no joint residence profile×variant×error-class table.
+  `profileVariantWinner=null`, selector/counterfactual/replay/runtime/promotion remain
+  false; all fields remain manual review. Next READY: `OCR-HO-V2-018W`.
+
+### OCR-HO-V2-018W - sealed joint extractor (DONE / HOLD)
+
+- Extractor: `scripts/extract_ocr_ho_v2_018w.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018w.py`.
+- The extractor is scoped to `placeOfResidence` and emits only aggregate rows keyed
+  by `profile::variant`, with NFC/whitespace token classes; it never emits OCR values.
+- Sealed manifest preflight: 15 documents, manifest digest
+  `783e1b50a51ef57afd376d4493e3e09ad68cabef67f07c5afb984c052394198d`, file SHA-256
+  `cda880557491e5b749b6b46520a5c376757f5f6c49e50d0304a9573852c9a6ca`.
+- Authorization record matched the sealed manifest and authorized only aggregate
+  extractor execution. Private extraction produced 16 combinations, each evaluated
+  on 15 documents; no OCR value was emitted. Next READY: `OCR-HO-V2-018X`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018w-20260810\CCCD_OCR_HO_V2_018W_SEALED_JOINT_RESIDENCE_PROFILE_VARIANT_ERROR_CLASS_DIAGNOSTIC.json`;
+  status `JOINT_RESIDENCE_PROFILE_VARIANT_ERROR_CLASS_EXTRACTED_HOLD`, SHA-256
+  `2c886d760eb681997d20f1ee961b3f3da38d1f0d59980de4c085f5585598b58c`.
+- Aggregate class totals across the 240 profile×variant document groups are
+  recognizer disagreement `116`, line-ID miss `81`, line-order mismatch `32`,
+  token extra `8`, token swap `3`; `profileVariantWinner=null`,
+  `selectionEligible=false`, and all gates remain HOLD/manual-review-only.
+
+### OCR-HO-V2-018X - sealed joint table review (DONE / HOLD)
+
+- Reviewer: `scripts/review_ocr_ho_v2_018x.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018x.py`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018x-20260810\CCCD_OCR_HO_V2_018X_SEALED_JOINT_TABLE_REVIEW.json`;
+  status `SEALED_JOINT_TABLE_REVIEW_HOLD`, SHA-256
+  `6965fab30378f81c93744e1ae6da6597816aa96a7216bbecf3ee6e21fbcf6065`.
+- The complete table has `240` aggregate profile×variant document groups. Fifteen
+  rows are recognizer-disagreement dominant and one is line-ID-miss dominant. This
+  is diagnostic evidence only: `profileVariantWinner=null`, `selectionEligible=false`,
+  and selector/counterfactual/replay/runtime/held-out/promotion remain closed.
+- Next READY: `OCR-HO-V2-018Y`; review class distribution and choose at most one
+  bounded non-selector diagnostic.
+
+### OCR-HO-V2-018Y - class distribution and bounded diagnostic review (DONE / HOLD)
+
+- Reviewer: `scripts/review_ocr_ho_v2_018y.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018y.py`.
+- Authorization was local-only and matched sealed manifest digest
+  `783e1b50a51ef57afd376d4493e3e09ad68cabef67f07c5afb984c052394198d`; no raw PII
+  was emitted. Authorization record SHA-256 is
+  `8fddf92b6cddeb3bd91ad9d583c967248853872942f77b2f5864155cd16567bd`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018y-20260810\CCCD_OCR_HO_V2_018Y_CLASS_DISTRIBUTION_REVIEW.json`;
+  status `BOUNDED_NON_SELECTOR_DIAGNOSTIC_SELECTED_HOLD`, SHA-256
+  `d19cf504268b0d0e119834f409d330c31032d7d82dd1d7cfc6544f8928c462fe`.
+- Aggregate totals are recognizer disagreement `116/240` (`48.3333%`), line-ID miss
+  `81/240` (`33.75%`), line-order mismatch `32`, token extra `8`, and token swap `3`.
+  No global class reached `50%`; the single selected diagnostic is
+  `RESIDENCE_LINE_ID_MISS_BOUNDARY_ATTRIBUTION`, with line-ID misses present in all
+  16 joint rows. No profile/variant winner or selector path was opened; gates remain
+  HOLD, accepted coverage `0`, and every field remains manual review.
+- Next READY: `OCR-HO-V2-018Z`; run one aggregate-only residence line-ID boundary
+  attribution review without selector, counterfactual, replay or runtime change.
+
+### OCR-HO-V2-018Z - residence line-ID boundary attribution (DONE / HOLD)
+
+- Reviewer: `scripts/review_ocr_ho_v2_018z.py`; synthetic test:
+  `tests/test_ocr_ho_v2_018z.py`.
+- Authorization was local-only and matched sealed manifest digest
+  `783e1b50a51ef57afd376d4493e3e09ad68cabef67f07c5afb984c052394198d`; no raw PII
+  was emitted. Authorization record SHA-256 is
+  `ca42c68bb7abc0d1646f2ca5abdd5991c155c9184cf0d87b3177bb29b99de34e`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-018z-20260810\CCCD_OCR_HO_V2_018Z_RESIDENCE_LINE_ID_BOUNDARY_ATTRIBUTION.json`;
+  status `RESIDENCE_LINE_ID_BOUNDARY_ATTRIBUTION_HOLD`, SHA-256
+  `588356ecdd1cdb01be6b6edd1f49426ea8b287ed9083b470d13dbdae91d97869`.
+- Residence boundary attribution has `5` cases: bottom boundary `3/5 = 60%`,
+  line-order `1`, multiple-boundary-sides `1`; missing expected lines `9`, selected
+  lines `8`. Geometry corroboration shows bottom overflow `2/3`, sealed line-ID
+  overlap `0`, and all three geometry cases from line segmentation.
+- The `81` profile/variant line-ID miss groups remain a separate aggregate cohort;
+  the boundary cross-tab is unavailable, so no one-to-one mapping is inferred.
+  Global boundary dominance is `8/18 = 44.44%`, below the 50% patch threshold.
+  No patch, selector, counterfactual, replay or promotion occurred; gates remain
+  HOLD, accepted coverage `0`, and all fields remain manual review.
+- Next READY: `OCR-HO-V2-019A`; review bounded residence attribution and decide
+  whether any separately authorized patch review is warranted.
+
+### OCR-HO-V2-019A - residence patch-review decision (DONE / HOLD)
+
+- Reviewer: `scripts/review_ocr_ho_v2_019a.py`; synthetic test:
+  `tests/test_ocr_ho_v2_019a.py`.
+- Standing local-only diagnostic approval was recorded with sealed manifest digest
+  `783e1b50a51ef57afd376d4493e3e09ad68cabef67f07c5afb984c052394198d`; no raw PII
+  was emitted. Authorization record SHA-256 is
+  `15ecebb173cf3addf1f78cc5e4acb55029ddf8b62f7e4899351cc284a124c90e`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-019a-20260810\CCCD_OCR_HO_V2_019A_RESIDENCE_PATCH_REVIEW_DECISION.json`;
+  status `PATCH_REVIEW_NOT_WARRANTED_HOLD`, SHA-256
+  `f2ce65a58d6879f1dd3349f63f3b7d1c529962e87c5cd7998a2705765356cb17`.
+- Evidence: global boundary `8/18 = 44.44%`, profile/variant boundary cross-tab
+  unavailable, shadow patch quality improvement unproven, and 018C development gate
+  remains `HOLD` with DER non-regression `false`, residence ASCII exact `false`, and
+  automatic residence ROI `0.666667`.
+- Patch review eligibility is `false`; no patch authorization, selector, counterfactual,
+  replay, runtime change or promotion occurred. Gates remain HOLD, accepted coverage
+  `0`, and all fields remain manual review.
+- Next READY: `OCR-HO-V2-019B`; obtain independent residence boundary/profile cross-tab
+  evidence before any patch review.
+
+### OCR-HO-V2-019B - independent residence boundary/profile cross-tab (DONE / HOLD)
+
+- Extractor: `scripts/extract_ocr_ho_v2_019b.py`; synthetic test:
+  `tests/test_ocr_ho_v2_019b.py`.
+- Standing local-only diagnostic approval was recorded with sealed manifest digest
+  `783e1b50a51ef57afd376d4493e3e09ad68cabef67f07c5afb984c052394198d`; candidate
+  metadata was read only for line IDs/profile/variant and no OCR value was emitted.
+  Authorization record SHA-256 is
+  `e1159eb1a06b319b67f896ced24f21f5eaf0a440671d9f32caca41cc01252691`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-019b-20260810\CCCD_OCR_HO_V2_019B_INDEPENDENT_RESIDENCE_BOUNDARY_PROFILE_VARIANT_CROSSTAB.json`;
+  status `INDEPENDENT_RESIDENCE_CROSSTAB_EXTRACTED_HOLD`, SHA-256
+  `cd23341bc8dfc901b5809ada4f2d878c6057683a1d947ca5d053a67ba44058a4`.
+- The independent cross-tab has `48` aggregate rows across `16` profile/variant
+  combinations and `240` document groups. It attributes `80/81` line-ID misses to
+  the five residence boundary documents; one line-ID miss has no boundary case in
+  the independent 017H cohort. No profile/variant winner, patch, selector,
+  counterfactual, replay, runtime change or promotion occurred; gates remain HOLD,
+  accepted coverage `0`, and every field remains manual review.
+- Next READY: `OCR-HO-V2-019C`; review the independent cross-tab before any patch
+  review.
+
+### OCR-HO-V2-019C - independent cross-tab review (DONE / HOLD)
+
+- Reviewer: `scripts/review_ocr_ho_v2_019c.py`; synthetic test:
+  `tests/test_ocr_ho_v2_019c.py`.
+- Standing local-only diagnostic approval was recorded with sealed manifest digest
+  `783e1b50a51ef57afd376d4493e3e09ad68cabef67f07c5afb984c052394198d`; no raw PII
+  was emitted. Authorization record SHA-256 is
+  `a35d2d894954196fbb3ed1d471314dc71eced11aa3dbc1936898a7d872d10d7f`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-019c-20260810\CCCD_OCR_HO_V2_019C_INDEPENDENT_CROSSTAB_REVIEW.json`;
+  status `INDEPENDENT_CROSSTAB_NONDISCRIMINATIVE_HOLD`, SHA-256
+  `151626dfb2d498c8cc0ca3f4e94cf427db46300f9ebc162703d6a00c91856f7b`.
+- The review covers `48` rows and `16` profile/variant combinations but finds only
+  `1` signature: every combination has the same boundary counts. Therefore the
+  cross-tab is not a discriminative selector or patch signal; winner/selector and
+  patch eligibility remain `false`, with no runtime/replay/promotion action.
+- Next READY: `OCR-HO-V2-019D`; collect independent per-profile quality/non-regression
+  evidence before any patch or selector review.
+
+### OCR-HO-V2-019D - independent per-profile quality evidence (DONE / HOLD)
+
+- Analyzer: `scripts/analyze_ocr_ho_v2_019d.py`; synthetic test:
+  `tests/test_ocr_ho_v2_019d.py`.
+- Standing local-only diagnostic approval was recorded with sealed manifest digest
+  `783e1b50a51ef57afd376d4493e3e09ad68cabef67f07c5afb984c052394198d`; no raw PII
+  was emitted. Authorization record SHA-256 is
+  `1A305A9F27921731CC53680CC8B0A45AA280DB5943DABC9FC9CBEF35F4C67883`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-019d-20260810\CCCD_OCR_HO_V2_019D_PER_PROFILE_QUALITY_DIAGNOSTIC.json`;
+  status `PER_PROFILE_QUALITY_EVIDENCE_HOLD`, SHA-256
+  `7F765EEDD71D05E0592F7FCDC680F02E00F90AA3EA58B798173AE4805567FCAD`.
+- Independent evidence covers `4` profiles, `4` variants and `16` combinations. Residence
+  oracle ASCII peaks at `2/15` (gate `13/15`); line classes reconcile to `127 MATCH`,
+  `81 MISS` and `32 ORDER`. No combination is selector-eligible and no profile/variant
+  winner is recorded. The report contains no `value`, `rawValue` or `text` keys.
+- No patch, selector, counterfactual, replay, runtime, held-out or promotion action occurred;
+  development and held-out gates remain `HOLD`, accepted coverage is `0`, and every field
+  remains manual review.
+- Validation: relevant OCR-HO suite `147 passed`; touched-file Ruff, API compileall,
+  `scripts/validate_longrun_state.py` and `git diff --check` passed.
+- Next READY: `OCR-HO-V2-019E`; review the independent quality matrix and keep all runtime
+  paths closed.
+
+### OCR-HO-V2-019E - independent quality-matrix review (DONE / HOLD)
+
+- Reviewer: `scripts/review_ocr_ho_v2_019e.py`; synthetic test:
+  `tests/test_ocr_ho_v2_019e.py`.
+- Standing local-only diagnostic approval matched sealed manifest digest
+  `783e1b50a51ef57afd376d4493e3e09ad68cabef67f07c5afb984c052394198d` and source 019D
+  SHA-256 `7F765EEDD71D05E0592F7FCDC680F02E00F90AA3EA58B798173AE4805567FCAD`.
+  Authorization record SHA-256 is
+  `31E711C3980C2B24EDE0DE56AF70F63F7B22EC62550E3EDE7E59F3313A86E8B3`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-019e-20260810\CCCD_OCR_HO_V2_019E_QUALITY_MATRIX_REVIEW.json`;
+  status `PER_PROFILE_QUALITY_MATRIX_NONDISCRIMINATIVE_HOLD`, SHA-256
+  `2A9E2563724D683B1CE5D3FAB8CFD125BAA71ACE2F3A3FDA608D5C3E58AEE2F1`.
+- Review covers `48` field-quality rows across `16` profile/variant combinations. Full
+  non-regression pass rows are `0`; residence oracle ASCII max is `2/15` versus the
+  `13/15` gate; gate-qualified combinations are `0`. Residence line totals remain
+  `127 MATCH / 81 MISS / 32 ORDER`.
+- No profile/variant winner, selector rule, patch rule or bounded runtime change is justified.
+  Development and held-out gates remain `HOLD`, accepted coverage is `0`, every field is
+  manual review, and selector/patch/counterfactual/replay/runtime/promotion remain closed.
+- Validation: relevant OCR-HO suite `149 passed`; touched-file Ruff, API compileall,
+  `scripts/validate_longrun_state.py` and `git diff --check` passed.
+- Next READY: `OCR-HO-V2-019G`; prepare or review an independent package before any replay.
+
+### OCR-HO-V2-019F - profile/variant selection closure (DONE / HOLD)
+
+- Reviewer: `scripts/review_ocr_ho_v2_019f.py`; synthetic test:
+  `tests/test_ocr_ho_v2_019f.py`.
+- Standing local-only diagnostic approval matched sealed manifest digest
+  `783e1b50a51ef57afd376d4493e3e09ad68cabef67f07c5afb984c052394198d` and source 019E
+  SHA-256 `2A9E2563724D683B1CE5D3FAB8CFD125BAA71ACE2F3A3FDA608D5C3E58AEE2F1`.
+  Authorization record SHA-256 is
+  `BB16DD4A4402F7D1A6DFDA463739D4F29BB38A173A409BC10D7B43850B62AEE1`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-019f-20260810\CCCD_OCR_HO_V2_019F_PROFILE_VARIANT_CLOSURE.json`;
+  status `PROFILE_VARIANT_SELECTION_PATH_CLOSED_HOLD`, SHA-256
+  `36146EEC4105858A1B1C9177DF56F1492ABC0503E5D0AEF80901CB33B5625EB4`.
+- The selector path is explicitly `CLOSED`: no profile/variant winner, selector eligibility
+  or patch eligibility. Closure basis remains `0` full non-regression passes and residence
+  oracle max `2/15`; all gates stay `HOLD`, accepted coverage `0`, and manual review only.
+- Five reopen requirements are recorded: independently locked prediction/GroundTruth digests,
+  pinned scope/baseline, residence ASCII `>=13/15` plus automatic ROI `>=95%`, zero exact/DER/
+  schema/sensitive regressions, and explicit review-owner authorization.
+- No selector, patch, counterfactual, replay, runtime, held-out or promotion action occurred.
+  Next READY: `OCR-HO-V2-019G`; prepare or review a new independent evidence package.
+
+### OCR-HO-V2-019G - independent prediction/GroundTruth package intake (DONE / HOLD)
+
+- Reviewer: `scripts/review_ocr_ho_v2_019g.py`; synthetic test:
+  `tests/test_ocr_ho_v2_019g.py`.
+- Standing local-only intake authorization matched sealed manifest digest
+  `783e1b50a51ef57afd376d4493e3e09ad68cabef67f07c5afb984c052394198d` and source 019F
+  SHA-256 `36146EEC4105858A1B1C9177DF56F1492ABC0503E5D0AEF80901CB33B5625EB4`.
+  Authorization record SHA-256 is
+  `BE5A7ABAD147E4B5500EC44907405E7A18A9058E2839970D8EFD3B31758519E1`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-019g-20260810\CCCD_OCR_HO_V2_019G_INDEPENDENT_PACKAGE_INTAKE.json`;
+  status `PACKAGE_NOT_READY_HOLD`, SHA-256
+  `798B9AC669BF9F9F7D376D90665C4FA16B0837AAFCC1940CBFFB2F2DE596DBE0`.
+- No independent package manifest was available. No GroundTruth was created or opened;
+  no prediction or raw PII was opened. Required evidence remains: independently sealed
+  prediction and GroundTruth SHA-256 locks, immutable/local-only metadata, distinct
+  digests, exact 15-document/120-field/45-diagnostic scope, and explicit prohibition of
+  prediction-derived GroundTruth and evaluate-once execution.
+- Selector, patch, counterfactual, development replay, held-out, evaluate-once, primary
+  runtime and promotion remain closed. Gates: `HOLD`, accepted coverage `0`, every field
+  `MANUAL_REVIEW`, schema errors `0`, sensitive false acceptance `0`.
+- Validation: relevant OCR-HO suite `153 passed`; touched-file Ruff, API compileall,
+  `scripts/validate_longrun_state.py` and `git diff --check` passed. Next READY:
+  `OCR-HO-V2-019H`.
+
+### OCR-HO-V2-019H - independent prediction/GroundTruth lock review (DONE / HOLD)
+
+- Reviewer: `scripts/review_ocr_ho_v2_019h.py`; synthetic test:
+  `tests/test_ocr_ho_v2_019h.py`.
+- Source 019G SHA-256 is
+  `798B9AC669BF9F9F7D376D90665C4FA16B0837AAFCC1940CBFFB2F2DE596DBE0`; the sealed
+  manifest digest remains
+  `783e1b50a51ef57afd376d4493e3e09ad68cabef67f07c5afb984c052394198d`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-019h-20260810\CCCD_OCR_HO_V2_019H_INDEPENDENT_PACKAGE_LOCK_REVIEW.json`;
+  status `PACKAGE_LOCK_NOT_READY_HOLD`, SHA-256
+  `15844941828CFD723A546BD98732F655D0A017AF1A77227E8C954A275DB01100`.
+- No independent package manifest was available, so prediction/GroundTruth lock
+  metadata could not be verified. No GroundTruth was created/opened; no prediction or
+  raw PII was opened. Required locks remain: distinct 64-hex SHA-256 digests, sealed/
+  immutable/local-only metadata, exact 15/120/45 scope, and prediction-derived
+  GroundTruth/evaluate-once disabled.
+- Replay, selector, counterfactual, runtime, held-out, evaluate-once and promotion remain
+  closed. Gates: `HOLD`, accepted coverage `0`, every field `MANUAL_REVIEW`, schema errors
+  `0`, sensitive false acceptance `0`.
+- Validation: relevant OCR-HO suite `155 passed`; touched-file Ruff, API compileall,
+  `scripts/validate_longrun_state.py` and `git diff --check` passed. Next READY:
+  `OCR-HO-V2-019I`.
+
+### OCR-HO-V2-019I - replay-closure review (DONE / HOLD)
+
+- Reviewer: `scripts/review_ocr_ho_v2_019i.py`; synthetic test:
+  `tests/test_ocr_ho_v2_019i.py`.
+- Source 019H SHA-256 is
+  `15844941828CFD723A546BD98732F655D0A017AF1A77227E8C954A275DB01100`; source status
+  was `PACKAGE_LOCK_NOT_READY_HOLD` with `packageManifestMissing`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-019i-20260810\CCCD_OCR_HO_V2_019I_REPLAY_CLOSURE_REVIEW.json`;
+  status `INDEPENDENT_PACKAGE_ABSENT_REPLAY_CLOSED_HOLD`, SHA-256
+  `F1F2801423AEC73C1E841D11859689A6E894B565E065CD1D9AA55B110A8E586F`.
+- Replay closure is `PASS` as a safety decision: `replayClosed=true`,
+  `developmentReplayAuthorized=false`, `developmentReplayExecuted=false`, and
+  `evaluateOnceAuthorized=false`. No GroundTruth or prediction was opened or created;
+  all fields remain manual review and no selector/runtime/promotion action occurred.
+- Gates remain `HOLD`, schema errors `0`, sensitive false acceptance `0`, accepted
+  coverage `0`, and `productionPromotionAllowed=false`. Next READY: `OCR-HO-V2-019J`.
+- Validation: relevant OCR-HO suite `157 passed`; touched-file Ruff, API compileall,
+  `scripts/validate_longrun_state.py` and `git diff --check` passed.
+
+### OCR-HO-V2-019J - new package/lock recheck (DONE / HOLD)
+
+- Reviewer: `scripts/review_ocr_ho_v2_019j.py`; synthetic test:
+  `tests/test_ocr_ho_v2_019j.py`.
+- Source 019I SHA-256 is
+  `F1F2801423AEC73C1E841D11859689A6E894B565E065CD1D9AA55B110A8E586F`; its replay
+  closure was `PASS` and remained execution-disabled.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-019j-20260810\CCCD_OCR_HO_V2_019J_PACKAGE_RECHECK.json`;
+  status `NEW_PACKAGE_NOT_FOUND_REPLAY_CLOSED_HOLD`, SHA-256
+  `36072417C7095F3FD3BFFFA4FD115577DFC6B41D54E676EFEF38ED0F6A0398D8`.
+- Private inventory contained no new independent package/lock manifest. No prediction or
+  GroundTruth was opened/created. `replayClosed=true`, replay/evaluate-once/selector/
+  runtime/promotion remain `false`; all fields remain manual review.
+- Gates remain `HOLD`, schema errors `0`, sensitive false acceptance `0`, accepted
+  coverage `0`, and `productionPromotionAllowed=false`. Next READY: `OCR-HO-V2-019K`.
+- Validation: relevant OCR-HO suite `159 passed`; touched-file Ruff, API compileall,
+  `scripts/validate_longrun_state.py` and `git diff --check` passed.
+
+### OCR-HO-V2-019K - replay-path closure (DONE / HOLD)
+
+- Reviewer: `scripts/review_ocr_ho_v2_019k.py`; synthetic test:
+  `tests/test_ocr_ho_v2_019k.py`.
+- Source 019J SHA-256 is
+  `36072417C7095F3FD3BFFFA4FD115577DFC6B41D54E676EFEF38ED0F6A0398D8`; source status
+  was `NEW_PACKAGE_NOT_FOUND_REPLAY_CLOSED_HOLD`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-019k-20260810\CCCD_OCR_HO_V2_019K_REPLAY_PATH_CLOSURE.json`;
+  status `REPLAY_PATH_CLOSED_NO_PACKAGE_HOLD`, SHA-256
+  `8A51DC3AFAA25B82586E0242EB3D35E66118685035ABB47A930F6B5B37EE4EFB`.
+- No independent package/lock exists. `replayClosed=true`; development replay,
+  evaluate-once, selector, runtime and promotion remain false. No prediction or
+  GroundTruth was opened/created; all fields remain manual review.
+- Gates remain `HOLD`, schema errors `0`, sensitive false acceptance `0`, accepted
+  coverage `0`, and `productionPromotionAllowed=false`. Next READY: `OCR-HO-V2-019L`.
+- Validation: relevant OCR-HO suite `161 passed`; touched-file Ruff, API compileall,
+  `scripts/validate_longrun_state.py` and `git diff --check` passed.
+
+### OCR-HO-V2-019L - package-absence checkpoint (DONE / HOLD)
+
+- Reviewer: `scripts/review_ocr_ho_v2_019l.py`; synthetic test:
+  `tests/test_ocr_ho_v2_019l.py`.
+- Source 019K SHA-256 is
+  `8A51DC3AFAA25B82586E0242EB3D35E66118685035ABB47A930F6B5B37EE4EFB`; source status
+  was `REPLAY_PATH_CLOSED_NO_PACKAGE_HOLD`.
+- Artifact:
+  `C:\Users\HP\AppData\Local\Temp\ocr-ho-v2-019l-20260810\CCCD_OCR_HO_V2_019L_PACKAGE_ABSENCE_CHECKPOINT.json`;
+  status `PACKAGE_ABSENCE_CONFIRMED_REPLAY_CLOSED_HOLD`, SHA-256
+  `2F00C4D2B4B5397E73B8B29780C513192CC0A4EF10290AB95B828F9F2D1CB8FE`.
+- No independent package/lock exists. Replay/evaluate-once/selector/runtime/promotion
+  remain false; no prediction or GroundTruth was opened/created; all fields remain manual
+  review. Gates remain `HOLD`, schema errors `0`, sensitive false acceptance `0`, accepted
+  coverage `0`, and `productionPromotionAllowed=false`.
+- Validation: relevant OCR-HO suite `163 passed`; touched-file Ruff, API compileall,
+  `scripts/validate_longrun_state.py` and `git diff --check` passed. Next READY:
+  `OCR-HO-V2-019M`.
+## Local Camunda dataset checkpoint — 2026-08-11
+
+- Source approved for the local demo is `D:\HR_OT_Leave_Request_Dataset`, kept
+  private and outside Git: 15 Leave Request + 15 Overtime Request documents.
+- Overtime parser is v1.1.0 and recognizes the single-day `Ngay ... lam/tang
+  them ... gio` format as well as the prior multi-day format. Aggregate native
+  check: correct template 30/30, validation errors 0/30, eligible to continue 30/30.
+- Camunda 7.13 local batch `dataset-20260811-b93faaf0ded4/R2` ran 150 external
+  tasks using `D:\venv_paddle\Scripts\python.exe`; all 30 cases are now at
+  `UserReview`, with no remaining external task. Shadow policy remains on:
+  `autoContinueEnabled=false`, so no approval or business side effect was automated.
+- Before the batch, two stale workers were stopped. A first batch with reused
+  idempotency keys was removed; only the fresh R2 batch should be used for review.

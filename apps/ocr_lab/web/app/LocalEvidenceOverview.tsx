@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import LocalBenchmarkPanel from "./LocalBenchmarkPanel";
 
 const API_BASE = "http://127.0.0.1:8765";
 const SHOW_GROUND_TRUTH_REVIEW =
@@ -218,6 +219,8 @@ export default function LocalEvidenceOverview({ onOpen }: LocalEvidenceOverviewP
           <button type="button" onClick={() => onOpen("templates")}>Mở template inspector</button>
         </article>
       </div>
+
+      <LocalBenchmarkPanel embedded />
 
       <div className="local-evidence-verdict">
         <strong>Verdict hiện tại: OCR chưa đủ gate để mở Camunda.</strong>

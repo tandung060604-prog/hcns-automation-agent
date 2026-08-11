@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:hcns:idp:phase15:cv:2.0.0",
-  "title": "Phase 15 CV Business JSON",
+  "title": "HCNS CV Business JSON v2",
   "type": "object",
   "required": ["schemaVersion", "documentFamily", "documentType", "idpStatus", "payload"],
   "properties": {
@@ -16,15 +16,29 @@
         "fields": {
           "type": "object",
           "required": [
-            "fullName",
+            "full_name",
             "headline",
             "email",
-            "phoneNumber",
+            "phone_number",
             "address",
-            "education",
+            "desired_role",
+            "years_experience",
             "experience",
-            "skills"
-          ]
+            "skills",
+            "education"
+          ],
+          "properties": {
+            "full_name": {"type": ["string", "null"]},
+            "headline": {"type": ["string", "null"]},
+            "email": {"type": ["string", "null"]},
+            "phone_number": {"type": ["string", "null"]},
+            "address": {"type": ["string", "null"]},
+            "desired_role": {"type": ["string", "null"]},
+            "years_experience": {"type": ["number", "string", "null"]},
+            "experience": {"type": ["string", "null"]},
+            "skills": {"type": ["string", "null"]},
+            "education": {"type": ["string", "null"]}
+          }
         },
         "tables": {"type": "array"},
         "summary": {"type": "object"}

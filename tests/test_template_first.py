@@ -105,6 +105,26 @@ def overtime_lines() -> list[str]:
     ]
 
 
+def overtime_single_day_lines() -> list[str]:
+    return [
+        "Hà Nội, ngày 13 tháng 08 năm 2026",
+        "ĐƠN XIN TĂNG CA",
+        "Căn cứ Hợp đồng lao động số HD-SINGLE-DAY ký ngày 01/01/2026;",
+        "Kính gửi: Ban Giám đốc CÔNG TY SYNTHETIC.",
+        "Tôi là: NHÂN VIÊN SYNTHETIC - Chức vụ: Kỹ thuật viên",
+        (
+            "Hiện nay, tôi đang thực hiện công việc tại vị trí Kỹ thuật viên, "
+            "thời gian làm việc 08:00-17:00. Do hoàn thiện kiểm thử synthetic, "
+            "tôi đề nghị được làm thêm."
+        ),
+        (
+            "Thời gian đề nghị: Ngày 14/08/2026, làm thêm 3 giờ, từ 18 giờ 00 phút "
+            "đến 21 giờ 00 phút; tổng thời gian dự kiến là 3 giờ."
+        ),
+        "Nội dung công việc: Hoàn thiện kiểm thử synthetic.",
+    ]
+
+
 def process(lines: list[str], filename: str = "opaque-upload.docx") -> dict[str, object]:
     service = build_default_template_processing_service()
     return service.process(
@@ -124,18 +144,22 @@ def test_registry_lists_six_approved_templates() -> None:
     templates = build_default_template_processing_service().list_templates()
 
     assert [template["templateId"] for template in templates] == [
-        "cv-v1",
-        "ielts-certificate-v1",
+        "cv-v2",
+        "ielts-certificate-v2",
         "leave-request-v1",
         "overtime-request-v1",
-        "probation-contract-v1",
+        "probation-contract-v2",
         "vietnam-citizen-id-front-v1",
     ]
     assert templates[0]["supportedFileTypes"] == ["docx", "pdf"]
     assert templates[1]["supportedFileTypes"] == ["pdf", "png", "jpg", "jpeg"]
     assert templates[2]["supportedFileTypes"] == templates[0]["supportedFileTypes"]
     assert all(template["lifecycle"] == "FROZEN" for template in templates)
-    assert all(template["parserVersion"] == "1.0.0" for template in templates)
+    parser_versions = {
+        template["templateId"]: template["parserVersion"] for template in templates
+    }
+    assert parser_versions["leave-request-v1"] == "1.0.0"
+    assert parser_versions["overtime-request-v1"] == "1.1.0"
 
 
 def test_leave_template_is_filename_independent_and_schema_valid() -> None:
@@ -169,10 +193,14 @@ def test_cv_template_is_review_first_and_keeps_values_private_from_camunda() -> 
         ]
     )
 
-    assert response["templateId"] == "cv-v1"
+    assert response["templateId"] == "cv-v2"
     assert response["quality"]["recommendedAction"] == "MANUAL_REVIEW"
-    assert response["data"]["fullName"] == "Candidate Synthetic"
-    assert "fullName" not in response["camundaVariables"]
+    assert response["data"]["full_name"] == "Candidate Synthetic"
+    assert "full_name" not in response["camundaVariables"]
+    schema = json.loads(
+        (ROOT / "schemas/templates/cv_v2.schema.json").read_text(encoding="utf-8")
+    )
+    validate(response["data"], schema)
 
 
 def test_probation_contract_detection_ignores_vietnamese_diacritics() -> None:
@@ -185,7 +213,7 @@ def test_probation_contract_detection_ignores_vietnamese_diacritics() -> None:
         filename="contract.pdf",
     )
 
-    assert response["templateId"] == "probation-contract-v1"
+    assert response["templateId"] == "probation-contract-v2"
     assert response["documentType"] == "EMPLOYMENT_CONTRACT"
     assert response["quality"]["recommendedAction"] == "MANUAL_REVIEW"
 
@@ -212,6 +240,20 @@ def test_overtime_template_parses_and_normalizes_time() -> None:
     assert data["overtimeEndTime"] == "20:00"
     assert data["overtimeHoursPerDay"] == 2
     assert data["totalOvertimeHours"] == 6
+
+
+def test_overtime_template_parses_single_day_dataset_format() -> None:
+    response = process(overtime_single_day_lines())
+    data = response["data"]
+
+    assert response["templateId"] == "overtime-request-v1"
+    assert data["startDate"] == "2026-08-14"
+    assert data["endDate"] == "2026-08-14"
+    assert data["overtimeHoursPerDay"] == 3
+    assert data["overtimeStartTime"] == "18:00"
+    assert data["overtimeEndTime"] == "21:00"
+    assert data["totalOvertimeHours"] == 3
+    assert data["validationErrors"] == []
     assert data["recommendedAction"] == "AUTO_CONTINUE"
     schema = json.loads(
         (ROOT / "schemas/templates/overtime_request_v1.schema.json").read_text(

@@ -24,6 +24,19 @@ type BenchmarkRow = {
 type BenchmarkPayload = {
   rows: BenchmarkRow[];
   notes: string[];
+  evidence?: {
+    displayOnly: boolean;
+    reportConfigured: boolean;
+    manifestConfigured: boolean;
+    reportSchemaVersion: string | null;
+    datasetId: string | null;
+    reportDigest: string | null;
+    manifestDigest: string | null;
+    decision: string;
+    promotionAllowed: boolean;
+    containsRawFieldValues: boolean;
+    groundTruthUsedForScoringOnly: boolean;
+  };
 };
 
 function percent(value: number | null) {
@@ -116,7 +129,11 @@ function LoadingBenchmark() {
   );
 }
 
-export default function LocalBenchmarkPanel() {
+type LocalBenchmarkPanelProps = {
+  embedded?: boolean;
+};
+
+export default function LocalBenchmarkPanel({ embedded = false }: LocalBenchmarkPanelProps) {
   const [payload, setPayload] = useState<BenchmarkPayload | null>(null);
   const [error, setError] = useState("");
 
@@ -140,11 +157,11 @@ export default function LocalBenchmarkPanel() {
   }, []);
 
   return (
-    <section className="section local-benchmark-section" id="local-benchmark">
+    <section className={`section local-benchmark-section${embedded ? " local-benchmark-section-embedded" : ""}`} id="local-benchmark">
       <div className="section-heading local-benchmark-heading">
         <div>
-          <p className="eyebrow">BENCHMARK THEO LOẠI TÀI LIỆU</p>
-          <h2>Nhìn nhanh chất lượng theo từng nhóm</h2>
+          <p className="eyebrow">SÁU FAMILY ACTIVE · LOCAL EVIDENCE</p>
+          <h2>Đối chiếu đủ sáu loại tài liệu</h2>
         </div>
         <p>
           Mỗi card tách rõ mẫu benchmark, tài liệu local và số field được chấm.
@@ -176,6 +193,18 @@ export default function LocalBenchmarkPanel() {
         <LoadingBenchmark />
       ) : (
         <>
+          {payload.evidence && (
+            <div className="local-benchmark-evidence" data-testid="benchmark-evidence">
+              <strong>
+                {payload.evidence.reportConfigured && payload.evidence.manifestConfigured
+                  ? `Evidence aggregate-only · ${payload.evidence.decision}`
+                  : "Evidence report chưa được cấu hình"}
+              </strong>
+              <span>
+                {payload.evidence.datasetId ?? "Chưa có dataset"} · display-only · promotion disabled
+              </span>
+            </div>
+          )}
           <div className="local-benchmark-visual-grid">
             {payload.rows.map((row) => <BenchmarkCard key={row.key} row={row} />)}
           </div>

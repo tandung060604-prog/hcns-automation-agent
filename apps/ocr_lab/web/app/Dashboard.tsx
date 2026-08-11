@@ -7,15 +7,14 @@ import {
 import ExternalDatasetReview from "./ExternalDatasetReview";
 import ExternalDatasetPrediction from "./ExternalDatasetPrediction";
 import LocalEvidenceOverview from "./LocalEvidenceOverview";
-import LocalBenchmarkPanel from "./LocalBenchmarkPanel";
-import M5Cam006SmokePanel from "./M5Cam006SmokePanel";
-import M5LocalShadowPanel from "./M5LocalShadowPanel";
 import OcrHoDiagnostic from "./OcrHoDiagnostic";
 
 const SHOW_GROUND_TRUTH_REVIEW =
   import.meta.env.VITE_SHOW_GROUND_TRUTH_REVIEW === "true";
 const SHOW_EXTERNAL_DATASET_REVIEW =
   import.meta.env.VITE_SHOW_EXTERNAL_DATASET_REVIEW === "true";
+const SHOW_LEGACY_EXPLORER_TABS =
+  import.meta.env.VITE_SHOW_LEGACY_EXPLORER_TABS === "true";
 const SHOW_OCR_HO_SHADOW_UAT =
   import.meta.env.VITE_SHOW_OCR_HO_SHADOW_UAT === "true";
 const SHOW_OCR_HO_DIAGNOSTIC_GT =
@@ -649,6 +648,16 @@ type TemplateSessionSummary = {
   parserName: string;
 };
 
+type CamundaReviewTask = {
+  taskId: string;
+  role: "employee" | "hr";
+  taskName: string;
+  documentId: string;
+  documentType: string;
+  created: string;
+  inspectable: boolean;
+};
+
 type UserSessionSummary = {
   sessionId: string;
   createdAt: string;
@@ -993,6 +1002,29 @@ const familyLabels: Record<string, string> = {
 };
 
 const businessFieldLabels: Record<string, string> = {
+  full_name: "Họ và tên (v2)",
+  phone_number: "Số điện thoại (v2)",
+  desired_role: "Vị trí mong muốn",
+  years_experience: "Số năm kinh nghiệm",
+  contract_number: "Số hợp đồng",
+  contract_sign_date: "Ngày ký hợp đồng",
+  effective_date: "Ngày hiệu lực",
+  probation_end_date: "Ngày kết thúc thử việc",
+  employer_name: "Tên người sử dụng lao động",
+  employer_representative: "Đại diện người sử dụng lao động",
+  employee_name: "Tên người lao động",
+  employee_id_number: "Mã định danh người lao động",
+  job_title: "Chức danh công việc",
+  workplace: "Nơi làm việc",
+  weekly_hours: "Giờ làm việc mỗi tuần",
+  probation_salary_monthly: "Lương thử việc hàng tháng",
+  allowances_summary: "Tóm tắt phụ cấp",
+  salary_payment_schedule: "Kỳ trả lương",
+  recipient_name: "Tên người nhận chứng chỉ",
+  credential_id: "Mã chứng chỉ",
+  credential_type: "Loại chứng chỉ",
+  overall_score: "Điểm tổng IELTS",
+  issue_date: "Ngày cấp / ngày thi",
   fullName: "Họ và tên",
   headline: "Vị trí / tiêu đề nghề nghiệp",
   email: "Email",
@@ -1805,11 +1837,15 @@ function TemplateResultPanel({
   filename,
   deleteArmed,
   onDelete,
+  onStartCamunda,
+  camundaStatus,
 }: {
   result: TemplateProcessingResult;
   filename: string;
   deleteArmed: boolean;
   onDelete: () => void;
+  onStartCamunda: () => void;
+  camundaStatus: string;
 }) {
   const fields = Object.entries(result.data).filter(
     ([name]) => !TEMPLATE_RESULT_META_FIELDS.has(name),
@@ -1904,6 +1940,11 @@ function TemplateResultPanel({
       </details>
 
       <div className="result-actions template-result-actions">
+        {result.documentType === "LEAVE_REQUEST" || result.documentType === "OVERTIME_REQUEST" ? (
+          <button type="button" onClick={onStartCamunda}>
+            Đưa vào Camunda
+          </button>
+        ) : null}
         <button
           className={deleteArmed ? "armed" : ""}
           onClick={onDelete}
@@ -1914,7 +1955,57 @@ function TemplateResultPanel({
             : "Xóa kết quả local"}
         </button>
       </div>
+      {camundaStatus ? <p className="review-help">{camundaStatus}</p> : null}
     </div>
+  );
+}
+
+function RoleReviewQueue({
+  tasks,
+  onInspect,
+  onReview,
+}: {
+  tasks: CamundaReviewTask[];
+  onInspect: (documentId: string) => void;
+  onReview: (task: CamundaReviewTask, decision: string) => void;
+}) {
+  const groups = [
+    {
+      role: "employee" as const,
+      title: "Nhân viên / người nộp",
+      description: "Kiểm tra bản xem trước và dữ liệu trích xuất; xác nhận hoặc chuyển HCNS.",
+      actions: [["CONFIRMED", "Xác nhận chính xác"], ["UNRESOLVED", "Chuyển HCNS"]],
+    },
+    {
+      role: "hr" as const,
+      title: "HCNS",
+      description: "Đối chiếu tài liệu gốc và JSON local; chấp nhận, yêu cầu tải lại hoặc từ chối.",
+      actions: [["CONFIRMED", "Chấp nhận"], ["REQUEST_REUPLOAD", "Yêu cầu tải lại"], ["REJECTED", "Từ chối"]],
+    },
+  ];
+  return (
+    <section className="section role-review-section" id="roles">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">HUMAN REVIEW · LOCAL DEMO</p>
+          <h2>Phân luồng nhân viên và HCNS</h2>
+        </div>
+        <p>Chi tiết tài liệu chỉ mở trên localhost. Quyết định được gửi sang Camunda để lưu audit và điều phối bước tiếp theo.</p>
+      </div>
+      <div className="role-review-grid">
+        {groups.map((group) => {
+          const roleTasks = tasks.filter((task) => task.role === group.role);
+          return <article className="role-review-card" key={group.role}>
+            <header><span>{group.role === "employee" ? "01" : "02"}</span><div><h3>{group.title}</h3><p>{group.description}</p></div></header>
+            <strong className="role-count">{roleTasks.length} việc cần xử lý</strong>
+            {roleTasks.length ? <ul>{roleTasks.map((task) => <li key={task.taskId}>
+              <div><small>{task.documentType}</small><b>{task.taskName}</b><code>{task.documentId.slice(0, 8)}…</code></div>
+              <div className="role-actions"><button type="button" disabled={!task.inspectable} title={task.inspectable ? undefined : "Case này không có session local để xem chi tiết"} onClick={() => onInspect(task.documentId)}>{task.inspectable ? "Kiểm tra local" : "Không có session local"}</button>{group.actions.map(([decision, label]) => <button type="button" key={decision} onClick={() => onReview(task, decision)}>{label}</button>)}</div>
+            </li>)}</ul> : <p className="role-empty">Chưa có task ở bước này.</p>}
+          </article>;
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -1963,14 +2054,14 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const groundTruthDocumentExcluded =
     groundTruthReviewDocument?.disposition === "OUT_OF_SCOPE_BACK";
   const [evidenceMode, setEvidenceMode] =
-    useState<"overview" | "heldout" | "templates" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "external-dataset-policy-v2" | "ocr-ho-v2-shadow" | "ocr-ho-v2-diagnostic">(
+    useState<"overview" | "templates" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "ocr-ho-v2-shadow" | "ocr-ho-v2-diagnostic">(
       SHOW_OCR_HO_DIAGNOSTIC_GT
         ? "ocr-ho-v2-diagnostic"
         : SHOW_OCR_HO_SHADOW_UAT
         ? "ocr-ho-v2-shadow"
-        : SHOW_EXTERNAL_DATASET_REVIEW
-          ? "external-dataset"
-          : "templates",
+          : SHOW_EXTERNAL_DATASET_REVIEW
+            ? "external-dataset"
+          : "overview",
     );
   const [evidenceInspectorView, setEvidenceInspectorView] =
     useState<"fields" | "json">("fields");
@@ -1992,12 +2083,20 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [processingMode, setProcessingMode] =
     useState<"template" | "legacy">("template");
   const [ocrDocumentType, setOcrDocumentType] = useState<
-    "IDENTITY_CARD" | "CERTIFICATE"
+    | "CV"
+    | "EMPLOYMENT_CONTRACT"
+    | "CONTRACT_APPENDIX"
+    | "HR_DECISION"
+    | "IDENTITY_CARD"
+    | "CERTIFICATE"
   >("IDENTITY_CARD");
   const [supportedTemplates, setSupportedTemplates] =
     useState<SupportedTemplate[]>([]);
   const [templateResult, setTemplateResult] =
     useState<TemplateProcessingResult | null>(null);
+  const [camundaStatus, setCamundaStatus] = useState("");
+  const [camundaQueue, setCamundaQueue] = useState<CamundaReviewTask[]>([]);
+  const [camundaQueueStatus, setCamundaQueueStatus] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadPreviewUrl, setUploadPreviewUrl] = useState("");
   const [isDragging, setIsDragging] = useState(false);
@@ -2156,6 +2255,19 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       });
   };
 
+  const refreshCamundaQueue = () => {
+    fetch(`${API_BASE}/api/camunda/queue`)
+      .then((response) => {
+        if (!response.ok) throw new Error("Camunda queue unavailable");
+        return response.json() as Promise<{ queue: CamundaReviewTask[] }>;
+      })
+      .then((payload) => {
+        setCamundaQueue(payload.queue);
+        setCamundaQueueStatus("");
+      })
+      .catch(() => setCamundaQueueStatus("Chưa kết nối được Camunda local."));
+  };
+
   useEffect(() => {
     fetch(`${API_BASE}/health`)
       .then((response) => {
@@ -2174,6 +2286,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       .catch(() => setSupportedTemplates([]));
     refreshUserSessions();
     refreshTemplateSessions();
+    refreshCamundaQueue();
     if (!SHOW_OCR_HO_SHADOW_UAT) return;
     fetch(`${API_BASE}/phase14/benchmark`)
       .then((response) => {
@@ -2671,6 +2784,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     setUploadError("");
     setLoadedUserResult(null);
     setTemplateResult(null);
+    setCamundaStatus("");
     setDeleteArmed(false);
     const formData = new FormData();
     formData.append("file", uploadFile);
@@ -2728,6 +2842,68 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       setUploadError(error instanceof Error ? error.message : "Không thể xử lý file");
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const startCamundaCase = async () => {
+    const documentId = templateResult?.data.documentId;
+    if (!documentId) return;
+    setCamundaStatus("Đang tạo case Camunda local...");
+    try {
+      const response = await fetch(`${API_BASE}/api/camunda/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId }),
+      });
+      const payload = (await response.json()) as { error?: string; tasklistUrl?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Không thể tạo case Camunda");
+      setCamundaStatus("Đã tạo case. Mở Camunda Tasklist để xác nhận dữ liệu.");
+      refreshCamundaQueue();
+      if (payload.tasklistUrl) window.open(payload.tasklistUrl, "_blank", "noopener");
+    } catch (error) {
+      setCamundaStatus(error instanceof Error ? error.message : "Không thể tạo case Camunda");
+    }
+  };
+
+  const inspectCamundaDocument = async (documentId: string) => {
+    setActiveTemplateSessionId(documentId);
+    setCamundaQueueStatus("Đang mở bản gốc và JSON local...");
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/documents/result?id=${encodeURIComponent(documentId)}`,
+      );
+      if (!response.ok) throw new Error("Không tìm thấy session local của case này");
+      setUploadFile(null);
+      setUploadPreviewUrl("");
+      setLoadedUserResult(null);
+      setTemplateResult((await response.json()) as TemplateProcessingResult);
+      setProcessingMode("template");
+      setCamundaQueueStatus("");
+      window.location.hash = "upload";
+    } catch (error) {
+      setCamundaQueueStatus(
+        error instanceof Error ? error.message : "Không thể mở dữ liệu local",
+      );
+    }
+  };
+
+  const completeCamundaReview = async (
+    task: CamundaReviewTask,
+    decision: string,
+  ) => {
+    setCamundaQueueStatus("Đang gửi quyết định sang Camunda local...");
+    try {
+      const response = await fetch(`${API_BASE}/api/camunda/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId: task.taskId, role: task.role, decision }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Không thể hoàn thành task");
+      setCamundaQueueStatus("Đã ghi nhận. Camunda đang điều phối bước tiếp theo.");
+      refreshCamundaQueue();
+    } catch (error) {
+      setCamundaQueueStatus(error instanceof Error ? error.message : "Không thể hoàn thành task");
     }
   };
 
@@ -3183,6 +3359,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         </a>
         <nav aria-label="Điều hướng chính">
           <a href="#upload">OCR tài liệu thật</a>
+          <a href="#roles">Hàng đợi HITL</a>
           <a href="#explorer">Tài liệu &amp; CCCD</a>
           <a href="#phases">Policy</a>
           <a href="#next">Tiếp theo</a>
@@ -3267,6 +3444,13 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           </a>
         </div>
       </section>
+
+      <RoleReviewQueue
+        tasks={camundaQueue}
+        onInspect={inspectCamundaDocument}
+        onReview={completeCamundaReview}
+      />
+      {camundaQueueStatus ? <p className="camunda-queue-status">{camundaQueueStatus}</p> : null}
 
       <section className="section upload-section" id="upload">
         <div className="section-heading">
@@ -3637,7 +3821,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                     type="button"
                   >
                     <strong>Biểu mẫu HCNS</strong>
-                    <span>Office, PDF, TXT, ảnh scan</span>
+                    <span>DOCX/PDF theo mẫu đã cấu hình</span>
                   </button>
                   <button
                     aria-selected={processingMode === "legacy"}
@@ -3651,8 +3835,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                     role="tab"
                     type="button"
                   >
-                    <strong>OCR / IDP cũ</strong>
-                    <span>Chỉ dùng cho CCCD / CERTIFICATE</span>
+                    <strong>OCR / IDP local</strong>
+                    <span>CV, hợp đồng, quyết định, CCCD, chứng chỉ</span>
                   </button>
                 </div>
               ) : null}
@@ -3668,15 +3852,25 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               </div>
               {processingMode === "legacy" ? (
                 <label className="upload-scope-select">
-                  <span>OCR SCOPE</span>
+                  <span>LOẠI TÀI LIỆU SCAN</span>
                   <select
                     value={ocrDocumentType}
                     onChange={(event) =>
                       setOcrDocumentType(
-                        event.target.value as "IDENTITY_CARD" | "CERTIFICATE",
+                        event.target.value as
+                          | "CV"
+                          | "EMPLOYMENT_CONTRACT"
+                          | "CONTRACT_APPENDIX"
+                          | "HR_DECISION"
+                          | "IDENTITY_CARD"
+                          | "CERTIFICATE",
                       )
                     }
                   >
+                    <option value="CV">CV / hồ sơ ứng viên</option>
+                    <option value="EMPLOYMENT_CONTRACT">Hợp đồng lao động</option>
+                    <option value="CONTRACT_APPENDIX">Phụ lục hợp đồng</option>
+                    <option value="HR_DECISION">Quyết định nhân sự</option>
                     <option value="IDENTITY_CARD">CCCD / Identity card</option>
                     <option value="CERTIFICATE">Certificate / IELTS</option>
                   </select>
@@ -3720,8 +3914,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                   {uploadFile
                     ? `${(uploadFile.size / 1024 / 1024).toFixed(2)} MB`
                     : processingMode === "template"
-                      ? "DOCX, PDF native parser"
-                      : "CCCD/chứng chỉ: ảnh hoặc PDF scan; DOCX/PDF text: native parser"}
+                      ? "DOCX hoặc PDF theo biểu mẫu đã cấu hình"
+                      : "Ảnh/PDF scan: chọn đúng loại tài liệu; DOCX/XLSX/PDF có text: native parser"}
                 </p>
               </label>
               <div className="upload-consent">
@@ -3823,6 +4017,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                   deleteArmed={deleteArmed}
                   filename={documentPreviewFilename || "Tài liệu HCNS"}
                   onDelete={deleteTemplateSession}
+                  onStartCamunda={startCamundaCase}
+                  camundaStatus={camundaStatus}
                   result={templateResult}
                 />
               )}
@@ -4796,12 +4992,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         </div>
       </section>
 
-      <LocalBenchmarkPanel />
-
-      <M5LocalShadowPanel />
-
-      <M5Cam006SmokePanel />
-
       <section className="section" id="phases">
         <div className="section-heading">
           <div>
@@ -5120,12 +5310,12 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         <div className="section-heading">
           <div>
             <p className="eyebrow">LOCAL REAL-DOCUMENT EVIDENCE</p>
-            <h2>Biểu mẫu HCNS chuẩn và CCCD</h2>
+            <h2>Sáu family tài liệu HCNS</h2>
           </div>
           <p>
-            Chỉ hiển thị kết quả Template-first và bộ CCCD held-out mới nhất đã
-            evaluate-once trên localhost. Prediction, Ground Truth và metrics
-            được giữ trong boundary local-only.
+            Khu vực này hiển thị đủ sáu family active. Leave/OT có E2E thật;
+            bốn family còn lại hiển thị benchmark hoặc trạng thái HOLD theo
+            artifact hiện có, không trộn vào kết quả E2E.
           </p>
         </div>
         <div className="evidence-switch" role="tablist">
@@ -5163,7 +5353,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             role="tab"
             aria-selected={evidenceMode === "templates"}
           >
-            {templateSessions.length} đơn nghỉ phép &amp; tăng ca
+            E2E thật · Leave + OT
           </button>
           {SHOW_GROUND_TRUTH_REVIEW ? (
           <button
@@ -5175,7 +5365,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             {groundTruthReview?.documentCount ?? 0} CCCD mới đã Ground Truth
           </button>
           ) : null}
-          {SHOW_EXTERNAL_DATASET_REVIEW ? (
+          {SHOW_LEGACY_EXPLORER_TABS && SHOW_EXTERNAL_DATASET_REVIEW ? (
             <button
               className={evidenceMode === "external-dataset" ? "active" : ""}
               onClick={() => setEvidenceMode("external-dataset")}
@@ -5185,18 +5375,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               DATA-08 · 4 contract case review
             </button>
           ) : null}
-          {SHOW_EXTERNAL_DATASET_REVIEW ? (
-            <button
-              className={evidenceMode === "external-dataset-policy-v2" ? "active" : ""}
-              onClick={() => setEvidenceMode("external-dataset-policy-v2")}
-              role="tab"
-              aria-selected={evidenceMode === "external-dataset-policy-v2"}
-              type="button"
-            >
-              DATA-25 policy v2 audit
-            </button>
-          ) : null}
-          {SHOW_EXTERNAL_DATASET_REVIEW ? (
+          {SHOW_LEGACY_EXPLORER_TABS && SHOW_EXTERNAL_DATASET_REVIEW ? (
             <>
           <button
             className={evidenceMode === "external-dataset-prediction" ? "active" : ""}
@@ -5293,8 +5472,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           <ExternalDatasetPrediction />
         ) : SHOW_EXTERNAL_DATASET_REVIEW && evidenceMode === "external-dataset-prediction-v13" ? (
           <ExternalDatasetPrediction version="data13" />
-        ) : SHOW_EXTERNAL_DATASET_REVIEW && evidenceMode === "external-dataset-policy-v2" ? (
-          <ExternalDatasetPrediction version="policy-v2" />
         ) : SHOW_EXTERNAL_DATASET_REVIEW && evidenceMode === "external-dataset" ? (
           <ExternalDatasetReview />
         ) : evidenceMode === "templates" ? (

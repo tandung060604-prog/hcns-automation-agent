@@ -25,7 +25,7 @@ from hcns_agent.templates.model import ParsedTemplate, TemplateDetection
 
 
 class OvertimeRequestParser:
-    version = "1.0.0"
+    version = "1.1.0"
 
     def parse(
         self,
@@ -56,7 +56,7 @@ class OvertimeRequestParser:
         period = re.search(
             r"Thời\s+gian\s+đề\s+nghị\s*:\s*Từ\s+ngày\s+"
             r"(\d{1,2}/\d{1,2}/\d{4})\s+đến\s+hết\s+ngày\s+"
-            r"(\d{1,2}/\d{1,2}/\d{4}).*?tăng\s+thêm\s+"
+            r"(\d{1,2}/\d{1,2}/\d{4}).*?(?:tăng|làm)\s+thêm\s+"
             r"(\d+(?:[.,]\d+)?)\s+giờ\s+mỗi\s+ngày,\s+từ\s+"
             r"(\d{1,2})\s+giờ(?:\s+(\d{1,2})\s+phút)?\s+đến\s+"
             r"(\d{1,2})\s+giờ(?:\s+(\d{1,2})\s+phút)?.*?"
@@ -65,6 +65,34 @@ class OvertimeRequestParser:
             text,
             flags=re.IGNORECASE | re.DOTALL,
         )
+        single_day_period = None
+        if period is None:
+            single_day_period = re.search(
+                r"Thời\s+gian\s+đề\s+nghị\s*:\s*Ngày\s+"
+                r"(\d{1,2}/\d{1,2}/\d{4})\s*,?\s*"
+                r"(?:tăng|làm)\s+thêm\s+(\d+(?:[.,]\d+)?)\s+giờ\s*,?\s*"
+                r"từ\s+(\d{1,2})\s+giờ(?:\s+(\d{1,2})\s+phút)?\s+đến\s+"
+                r"(\d{1,2})\s+giờ(?:\s+(\d{1,2})\s+phút)?.*?"
+                r"tổng\s+thời\s+gian\s+dự\s+kiến\s+là\s+"
+                r"(\d+(?:[.,]\d+)?)\s+giờ",
+                text,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+        period_values: tuple[str | None, ...] | None = None
+        if period is not None:
+            period_values = period.groups()
+        elif single_day_period is not None:
+            single_values = single_day_period.groups()
+            period_values = (
+                single_values[0],
+                single_values[0],
+                single_values[1],
+                single_values[2],
+                single_values[3],
+                single_values[4],
+                single_values[5],
+                single_values[6],
+            )
         employee = re.search(
             r"Tôi\s+là\s*:\s*(.+?)\s*-\s*Chức\s+vụ\s*:\s*([^\n]+)",
             text,
@@ -85,7 +113,7 @@ class OvertimeRequestParser:
             period = period or re.search(
                 r"Thi\s+gian\s+.{0,12}ngh\s*:\s*T.\s+ngày\s+"
                 r"(\d{1,2}/\d{1,2}/\d{4}).*?ngày\s+"
-                r"(\d{1,2}/\d{1,2}/\d{4}).*?tăng\s+thêm\s+"
+                r"(\d{1,2}/\d{1,2}/\d{4}).*?(?:tăng|làm)\s+thêm\s+"
                 r"(\d+(?:[.,]\d+)?)\s+gi.{0,3}mi\s+ngày.*?t.\s+"
                 r"(\d{1,2})\s+gi(?:\s+(\d{1,2})\s+phút)?.*?"
                 r"(?:đ|d).{0,3}\s+(\d{1,2})\s+gi"
@@ -117,12 +145,24 @@ class OvertimeRequestParser:
             "laborContractDate": iso_date(contract.group(2)) if contract else None,
             "standardWorkSchedule": strip_terminal(employment.group(1)) if employment else None,
             "reason": strip_terminal(employment.group(2)) if employment else None,
-            "startDate": iso_date(period.group(1)) if period else None,
-            "endDate": iso_date(period.group(2)) if period else None,
-            "overtimeHoursPerDay": number_value(period.group(3)) if period else None,
-            "overtimeStartTime": clock_time(period.group(4), period.group(5)) if period else None,
-            "overtimeEndTime": clock_time(period.group(6), period.group(7)) if period else None,
-            "totalOvertimeHours": number_value(period.group(8)) if period else None,
+            "startDate": iso_date(period_values[0]) if period_values else None,
+            "endDate": iso_date(period_values[1]) if period_values else None,
+            "overtimeHoursPerDay": (
+                number_value(period_values[2]) if period_values else None
+            ),
+            "overtimeStartTime": (
+                clock_time(period_values[3], period_values[4])
+                if period_values
+                else None
+            ),
+            "overtimeEndTime": (
+                clock_time(period_values[5], period_values[6])
+                if period_values
+                else None
+            ),
+            "totalOvertimeHours": (
+                number_value(period_values[7]) if period_values else None
+            ),
             "workContent": field(
                 "workContent",
                 r"Nội\s+dung\s+công\s+việc\s*:\s*([\s\S]+?)"

@@ -1,6 +1,6 @@
 {
   "schemaVersion": "template-version-governance/1.0.0",
-  "lifecycle": "FROZEN_V1",
+  "lifecycle": "FROZEN_V2",
   "templates": [
     {
       "templateId": "leave-request-v1",
@@ -25,7 +25,7 @@
       "documentType": "OVERTIME_REQUEST",
       "version": "1.0",
       "schemaRef": "schemas/templates/overtime_request_v1.schema.json",
-      "parserVersion": "1.0.0",
+      "parserVersion": "1.1.0",
       "lifecycle": "FROZEN",
       "supportedFileTypes": ["docx", "pdf"],
       "requiredFields": [
@@ -43,42 +43,45 @@
       ]
     },
     {
-      "templateId": "probation-contract-v1",
+      "templateId": "probation-contract-v2",
       "documentType": "EMPLOYMENT_CONTRACT",
-      "version": "1.0",
-      "schemaRef": "schemas/templates/probation_contract_v1.schema.json",
-      "parserVersion": "1.0.0",
+      "version": "2.0",
+      "schemaRef": "schemas/templates/probation_contract_v2.schema.json",
+      "parserVersion": "2.0.0",
       "lifecycle": "FROZEN",
       "supportedFileTypes": ["docx", "pdf"],
       "requiredFields": [
-        "employeeName", "employeeId", "jobTitle", "salary",
-        "effectiveDate", "probationEndDate", "employerName"
+        "contract_number", "contract_sign_date", "effective_date",
+        "probation_end_date", "employer_name", "employer_representative",
+        "employee_name", "employee_id_number", "job_title", "workplace",
+        "weekly_hours", "probation_salary_monthly", "allowances_summary",
+        "salary_payment_schedule"
       ]
     },
     {
-      "templateId": "cv-v1",
+      "templateId": "cv-v2",
       "documentType": "CV",
-      "version": "1.0",
-      "schemaRef": "schemas/templates/cv_v1.schema.json",
-      "parserVersion": "1.0.0",
+      "version": "2.0",
+      "schemaRef": "schemas/templates/cv_v2.schema.json",
+      "parserVersion": "2.0.0",
       "lifecycle": "FROZEN",
       "supportedFileTypes": ["docx", "pdf"],
       "requiredFields": [
-        "fullName", "headline", "email", "phoneNumber", "address",
-        "education", "experience", "skills"
+        "full_name", "headline", "email", "phone_number", "address",
+        "desired_role", "years_experience", "experience", "skills", "education"
       ]
     },
     {
-      "templateId": "ielts-certificate-v1",
+      "templateId": "ielts-certificate-v2",
       "documentType": "CERTIFICATE",
-      "version": "1.0",
-      "schemaRef": "schemas/templates/ielts_certificate_v1.schema.json",
-      "parserVersion": "1.0.0",
+      "version": "2.0",
+      "schemaRef": "schemas/templates/ielts_certificate_v2.schema.json",
+      "parserVersion": "2.0.0",
       "lifecycle": "FROZEN",
       "supportedFileTypes": ["pdf", "png", "jpg", "jpeg"],
       "requiredFields": [
-        "recipientName", "credentialId", "credentialType", "overallScore",
-        "issueDate"
+        "recipient_name", "credential_id", "credential_type", "overall_score",
+        "issue_date"
       ]
     },
     {
@@ -95,6 +98,14 @@
       ]
     }
   ],
+  "compatibility": {
+    "canonicalSchemaVersion": "2.0.0",
+    "legacyTemplateIds": {
+      "cv-v1": "cv-v2",
+      "probation-contract-v1": "probation-contract-v2",
+      "ielts-certificate-v1": "ielts-certificate-v2"
+    }
+  },
   "uat": {
     "formats": ["docx", "pdf", "image", "scan_pdf"],
     "gates": {

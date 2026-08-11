@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
+from argparse import Namespace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
 
 from scripts.phase11_6_cccd_heldout import (
+    ingest,
     persist_phase11_5_snapshots,
     select_novel_sources,
     validate_authorization,
@@ -52,6 +56,59 @@ def test_authorization_must_be_explicit(tmp_path: Path) -> None:
 
     with pytest.raises(PermissionError):
         validate_authorization(tmp_path)
+
+
+def test_heldout_ingest_declares_identity_document(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "source" / "CCCD-HO-001.png"
+    source.parent.mkdir()
+    digest = image(source, (1, 2, 3))
+    write_json(
+        tmp_path / "authorization.json",
+        {
+            "authorizedLocalDocumentsOnly": True,
+            "processingRightsConfirmed": True,
+            "documentOwnerConsentOrLawfulBasisConfirmed": True,
+            "rightsBasis": "synthetic fixture",
+        },
+    )
+    manifest = {
+        "documentCount": 1,
+        "records": [
+            {
+                "sessionId": "session-1",
+                "documentId": "CCCD-HO-001",
+                "sourceFormat": "PNG",
+                "sourcePath": "source/CCCD-HO-001.png",
+                "sourceSha256": digest,
+            }
+        ],
+    }
+    write_json(tmp_path / "manifest_private.json", manifest)
+    (tmp_path / "locks").mkdir()
+    manifest_digest = hashlib.sha256(
+        (tmp_path / "manifest_private.json").read_bytes()
+    ).hexdigest()
+    (tmp_path / "locks" / "manifest_private.sha256").write_text(
+        f"{manifest_digest}  manifest_private.json\n",
+        encoding="ascii",
+    )
+    calls: list[str | None] = []
+
+    class FakeService:
+        def __init__(self, _: Path) -> None:
+            pass
+
+        def process_upload(self, *args: object) -> None:
+            calls.append(args[4] if len(args) > 4 else None)
+
+    monkeypatch.setitem(
+        sys.modules, "serve_dashboard_api", SimpleNamespace(UserOCRService=FakeService)
+    )
+
+    assert ingest(Namespace(dataset_root=tmp_path)) == 0
+    assert calls == ["IDENTITY_DOCUMENT"]
 
 
 def test_fresh_heldout_baseline_is_frozen_before_candidate(
