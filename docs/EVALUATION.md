@@ -1,5 +1,14 @@
 # Evaluation
 
+## M5-CAM-004 synthetic Camunda manual-review rehearsal (2026-08-11)
+
+Đây là workflow safety rehearsal, không phải accuracy evaluation. Camunda 7.13
+loopback xử lý 2 fixture synthetic leave/overtime: cả hai đạt UserReview và
+hoàn tất. Process start local `2`; manual review `2/2`; auto-continue, raw
+exposure, duplicate result, unreconciled case và real side effect đều `0`.
+Scalar/reference handoff và rollback fail-closed đều pass; Ground Truth và
+evaluate-once không được chạm tới, real cohort vẫn đóng.
+
 ## M5-CAM-003 post-merge localhost acceptance (2026-08-10)
 
 Checkpoint này xác nhận deployment local sau merge, không phải accuracy

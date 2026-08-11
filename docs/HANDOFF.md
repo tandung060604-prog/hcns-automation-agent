@@ -1,5 +1,18 @@
 # Handoff
 
+## M5-CAM-004 synthetic Camunda manual-review rehearsal (DONE / PASS, 2026-08-11)
+
+- Camunda 7.13 local loopback đã deploy BPMN/DMN và chạy đúng 2 fixture
+  synthetic: leave và overtime.
+- 2/2 case tới `UserReview` và hoàn tất; manual review 2/2, process start local
+  2, raw exposure/auto-continue/duplicate/unreconciled/real side effect đều 0.
+- Handoff dùng Phase15 scalar/reference boundary, chỉ opaque reference, không
+  truyền field/OCR/path; `autoContinueEnabled=false`.
+- Rollback probe `autoContinueCount > 0` bị chặn fail-closed: rollback required,
+  không được complete. Report private create-only, aggregate-only.
+- Không đọc Ground Truth/DATA-24, không mở real cohort, HRIS/notification chỉ
+  simulated trong local sandbox.
+
 ## M5-CAM-003 post-merge localhost acceptance (DONE / PASS, 2026-08-10)
 
 - PR #24 đã merge tại `aee3ffd`; checkout `main` sạch và đồng bộ
