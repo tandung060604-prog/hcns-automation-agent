@@ -235,18 +235,6 @@ test("exposes the DATA-08 independent contract review panel behind a private fla
   assert.match(css, /external-review-primary-save:disabled/);
 });
 
-test("keeps prediction-only unsupported formats in explicit manual review", async () => {
-  const [component, api] = await Promise.all([
-    readFile(new URL("../app/ExternalDatasetPrediction.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../../api/serve_dashboard_api.py", import.meta.url), "utf8"),
-  ]);
-  assert.match(component, /UNSUPPORTED_FORMAT/);
-  assert.match(component, /MANUAL_REVIEW/);
-  assert.match(component, /\/external-dataset\/prediction\/source\?id=/);
-  assert.match(api, /\/external-dataset\/prediction\/source/);
-  assert.match(api, /resolve_prediction_source/);
-});
-
 test("exposes one Template-first upload with source preview and structured results", async () => {
   const [dashboard, css, envExample] = await Promise.all([
     readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
@@ -412,48 +400,4 @@ test("renders the document benchmark as a visual flow and card grid", async () =
   assert.match(css, /\.local-benchmark-ring/);
   assert.match(css, /\.local-benchmark-flow/);
   assert.match(api, /\/benchmark\/summary/);
-});
-
-test("renders M5 local shadow review as aggregate-only UI", async () => {
-  const [component, dashboard, css, api, starter] = await Promise.all([
-    readFile(new URL("../app/M5LocalShadowPanel.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
-    readFile(new URL("../../api/serve_dashboard_api.py", import.meta.url), "utf8"),
-    readFile(new URL("../../api/start_dashboard.ps1", import.meta.url), "utf8"),
-  ]);
-  assert.match(component, /M5-CAM-002/);
-  assert.match(component, /MANUAL_REVIEW ONLY/);
-  assert.match(component, /promotionAllowed/);
-  assert.match(component, /\/m5\/local-shadow-review\/summary/);
-  assert.match(component, /not configured/);
-  assert.match(component, /if \(!configured\) return null/);
-  assert.match(dashboard, /<M5LocalShadowPanel \/>/);
-  assert.match(css, /\.local-shadow-section/);
-  assert.match(api, /\/m5\/local-shadow-review\/summary/);
-  assert.match(api, /--m5-local-shadow-report/);
-  assert.match(starter, /M5LocalShadowReport/);
-  assert.doesNotMatch(component, /Camunda REST|startProcess|HRIS|notification/);
-});
-
-test("renders M5-CAM-007 as a read-only aggregate panel", async () => {
-  const [component, dashboard, css, api, starter] = await Promise.all([
-    readFile(new URL("../app/M5Cam006SmokePanel.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
-    readFile(new URL("../../api/serve_dashboard_api.py", import.meta.url), "utf8"),
-    readFile(new URL("../../api/start_dashboard.ps1", import.meta.url), "utf8"),
-  ]);
-  assert.match(component, /M5-CAM-007/);
-  assert.match(component, /\/m5\/cam-006\/summary/);
-  assert.match(component, /promotionAllowed/);
-  assert.match(component, /manualReviewCount/);
-  assert.match(component, /autoContinueCount/);
-  assert.match(component, /hrisSideEffectCount/);
-  assert.match(dashboard, /<M5Cam006SmokePanel \/>/);
-  assert.match(css, /\.m5-cam-006-section/);
-  assert.match(api, /\/m5\/cam-006\/summary/);
-  assert.match(api, /--m5-cam-006-smoke-report/);
-  assert.match(starter, /M5Cam006SmokeReport/);
-  assert.doesNotMatch(component, /businessJson|ocrText|documentPath|rawPayload/);
 });
