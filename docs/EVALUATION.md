@@ -1,5 +1,15 @@
 # Evaluation
 
+## M5-CAM-005 scalar/opaque handoff contract regression (2026-08-11)
+
+Đây là contract/safety regression, không phải accuracy evaluation. Hai fixture
+synthetic leave/overtime đi qua API fixture → Phase15 bridge và dừng trước
+Camunda process. `2/2` pass scalar-only, opaque-reference-only,
+`MANUAL_REVIEW`, `autoContinueEnabled=false`; `7/7` field/OCR/path/raw payload
+bị từ chối; schema whitelist lỗi `0`, non-scalar `0`, idempotency mismatch `0`.
+Camunda process start và HRIS/notification side effect đều `0`; Ground Truth và
+evaluate-once không được chạm tới; `promotionAllowed=false`.
+
 ## M5-CAM-004 synthetic Camunda manual-review rehearsal (2026-08-11)
 
 Đây là workflow safety rehearsal, không phải accuracy evaluation. Camunda 7.13

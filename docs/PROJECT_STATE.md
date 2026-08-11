@@ -1,5 +1,20 @@
 # Project State
 
+## M5-CAM-005 scalar/opaque handoff contract regression (2026-08-11)
+
+M5-CAM-005 đã kiểm tra contract UI/API giả lập → Phase15 bridge → Camunda
+boundary bằng đúng hai fixture synthetic `LEAVE_REQUEST` và `OVERTIME_REQUEST`,
+không start Camunda process. Cả `2/2` projection giữ scalar-only,
+opaque-reference-only, `MANUAL_REVIEW` và `autoContinueEnabled=false`.
+
+Regression từ chối `7/7` tên/payload nhạy cảm gồm field, OCR, path và raw
+payload; schema whitelist lỗi `0`, non-scalar `0`, idempotency mismatch `0`,
+Camunda process start `0`, HRIS/notification side effect `0`. Ground Truth và
+evaluate-once không được đọc/chạm tới; `promotionAllowed=false`.
+
+Artifact aggregate-only private:
+`C:\\Camunda\\private-data\\m5-cam-005\\reports\\m5-cam-005-contract-regression-20260811-v2.json`.
+
 ## M5-CAM-004 synthetic Camunda manual-review rehearsal (2026-08-11)
 
 Đã chạy lại hai fixture synthetic `LEAVE_REQUEST` và `OVERTIME_REQUEST` trên
