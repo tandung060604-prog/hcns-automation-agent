@@ -105,6 +105,33 @@ _SENSITIVE_FIELDS_BY_TEMPLATE = {
         {"idNumber", "fullName", "dateOfBirth", "placeOfOrigin", "placeOfResidence"}
     ),
 }
+_ROUTING_CRITICAL_FIELDS_BY_TEMPLATE = {
+    "probation-contract-v2": frozenset(
+        {
+            "effective_date",
+            "probation_end_date",
+            "employer_name",
+            "employee_name",
+            "job_title",
+            "probation_salary_monthly",
+        }
+    ),
+    "cv-v2": frozenset(
+        {
+            "full_name",
+            "headline",
+            "email",
+            "phone_number",
+            "address",
+            "education",
+            "experience",
+            "skills",
+        }
+    ),
+    "ielts-certificate-v2": frozenset(
+        {"recipient_name", "credential_id", "credential_type", "overall_score", "issue_date"}
+    ),
+}
 M4_LONG_RUNNING_LOCK_POLICY = LockExtensionPolicy(
     topic_names=frozenset({"document_parse_content"}),
     new_duration_ms=180_000,
@@ -788,7 +815,10 @@ def _build_template_quality_projection(
 
     missing_fields = set(result.validation.missing_fields)
     required_fields = set(result.detection.definition.required_fields)
-    missing_required = bool(missing_fields & required_fields)
+    critical_fields = _ROUTING_CRITICAL_FIELDS_BY_TEMPLATE.get(
+        template_id, frozenset(required_fields)
+    )
+    missing_required = bool(missing_fields & critical_fields)
     validation_errors = set(result.validation.validation_errors)
     validation_codes = {
         error.partition(":")[0]
