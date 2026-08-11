@@ -1,5 +1,17 @@
 # Evaluation
 
+## M5-CAM-007 localhost UI read-only smoke aggregate (2026-08-11)
+
+This is a safety/UI checkpoint, not an accuracy evaluation. The localhost UI reads
+the existing M5-CAM-006 aggregate through GET `/m5/cam-006/summary`; the API
+whitelist excludes business payloads, fields, OCR, paths, and PII, while POST and
+DELETE are rejected. It reports fixture/bridge counts, scalar/opaque-reference
+status, manual-review and auto-continue counters, and side-effect counters.
+
+GroundTruth and evaluate-once are not read or changed. Camunda, HRIS, notification,
+and real-cohort actions remain disabled; `promotionAllowed=false`. Web build and 17
+rendered tests, 175 Python unittest cases, and focused API tests pass.
+
 ## M5-CAM-006 localhost API → Phase15 bridge smoke (2026-08-11)
 
 Đây là read-only contract smoke, không phải accuracy evaluation. Loopback GET

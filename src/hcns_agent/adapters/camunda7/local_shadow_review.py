@@ -53,6 +53,32 @@ _REPORT_KEYS = (
     "containsRawFieldValues",
     "promotionAllowed",
 )
+_M5_CAM_006_REPORT_KEYS = (
+    "milestone",
+    "evaluationKind",
+    "mode",
+    "passed",
+    "fixtureCount",
+    "getRequestCount",
+    "postRequestCount",
+    "httpMethodPolicy",
+    "phase15BridgeProjectionCount",
+    "manualReviewCount",
+    "autoContinueCount",
+    "scalarOnly",
+    "opaqueReferenceOnly",
+    "schemaWhitelistErrorCount",
+    "nonScalarValueCount",
+    "sourceMutationCount",
+    "camundaProcessStartAttempts",
+    "hrisSideEffectCount",
+    "notificationSideEffectCount",
+    "groundTruthUsed",
+    "evaluateOnceArtifactTouched",
+    "realCohortOpened",
+    "containsRawFieldValues",
+    "promotionAllowed",
+)
 
 
 class LocalShadowReviewError(ValueError):
@@ -285,6 +311,26 @@ def load_shadow_review_report(path: str) -> dict[str, object]:
     if payload.get("containsRawFieldValues") is not False:
         raise LocalShadowReviewError("shadow report is not aggregate-only")
     return {key: payload[key] for key in _REPORT_KEYS if key in payload}
+
+
+def load_m5_cam_006_smoke_report(path: str) -> dict[str, object]:
+    """Read only the safe aggregate surface of the M5-CAM-006 smoke report."""
+
+    with open(path, encoding="utf-8") as source:
+        payload = json.load(source)
+    if not isinstance(payload, dict):
+        raise LocalShadowReviewError("M5-CAM-006 smoke report root must be an object")
+    if payload.get("evaluationKind") != "localhost-api-phase15-bridge-read-only-smoke":
+        raise LocalShadowReviewError("unexpected M5-CAM-006 smoke report kind")
+    if payload.get("containsRawFieldValues") is not False:
+        raise LocalShadowReviewError("M5-CAM-006 smoke report is not aggregate-only")
+    if payload.get("promotionAllowed") is not False:
+        raise LocalShadowReviewError("M5-CAM-006 smoke report is promotion-enabled")
+    if payload.get("postRequestCount") != 0:
+        raise LocalShadowReviewError("M5-CAM-006 smoke report is not GET-only")
+    if payload.get("realCohortOpened") is not False:
+        raise LocalShadowReviewError("M5-CAM-006 smoke report opened a real cohort")
+    return {key: payload[key] for key in _M5_CAM_006_REPORT_KEYS if key in payload}
 
 
 def _opaque(value: object, name: str) -> str:

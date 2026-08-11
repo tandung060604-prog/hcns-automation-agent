@@ -1,5 +1,18 @@
 # Handoff
 
+## M5-CAM-007 localhost UI read-only smoke aggregate (DONE / PASS, 2026-08-11)
+
+- `/workspace` renders an aggregate-only M5-CAM-006 panel using GET
+  `/m5/cam-006/summary`; the route rejects POST and DELETE with 405.
+- Displayed values are limited to fixture/bridge counts, scalar and opaque-reference
+  flags, manual-review/auto-continue, whitelist, source-mutation, and side-effect
+  counters. Business payloads, fields, OCR, paths, and PII are not exposed.
+- GroundTruth/evaluate-once are not read, `promotionAllowed=false`, and no Camunda,
+  HRIS, notification, or real-cohort action is started. Existing private report is
+  read-only; no private artifact is modified.
+- Validation: 175 Python unittest cases, 5 focused API pytest cases, web build and
+  17 rendered tests pass; lint has no errors (existing warnings only).
+
 ## M5-CAM-006 localhost API → Phase15 bridge smoke (DONE / PASS, 2026-08-11)
 
 - Đã chạy loopback API read-only với hai UUID fixture synthetic leave/overtime;
