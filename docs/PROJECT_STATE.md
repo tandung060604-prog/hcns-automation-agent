@@ -1,5 +1,12 @@
 # Project State
 
+## M5-CAM-008 UI status cleanup (2026-08-11)
+
+The optional M5-CAM-002 local shadow panel now stays hidden when its aggregate
+report is simply not configured. Other API/runtime errors remain visible. This
+prevents an optional legacy panel from looking like a dashboard-wide failure;
+M5-CAM-007 remains unchanged.
+
 ## M5-CAM-007 localhost UI read-only smoke aggregate (2026-08-11)
 
 The `/workspace` dashboard now shows the existing M5-CAM-006 smoke report through

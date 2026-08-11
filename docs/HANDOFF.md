@@ -1,5 +1,11 @@
 # Handoff
 
+## M5-CAM-008 UI status cleanup (DONE / LOCAL, 2026-08-11)
+
+- M5-CAM-002 now hides itself for the expected 404 “report not configured” state.
+- Unexpected API failures still render a warning; M5-CAM-007 read-only smoke
+  aggregate behavior is unchanged.
+
 ## M5-CAM-007 localhost UI read-only smoke aggregate (DONE / PASS, 2026-08-11)
 
 - `/workspace` renders an aggregate-only M5-CAM-006 panel using GET
