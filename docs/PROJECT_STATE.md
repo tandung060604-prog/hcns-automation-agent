@@ -1,5 +1,18 @@
 # Project State
 
+## M5-CAM-006 localhost API → Phase15 bridge read-only smoke (2026-08-11)
+
+Smoke test local loopback bằng hai fixture synthetic Phase15 leave/overtime:
+GET `/user/phase15-business` đọc Business JSON rồi chuyển qua Phase15
+Camunda bridge. Cả `2/2` projection giữ scalar-only, opaque-reference-only,
+`MANUAL_REVIEW`, `autoContinueEnabled=false`; whitelist lỗi `0`,
+non-scalar `0`, source mutation `0`.
+
+Không có POST, Camunda process start, HRIS/notification side effect hoặc real
+cohort. Ground Truth/evaluate-once không được đọc; `promotionAllowed=false`.
+Artifact aggregate-only private:
+`C:\\Camunda\\private-data\\m5-cam-006\\reports\\m5-cam-006-api-bridge-smoke-20260811-v1.json`.
+
 ## M5-CAM-005 scalar/opaque handoff contract regression (2026-08-11)
 
 M5-CAM-005 đã kiểm tra contract UI/API giả lập → Phase15 bridge → Camunda
