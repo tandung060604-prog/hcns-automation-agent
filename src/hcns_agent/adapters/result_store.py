@@ -11,6 +11,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
+from hcns_agent.adapters.file_lock import exclusive_file_lock
 from hcns_agent.domain.canonical import ResultReference
 from hcns_agent.domain.documents import (
     DocumentType,
@@ -69,67 +70,71 @@ class JsonFileResultStore:
             ) from error
 
     def save(self, result: IdpResult, *, idempotency_key: str) -> StoredDocumentResult:
-        existing = self.find_by_idempotency_key(idempotency_key)
-        if existing is not None:
-            return existing
+        # ponytail: one local lock serializes writes; use per-key locks if throughput matters.
+        with exclusive_file_lock(self._root / ".write.lock"):
+            existing = self.find_by_idempotency_key(idempotency_key)
+            if existing is not None:
+                return existing
 
-        document = result.canonical_document
-        storage_key = sha256(f"{document.document_id}:{idempotency_key}".encode()).hexdigest()
-        document_path = self._documents / f"{storage_key}.json"
-        document_payload = json.dumps(
-            asdict(result),
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            default=_json_default,
-        ).encode("utf-8")
-        checksum = sha256(document_payload).hexdigest()
-        reference = ResultReference(
-            uri=f"document-store://{storage_key}",
-            checksum_sha256=checksum,
-            schema_version=result.schema_version,
-            storage_version="json-v1",
-        )
-        index_payload = {
-            "documentId": document.document_id,
-            "sourceFormat": document.source_format.value,
-            "parseStatus": document.parse_status.value,
-            "documentType": result.classification.document_type.value,
-            "qualityStatus": result.quality.status.value,
-            "reviewRequired": result.quality.review_required,
-            "schemaVersion": result.schema_version,
-            "storageVersion": reference.storage_version,
-            "uri": reference.uri,
-            "checksumSha256": checksum,
-        }
-        try:
-            _atomic_write(document_path, document_payload)
-            _atomic_write(
-                self._index_path(idempotency_key),
-                json.dumps(
-                    index_payload,
-                    sort_keys=True,
-                    separators=(",", ":"),
-                ).encode("utf-8"),
+            document = result.canonical_document
+            storage_key = sha256(
+                f"{document.document_id}:{idempotency_key}".encode()
+            ).hexdigest()
+            document_path = self._documents / f"{storage_key}.json"
+            document_payload = json.dumps(
+                asdict(result),
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                default=_json_default,
+            ).encode("utf-8")
+            checksum = sha256(document_payload).hexdigest()
+            reference = ResultReference(
+                uri=f"document-store://{storage_key}",
+                checksum_sha256=checksum,
+                schema_version=result.schema_version,
+                storage_version="json-v1",
             )
-        except OSError as error:
-            raise DocumentIntakeError(
-                IntakeErrorCode.STORAGE_FAILED,
-                "IDP result could not be persisted",
-                kind=ErrorKind.TECHNICAL,
-                retryable=True,
-            ) from error
+            index_payload = {
+                "documentId": document.document_id,
+                "sourceFormat": document.source_format.value,
+                "parseStatus": document.parse_status.value,
+                "documentType": result.classification.document_type.value,
+                "qualityStatus": result.quality.status.value,
+                "reviewRequired": result.quality.review_required,
+                "schemaVersion": result.schema_version,
+                "storageVersion": reference.storage_version,
+                "uri": reference.uri,
+                "checksumSha256": checksum,
+            }
+            try:
+                _atomic_write(document_path, document_payload)
+                _atomic_write(
+                    self._index_path(idempotency_key),
+                    json.dumps(
+                        index_payload,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8"),
+                )
+            except OSError as error:
+                raise DocumentIntakeError(
+                    IntakeErrorCode.STORAGE_FAILED,
+                    "IDP result could not be persisted",
+                    kind=ErrorKind.TECHNICAL,
+                    retryable=True,
+                ) from error
 
-        return StoredDocumentResult(
-            reference=reference,
-            document_id=document.document_id,
-            source_format=document.source_format,
-            parse_status=document.parse_status,
-            document_type=result.classification.document_type,
-            quality_status=result.quality.status,
-            review_required=result.quality.review_required,
-            schema_version=result.schema_version,
-        )
+            return StoredDocumentResult(
+                reference=reference,
+                document_id=document.document_id,
+                source_format=document.source_format,
+                parse_status=document.parse_status,
+                document_type=result.classification.document_type,
+                quality_status=result.quality.status,
+                review_required=result.quality.review_required,
+                schema_version=result.schema_version,
+            )
 
     def _index_path(self, idempotency_key: str) -> Path:
         key_hash = sha256(idempotency_key.encode("utf-8")).hexdigest()

@@ -1826,7 +1826,7 @@ footer { display: flex; justify-content: space-between; padding: 26px clamp(24px
 
 .vinhris-logo { display: inline-flex; align-items: center; gap: 10px; color: var(--vin-ink); }
 .vinhris-logo-mark { display: grid; place-items: center; width: 35px; height: 35px; border-radius: 9px; background: var(--vin-red); color: #fff7ec; }
-.vinhris-logo-mark svg { width: 27px; height: 27px; fill: currentColor; }
+.vinhris-logo-mark b { display: grid; width: 100%; height: 100%; place-items: center; color: currentColor; font-size: 20px; font-weight: 800; letter-spacing: -.12em; line-height: 1; }
 .vinhris-logo-cut { fill: var(--vin-red); }
 .vinhris-logo-sun { fill: var(--vin-gold); }
 .vinhris-logo-signal { fill: none; stroke: var(--vin-red); stroke-linecap: round; stroke-width: 1.2; }
@@ -1997,6 +1997,131 @@ footer { display: flex; justify-content: space-between; padding: 26px clamp(24px
   .vinhris-trust { gap: 46px; }
   .vinhris-footer { flex-wrap: wrap; gap: 14px 20px; }
   .vinhris-footer > span { width: 100%; order: 3; }
+}
+
+/* Operations workspace: restrained enterprise styling for the internal HCNS flow. */
+.operations-site {
+  --ops-red: #a61e31;
+  --ops-red-deep: #7b1424;
+  --ops-gold: #b78a2d;
+  --ops-ink: #1f2723;
+  --ops-muted: #5d6861;
+  --ops-paper: #f5f5f1;
+  --ops-panel: #fffefa;
+  --ops-line: #d7ddd6;
+  background: var(--ops-paper);
+  color: var(--ops-ink);
+}
+
+.operations-site .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  min-height: 68px;
+  padding: 0 clamp(24px, 6vw, 88px);
+  border-bottom: 1px solid var(--ops-line);
+  background: rgba(255, 254, 250, .94);
+  box-shadow: 0 4px 18px rgba(38, 42, 37, .05);
+  backdrop-filter: blur(12px);
+}
+
+.operations-site .brand { gap: 9px; color: var(--ops-ink); font-size: 15px; font-weight: 760; letter-spacing: -.025em; }
+.operations-site .brand-mark {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 225, 130, .7);
+  border-radius: 9px;
+  background: var(--ops-red);
+  box-shadow: inset 0 0 0 1px rgba(111, 12, 30, .25);
+  color: #fff8df;
+  font-size: 16px;
+  font-weight: 800;
+}
+.operations-site .brand small { margin-left: 2px; padding-left: 9px; border-left: 1px solid var(--ops-line); color: var(--ops-muted); font: 700 9px/1 var(--font-geist-mono), monospace; letter-spacing: .1em; }
+.operations-site .topbar nav { gap: 23px; margin-left: 34px; }
+.operations-site .topbar nav a { color: #526058; font-size: 12px; font-weight: 650; }
+.operations-site .topbar nav a:hover { color: var(--ops-red); }
+.operations-site .live { border-color: #cfd9d0; background: #fbfdfb; color: #466052; font-size: 11px; }
+.operations-site .live::before { background: #4d9a68; }
+
+.operations-site .hero {
+  min-height: auto;
+  padding: clamp(58px, 7vw, 98px) clamp(24px, 8vw, 128px) clamp(62px, 8vw, 106px);
+  background:
+    linear-gradient(112deg, rgba(255, 254, 250, .98) 0%, rgba(255, 254, 250, .91) 57%, rgba(245, 238, 218, .82) 100%),
+    linear-gradient(90deg, transparent 0 93%, rgba(166, 30, 49, .06) 93% 100%);
+  border-bottom: 1px solid var(--ops-line);
+}
+.operations-site .hero-copy { max-width: 790px; }
+.operations-site .eyebrow, .operations-site .section-eyebrow { color: var(--ops-red); font-weight: 780; letter-spacing: .13em; }
+.operations-site .hero h1 { max-width: 760px; font-size: clamp(42px, 5.3vw, 72px); font-weight: 680; line-height: .98; letter-spacing: -.065em; }
+.operations-site .hero h1 span { color: var(--ops-red-deep); }
+.operations-site .hero-lead { max-width: 650px; color: var(--ops-muted); font-size: clamp(16px, 1.7vw, 20px); line-height: 1.55; }
+.operations-site .hero-feature-list { gap: 11px; color: #33443a; font-size: 14px; font-weight: 620; }
+.operations-site .hero-feature-list span { padding-left: 12px; border-left: 2px solid var(--ops-gold); }
+.operations-site .hero-feature-list span::before { display: none; }
+.operations-site .primary-button { background: var(--ops-red); box-shadow: 0 8px 18px rgba(126, 19, 37, .18); }
+.operations-site .primary-button:hover { background: var(--ops-red-deep); }
+.operations-site .text-button { color: #314038; }
+.operations-site .text-button span, .operations-site .text-button:hover { color: var(--ops-red); }
+.operations-site .hero-product-frame { border-color: var(--ops-line); border-radius: 14px; background: #fffefa; box-shadow: 0 20px 50px rgba(35, 43, 37, .1); }
+.operations-site .hero-product figcaption { color: var(--ops-muted); }
+
+.operations-site .section { padding: clamp(58px, 7vw, 96px) clamp(24px, 8vw, 128px); }
+.operations-site .section-heading { display: block; max-width: 820px; margin-bottom: 34px; }
+.operations-site .section-heading h2 { max-width: 760px; font-size: clamp(34px, 4.3vw, 56px); font-weight: 670; line-height: 1.02; }
+.operations-site .section-heading > p { max-width: 620px; margin-top: 15px; color: var(--ops-muted); font-size: 15px; }
+.operations-site .product-section { background: #fffefa; border-bottom: 1px solid var(--ops-line); }
+.operations-site .product-card { border-color: var(--ops-line); border-radius: 12px; box-shadow: none; }
+.operations-site .product-card:hover { border-color: rgba(166, 30, 49, .42); transform: translateY(-3px); box-shadow: 0 12px 24px rgba(47, 48, 41, .08); }
+.operations-site .product-number { color: var(--ops-gold); }
+.operations-site .product-card h3 { color: var(--ops-ink); }
+.operations-site .product-card p { color: var(--ops-muted); }
+.operations-site .product-context { border-color: var(--ops-line); border-radius: 12px; box-shadow: 0 14px 32px rgba(47, 48, 41, .08); }
+.operations-site .product-story h2, .operations-site .product-capabilities dt { color: var(--ops-ink); }
+.operations-site .product-story > p, .operations-site .product-capabilities dd { color: var(--ops-muted); }
+.operations-site .product-capabilities div, .operations-site .product-capabilities div:first-child { border-color: var(--ops-line); }
+
+.operations-site .role-review-section { background: #f0f2ed; border-bottom: 1px solid var(--ops-line); }
+.operations-site .role-review-card { border-color: var(--ops-line); border-radius: 12px; background: var(--ops-panel); }
+.operations-site .role-review-card > header > span { background: var(--ops-red); color: #fff8df; }
+.operations-site .role-review-card h3, .operations-site .role-review-card li b { color: var(--ops-ink); }
+.operations-site .role-review-card header p, .operations-site .role-empty, .operations-site .role-review-card li small, .operations-site .role-review-card li code { color: var(--ops-muted); }
+.operations-site .role-review-card button { border-color: #cbd5cd; background: #fffefa; color: #314239; }
+.operations-site .role-review-card button:hover { border-color: var(--ops-red); color: var(--ops-red); }
+.operations-site .role-review-card button:last-child { border-color: var(--ops-red); background: var(--ops-red); color: #fff; }
+
+.operations-site .upload-section { background: var(--ops-paper); }
+.operations-site .upload-section .section-heading { max-width: 100%; }
+.operations-site .upload-section .section-heading > p { margin-left: 0; }
+.operations-site .upload-form, .operations-site .upload-result { border-color: var(--ops-line); border-radius: 12px; background: #fffefa; }
+.operations-site .upload-mode-switch { background: #eceee9; }
+.operations-site .upload-mode-switch button.active { border-color: rgba(166, 30, 49, .32); background: #fffaf7; box-shadow: inset 3px 0 0 var(--ops-red); }
+.operations-site .upload-intro > span, .operations-site .upload-consent span { color: var(--ops-red); }
+.operations-site .upload-intro p, .operations-site .upload-consent p { color: var(--ops-muted); }
+.operations-site .upload-consent { background: #f1f2ee; }
+.operations-site .upload-form > button { background: var(--ops-red); }
+.operations-site .upload-form > button:hover { background: var(--ops-red-deep); }
+.operations-site .template-document-preview, .operations-site .user-result-panel { border-color: var(--ops-line); }
+.operations-site .template-document-preview > header span, .operations-site .template-document-preview > footer strong { color: var(--ops-red); }
+.operations-site .user-result-head h3 { color: var(--ops-ink); }
+.operations-site .result-actions a { background: var(--ops-red); }
+.operations-site .result-actions a.secondary-download, .operations-site .result-actions button.phase9-button { border-color: #d7b064; color: var(--ops-red); }
+.operations-site .result-actions button.phase9-button:hover { background: #fff5e7; }
+
+@media (max-width: 980px) {
+  .operations-site .topbar { padding: 0 24px; }
+  .operations-site .topbar nav { display: none; }
+  .operations-site .hero, .operations-site .section { padding-right: 24px; padding-left: 24px; }
+}
+
+@media (max-width: 620px) {
+  .operations-site .topbar { min-height: 62px; padding: 0 18px; }
+  .operations-site .brand small { display: none; }
+  .operations-site .live { font-size: 10px; }
+  .operations-site .hero, .operations-site .section { padding-right: 18px; padding-left: 18px; }
+  .operations-site .hero h1 { font-size: clamp(38px, 11vw, 54px); }
+  .operations-site .hero-feature-list { font-size: 13px; }
 }
 
 /* Hero media layer: the film sets the tone while the product story stays readable. */

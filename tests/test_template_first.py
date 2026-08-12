@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from html import escape
 from pathlib import Path
 
@@ -18,9 +21,11 @@ from hcns_agent.adapters.camunda7.contract import (
     map_document_type,
 )
 from hcns_agent.adapters.mock_ocr import DeterministicMockOcrEngine
+from hcns_agent.adapters.paddleocr import PaddleOcrEngine
 from hcns_agent.bootstrap import build_default_intake
 from hcns_agent.domain.documents import DocumentType
 from hcns_agent.ports.document_parser import DocumentSource
+from hcns_agent.ports.ocr import OcrLine, OcrPage, OcrResult
 from hcns_agent.templates.common import (
     ocr_line_value,
     repair_template_ocr_value,
@@ -31,6 +36,8 @@ from hcns_agent.templates.service import (
     TemplateProcessingService,
     TemplateTechnicalError,
     TemplateUnsupportedError,
+    _LazyTemplateEasyOcrEngine,
+    _LazyTemplatePaddleOcrEngine,
     build_default_template_processing_service,
 )
 
@@ -228,6 +235,60 @@ def test_id_front_template_rejects_back_side() -> None:
                 content=docx_bytes(["CAN CUOC CONG DAN", "BACK", "ID NUMBER: 1"]),
             )
         )
+
+
+@pytest.mark.parametrize("backend", ["easyocr", "paddleocr"])
+def test_lazy_ocr_engine_initializes_once_under_concurrency(
+    backend: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+    calls_lock = threading.Lock()
+    result = OcrResult(
+        document_id="SYNTHETIC-OCR",
+        engine="synthetic",
+        pages=(OcrPage(page_index=0, lines=(OcrLine("ok", 1.0),)),),
+        duration_ms=0,
+    )
+
+    class _FakeDelegate:
+        def recognize(self, source: DocumentSource) -> OcrResult:
+            return result
+
+    def build_delegate(*, device: str) -> _FakeDelegate:
+        nonlocal calls
+        with calls_lock:
+            calls += 1
+        time.sleep(0.02)
+        return _FakeDelegate()
+
+    if backend == "easyocr":
+        from hcns_agent.adapters.easyocr import EasyOcrEngine
+
+        monkeypatch.setattr(
+            EasyOcrEngine,
+            "from_default",
+            classmethod(lambda cls, *, device: build_delegate(device=device)),
+        )
+        engine = _LazyTemplateEasyOcrEngine()
+    else:
+        monkeypatch.setattr(
+            PaddleOcrEngine,
+            "from_default",
+            classmethod(lambda cls, *, device: build_delegate(device=device)),
+        )
+        engine = _LazyTemplatePaddleOcrEngine()
+
+    source = DocumentSource(
+        document_id="SYNTHETIC-OCR",
+        filename="synthetic.png",
+        content=b"synthetic",
+    )
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(executor.map(engine.recognize, [source] * 8))
+
+    assert calls == 1
+    assert results == [result] * 8
 def test_overtime_template_parses_and_normalizes_time() -> None:
     response = process(overtime_lines())
     data = response["data"]

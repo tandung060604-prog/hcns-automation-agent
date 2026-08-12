@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import os
+import subprocess
 from pathlib import Path
 
 REQUIRED_FILES = (
@@ -23,19 +23,20 @@ FORBIDDEN_TRACKED_PARTS = {
     "models",
 }
 
-SKIPPED_DIRECTORY_NAMES = {
-    ".git",
-    ".mypy_cache",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".venv",
-    ".next",
-    ".wrangler",
-    "__pycache__",
-    "dist",
-    "dataset",
-    "node_modules",
-}
+def _tracked_paths(root: Path) -> list[str]:
+    result = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+    )
+    return [path for path in result.stdout.decode("utf-8").split("\0") if path]
+
+
+def _is_forbidden(path: str) -> bool:
+    return path in FORBIDDEN_TRACKED_PARTS or any(
+        path.startswith(f"{part}/") for part in FORBIDDEN_TRACKED_PARTS
+    )
 
 
 def main() -> None:
@@ -44,28 +45,7 @@ def main() -> None:
     if missing:
         raise SystemExit(f"Missing required files: {', '.join(missing)}")
 
-    violations: list[str] = []
-    for current_root, directory_names, file_names in os.walk(root, topdown=True):
-        current = Path(current_root)
-        retained_directories: list[str] = []
-        for name in directory_names:
-            relative_directory = (current / name).relative_to(root).as_posix()
-            if name in SKIPPED_DIRECTORY_NAMES:
-                continue
-            if relative_directory in FORBIDDEN_TRACKED_PARTS or any(
-                relative_directory.startswith(f"{part}/")
-                for part in FORBIDDEN_TRACKED_PARTS
-            ):
-                violations.append(relative_directory)
-                continue
-            retained_directories.append(name)
-        directory_names[:] = sorted(retained_directories)
-        for file_name in file_names:
-            relative = (current / file_name).relative_to(root).as_posix()
-            if relative in FORBIDDEN_TRACKED_PARTS or any(
-                relative.startswith(f"{part}/") for part in FORBIDDEN_TRACKED_PARTS
-            ):
-                violations.append(relative)
+    violations = [path for path in _tracked_paths(root) if _is_forbidden(path)]
     if violations:
         raise SystemExit(f"Forbidden repository content: {', '.join(violations)}")
 

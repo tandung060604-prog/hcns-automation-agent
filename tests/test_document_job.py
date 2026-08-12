@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
@@ -127,3 +128,22 @@ class DocumentJobHandlerTests(TestCase):
             self.assertEqual(first, second)
             self.assertTrue(first.reference.uri.startswith("document-store://"))
             self.assertEqual(64, len(first.reference.checksum_sha256))
+
+    def test_json_result_store_concurrent_retries_keep_one_artifact(self) -> None:
+        result = build_default_pipeline(DeterministicMockOcrEngine()).execute(
+            self.request().source
+        )
+        with TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory).resolve()
+            store = JsonFileResultStore(root)
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                saved = list(
+                    executor.map(
+                        lambda _: store.save(result, idempotency_key="CONCURRENT-KEY"),
+                        range(4),
+                    )
+                )
+
+            self.assertEqual([saved[0]] * 4, saved)
+            self.assertEqual(1, len(list((root / "documents").glob("*.json"))))
+            self.assertEqual(1, len(list((root / "idempotency").glob("*.json"))))

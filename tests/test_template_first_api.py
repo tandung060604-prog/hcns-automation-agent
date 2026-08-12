@@ -165,6 +165,53 @@ def test_api_root_redirects_to_local_dashboard(tmp_path: Path) -> None:
         thread.join(timeout=5)
 
 
+def test_api_rejects_non_local_host_header(tmp_path: Path) -> None:
+    configure_handler(tmp_path)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+    try:
+        connection.request("GET", "/health", headers={"Host": "attacker.example"})
+        response = connection.getresponse()
+        assert response.status == 400
+        assert json.loads(response.read().decode("utf-8")) == {
+            "error": "Local dashboard Host header is required"
+        }
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_camunda_json_endpoint_rejects_oversized_body(tmp_path: Path) -> None:
+    configure_handler(tmp_path)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+    try:
+        connection.putrequest("POST", "/api/camunda/start")
+        connection.putheader("Host", f"127.0.0.1:{server.server_port}")
+        connection.putheader("Content-Type", "application/json")
+        connection.putheader(
+            "Content-Length",
+            str(dashboard_api.MAX_REVIEW_BYTES + 1),
+        )
+        connection.endheaders()
+        response = connection.getresponse()
+        assert response.status == 413
+        assert json.loads(response.read().decode("utf-8")) == {
+            "error": "Request body is empty or exceeds 2 MB"
+        }
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_local_camunda_queue_and_employee_review_use_opaque_reference(
     tmp_path: Path, monkeypatch: object
 ) -> None:

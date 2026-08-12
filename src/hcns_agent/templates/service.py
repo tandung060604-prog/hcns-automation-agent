@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from collections.abc import Mapping
 from pathlib import PurePath
 from typing import cast
@@ -77,6 +78,7 @@ class _LazyTemplatePaddleOcrEngine:
     def __init__(self, *, device: str = "cpu") -> None:
         self._device = device
         self._delegate: PaddleOcrEngine | None = None
+        self._lock = threading.Lock()
 
     @property
     def name(self) -> str:
@@ -88,10 +90,12 @@ class _LazyTemplatePaddleOcrEngine:
 
     def recognize(self, source: DocumentSource) -> OcrResult:
         if self._delegate is None:
-            try:
-                self._delegate = PaddleOcrEngine.from_default(device=self._device)
-            except RuntimeError as error:
-                raise TemplateTechnicalError("OCR_RUNTIME_UNAVAILABLE") from error
+            with self._lock:
+                if self._delegate is None:
+                    try:
+                        self._delegate = PaddleOcrEngine.from_default(device=self._device)
+                    except RuntimeError as error:
+                        raise TemplateTechnicalError("OCR_RUNTIME_UNAVAILABLE") from error
         try:
             return self._delegate.recognize(source)
         except RuntimeError as error:
@@ -104,6 +108,7 @@ class _LazyTemplateEasyOcrEngine:
     def __init__(self, *, device: str = "cpu") -> None:
         self._device = device
         self._delegate: OcrEngine | None = None
+        self._lock = threading.Lock()
 
     @property
     def name(self) -> str:
@@ -115,12 +120,14 @@ class _LazyTemplateEasyOcrEngine:
 
     def recognize(self, source: DocumentSource) -> OcrResult:
         if self._delegate is None:
-            try:
-                from hcns_agent.adapters.easyocr import EasyOcrEngine
+            with self._lock:
+                if self._delegate is None:
+                    try:
+                        from hcns_agent.adapters.easyocr import EasyOcrEngine
 
-                self._delegate = EasyOcrEngine.from_default(device=self._device)
-            except (ImportError, RuntimeError) as error:
-                raise TemplateTechnicalError("OCR_RUNTIME_UNAVAILABLE") from error
+                        self._delegate = EasyOcrEngine.from_default(device=self._device)
+                    except (ImportError, RuntimeError) as error:
+                        raise TemplateTechnicalError("OCR_RUNTIME_UNAVAILABLE") from error
         try:
             return self._delegate.recognize(source)
         except RuntimeError as error:

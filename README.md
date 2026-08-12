@@ -1,169 +1,214 @@
-# Hệ thống OCR và tự động hóa biểu mẫu HCNS
+# VinHRIS — Cổng tác nghiệp tài liệu Hành chính - Nhân sự
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![PaddleOCR](https://img.shields.io/badge/OCR-PaddleOCR%20%2B%20EasyOCR-0A8FDC)](https://www.paddleocr.ai/)
+[![OCR](https://img.shields.io/badge/OCR-PaddleOCR%20%2B%20EasyOCR-0A8FDC)](https://www.paddleocr.ai/)
 [![Workflow](https://img.shields.io/badge/Workflow-Camunda%207.13-FF5A00)](https://camunda.com/platform-7/)
-[![Privacy](https://img.shields.io/badge/Data-Local%20%2F%20Self--hosted-6B46C1)](#bảo-mật-dữ-liệu)
+[![Privacy](https://img.shields.io/badge/Data-Local%20%2F%20Self--hosted-6B46C1)](#an-toàn-dữ-liệu)
+[![CI](https://github.com/tandung060604-prog/hcns-automation-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/tandung060604-prog/hcns-automation-agent/actions/workflows/ci.yml)
 
-Đây là dự án OCR và Document AI chạy cục bộ cho biểu mẫu hành chính nhân sự. Hệ thống tiếp nhận tài liệu in ở dạng DOCX, PDF hoặc ảnh scan; nhận diện loại tài liệu, trích xuất dữ liệu có cấu trúc, chuẩn hóa thành JSON và chuyển các trường cần xác minh cho người dùng.
+VinHRIS là hệ thống Document AI chạy local, hỗ trợ tiếp nhận hồ sơ HCNS, đọc nội
+dung, nhận diện biểu mẫu, trích xuất dữ liệu có cấu trúc và đưa các trường chưa
+chắc chắn cho người dùng kiểm tra. Camunda 7 điều phối trạng thái quy trình; file
+gốc, OCR text và dữ liệu chi tiết vẫn được giữ trong môi trường nội bộ.
 
-Dự án ưu tiên mô hình tự lưu trữ: dữ liệu, kết quả OCR và JSON được giữ trong môi trường cục bộ. Phạm vi hiện tại không bao gồm xử lý chữ viết tay.
+> **Trạng thái sản phẩm:** MVP local-first đang hoạt động ở **shadow mode**.
+> Hệ thống hỗ trợ demo end-to-end và đánh giá kỹ thuật, nhưng chưa tự tạo quyết
+> định nhân sự hoặc ghi dữ liệu vào HRIS production.
+
+## Giá trị chính
+
+- Giảm nhập liệu lặp lại từ DOCX, PDF, ảnh scan và các biểu mẫu HCNS phổ biến.
+- Ưu tiên native parser cho tài liệu có text; chỉ dùng OCR khi file thực sự cần.
+- Gắn trạng thái, confidence và evidence vào từng trường để dễ đối chiếu.
+- Luôn giữ con người trong vòng quyết định với xác nhận, chỉnh sửa, tải lại hoặc từ chối.
+- Chỉ chuyển metadata và mã tham chiếu cần thiết sang Camunda, không đẩy file gốc vào workflow.
+
+## Trạng thái hiện tại
+
+| Thành phần | Trạng thái | Ý nghĩa thực tế |
+|---|---|---|
+| Universal document intake | Hoạt động | Nhận TXT, DOCX, PDF, XLSX, PPTX, PNG và JPG/JPEG |
+| Template-first extraction | Hoạt động | Chọn schema theo loại biểu mẫu và xuất Business JSON có cấu trúc |
+| OCR local | Hoạt động | PaddleOCR hoặc EasyOCR cho ảnh và PDF scan |
+| Dashboard VinHRIS | Hoạt động | Upload, xem bản gốc, evidence, kết quả và hàng đợi review |
+| Camunda 7 + Human-in-the-loop | Hoạt động ở shadow mode | Điều phối External Task/User Task, không tạo side effect nghiệp vụ thật |
+| Kết quả local/idempotency | Đã gia cố | Ghi kết quả an toàn khi nhiều request chạy đồng thời |
+| API dashboard | Chỉ local | Chỉ chấp nhận loopback Host và giới hạn kích thước request |
+| Chất lượng scan nhạy cảm | Review-only | Confidence thấp hoặc scan chưa chắc chắn luôn cần người duyệt |
+
+## Cập nhật mới nhất — 12/08/2026
+
+- **An toàn khi xử lý đồng thời:** result store dùng file lock đa tiến trình, tránh
+  hai request cùng ghi đè index hoặc tạo kết quả xung đột cho một idempotency key.
+- **Biên API local rõ ràng hơn:** dashboard từ chối Host không phải loopback và
+  trả `413` cho Camunda JSON body rỗng hoặc vượt giới hạn 2 MB.
+- **Khởi tạo OCR ổn định:** PaddleOCR và EasyOCR lazy backend chỉ được khởi tạo
+  một lần khi nhiều request đầu tiên đến cùng lúc.
+- **CI chạy đúng toàn bộ test:** pipeline chuyển sang `pytest`, không còn bỏ sót
+  test viết theo pytest style.
+- **Web contract đồng bộ giao diện:** rendered tests đã bám theo metadata và nội
+  dung tiếng Việt hiện tại của VinHRIS.
+- **Repository gọn và an toàn hơn:** hygiene checker chỉ kiểm tra file Git đang
+  theo dõi; `.worktrees/`, `output/` và `tmp/` không bị quét hoặc đưa vào commit.
+
+Chi tiết kỹ thuật và lịch sử xác minh nằm trong
+[PROJECT_STATE](docs/PROJECT_STATE.md) và [HANDOFF](docs/HANDOFF.md).
 
 ## Luồng xử lý
 
 ```mermaid
 flowchart TD
     A["Người dùng tải tài liệu"] --> B["Kiểm tra định dạng và chất lượng file"]
-    B -->|"DOCX hoặc PDF có text"| C["Đọc trực tiếp nội dung"]
-    B -->|"Ảnh hoặc PDF scan"| D["OCR cục bộ"]
-    C --> E["Nhận diện loại tài liệu"]
+    B -->|"Có text layer"| C["Native parser"]
+    B -->|"Ảnh hoặc PDF scan"| D["OCR local"]
+    C --> E["Nhận diện loại tài liệu và template"]
     D --> E
     E --> F["Trích xuất và chuẩn hóa trường dữ liệu"]
     F --> G["Kiểm tra schema, confidence và dữ liệu thiếu"]
-    G -->|"Đủ điều kiện"| H["Tạo JSON kết quả"]
-    G -->|"Cần xác minh"| I["Human-in-the-loop: người dùng hoặc HCNS kiểm tra"]
-    I -->|"Sửa hoặc xác nhận"| H
-    I -->|"Yêu cầu tải lại"| A
-    H --> J["Camunda điều phối quy trình"]
-    J --> K["Lưu trạng thái và tham chiếu kết quả cục bộ"]
+    G -->|"Cần xác minh"| H["Human review"]
+    H -->|"Sửa hoặc xác nhận"| I["Business JSON"]
+    H -->|"Yêu cầu tải lại"| A
+    G -->|"Đủ điều kiện"| I
+    I --> J["Camunda điều phối trạng thái"]
+    J --> K["Lưu kết quả và tham chiếu local"]
 ```
 
-## Năng lực đã triển khai
+## Phạm vi tài liệu
 
-| Năng lực | Hiện trạng |
-|---|---|
-| Tiếp nhận tài liệu | DOCX, PDF có text, PDF scan, PNG và JPG/JPEG |
-| Đọc tài liệu có text layer | Ưu tiên đọc trực tiếp DOCX/PDF để giảm lỗi OCR |
-| OCR cục bộ | PaddleOCR và EasyOCR cho ảnh hoặc PDF scan |
-| Phân loại tài liệu | Nhận diện theo nội dung và mốc nhận diện, không dựa vào tên file |
-| Trích xuất theo biểu mẫu | Bộ phân tích riêng cho từng loại tài liệu và JSON Schema tương ứng |
-| Chuẩn hóa dữ liệu | Ngày tháng, kiểu dữ liệu, trường bắt buộc và cấu trúc JSON |
-| Evidence cho từng trường | Lưu trạng thái trường, confidence và nguồn trích xuất khi có |
-| Human-in-the-loop | Xem tài liệu gốc, đối chiếu kết quả, xác nhận, sửa, yêu cầu tải lại hoặc từ chối |
-| Điều phối nghiệp vụ | Camunda 7 với BPMN, External Task và User Task |
-| Vận hành local/self-host | Dashboard, API và dữ liệu chạy trong môi trường cục bộ |
-
-## Phạm vi tài liệu hiện tại
-
-| Nhóm tài liệu | Trạng thái | Ghi chú |
+| Nhóm tài liệu | Mức hỗ trợ | Chính sách hiện tại |
 |---|---|---|
-| Đơn xin nghỉ phép | Đã kiểm chứng end-to-end | Có luồng Camunda và Human-in-the-loop trên tài liệu native |
-| Đơn xin tăng ca | Đã kiểm chứng end-to-end | Có luồng Camunda và Human-in-the-loop trên tài liệu native |
-| CV | Review-only | Có schema và màn hình đối chiếu; luôn cần người duyệt đối với scan |
-| Hợp đồng thử việc | Review-only | Có schema và màn hình đối chiếu; chưa dùng để tự động tạo quyết định nghiệp vụ |
-| Chứng chỉ IELTS | Review-only | Có schema và màn hình đối chiếu |
-| CCCD mặt trước | Review-only | Chỉ trích xuất để kiểm tra nội bộ; không tự động phê duyệt |
-| Hồ sơ HCNS khác | OCR cục bộ | Có thể nhận các nhóm hồ sơ phổ biến, nhưng chỉ tự động đi tiếp khi đã có schema và quy tắc kiểm tra phù hợp |
+| Đơn xin nghỉ phép | End-to-end | Template-first, Camunda và Human-in-the-loop |
+| Đơn xin tăng ca | End-to-end | Template-first, Camunda và Human-in-the-loop |
+| CV | Review-only | Có schema và evidence; scan luôn cần người duyệt |
+| Hợp đồng thử việc | Review-only | Không tự tạo quyết định nghiệp vụ |
+| Chứng chỉ IELTS | Review-only | Trích xuất có schema và đối chiếu thủ công |
+| CCCD mặt trước | Review-only | Chỉ dùng cho kiểm tra nội bộ, không tự phê duyệt |
+| Hồ sơ chưa có schema | Intake/OCR | Không tự động đi tiếp cho đến khi có rule phù hợp |
 
-Không tuyên bố hỗ trợ chữ viết tay, CCCD mặt sau hoặc tài liệu chưa có schema nghiệp vụ.
+Chưa tuyên bố hỗ trợ chữ viết tay, CCCD mặt sau hoặc tự động hóa quyết định
+tuyển dụng, sa thải, lương, kỷ luật và phúc lợi.
 
-## Luồng demo Camunda
+## Bằng chứng chất lượng hiện có
 
-Hai loại biểu mẫu đã được kiểm chứng có chung nguyên tắc vận hành:
-
-1. Nhân viên tải Đơn xin nghỉ phép hoặc Đơn xin tăng ca trên Dashboard.
-2. Hệ thống đọc nội dung, nhận diện biểu mẫu và tạo JSON theo schema.
-3. Hồ sơ được đưa vào Camunda ở chế độ review: người nộp xác nhận hoặc chuyển HCNS.
-4. HCNS đối chiếu tài liệu gốc với kết quả local, rồi chọn chấp nhận, yêu cầu tải lại hoặc từ chối.
-5. Camunda lưu vết trạng thái quy trình; dữ liệu chi tiết vẫn ở local.
-
-Chế độ demo hiện tại là **shadow mode**: mọi hồ sơ đều dừng ở bước con người kiểm tra, không tự tạo hiệu lực nghiệp vụ hoặc thay đổi dữ liệu nhân sự.
-
-## Kết quả đánh giá hiện có
-
-Các số liệu dưới đây là kết quả trên tập phát triển cục bộ, không phải cam kết chất lượng production. Tài liệu scan và các trường có confidence thấp vẫn cần người duyệt.
+Các số liệu dưới đây đến từ tập đánh giá local đã khóa, không phải cam kết chất
+lượng production. Trạng thái promotion hiện vẫn là `HOLD` và
+`promotionAllowed=false`.
 
 | Phạm vi đánh giá | Kết quả | Diễn giải |
 |---|---:|---|
-| Đơn nghỉ phép và đơn tăng ca native | 30/30 chọn đúng biểu mẫu | 15 Leave Request và 15 Overtime Request |
-| Đơn nghỉ phép và đơn tăng ca native | 0/30 lỗi validation | Đủ điều kiện đi vào bước Human-in-the-loop |
-| CV, hợp đồng thử việc và IELTS | 107/112 field exact match (95,54%) | Hợp đồng 42/42, CV 45/50, IELTS 20/20 |
-| JSON Schema | 0 lỗi trên tập đánh giá nêu trên | Kiểm tra cấu trúc đầu ra trước khi chuyển bước |
+| Leave + Overtime native | 30/30 chọn đúng template | 15 Leave Request và 15 Overtime Request |
+| Leave + Overtime native | 0/30 lỗi validation | Đủ điều kiện chuyển đến bước Human review |
+| Contract + CV + IELTS | 107/112 field exact match | Contract 42/42, CV 45/50, IELTS 20/20 |
+| JSON Schema | 0 lỗi | Kiểm tra cấu trúc trước khi chuyển workflow |
 
-## Cách baseline README được dùng trong runtime
-
-README chỉ là tài liệu mô tả nên trước đây không thể dùng trực tiếp làm đầu vào
-điểm số; nguồn có thể kiểm chứng là aggregate JSON đã seal. Phần nối dưới đây
-đưa đúng artifact đó vào API local, không biến README thành nguồn sự thật mới.
-
-Các số liệu `107/112` không còn chỉ là số ghi trong README. API local đọc
-aggregate DATA-29 và inventory metadata qua `/benchmark/summary`, sau đó UI
-hiển thị sáu card độc lập: CV, hợp đồng, IELTS, CCCD mặt trước, nghỉ phép và
-tăng ca. Exact/presence chỉ lấy từ aggregate có Ground Truth sealed; inventory
-chỉ dùng để đếm tài liệu local/prediction-only, không được dùng để tạo điểm.
-
-CV, hợp đồng thử việc và IELTS đã được khóa ở template v2 với field `snake_case`.
-Result v1 cũ vẫn đọc được qua compatibility projection thuần, không sửa file
-private; kết quả mới phát ra v2. Mọi evidence hiện là display-only:
-`decision=HOLD`, `promotionAllowed=false`, `containsRawFieldValues=false`.
-
-Nếu API đã chạy trước khi thêm các tham số evidence, cần khởi động lại bằng
-report và inventory tương ứng để dashboard đọc đúng baseline:
-
-```powershell
-.\apps\ocr_lab\api\start_dashboard.ps1 `
-  -DataRoot "C:\private-data" `
-  -BenchmarkReport "C:\tmp\bo10-dev-aggregate-data29-cv-residual-20260810-v3.json" `
-  -BenchmarkManifest "C:\tmp\hcns-dataset-run-bo10-contract-cv-ielts-v2-20260805-inventory.json" `
-  -ExternalDatasetInventory "C:\tmp\hcns-dataset-run-bo10-contract-cv-ielts-v2-20260805-inventory.json"
-```
-
-Các thước đo được dùng trong dự án gồm:
-
-- **Classification accuracy**: tỷ lệ nhận diện đúng loại tài liệu.
-- **Field exact match / field accuracy**: tỷ lệ trường trích xuất khớp hoàn toàn với dữ liệu đối chiếu.
-- **Field presence / completeness**: tỷ lệ trường cần thiết có giá trị hợp lệ.
-- **CER** và **WER**: lỗi theo ký tự và theo từ, dùng khi đánh giá OCR trên phần văn bản có nhãn đối chiếu.
-- **JSON Schema errors**: số lỗi cấu trúc hoặc kiểu dữ liệu của đầu ra JSON.
-
-## Công nghệ
-
-- Python, FastAPI và Pydantic
-- PaddleOCR, EasyOCR và các parser cho DOCX/PDF
-- JSON Schema cho hợp đồng dữ liệu đầu ra
-- React/Next.js cho giao diện local
-- Camunda 7, BPMN, DMN, External Task và User Task
-- Pytest và Node test cho kiểm thử hồi quy
+Dashboard chỉ hiển thị metric từ aggregate evidence đã seal. Inventory chỉ dùng
+để đếm tài liệu local, không được dùng để tự tạo điểm số. Kết quả template v1 cũ
+vẫn đọc được qua compatibility projection; kết quả mới phát ra theo contract v2.
 
 ## Chạy local
 
-Yêu cầu: Python 3.10+, Node.js và môi trường OCR đã cài PaddleOCR. Camunda là tùy chọn nếu chỉ cần thử OCR; cần chạy thêm Camunda 7 để trình diễn workflow end-to-end.
+### Yêu cầu
+
+- Python 3.10+
+- Node.js 22+
+- PaddleOCR hoặc EasyOCR nếu cần xử lý ảnh/PDF scan
+- Camunda 7.13 nếu cần demo workflow end-to-end
+
+### Cài đặt
 
 ```powershell
-Set-Location .\hcns-automation-agent
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev,paddle]"
+
+Push-Location .\apps\ocr_lab\web
+npm ci
+Pop-Location
+```
+
+### Khởi động dashboard và API
+
+```powershell
 .\apps\ocr_lab\api\start_dashboard.ps1 `
   -DataRoot "C:\duong-dan\private-data" `
-  -PythonPath "C:\duong-dan\python.exe" `
+  -PythonPath ".\.venv\Scripts\python.exe" `
   -TemplateOcrBackend paddle
 ```
 
 Sau khi khởi động:
 
-- Dashboard: `http://localhost:3000`
+- VinHRIS Dashboard: `http://localhost:3000`
 - Local API: `http://127.0.0.1:8765`
 - Camunda: `http://localhost:8080/camunda`
 
-Hướng dẫn trình diễn end-to-end nằm tại [docs/DEMO_CAMUNDA_HITL.md](docs/DEMO_CAMUNDA_HITL.md). Báo cáo minh chứng cho mentor nằm tại [docs/DEMO_CAMUNDA_HITL_REPORT.md](docs/DEMO_CAMUNDA_HITL_REPORT.md).
+Hướng dẫn thao tác đầy đủ: [Demo Camunda + HITL](docs/DEMO_CAMUNDA_HITL.md).
 
-## Bảo mật dữ liệu
+## Kiểm thử
 
-- Không upload tài liệu lên cloud trong luồng local.
-- Không ghi OCR text, JSON chi tiết hoặc dữ liệu nhận dạng cá nhân vào Git.
-- Camunda chỉ nhận metadata và tham chiếu kết quả cần thiết cho điều phối.
-- Tài liệu scan, trường thiếu hoặc chưa đủ tin cậy được giữ ở trạng thái cần kiểm tra.
+```powershell
+python -m pytest -q
+python -m ruff check src tests scripts `
+  apps/ocr_lab/api/canonical_phase_metrics.py `
+  apps/ocr_lab/api/local_server_security.py `
+  apps/ocr_lab/api/phase14_review_store.py `
+  apps/ocr_lab/api/upload_safety.py
+python -m mypy src
+python scripts/check_repository.py
 
-## Định hướng mở rộng
+Push-Location .\apps\ocr_lab\web
+npm test
+npm run lint
+Pop-Location
+```
 
-Những hạng mục dưới đây là hướng phát triển, chưa được trình bày như tính năng production:
+Checkpoint gần nhất: Python `527 passed`; web rendered-contract `14/14 passed`;
+Ruff, mypy, compileall và repository hygiene đều pass. Web lint còn warning kỹ
+thuật nhưng không có error.
 
-- Deskew, denoise, rotation correction và kiểm tra chất lượng ảnh scan.
-- Layout detection cho tài liệu nhiều cột, bảng biểu, chữ ký, con dấu và logo.
-- Mở rộng OCR đa ngôn ngữ theo dữ liệu và phạm vi dự án.
-- Annotation guideline, dataset, active learning và pipeline fine-tuning cho loại biểu mẫu mới.
-- Tối ưu GPU inference và đóng gói bằng Docker, ONNX, Triton hoặc model serving.
+## An toàn dữ liệu
 
-## Tài liệu dự án
+- Không upload tài liệu HCNS lên cloud trong runtime local hiện tại.
+- Không commit dataset, file upload, model weights, OCR output thật, secret hoặc PII.
+- API dashboard chỉ nhận loopback Host; request Camunda được giới hạn kích thước.
+- Camunda chỉ nhận scalar metadata và opaque result reference, không nhận raw Business JSON.
+- Result store dùng idempotency key và khóa ghi để tránh kết quả trùng/xung đột.
+- Trường thiếu, confidence thấp hoặc tài liệu scan luôn được chuyển sang Human review.
+- Mọi action có thể tác động HRM/BPM cần policy cho phép và human approval.
 
-- [Trạng thái kỹ thuật hiện tại](docs/PROJECT_STATE.md)
-- [Ghi chú đánh giá](docs/EVALUATION.md)
+## Kiến trúc repository
+
+```text
+src/hcns_agent/        Domain, application services, ports và adapters
+apps/ocr_lab/api/      Local API và cầu nối Camunda
+apps/ocr_lab/web/      Giao diện VinHRIS
+camunda/               BPMN, DMN và cấu hình workflow
+schemas/               JSON Schema cho output contract
+tests/                 Contract, integration và regression tests
+scripts/               Công cụ đánh giá và repository checks
+docs/                  Kiến trúc, vận hành, tiến độ và bằng chứng
+```
+
+Nguyên tắc kiến trúc: native parser trước OCR, domain không phụ thuộc Camunda SDK,
+Business JSON không đi qua process variables và mọi nhánh không chắc chắn phải
+đi qua Human-in-the-loop.
+
+## Tài liệu dành cho mentor và đội phát triển
+
+- [Tổng quan tài liệu](docs/README.md)
+- [Trạng thái kỹ thuật mới nhất](docs/PROJECT_STATE.md)
+- [Kiến trúc hệ thống](docs/ARCHITECTURE.md)
+- [Human-in-the-loop](docs/HUMAN_IN_THE_LOOP.md)
+- [Phương pháp và metric đánh giá](docs/EVALUATION.md)
 - [Hướng dẫn demo Camunda](docs/DEMO_CAMUNDA_HITL.md)
+- [Báo cáo demo cho mentor](docs/DEMO_CAMUNDA_HITL_REPORT.md)
+- [Handoff cho phiên phát triển tiếp theo](docs/HANDOFF.md)
+
+## Giới hạn và hướng phát triển
+
+Các hạng mục sau chưa được xem là tính năng production:
+
+- Chữ viết tay và CCCD mặt sau.
+- Tự động đưa ra quyết định nhân sự hoặc ghi trực tiếp vào HRIS.
+- Tối ưu scan phức tạp: deskew, denoise, rotation và layout nhiều cột/bảng biểu.
+- Promotion OCR cho các family đang ở trạng thái `HOLD`.
+- Đóng gói production bằng Docker/GPU serving và quan sát vận hành hoàn chỉnh.

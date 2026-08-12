@@ -72,7 +72,7 @@ from document_route_safety import (
     safe_existing_document_route,
     selected_orientations_are_identity,
 )
-from local_server_security import require_loopback_host
+from local_server_security import require_local_host_header, require_loopback_host
 
 try:
     from paddleocr import PaddleOCR
@@ -1610,15 +1610,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_OPTIONS(self) -> None:
+        if not self._request_host_is_local():
+            return
         self.send_response(HTTPStatus.NO_CONTENT)
         self.cors_headers()
         self.end_headers()
 
     def do_POST(self) -> None:
+        if not self._request_host_is_local():
+            return
         parsed = urlparse(self.path)
         if parsed.path == "/api/camunda/review":
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
+                if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                    self.send_json(
+                        {"error": "Request body is empty or exceeds 2 MB"},
+                        HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                    )
+                    return
                 payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
                 task_id = str(payload.get("taskId", ""))
                 role = str(payload.get("role", ""))
@@ -1660,6 +1670,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/camunda/start":
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
+                if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                    self.send_json(
+                        {"error": "Request body is empty or exceeds 2 MB"},
+                        HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                    )
+                    return
                 payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
                 document_id = str(payload.get("documentId", ""))
                 uuid.UUID(document_id)
@@ -2584,6 +2600,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
         return filename, file_part.get_content_type(), content
 
     def do_DELETE(self) -> None:
+        if not self._request_host_is_local():
+            return
         parsed = urlparse(self.path)
         if parsed.path.startswith("/external-dataset/typed/"):
             self.send_json(
@@ -2603,6 +2621,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_json({"deleted": True})
 
     def do_GET(self) -> None:
+        if not self._request_host_is_local():
+            return
         try:
             self._do_GET()
         except (BrokenPipeError, ConnectionResetError):
@@ -2615,6 +2635,17 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 },
                 HTTPStatus.INTERNAL_SERVER_ERROR,
             )
+
+    def _request_host_is_local(self) -> bool:
+        try:
+            require_local_host_header(self.headers.get("Host", ""))
+        except ValueError:
+            self.send_json(
+                {"error": "Local dashboard Host header is required"},
+                HTTPStatus.BAD_REQUEST,
+            )
+            return False
+        return True
 
     def _do_GET(self) -> None:
         parsed = urlparse(self.path)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -328,6 +329,46 @@ def test_parse_persists_before_complete_and_replay_reuses_reference(
         for value in result.values()
     )
     assert "NHÂN VIÊN SYNTHETIC" not in str(client.completed)
+
+
+def test_result_store_rejects_concurrent_idempotency_collision(
+    tmp_path: Path,
+) -> None:
+    document_reference = "SESSION-SYNTHETIC"
+    _create_session_source(tmp_path, document_reference)
+    service = build_default_template_processing_service()
+    result_store = JsonFileTemplateResultStore(tmp_path / "camunda_m4")
+    result = service.process(
+        DocumentSource(
+            document_id=document_reference,
+            filename="document.docx",
+            content=docx_bytes(leave_lines()),
+            source_reference=document_reference,
+        ),
+        result_reference=result_store.result_reference("CONCURRENT-KEY"),
+    )
+
+    def save(reference: str) -> str:
+        result_store.save(
+            result,
+            idempotency_key="CONCURRENT-KEY",
+            document_reference=reference,
+        )
+        return reference
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = tuple(
+            executor.submit(save, reference)
+            for reference in ("SESSION-A", "SESSION-B")
+        )
+        completed = [future for future in futures if future.exception() is None]
+        failed = [future for future in futures if isinstance(future.exception(), ValueError)]
+
+    assert len(completed) == 1
+    assert len(failed) == 1
+    assert result_store.find_by_idempotency_key("CONCURRENT-KEY") is not None
+    assert len(tuple((result_store.root / "results").glob("*.json"))) == 1
+    assert len(tuple((result_store.root / "idempotency").glob("*.json"))) == 1
 
 
 def test_persisted_result_drives_reference_only_detect_extract_and_normalize(
