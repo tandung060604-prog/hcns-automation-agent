@@ -83,7 +83,9 @@ def _positioned_ocr_canonical(items: list[tuple[str, int, int, int]]) -> dict[st
 
 
 def test_prediction_source_resolution_is_inventory_only() -> None:
-    with tempfile.TemporaryDirectory(prefix="prediction-source-", dir="C:/tmp") as raw_root:
+    temp_root = Path(Path.cwd().anchor) / "tmp"
+    temp_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="prediction-source-", dir=temp_root) as raw_root:
         root = Path(raw_root)
         source = root / "cv-001.png"
         source.write_bytes(b"synthetic-image")

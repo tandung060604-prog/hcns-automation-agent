@@ -21,6 +21,9 @@
   `codex/codebase-hardening-readme`, targeting `main`.
 - Existing untracked local scripts were preserved and remain outside this delivery;
   PDF/R-003 is out of scope.
+- GitHub CI initially exposed six Windows-only synthetic fixtures using `C:/tmp`;
+  they were changed to platform temporary directories without touching production
+  data paths or behavior.
 
 ## Repository context
 

@@ -45,7 +45,7 @@ gốc, OCR text và dữ liệu chi tiết vẫn được giữ trong môi trư�
 - **Khởi tạo OCR ổn định:** PaddleOCR và EasyOCR lazy backend chỉ được khởi tạo
   một lần khi nhiều request đầu tiên đến cùng lúc.
 - **CI chạy đúng toàn bộ test:** pipeline chuyển sang `pytest`, không còn bỏ sót
-  test viết theo pytest style.
+  test viết theo pytest style; fixture tạm hoạt động trên cả Windows và Linux.
 - **Web contract đồng bộ giao diện:** rendered tests đã bám theo metadata và nội
   dung tiếng Việt hiện tại của VinHRIS.
 - **Repository gọn và an toàn hơn:** hygiene checker chỉ kiểm tra file Git đang

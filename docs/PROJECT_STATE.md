@@ -18,6 +18,9 @@
   production limits are separated for users, mentors and engineers.
 - Delivery branch: `codex/codebase-hardening-readme`, targeting `main`.
   PDF/R-003 remains intentionally out of scope.
+- GitHub CI exposed six legacy tests that hard-coded `C:/tmp`; their synthetic
+  fixtures now use platform temporary directories so Python 3.10/3.12 jobs run
+  consistently on Linux and Windows.
 
 ## Codebase review repair track - R-011 DONE (2026-08-12)
 - Rendered landing-page contract tests now assert the current Vietnamese VinHRIS

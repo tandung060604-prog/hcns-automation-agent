@@ -20,9 +20,9 @@ from external_dataset_review import (  # noqa: E402
 
 
 def build_dataset(tmp_path: Path) -> tuple[Path, Path, Path]:
-    root = Path("C:/tmp") / f"codex-external-test-{tmp_path.name}"
+    root = Path(Path.cwd().anchor) / "tmp" / f"codex-external-test-{tmp_path.name}"
     shutil.rmtree(root, ignore_errors=True)
-    root.mkdir()
+    root.mkdir(parents=True)
     cases: list[dict[str, object]] = []
     draft_cases: list[dict[str, object]] = []
     for index, category in enumerate(FIELD_SPECS, start=1):
