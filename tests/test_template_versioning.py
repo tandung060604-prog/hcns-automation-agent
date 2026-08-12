@@ -40,6 +40,37 @@ def test_template_version_mismatch_fails_closed(tmp_path: Path) -> None:
         )
 
 
+def test_schema_version_mismatch_fails_closed(tmp_path: Path) -> None:
+    schema_path = ROOT / "schemas/templates/cv_v2.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    schema["properties"]["templateVersion"]["const"] = "9.9"
+    isolated_schema = tmp_path / "schemas/templates/cv_v2.schema.json"
+    isolated_schema.parent.mkdir(parents=True)
+    isolated_schema.write_text(json.dumps(schema), encoding="utf-8")
+
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    manifest["templates"] = [
+        {
+            **row,
+            "schemaRef": (
+                "schemas/templates/cv_v2.schema.json"
+                if row["templateId"] == "cv-v2"
+                else row["schemaRef"]
+            ),
+        }
+        for row in manifest["templates"]
+    ]
+    isolated_manifest = tmp_path / "template_version_manifest.json"
+    isolated_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(TemplateVersionGovernanceError, match="Schema version"):
+        validate_template_version_manifest(
+            root=tmp_path,
+            registry=build_default_template_registry(),
+            manifest_path=isolated_manifest,
+        )
+
+
 def test_v2_business_fields_match_the_benchmark_contract() -> None:
     registry = {
         row["templateId"]: row

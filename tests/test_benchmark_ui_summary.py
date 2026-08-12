@@ -25,7 +25,7 @@ def test_benchmark_summary_uses_aggregate_evidence_without_exposing_values(
             {
                 "schemaVersion": "external-dataset-data12-aggregate/1.0.0",
                 "datasetId": "synthetic-v2",
-                "decision": "HOLD",
+                "decision": "PASS",
                 "promotionAllowed": False,
                 "containsRawFieldValues": False,
                 "groundTruthUsedForScoringOnly": True,
@@ -61,9 +61,15 @@ def test_benchmark_summary_uses_aggregate_evidence_without_exposing_values(
 
     payload = build_local_benchmark_summary(_Handler)
     rows = {row["key"]: row for row in payload["rows"]}
+    assert list(rows) == ["cv", "contract", "ielts", "cccd-front", "leave", "overtime"]
     assert rows["cv"]["exactMatchRate"] == 0.9
+    assert rows["leave"]["benchmarkDocumentCount"] == 15
+    assert rows["leave"]["benchmarkSampleCount"] == 7
+    assert rows["overtime"]["benchmarkDocumentCount"] == 15
+    assert rows["overtime"]["benchmarkSampleCount"] == 7
     assert rows["cv"]["source"].startswith("DATA-29")
     assert payload["evidence"]["displayOnly"] is True
+    assert payload["evidence"]["decision"] == "HOLD"
     assert payload["evidence"]["promotionAllowed"] is False
     assert payload["evidence"]["containsRawFieldValues"] is False
     serialized = json.dumps(payload)

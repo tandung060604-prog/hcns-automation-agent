@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from hcns_agent.templates.compatibility import LEGACY_FIELD_MAP
 from hcns_agent.templates.registry import TemplateRegistry
 
 
@@ -60,6 +61,10 @@ def validate_template_version_manifest(
                 raise TemplateVersionGovernanceError(
                     f"Version mismatch for {template_id}: {key}"
                 )
+        if registry_row.get("schemaVersion") != manifest_row.get("schemaVersion"):
+            raise TemplateVersionGovernanceError(
+                f"Version mismatch for {template_id}: schemaVersion"
+            )
         schema_path = root / str(manifest_row["schemaRef"])
         if not schema_path.is_file():
             raise TemplateVersionGovernanceError(
@@ -75,10 +80,10 @@ def validate_template_version_manifest(
             raise TemplateVersionGovernanceError(
                 f"Schema templateId mismatch for {template_id}"
             )
-            if properties.get("templateVersion", {}).get("const") != manifest_row["version"]:
-                raise TemplateVersionGovernanceError(
-                    f"Schema version mismatch for {template_id}"
-                )
+        if properties.get("templateVersion", {}).get("const") != manifest_row["version"]:
+            raise TemplateVersionGovernanceError(
+                f"Schema version mismatch for {template_id}"
+            )
     _validate_compatibility(manifest)
     _validate_uat_policy(manifest)
     return manifest
@@ -134,3 +139,6 @@ def _validate_compatibility(manifest: dict[str, Any]) -> None:
     }
     if legacy != expected:
         raise TemplateVersionGovernanceError("Legacy template compatibility map differs")
+    field_map = compatibility.get("legacyFieldMap")
+    if field_map != LEGACY_FIELD_MAP:
+        raise TemplateVersionGovernanceError("Legacy field compatibility map differs")

@@ -106,6 +106,10 @@ function BenchmarkCard({ row }: { row: BenchmarkRow }) {
           <strong>{row.fieldCount ?? "Chưa có"}</strong>
           <span>field được chấm</span>
         </div>
+        <div>
+          <strong>{row.benchmarkSampleCount}</strong>
+          <span>mẫu tính field</span>
+        </div>
       </div>
       <p className="local-benchmark-card-note">{row.note}</p>
       {row.ocrAggregate && <small className="local-benchmark-ocr">{row.ocrAggregate}</small>}

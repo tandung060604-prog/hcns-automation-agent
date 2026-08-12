@@ -46,6 +46,7 @@
       "templateId": "probation-contract-v2",
       "documentType": "EMPLOYMENT_CONTRACT",
       "version": "2.0",
+      "schemaVersion": "2.0.0",
       "schemaRef": "schemas/templates/probation_contract_v2.schema.json",
       "parserVersion": "2.0.0",
       "lifecycle": "FROZEN",
@@ -62,6 +63,7 @@
       "templateId": "cv-v2",
       "documentType": "CV",
       "version": "2.0",
+      "schemaVersion": "2.0.0",
       "schemaRef": "schemas/templates/cv_v2.schema.json",
       "parserVersion": "2.0.0",
       "lifecycle": "FROZEN",
@@ -75,6 +77,7 @@
       "templateId": "ielts-certificate-v2",
       "documentType": "CERTIFICATE",
       "version": "2.0",
+      "schemaVersion": "2.0.0",
       "schemaRef": "schemas/templates/ielts_certificate_v2.schema.json",
       "parserVersion": "2.0.0",
       "lifecycle": "FROZEN",
@@ -104,6 +107,38 @@
       "cv-v1": "cv-v2",
       "probation-contract-v1": "probation-contract-v2",
       "ielts-certificate-v1": "ielts-certificate-v2"
+    },
+    "legacyFieldMap": {
+      "cv-v1": {
+        "fullName": "full_name",
+        "phoneNumber": "phone_number",
+        "desiredRole": "desired_role",
+        "yearsExperience": "years_experience"
+      },
+      "probation-contract-v1": {
+        "contractNumber": "contract_number",
+        "contractSignDate": "contract_sign_date",
+        "employeeName": "employee_name",
+        "employeeId": "employee_id_number",
+        "employeeIdNumber": "employee_id_number",
+        "jobTitle": "job_title",
+        "salary": "probation_salary_monthly",
+        "probationSalaryMonthly": "probation_salary_monthly",
+        "effectiveDate": "effective_date",
+        "probationEndDate": "probation_end_date",
+        "employerName": "employer_name",
+        "employerRepresentative": "employer_representative",
+        "weeklyHours": "weekly_hours",
+        "allowancesSummary": "allowances_summary",
+        "salaryPaymentSchedule": "salary_payment_schedule"
+      },
+      "ielts-certificate-v1": {
+        "recipientName": "recipient_name",
+        "credentialId": "credential_id",
+        "credentialType": "credential_type",
+        "overallScore": "overall_score",
+        "issueDate": "issue_date"
+      }
     }
   },
   "uat": {

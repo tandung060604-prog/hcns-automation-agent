@@ -1039,7 +1039,7 @@ section[id] { scroll-margin-top: 72px; }
 .local-benchmark-metric { min-width: 0; padding: 10px; border: 1px solid #e1e9e2; border-radius: 7px; background: #f8fbf8; }
 .local-benchmark-metric span { display: block; color: var(--muted); font: 700 8px/1.1 var(--font-geist-mono), monospace; text-transform: uppercase; }
 .local-benchmark-metric strong { display: block; margin-top: 7px; color: var(--ink); font-size: 15px; overflow-wrap: anywhere; }
-.local-benchmark-card-foot { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+.local-benchmark-card-foot { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding-top: 14px; border-top: 1px solid var(--line); }
 .local-benchmark-card-foot strong { display: block; color: var(--ink); font-size: 18px; }
 .local-benchmark-card-foot span { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; line-height: 1.25; }
 .local-benchmark-card-note, .local-benchmark-card-source, .local-benchmark-accepted { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.4; }

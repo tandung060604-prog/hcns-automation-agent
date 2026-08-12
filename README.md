@@ -80,6 +80,34 @@ Các số liệu dưới đây là kết quả trên tập phát triển cục b
 | CV, hợp đồng thử việc và IELTS | 107/112 field exact match (95,54%) | Hợp đồng 42/42, CV 45/50, IELTS 20/20 |
 | JSON Schema | 0 lỗi trên tập đánh giá nêu trên | Kiểm tra cấu trúc đầu ra trước khi chuyển bước |
 
+## Cách baseline README được dùng trong runtime
+
+README chỉ là tài liệu mô tả nên trước đây không thể dùng trực tiếp làm đầu vào
+điểm số; nguồn có thể kiểm chứng là aggregate JSON đã seal. Phần nối dưới đây
+đưa đúng artifact đó vào API local, không biến README thành nguồn sự thật mới.
+
+Các số liệu `107/112` không còn chỉ là số ghi trong README. API local đọc
+aggregate DATA-29 và inventory metadata qua `/benchmark/summary`, sau đó UI
+hiển thị sáu card độc lập: CV, hợp đồng, IELTS, CCCD mặt trước, nghỉ phép và
+tăng ca. Exact/presence chỉ lấy từ aggregate có Ground Truth sealed; inventory
+chỉ dùng để đếm tài liệu local/prediction-only, không được dùng để tạo điểm.
+
+CV, hợp đồng thử việc và IELTS đã được khóa ở template v2 với field `snake_case`.
+Result v1 cũ vẫn đọc được qua compatibility projection thuần, không sửa file
+private; kết quả mới phát ra v2. Mọi evidence hiện là display-only:
+`decision=HOLD`, `promotionAllowed=false`, `containsRawFieldValues=false`.
+
+Nếu API đã chạy trước khi thêm các tham số evidence, cần khởi động lại bằng
+report và inventory tương ứng để dashboard đọc đúng baseline:
+
+```powershell
+.\apps\ocr_lab\api\start_dashboard.ps1 `
+  -DataRoot "C:\private-data" `
+  -BenchmarkReport "C:\tmp\bo10-dev-aggregate-data29-cv-residual-20260810-v3.json" `
+  -BenchmarkManifest "C:\tmp\hcns-dataset-run-bo10-contract-cv-ielts-v2-20260805-inventory.json" `
+  -ExternalDatasetInventory "C:\tmp\hcns-dataset-run-bo10-contract-cv-ielts-v2-20260805-inventory.json"
+```
+
 Các thước đo được dùng trong dự án gồm:
 
 - **Classification accuracy**: tỷ lệ nhận diện đúng loại tài liệu.

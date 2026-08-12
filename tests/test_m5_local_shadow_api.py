@@ -66,7 +66,7 @@ def test_report_loader_rejects_non_aggregate_report(tmp_path: Path) -> None:
         load_shadow_review_report(str(path))
 
 
-def test_http_api_exposes_read_only_m5_summary(tmp_path: Path) -> None:
+def test_removed_m5_summary_endpoint_returns_not_found_without_mutation(tmp_path: Path) -> None:
     report = _report(tmp_path / "report.json")
     DashboardHandler.data_root = tmp_path
     DashboardHandler.cccd_heldout_root = None
@@ -82,11 +82,8 @@ def test_http_api_exposes_read_only_m5_summary(tmp_path: Path) -> None:
         connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
         connection.request("GET", "/m5/local-shadow-review/summary")
         response = connection.getresponse()
-        payload = json.loads(response.read())
-        assert response.status == 200
-        assert payload["milestone"] == "M5-CAM-001D"
-        assert payload["promotionAllowed"] is False
-        assert "fields" not in json.dumps(payload)
+        response.read()
+        assert response.status == 404
     finally:
         server.shutdown()
         server.server_close()

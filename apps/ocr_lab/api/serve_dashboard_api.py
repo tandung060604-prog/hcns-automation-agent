@@ -202,7 +202,10 @@ def _benchmark_evidence_metadata(
         "datasetId": report.get("datasetId") or manifest.get("datasetId"),
         "reportDigest": _file_digest(report_path),
         "manifestDigest": _file_digest(manifest_path),
-        "decision": report.get("decision", "HOLD"),
+        # Aggregate evidence never grants a production promotion decision.
+        # Even a stale/incorrect report claiming PASS is displayed as HOLD
+        # until a separately approved production gate exists.
+        "decision": "HOLD",
         "promotionAllowed": False,
         "containsRawFieldValues": report.get("containsRawFieldValues") is True,
         "groundTruthUsedForScoringOnly": report.get("groundTruthUsedForScoringOnly") is True,
@@ -218,16 +221,18 @@ def _template_benchmark_row(
     if key in {"leave", "overtime"}:
         field_count = 49 if key == "leave" else 77
         note = (
-            "7 mẫu native, 49/49 required field khớp đúng. "
-            "OCR ảnh và PDF scan được đánh giá riêng theo benchmark gộp."
+            "15 mẫu native, chọn đúng template 15/15; field regression subset "
+            "7 mẫu đạt 49/49 required field. OCR ảnh và PDF scan được đánh giá "
+            "riêng theo benchmark gộp."
             if key == "leave"
-            else "7 mẫu native, 77/77 required field khớp đúng. "
-            "7 field department không có trong nguồn được giữ null."
+            else "15 mẫu native, chọn đúng template 15/15; field regression subset "
+            "7 mẫu đạt 77/77 required field. 7 field department không có trong "
+            "nguồn được giữ null."
         )
         return {
             "key": key,
             "label": label,
-            "benchmarkDocumentCount": 7,
+            "benchmarkDocumentCount": 15,
             "benchmarkSampleCount": 7,
             "fieldCount": field_count,
             "exactMatchRate": 1.0,
