@@ -1,4 +1,70 @@
 # Project State
+## Codebase review repair track - pipeline/hygiene consolidation DONE (2026-08-12)
+- The repository hygiene checker now inspects only Git-tracked paths through
+  `git ls-files`; local worktrees, scratch output and private data are never
+  traversed. `.worktrees/`, `output/` and `tmp/` are ignored, and the app README
+  now matches CI's canonical `python -m pytest -q` command.
+- The one cwd-dependent API test path was made repository-root relative. No
+  duplicate runtime pipeline was introduced; `build_default_pipeline` remains
+  the single composition entrypoint for the default intake plus understanding
+  services.
+- Validation: repository checker, touched-file Ruff, focused OCR test
+  (`4 passed`), ignore checks and `git diff --check` passed. Final full-suite
+  validation: Python `527 passed`; tracked-file Ruff, mypy (90 source files),
+  compileall, repository checker and `git diff --check` all passed. Web `npm test`
+  passed 14/14 and `npm run lint` passed with 23 warnings, zero errors.
+- Root `README.md` now presents VinHRIS as a product: current capabilities,
+  latest hardening changes, local setup, verified evidence, safety boundaries and
+  production limits are separated for users, mentors and engineers.
+- Delivery branch: `codex/codebase-hardening-readme`, targeting `main`.
+  PDF/R-003 remains intentionally out of scope.
+- GitHub CI exposed six legacy tests that hard-coded `C:/tmp`; their synthetic
+  fixtures now use platform temporary directories so Python 3.10/3.12 jobs run
+  consistently on Linux and Windows.
+
+## Codebase review repair track - R-011 DONE (2026-08-12)
+- Rendered landing-page contract tests now assert the current Vietnamese VinHRIS
+  metadata and hero copy used by the local workspace UI; stale pre-redesign title
+  assertions were removed.
+- Validation: web `npm test` passed (`14/14` rendered-contract tests); `npm run lint`
+  passed with 23 existing warnings and zero errors.
+- Next READY: consolidate pipeline/import/path hygiene findings.
+
+## Codebase review repair track - R-012 DONE (2026-08-12)
+- Lazy PaddleOCR and EasyOCR template delegates now initialize under a per-engine
+  lock, so concurrent first requests create exactly one backend instance while
+  preserving the existing lazy-loading and error translation behavior.
+- Regression coverage: eight concurrent recognition calls for each backend share
+  one initialized delegate. Validation: targeted template tests `24 passed`,
+  touched-file Ruff and compileall passed, and `git diff --check` passed.
+- Next READY: R-011 web rendered-contract mismatch.
+
+## Codebase review repair track — R-005 DONE (2026-08-12)
+- Local JSON result stores now serialize idempotency commits and correction writes
+  with a stdlib cross-process file lock; the check-then-write race no longer permits
+  competing result/index updates for one idempotency key.
+- Regression coverage: concurrent generic result retries keep one artifact; concurrent
+  Template-first idempotency collisions produce one stored result and one rejection.
+- Validation: targeted `pytest` 20 passed; touched-file Ruff passed; `git diff --check`
+  passed. Next READY: R-007 dashboard local-boundary hardening.
+
+## Codebase review repair track — R-007 DONE (2026-08-12)
+- Dashboard requests now require a loopback Host header; non-local Host values are
+  rejected before route handling. Camunda review/start JSON bodies are capped at the
+  existing 2 MB review limit and return `413` when invalid or oversized.
+- Regression coverage: Host parser unit cases, hostile Host HTTP request, and oversized
+  Camunda JSON request. Validation: 14 targeted tests, helper/test Ruff, dashboard
+  `E9,F`, compileall and `git diff --check` passed.
+- Full dashboard lint retains pre-existing import-order/E402/E501 findings; no hygiene
+  cleanup was folded into this security task. Next READY: R-006 CI test discovery.
+
+## Codebase review repair track — R-006 DONE (2026-08-12)
+- CI now runs `python -m pytest -q`, so pytest-style tests are collected alongside
+  existing unittest-style cases; the prior `unittest discover` command missed them.
+- Validation: CI-equivalent full Python suite `525 passed`; targeted security/store
+  checks remained green; `git diff --check` passed. Next READY: R-012 OCR lazy-engine
+  thread safety.
+
 ## Canonical Template contract v2 (2026-08-11)
 - CV, probation contract and IELTS now emit v2 template ids with the benchmark's
   snake_case fields; v1 local result files remain readable through a pure

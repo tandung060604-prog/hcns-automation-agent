@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "VinHRIS | AI document operations cho HR",
+  title: "VinHRIS | Cổng tác nghiệp Hành chính - Nhân sự",
   description:
-    "VinHRIS biến tài liệu nhân sự thành dữ liệu có bằng chứng, Human Review và Business JSON trong workflow local-first.",
+    "Tiếp nhận hồ sơ, trích xuất thông tin và phối hợp kiểm tra tài liệu HCNS trong môi trường nội bộ.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

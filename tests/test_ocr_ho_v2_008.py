@@ -1,11 +1,11 @@
 import json
-import os
 import sys
 from pathlib import Path
 
 from jsonschema import validate
 
-sys.path.insert(0, os.path.abspath("apps/ocr_lab/api"))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "apps" / "ocr_lab" / "api"))
 
 import phase11_8_cccd_v2 as candidate  # noqa: E402
 

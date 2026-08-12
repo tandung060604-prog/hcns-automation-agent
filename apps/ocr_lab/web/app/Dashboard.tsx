@@ -1972,14 +1972,14 @@ function RoleReviewQueue({
   const groups = [
     {
       role: "employee" as const,
-      title: "Nhân viên / người nộp",
-      description: "Kiểm tra bản xem trước và dữ liệu trích xuất; xác nhận hoặc chuyển HCNS.",
+      title: "Người nộp hồ sơ",
+      description: "Xem lại thông tin đã trích xuất trước khi xác nhận hoặc chuyển cho HCNS.",
       actions: [["CONFIRMED", "Xác nhận chính xác"], ["UNRESOLVED", "Chuyển HCNS"]],
     },
     {
       role: "hr" as const,
       title: "HCNS",
-      description: "Đối chiếu tài liệu gốc và JSON local; chấp nhận, yêu cầu tải lại hoặc từ chối.",
+      description: "Đối chiếu hồ sơ gốc và kết quả trích xuất, sau đó đưa ra quyết định xử lý.",
       actions: [["CONFIRMED", "Chấp nhận"], ["REQUEST_REUPLOAD", "Yêu cầu tải lại"], ["REJECTED", "Từ chối"]],
     },
   ];
@@ -1987,10 +1987,10 @@ function RoleReviewQueue({
     <section className="section role-review-section" id="roles">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">HUMAN REVIEW · LOCAL DEMO</p>
-          <h2>Phân luồng nhân viên và HCNS</h2>
+          <p className="eyebrow">HÀNG ĐỢI KIỂM TRA</p>
+          <h2>Phân công rõ người, rõ việc</h2>
         </div>
-        <p>Chi tiết tài liệu chỉ mở trên localhost. Quyết định được gửi sang Camunda để lưu audit và điều phối bước tiếp theo.</p>
+        <p>Chi tiết hồ sơ được kiểm tra trên máy nội bộ. Quyết định được gửi sang Camunda để lưu vết và điều phối bước tiếp theo.</p>
       </div>
       <div className="role-review-grid">
         {groups.map((group) => {
@@ -3351,47 +3351,46 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       : "");
 
   return (
-    <main>
+    <main className="operations-site">
       <header className="topbar">
         <a className="brand" href="#overview" aria-label="Về đầu trang">
           <span className="brand-mark">V</span>
-          <span>VinHRIS</span>
+          <span>VinHRIS</span><small>HCNS</small>
         </a>
         <nav aria-label="Điều hướng chính">
-          <a href="#upload">OCR tài liệu thật</a>
-          <a href="#roles">Hàng đợi HITL</a>
-          <a href="#explorer">Tài liệu &amp; CCCD</a>
-          <a href="#phases">Policy</a>
-          <a href="#next">Tiếp theo</a>
+          <a href="#upload">Tiếp nhận hồ sơ</a>
+          <a href="#roles">Hàng đợi kiểm tra</a>
+          <a href="#explorer">Kho hồ sơ</a>
+          <a href="#phases">Tiêu chí xử lý</a>
+          <a href="#next">Việc tiếp theo</a>
         </nav>
         <span className={`live ${apiOnline ? "online" : ""}`}>
           <i />
-          {apiOnline ? "Local API online" : "Metrics only"}
+          {apiOnline ? "Hệ thống sẵn sàng" : "Chế độ xem dữ liệu"}
         </span>
       </header>
 
       <section className="hero" id="overview">
         <div className="hero-copy">
-          <p className="eyebrow">XỬ LÝ NỘI BỘ · AN TOÀN · LOCAL-ONLY</p>
+          <p className="eyebrow">KHU VỰC TÁC NGHIỆP</p>
           <h1>
-            VinHRIS
-            <span> HR workspace</span>
+            Xử lý hồ sơ HCNS
+            <span> trên một luồng rõ ràng.</span>
           </h1>
           <p className="hero-lead">
-            Tự động hóa biểu mẫu hành chính nhân sự với native DOCX, quality routing
-            và Human-in-the-Loop.
+            Tiếp nhận tài liệu, trích xuất thông tin và chuyển hồ sơ đến đúng người kiểm tra.
           </p>
           <div className="hero-feature-list">
-            <span>Template-first cho biểu mẫu chuẩn</span>
-            <span>Workflow sẵn sàng tích hợp Camunda</span>
-            <span>Xác nhận thủ công khi cần</span>
+            <span>Tài liệu được xử lý trong môi trường nội bộ</span>
+            <span>Kết quả gắn với nguồn trích xuất</span>
+            <span>Camunda điều phối bước kiểm tra</span>
           </div>
           <div className="hero-actions">
             <a className="primary-button" href="#upload">
-              Thử tài liệu thật
+              Tiếp nhận tài liệu
             </a>
             <a className="text-button" href="#product">
-              Xem sản phẩm <span>→</span>
+              Xem quy trình <span>→</span>
             </a>
           </div>
         </div>
@@ -3406,8 +3405,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             />
           </div>
           <figcaption>
-            Từ tài liệu có format sẵn đến JSON kiểm tra được, hoàn toàn trên máy
-            local.
+            Từ tài liệu đầu vào đến dữ liệu có cấu trúc, với bước kiểm tra khi cần.
           </figcaption>
         </figure>
       </section>
@@ -3420,27 +3418,27 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           />
         </figure>
         <div className="product-story">
-          <h2>Một luồng xử lý, bằng chứng đi cùng dữ liệu.</h2>
+          <h2>Hồ sơ vào một chỗ. Quyết định đi đúng nơi.</h2>
           <p>
-            Sản phẩm nhận ảnh, PDF, DOCX và XLSX, sau đó chọn native extraction hoặc
-            OCR phù hợp trước khi tạo JSON có thể kiểm tra.
+            Hệ thống nhận ảnh, PDF, DOCX và XLSX, chọn cách đọc phù hợp rồi tạo dữ liệu
+            có cấu trúc để người dùng kiểm tra.
           </p>
           <dl className="product-capabilities">
             <div>
-              <dt>Nhận tài liệu</dt>
+              <dt>Tiếp nhận</dt>
               <dd>Ảnh và PDF scan đi qua OCR. DOCX và XLSX ưu tiên dữ liệu gốc.</dd>
             </div>
             <div>
-              <dt>Giữ bằng chứng</dt>
-              <dd>Mỗi kết quả gắn với trang, text, confidence và bounding box.</dd>
+              <dt>Đối chiếu</dt>
+              <dd>Mỗi kết quả gắn với trang, nội dung nhận diện và độ tin cậy.</dd>
             </div>
             <div>
-              <dt>Kiểm duyệt ngoại lệ</dt>
-              <dd>Trường chưa chắc chắn được chuyển sang needs_review để người dùng xác nhận.</dd>
+              <dt>Kiểm tra ngoại lệ</dt>
+              <dd>Trường chưa chắc chắn được chuyển cho người phụ trách xác nhận.</dd>
             </div>
           </dl>
           <a className="primary-button product-cta" href="#upload">
-            Thử tài liệu thật
+            Bắt đầu tiếp nhận
           </a>
         </div>
       </section>
@@ -3455,12 +3453,12 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       <section className="section upload-section" id="upload">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">LOCAL PRIVATE OCR</p>
-            <h2>Đưa tài liệu thật vào</h2>
+            <p className="eyebrow">TIẾP NHẬN HỒ SƠ</p>
+            <h2>Chọn tài liệu cần xử lý</h2>
           </div>
           <p>
-            File, OCR text và JSON chỉ nằm trên máy này. Không upload cloud, không
-            telemetry, không ghi PII vào log hoặc Git.
+            Tệp và kết quả xử lý được lưu trong phiên làm việc nội bộ. Dữ liệu không được
+            gửi lên dịch vụ bên ngoài.
           </p>
         </div>
 

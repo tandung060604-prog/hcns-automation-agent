@@ -125,7 +125,7 @@ tiên. Ground Truth không được suy ra từ text của recognizer.
 ## Kiểm thử
 
 ```powershell
-python -m unittest discover -s tests -v
+python -m pytest -q
 Set-Location apps\ocr_lab\web
 npm test
 ```

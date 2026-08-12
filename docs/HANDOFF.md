@@ -1,10 +1,35 @@
 # Handoff
 
+## Codebase review repair track (2026-08-12)
+
+- Completed the agreed order: R-005 result-store concurrency, R-007 dashboard
+  local-boundary hardening, R-006 CI pytest collection, R-012 lazy OCR
+  initialization locking, R-011 web rendered-contract alignment, then pipeline
+  and repository hygiene. PDF/R-003 work stayed out of scope.
+- Local JSON stores now serialize idempotency/correction commits with a stdlib
+  cross-process lock. Lazy PaddleOCR/EasyOCR delegates initialize once under
+  concurrency. Dashboard requests require a loopback Host and bounded Camunda
+  JSON bodies. CI uses `python -m pytest -q`.
+- The repository checker scans only Git-tracked paths; `.worktrees/`, `output/`
+  and `tmp/` are ignored. The cwd-dependent OCR test path was made root-relative.
+- Final validation: Python `527 passed`; tracked-file Ruff passed; mypy passed
+  for 90 source files; compileall, repository hygiene and `git diff --check`
+  passed. Web `npm test` passed 14/14 and `npm run lint` passed with 23 warnings,
+  zero errors.
+- Root `README.md` was refreshed for product, mentor and engineering audiences
+  without removing active workflows or verified evidence. Delivery branch is
+  `codex/codebase-hardening-readme`, targeting `main`.
+- Existing untracked local scripts were preserved and remain outside this delivery;
+  PDF/R-003 is out of scope.
+- GitHub CI initially exposed six Windows-only synthetic fixtures using `C:/tmp`;
+  they were changed to platform temporary directories without touching production
+  data paths or behavior.
+
 ## Repository context
 
 - Repository: `D:\AI Vin Thực Chiến\Side Project\PaddleOCR\hcns-automation-agent`
-- Branch: `codex/data-18-cv-scan-recovery`
-- HEAD: `ac157564e3b7d456ba41d06eb189a8d66521f567` (`chore: publish OCR-HO-V2 diagnostic updates`)
+- Branch: `codex/codebase-hardening-readme`
+- Base: `c39aded3b35f806ee255281c1124744e04d7d64f` (`origin/main` at delivery start)
 - Routing: [docs/README.md](README.md)
 - Acceptance criteria: [docs/BACKLOG.md](BACKLOG.md)
 

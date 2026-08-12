@@ -33,16 +33,18 @@ test("server-renders the VinHRIS landing page", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>VinHRIS \| AI document operations cho HR<\/title>/i);
+  assert.match(
+    html,
+    /<title>VinHRIS \| Cổng tác nghiệp Hành chính - Nhân sự<\/title>/i,
+  );
   assert.match(html, /VinHRIS/);
-  assert.match(html, /AI DOCUMENT OPERATIONS FOR HR/);
-  assert.match(html, /Human review ready/);
+  assert.match(html, /CỔNG TÁC NGHIỆP HÀNH CHÍNH - NHÂN SỰ/);
+  assert.match(html, /Hồ sơ rõ ràng\. Quy trình có kiểm soát\./);
   assert.match(html, /Business JSON/);
   assert.match(html, /template-first-local-workflow\.png/);
-  assert.match(html, /Mở workspace/);
+  assert.match(html, /Vào khu vực làm việc/);
   assert.match(html, /vinhris-hero-source\.mp4/);
   assert.match(html, /Bật âm thanh/);
-  assert.match(html, /Kiến tạo một cuộc sống tốt đẹp hơn cho mọi người/);
   assert.match(html, /WORKSPACE PROOF \/ TEMPLATE-FIRST/);
   assert.match(html, /Xem một hồ sơ đi qua VinHRIS/);
   assert.match(html, /SAMPLE DOCUMENT · KHÔNG PHẢI PII THẬT/);
@@ -75,7 +77,7 @@ test("keeps Phase 11.4 CCCD controls in the local workspace flow", async () => {
   assert.match(css, /\.field-evaluation/);
   assert.match(page, /VinHRISLanding/);
   assert.match(workspacePage, /<Dashboard/);
-  assert.match(layout, /VinHRIS \| AI document operations/);
+  assert.match(layout, /VinHRIS \| Cổng tác nghiệp Hành chính - Nhân sự/);
 });
 
 test("shows Phase 11.5 Unicode, ASCII and crop evidence controls", async () => {

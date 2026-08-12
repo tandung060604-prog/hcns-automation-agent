@@ -43,6 +43,7 @@ from hcns_agent.adapters.camunda7.worker import (
     CamundaTechnicalError,
     LockExtensionPolicy,
 )
+from hcns_agent.adapters.file_lock import exclusive_file_lock
 from hcns_agent.domain.documents import DocumentType
 from hcns_agent.ports.document_parser import DocumentSource
 from hcns_agent.templates.model import RecommendedAction, TemplateProcessingResult
@@ -330,41 +331,45 @@ class JsonFileTemplateResultStore:
         idempotency_key: str,
         document_reference: str,
     ) -> StoredTemplateResult:
-        expected_reference = self.result_reference(idempotency_key)
-        document_digest = _document_reference_digest(document_reference)
-        existing = self.find_by_idempotency_key(idempotency_key)
-        if existing is not None:
-            if existing.document_reference_digest != document_digest:
-                raise ValueError("Idempotency key belongs to another document reference")
-            return existing
+        # ponytail: one local lock serializes writes; use per-key locks if throughput matters.
+        with exclusive_file_lock(self._root / ".write.lock"):
+            expected_reference = self.result_reference(idempotency_key)
+            document_digest = _document_reference_digest(document_reference)
+            existing = self.find_by_idempotency_key(idempotency_key)
+            if existing is not None:
+                if existing.document_reference_digest != document_digest:
+                    raise ValueError("Idempotency key belongs to another document reference")
+                return existing
 
-        payload = result.public_dict()
-        payload[_PRIVATE_DMN_PROJECTION_KEY] = _build_template_quality_projection(result)
-        variables = payload.get("camundaVariables")
-        if not isinstance(variables, dict):
-            raise TemplateResultStoreError("Template result has no Camunda projection")
-        if variables.get("extractedDataReference") != expected_reference:
-            raise TemplateResultStoreError("Template result reference is inconsistent")
+            payload = result.public_dict()
+            payload[_PRIVATE_DMN_PROJECTION_KEY] = _build_template_quality_projection(result)
+            variables = payload.get("camundaVariables")
+            if not isinstance(variables, dict):
+                raise TemplateResultStoreError("Template result has no Camunda projection")
+            if variables.get("extractedDataReference") != expected_reference:
+                raise TemplateResultStoreError("Template result reference is inconsistent")
 
-        digest = _idempotency_digest(idempotency_key)
-        result_path = self._results / f"{digest}.json"
-        index_path = self._idempotency / f"{digest}.json"
-        try:
-            _atomic_write_json(result_path, payload)
-            _atomic_write_json(
-                index_path,
-                {
-                    "reference": expected_reference,
-                    "documentReferenceDigest": document_digest,
-                },
+            digest = _idempotency_digest(idempotency_key)
+            result_path = self._results / f"{digest}.json"
+            index_path = self._idempotency / f"{digest}.json"
+            try:
+                _atomic_write_json(result_path, payload)
+                _atomic_write_json(
+                    index_path,
+                    {
+                        "reference": expected_reference,
+                        "documentReferenceDigest": document_digest,
+                    },
+                )
+            except OSError as error:
+                raise TemplateResultStoreError(
+                    "Template result could not be persisted"
+                ) from error
+            return StoredTemplateResult(
+                reference=expected_reference,
+                document_reference_digest=document_digest,
+                payload=payload,
             )
-        except OSError as error:
-            raise TemplateResultStoreError("Template result could not be persisted") from error
-        return StoredTemplateResult(
-            reference=expected_reference,
-            document_reference_digest=document_digest,
-            payload=payload,
-        )
 
     def apply_correction(
         self,
@@ -377,52 +382,55 @@ class JsonFileTemplateResultStore:
     ) -> StoredTemplateResult:
         if next_case_version <= 1:
             raise ValueError("Corrected case version must advance")
-        current = self.load(result_reference)
-        existing_application = current.payload.get(_PRIVATE_CORRECTION_APPLICATION_KEY)
-        if isinstance(existing_application, dict) and (
-            existing_application.get("correctionReference") == correction_reference
-            and existing_application.get("inputPayloadHash") == expected_payload_hash
-            and existing_application.get("caseVersion") == next_case_version
-        ):
-            return current
-        if current.payload_hash != expected_payload_hash:
-            raise ValueError("Correction is based on a stale result payload")
+        with exclusive_file_lock(self._root / ".write.lock"):
+            current = self.load(result_reference)
+            existing_application = current.payload.get(_PRIVATE_CORRECTION_APPLICATION_KEY)
+            if isinstance(existing_application, dict) and (
+                existing_application.get("correctionReference") == correction_reference
+                and existing_application.get("inputPayloadHash") == expected_payload_hash
+                and existing_application.get("caseVersion") == next_case_version
+            ):
+                return current
+            if current.payload_hash != expected_payload_hash:
+                raise ValueError("Correction is based on a stale result payload")
 
-        corrected_payload = corrected_result.public_dict()
-        corrected_payload[_PRIVATE_DMN_PROJECTION_KEY] = (
-            _build_template_quality_projection(corrected_result)
-        )
-        corrected_payload[_PRIVATE_CORRECTION_APPLICATION_KEY] = {
-            "correctionReference": correction_reference,
-            "inputPayloadHash": expected_payload_hash,
-            "caseVersion": next_case_version,
-        }
-        variables = corrected_payload.get("camundaVariables")
-        if (
-            not isinstance(variables, dict)
-            or variables.get("extractedDataReference") != result_reference
-        ):
-            raise TemplateResultStoreError("Corrected result reference is inconsistent")
+            corrected_payload = corrected_result.public_dict()
+            corrected_payload[_PRIVATE_DMN_PROJECTION_KEY] = (
+                _build_template_quality_projection(corrected_result)
+            )
+            corrected_payload[_PRIVATE_CORRECTION_APPLICATION_KEY] = {
+                "correctionReference": correction_reference,
+                "inputPayloadHash": expected_payload_hash,
+                "caseVersion": next_case_version,
+            }
+            variables = corrected_payload.get("camundaVariables")
+            if (
+                not isinstance(variables, dict)
+                or variables.get("extractedDataReference") != result_reference
+            ):
+                raise TemplateResultStoreError("Corrected result reference is inconsistent")
 
-        match = _RESULT_REFERENCE_PATTERN.fullmatch(result_reference)
-        if match is None:
-            raise TemplateResultStoreError("Template result reference is invalid")
-        digest = match.group(1)
-        revision_directory = self._revisions / digest
-        result_path = self._results / f"{digest}.json"
-        try:
-            revision_directory.mkdir(parents=True, exist_ok=True)
-            revision_path = revision_directory / f"{current.payload_hash}.json"
-            if not revision_path.exists():
-                _atomic_write_json(revision_path, current.payload)
-            _atomic_write_json(result_path, corrected_payload)
-        except OSError as error:
-            raise TemplateResultStoreError("Corrected result could not be persisted") from error
-        return StoredTemplateResult(
-            reference=result_reference,
-            document_reference_digest=current.document_reference_digest,
-            payload=corrected_payload,
-        )
+            match = _RESULT_REFERENCE_PATTERN.fullmatch(result_reference)
+            if match is None:
+                raise TemplateResultStoreError("Template result reference is invalid")
+            digest = match.group(1)
+            revision_directory = self._revisions / digest
+            result_path = self._results / f"{digest}.json"
+            try:
+                revision_directory.mkdir(parents=True, exist_ok=True)
+                revision_path = revision_directory / f"{current.payload_hash}.json"
+                if not revision_path.exists():
+                    _atomic_write_json(revision_path, current.payload)
+                _atomic_write_json(result_path, corrected_payload)
+            except OSError as error:
+                raise TemplateResultStoreError(
+                    "Corrected result could not be persisted"
+                ) from error
+            return StoredTemplateResult(
+                reference=result_reference,
+                document_reference_digest=current.document_reference_digest,
+                payload=corrected_payload,
+            )
 
     def _load_digest(self, digest: str) -> StoredTemplateResult:
         try:
