@@ -2,6 +2,9 @@
 
 ## DATA-29 full explorer + Camunda three-family bridge (2026-08-13)
 
+- Delivery checkpoint: commit `729295e` on
+  `codex/data29-camunda-shadow-e2e`, PR #34 targeting `main`.
+
 - Evidence Explorer now shows every pinned DATA-29 source: Contract `3`, CV `5`,
   IELTS `4`. The private upload-session tab and its frontend fetch/state/render
   path were removed; private sessions themselves were not deleted.

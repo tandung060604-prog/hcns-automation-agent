@@ -1,6 +1,9 @@
 # Project State
 ## DATA-29 full explorer + three-family Camunda bridge (2026-08-13)
 
+- Delivery checkpoint: commit `729295e` on
+  `codex/data29-camunda-shadow-e2e`, PR #34 targeting `main`.
+
 - Evidence Explorer no longer loads or renders private upload-session history.
   DATA-29 now exposes all 12 metric-linked sources through Contract `3`, CV `5`
   and IELTS `4` filters while retaining aggregate `107/112` exact and `112/112`
