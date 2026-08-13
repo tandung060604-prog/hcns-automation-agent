@@ -1,76 +1,63 @@
-# Kịch bản demo đối chiếu tài liệu trên localhost
+# Demo đối chiếu tài liệu thật trên localhost
 
-Kịch bản này dành cho user, mentor hoặc reviewer muốn xem luồng đang hoạt động
-mà không cần khởi tạo Camunda. Dùng tài liệu synthetic hoặc tài liệu private đã
-được phép xử lý; không dùng PII thật trong ảnh chụp hoặc video công khai.
+Kịch bản này dành cho user, mentor hoặc reviewer xem trực tiếp tài liệu đã được
+chủ sở hữu cho phép. Showcase không dùng dữ liệu mô phỏng để thay cho tài liệu
+thật và không khởi tạo Camunda.
 
-## Mục tiêu demo
+## Quy tắc dữ liệu
 
-Chứng minh một tài liệu đi qua đủ chuỗi:
+- Chỉ dùng tài liệu thật đã có quyền xem và xử lý.
+- Xác minh file nguồn trước khi chạy; lưu SHA-256 trong bằng chứng local.
+- File nguồn, Ground Truth, OCR output và comparison chỉ nằm trong data root
+  private, không commit vào Git.
+- Nếu chưa có tài liệu thật của một family, ghi rõ `CHƯA CÓ BẰNG CHỨNG`; không
+  thay bằng tài liệu minh họa.
+- Kết quả `PASS`/`HOLD` chỉ áp dụng cho file đang xem và không tự duyệt nghiệp vụ.
 
-`upload → preview nguồn → extraction → Ground Truth → comparison → HOLD/PASS`
+## Bằng chứng đang có ngày 13/08/2026
 
-Ba family cần trình bày:
+| Family | File nguồn local | SHA-256 | Kết quả hiện tại |
+|---|---|---|---|
+| CV | CV PDF cá nhân trong data root private | `8ad0b6f60f40f8f7e9c442958e3cd608199f5f272ffc11ed53d8c88d9e6e1a30` | `0/10 exact`, `HOLD` |
+| IELTS | `ielts-001.png` | `b49a069f8f78753b96e201cdab9d9c3b6414a364567f6331f98a64ce0c5dc8be` | `0/5 exact`, `HOLD` |
+| Hợp đồng thử việc | Chưa có file thật đủ điều kiện | — | Chưa có bằng chứng |
 
-| Family | Định dạng nên dùng | Kết quả cần thấy |
-|---|---|---|
-| CV | DOCX hoặc PDF | Template `cv-v2`, 10 field review-only |
-| Hợp đồng thử việc | DOCX hoặc PDF | Template `probation-contract-v2`, 14 field review-only |
-| IELTS | PDF, PNG hoặc JPG/JPEG | Template `ielts-certificate-v2`, 5 field; ảnh dùng OCR local |
+CV được đọc bằng `pdf/pymupdf-native`. IELTS được xử lý bằng PaddleOCR
+`PP-OCRv5_mobile_det + latin_PP-OCRv5_mobile_rec` trên CPU. Hai file đều được
+nhập Ground Truth trực tiếp từ nguồn và giữ `MANUAL_REVIEW`.
 
-## Chuẩn bị
+Kết quả xấu là bằng chứng quan trọng: thuật toán hiện nhận diện đúng family nhưng
+parser gắn sai field trên cả CV và IELTS. Không dùng hai family này cho quyết định
+nghiệp vụ hoặc tuyên bố production-ready.
 
-1. Khởi động dashboard/API theo root `README.md`.
+## Cách mở kết quả đã lưu
+
+1. Khởi động API bằng data root private chứa các session thật, không truyền báo
+   cáo aggregate của corpus khác.
 2. Mở `http://localhost:3000/workspace`.
-3. Giữ chế độ **Biểu mẫu HCNS**.
-4. Chuẩn bị file synthetic hoặc private đã được phép. Không commit file, kết quả
-   OCR hoặc Ground Truth vào Git.
-5. Nếu demo ảnh IELTS, kiểm tra `GET /health` báo đúng OCR backend mong muốn.
+3. Tại **Kho hồ sơ**, chọn **Tài liệu đã xử lý**.
+4. Chọn CV hoặc IELTS. UI hiển thị source, template, parser và giá trị trích xuất.
+5. Bấm vào tài liệu để mở khu **Đối chiếu kết quả · Current file**.
+6. Đọc từng cột Prediction, Ground Truth, confidence/evidence và badge kết quả.
 
-## Thao tác cho mỗi tài liệu
+## Cách chạy một tài liệu thật mới
 
-1. Upload file và bấm **Trích xuất tài liệu**.
-2. Xác nhận bên trái hiển thị nguồn/preview; bên phải hiển thị đúng template,
-   document type, confidence và validation status.
-3. Kiểm tra khối metadata:
-   - template và parser version;
-   - intake parser;
-   - OCR backend/version/model/device/profile nếu dùng ảnh;
-   - matching policy và thời gian xử lý.
-4. Đọc từng Prediction trực tiếp với nguồn, sau đó nhập Ground Truth. Không sao
-   chép Prediction sang Ground Truth nếu chưa đối chiếu nguồn.
-5. Bấm **Đối chiếu kết quả**.
-6. Xác nhận mỗi field có một badge: `EXACT`, `ACCEPTED`, `MISMATCH`, `MISSING`
-   hoặc `NEEDS_REVIEW`.
-7. Ghi lại tổng Exact/Accepted/Sai và quyết định `HOLD`/`PASS`.
+1. Xác nhận quyền sử dụng và tính nguyên bản của tài liệu.
+2. Tính SHA-256 trước khi upload.
+3. Upload trong chế độ **Biểu mẫu HCNS** và bấm **Trích xuất tài liệu**.
+4. Đối chiếu preview với từng Prediction rồi nhập Ground Truth từ chính nguồn.
+5. Bấm **Đối chiếu kết quả** và ghi lại số Exact/Accepted/Sai cùng `HOLD`/`PASS`.
+6. Giữ toàn bộ session ngoài Git. Nếu parser sai, giữ nguyên mismatch và mở task
+   sửa thuật toán; không sửa Ground Truth để làm đẹp chỉ số.
 
-## Cách trình bày kết quả
+## Checklist trình bày
 
-- **FILE HIỆN TẠI** là kết quả vừa upload, dùng Ground Truth của chính file đó.
-- **DATA-29 · AGGREGATE** là bằng chứng development đã seal, chỉ để tham khảo:
-  strict `107/112`, accepted `112/112`, quyết định `HOLD`.
-- Không dùng aggregate để che một mismatch của file hiện tại.
-- `PASS` ở comparison không tự phê duyệt nghiệp vụ; `promotionAllowed=false`
-  vẫn giữ nguyên.
-
-## Checklist bằng chứng
-
-| Bằng chứng | Đạt khi |
+| Bằng chứng | Điều kiện đạt |
 |---|---|
-| Upload | UI chỉ cho chọn định dạng hợp lệ theo family |
-| Source | Preview hoặc placeholder native hiển thị đúng file |
-| Prediction | Đủ field schema, không tự điền giá trị không có trong nguồn |
-| Ground Truth | Reviewer nhập từ nguồn và lưu trong session private |
-| Comparison | Badge và exact/wrong count khớp các field đang hiển thị |
-| Metadata | Nhìn thấy version thuật toán và profile đang chạy |
-| Safety | Kết luận review-only, không có cloud/HRIS side effect |
-
-## Kết quả smoke ngày 13/08/2026
-
-- API synthetic: 7/7 tổ hợp CV DOCX/PDF, Contract DOCX/PDF, IELTS PDF/PNG/JPG.
-- Browser E2E: 3/3 family hiển thị đủ source → comparison → conclusion.
-- PaddleOCR runtime thật: IELTS PNG nhận đúng template và giữ
-  `MANUAL_REVIEW`/`OCR_REVIEW_REQUIRED`.
-- Fixture IELTS synthetic hiện cho `3 exact · 2 sai`; hai mismatch parser được
-  giữ nguyên trên UI và quyết định là `HOLD`. Đây là bằng chứng màn hình bắt lỗi,
-  không phải tuyên bố chất lượng production.
+| Quyền sử dụng | Chủ sở hữu đã cho phép xem và xử lý |
+| Nguồn | Preview đúng file, hash nguồn đã ghi local |
+| Prediction | Kết quả do runtime hiện tại tạo ra |
+| Ground Truth | Reviewer nhập trực tiếp từ tài liệu nguồn |
+| Comparison | Badge và tổng số đúng/sai khớp từng field |
+| Metadata | Thấy template/parser/OCR model/profile đang chạy |
+| Safety | Local-only, review-only, không có HRIS/Camunda side effect |

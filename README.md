@@ -44,17 +44,18 @@ gốc, OCR text và dữ liệu chi tiết vẫn được giữ trong môi trư�
 - **Kết luận rõ ràng:** mỗi lần đối chiếu có tổng số field đúng/sai và quyết định
   `HOLD`/`PASS`. `PASS` chỉ nói về phép so khớp file hiện tại; không tự phê duyệt
   nghiệp vụ và không mở promotion.
-- **Không trộn hai loại số liệu:** UI tách `CURRENT_FILE` khỏi aggregate DATA-29
-  display-only (`107/112` strict, `112/112` accepted, `HOLD`).
+- **Chỉ hiển thị kết quả file đang xem:** showcase tài liệu thật chỉ dùng
+  `CURRENT_FILE` và Ground Truth nhập trực tiếp từ chính tài liệu đó; không nạp
+  aggregate của corpus khác vào màn hình đối chiếu.
 - **Metadata thuật toán có thể kiểm tra:** template/parser version, intake parser,
   OCR backend/version/model/device/profile, matching policy và thời gian xử lý
   được hiển thị cùng kết quả.
-- **Upload theo đúng manifest:** CV và hợp đồng thử việc đã smoke-test DOCX/PDF;
-  IELTS đã smoke-test PDF/PNG/JPG. Runtime PaddleOCR thật trên localhost xử lý
-  thành công IELTS PNG synthetic và vẫn bắt buộc `MANUAL_REVIEW`.
-- **E2E local đã xác minh:** CV, hợp đồng thử việc và IELTS đi qua đủ luồng upload
-  → extraction → Ground Truth → comparison → kết luận. Visual QA cũng sửa lỗi
-  đếm metadata thành field và bố cục màn hình laptop.
+- **Bằng chứng bằng tài liệu thật đã được cấp quyền:** CV cá nhân PDF và IELTS Test
+  Report Form PNG đã đi qua runtime localhost, Ground Truth được đối chiếu trực
+  tiếp từ nguồn và cả hai đều giữ `MANUAL_REVIEW`/`HOLD`.
+- **Không thay bằng dữ liệu mô phỏng:** hiện chưa có hợp đồng thật đủ điều kiện
+  trong các nguồn local đã kiểm tra, nên showcase không công bố kết quả contract.
+  Visual QA vẫn cho thấy source, Prediction, Ground Truth và mismatch theo field.
 
 Các cập nhật hardening ngày 12/08/2026 vẫn được giữ nguyên:
 
@@ -119,9 +120,9 @@ lượng production. Trạng thái promotion hiện vẫn là `HOLD` và
 |---|---:|---|
 | Leave + Overtime native | 30/30 chọn đúng template | 15 Leave Request và 15 Overtime Request |
 | Leave + Overtime native | 0/30 lỗi validation | Đủ điều kiện chuyển đến bước Human review |
-| Contract + CV + IELTS | 107/112 field exact match | Contract 42/42, CV 45/50, IELTS 20/20 |
-| Smoke format hiện tại | 7/7 tổ hợp qua API | CV DOCX/PDF, Contract DOCX/PDF, IELTS PDF/PNG/JPG |
-| E2E localhost | 3/3 family hiển thị được | Source → Prediction/GT → badge → HOLD/PASS |
+| CV thật hiện tại | 0/10 field exact, `HOLD` | PDF cá nhân; parser nhận sai cả 10 field |
+| IELTS thật hiện tại | 0/5 field exact, `HOLD` | PNG Test Report Form; PaddleOCR đọc được nguồn nhưng parser gắn sai field |
+| Hợp đồng thật | Chưa có bằng chứng | Không dùng tài liệu mô phỏng để lấp khoảng trống |
 | JSON Schema | 0 lỗi | Kiểm tra cấu trúc trước khi chuyển workflow |
 
 Dashboard chỉ hiển thị metric từ aggregate evidence đã seal. Inventory chỉ dùng
@@ -174,11 +175,12 @@ Hướng dẫn thao tác đầy đủ: [Demo Camunda + HITL](docs/DEMO_CAMUNDA_H
    với ảnh, UI hiển thị OCR backend/model/profile đang chạy.
 4. Nhập Ground Truth đúng theo tài liệu nguồn rồi bấm **Đối chiếu kết quả**.
 5. Đọc badge từng field, tổng Exact/Accepted/Sai và quyết định `HOLD`/`PASS`.
-6. So sánh khối **FILE HIỆN TẠI** với **DATA-29 · AGGREGATE**; hai phạm vi này
-   độc lập và không được dùng thay thế cho nhau.
+6. Kết luận theo khối **FILE HIỆN TẠI**. Không dùng một aggregate khác để thay
+   kết quả của tài liệu đang xem.
 
-Ground Truth và comparison được lưu trong session private local. Không dùng tài
-liệu thật nếu chưa có quyền xử lý; demo mặc định nên dùng fixture synthetic.
+Ground Truth và comparison được lưu trong session private local. Showcase chỉ
+dùng tài liệu thật đã được chủ sở hữu cho phép; file nguồn, Ground Truth và output
+không được commit vào Git.
 
 ## Kiểm thử
 
@@ -250,7 +252,7 @@ Các hạng mục sau chưa được xem là tính năng production:
 - Tự động đưa ra quyết định nhân sự hoặc ghi trực tiếp vào HRIS.
 - Tối ưu scan phức tạp: deskew, denoise, rotation và layout nhiều cột/bảng biểu.
 - Promotion OCR cho các family đang ở trạng thái `HOLD`.
-- Parser review-only vẫn có thể gắn nhầm field dù OCR đọc đúng. E2E synthetic mới
-  đã bắt được ví dụ ở CV và IELTS; màn hình comparison giữ các trường này ở
-  `MISMATCH`/`HOLD` để người review nhìn thấy thay vì che bằng aggregate.
+- Parser review-only hiện gắn nhầm field nghiêm trọng trên CV và IELTS thật vừa
+  kiểm tra. Màn hình comparison giữ nguyên `MISMATCH`/`HOLD`; chưa được dùng các
+  family này cho quyết định nghiệp vụ hoặc tuyên bố production-ready.
 - Đóng gói production bằng Docker/GPU serving và quan sát vận hành hoàn chỉnh.

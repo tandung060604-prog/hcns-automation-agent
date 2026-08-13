@@ -222,6 +222,19 @@ def test_cv_template_is_review_first_and_keeps_values_private_from_camunda() -> 
     validate(response["data"], schema)
 
 
+def test_cv_detection_accepts_pdf_text_with_glued_heading_words() -> None:
+    response = process(
+        [
+            "OCR DOCUMENT AI ENGINEER",
+            "KINHNGHIEM LAM VIEC",
+            "KYNANG",
+        ]
+    )
+
+    assert response["templateId"] == "cv-v2"
+    assert response["quality"]["recommendedAction"] == "MANUAL_REVIEW"
+
+
 def test_probation_contract_detection_ignores_vietnamese_diacritics() -> None:
     response = process(
         [

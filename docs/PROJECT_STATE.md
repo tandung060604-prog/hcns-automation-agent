@@ -10,19 +10,24 @@
   shows source, Prediction, Ground Truth, confidence/evidence, field badges,
   exact/wrong counts and a HOLD/PASS comparison decision. Promotion remains
   disabled independently of the comparison decision.
-- The workspace explicitly separates `CURRENT_FILE` from the sealed DATA-29
-  development aggregate (`107/112` strict, `112/112` accepted, HOLD) and shows
-  template/parser, OCR model/profile/device, matching policy and processing time.
-- Synthetic API smoke covers CV DOCX/PDF, probation contract DOCX/PDF and IELTS
-  PDF/PNG/JPG. Manual browser E2E covered all three families; a real local
-  PaddleOCR run processed the synthetic IELTS PNG and produced a review-only
-  result. The comparison correctly exposed two parser-level mismatches instead
-  of conflating them with DATA-29.
-- Final validation: Python full suite `538 passed`; frontend build and
+- The real-document showcase now uses only current-file results. Aggregate
+  evidence is not loaded into the document-comparison panel.
+  Template/parser, OCR model/profile/device, matching policy and processing time
+  remain visible.
+- Authorized real-document E2E currently covers the user's CV PDF and an IELTS
+  Test Report Form PNG. Source hashes are recorded locally; Ground Truth and
+  output remain outside Git. Current results are CV `0/10` exact and IELTS `0/5`
+  exact, both `HOLD`, exposing material parser errors rather than hiding them.
+- No eligible real probation contract was found. Contract showcase evidence is
+  intentionally absent instead of being substituted with simulated data.
+- Final validation: Python full suite `539 passed`; frontend build and
   rendered-contract test `14/14`; mypy passed for 90 source files; repository
   hygiene, compileall and diff check passed. ESLint has zero errors and retains
   23 pre-existing warnings outside this delivery.
 - Delivery branch: `codex/localhost-comparison-showcase`, targeting `main`.
+
+Older entries below are retained as an audit trail only. Their development-test
+evidence is not loaded into the current real-document showcase.
 
 ## Codebase review repair track - pipeline/hygiene consolidation DONE (2026-08-12)
 - The repository hygiene checker now inspects only Git-tracked paths through

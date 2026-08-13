@@ -9,20 +9,22 @@
   comparison with confidence, evidence and Exact/Accepted/Mismatch/Missing/
   Needs review badges. The summary is explicitly current-file HOLD/PASS and
   never grants workflow promotion.
-- DATA-29 remains a separate development aggregate (`107/112` strict,
-  `112/112` accepted, HOLD). Template/parser, OCR backend/model/device/profile,
-  matching-policy version and processing time are visible in the result panel.
-- Synthetic API smoke covers CV DOCX/PDF, probation contract DOCX/PDF and IELTS
-  PDF/PNG/JPG. Browser E2E covered all three families; a real local PaddleOCR
-  run processed a synthetic IELTS PNG and exposed two parser mismatches for
-  review instead of hiding them.
-- Final validation: Python `538 passed`; web rendered-contract tests `14/14`;
+- Real-document showcase sessions contain only the authorized CV PDF and IELTS
+  Test Report Form PNG. The document-comparison UI does not load aggregate evidence
+  and exposes template/parser/OCR metadata with each current file.
+- Current real-document results are CV `0/10` exact and IELTS `0/5` exact, both
+  `HOLD`. These are confirmed parser failures, not encoding or Ground Truth
+  transport errors. No eligible real probation contract is currently available.
+- Final validation: Python `539 passed`; web rendered-contract tests `14/14`;
   mypy passed for 90 source files; touched-file Ruff, compileall, repository
   hygiene and diff check passed. ESLint has zero errors and 23 existing warnings.
 - Delivery branch: `codex/localhost-comparison-showcase`, targeting `main`.
   Separate local Phase 11.10.2 CCCD work and three untracked scripts are
   preserved outside this delivery. PDF report generation remains out of scope;
   PDF is supported only as a document input.
+
+Older entries below are immutable implementation history. Their development-test
+evidence is not part of the current real-document showcase.
 
 ## Codebase review repair track (2026-08-12)
 

@@ -111,12 +111,12 @@ test("exposes the Phase 15 multi-format IDP and field review flow", async () => 
   assert.match(dashboard, /Phương pháp nào đang thực sự chạy/);
   assert.match(dashboard, /primaryProfile=vietocr_vgg_seq2seq/);
   assert.match(dashboard, /Không auto-switch fallback/);
-  assert.match(dashboard, /Sáu family tài liệu HCNS/);
+  assert.match(dashboard, /Bằng chứng tài liệu thật đã xử lý/);
   assert.match(dashboard, /CCCD đã Ground Truth/);
   assert.match(dashboard, /\/user\/source/);
   assert.match(dashboard, /EvidenceInspector/);
   assert.doesNotMatch(dashboard, /upload HCNS local/);
-  assert.match(dashboard, /E2E thật · Leave \+ OT/);
+  assert.match(dashboard, /Tài liệu đã xử lý/);
   assert.match(dashboard, /CCCD Phase \$\{phase11Label/);
   assert.match(dashboard, /NGUỒN PREDICTION/);
   assert.match(dashboard, /Business JSON/);
@@ -263,8 +263,8 @@ test("exposes one Template-first upload with source preview and structured resul
   assert.match(dashboard, /\/api\/documents\/comparison\?id=/);
   assert.match(dashboard, /Prediction và Ground Truth theo từng field/);
   assert.match(dashboard, /data-testid="compare-current-file-button"/);
-  assert.match(dashboard, /DATA-29/);
-  assert.match(dashboard, /DEVELOPMENT_AGGREGATE/);
+  assert.doesNotMatch(dashboard, /DATA-29/);
+  assert.doesNotMatch(dashboard, /DEVELOPMENT_AGGREGATE/);
   assert.match(dashboard, /templateParserVersion/);
   assert.match(dashboard, /ocrModels/);
   assert.match(dashboard, /TemplateDocumentPreview/);
