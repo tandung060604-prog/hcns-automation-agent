@@ -86,6 +86,7 @@ class ImageDocumentParser:
                     source_format=context.source_format,
                     model_manifest=manifest,
                     metadata={
+                        "ocrDurationMs": result.duration_ms,
                         "ocrRoiEvidence": result.model_manifest.get(
                             "roiRecovery", "[]"
                         )

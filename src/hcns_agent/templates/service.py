@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
 from collections.abc import Mapping
+from dataclasses import replace
 from importlib.util import find_spec
 from pathlib import PurePath
 from typing import cast
@@ -50,6 +52,7 @@ _SUPPORTED_TEMPLATE_FORMATS = frozenset(
 _OCR_TEMPLATE_FORMATS = frozenset({SourceFormat.PDF_SCAN, SourceFormat.IMAGE})
 DEFAULT_TEMPLATE_OCR_BACKEND = "easyocr"
 LOCAL_TEMPLATE_RUNTIME_PROFILE = "template-first"
+STAGE_TIMING_SCHEMA_VERSION = "hcns-stage-timing/1.0.0"
 
 
 class TemplateUnsupportedError(ValueError):
@@ -104,6 +107,7 @@ class _LazyTemplatePaddleOcrEngine:
         return find_spec("paddleocr") is not None
 
     def recognize(self, source: DocumentSource) -> OcrResult:
+        started = time.perf_counter()
         if self._delegate is None:
             with self._lock:
                 if self._delegate is None:
@@ -112,9 +116,10 @@ class _LazyTemplatePaddleOcrEngine:
                     except RuntimeError as error:
                         raise TemplateTechnicalError("OCR_RUNTIME_UNAVAILABLE") from error
         try:
-            return self._delegate.recognize(source)
+            result = self._delegate.recognize(source)
         except RuntimeError as error:
             raise TemplateTechnicalError("OCR_PROCESSING_FAILED") from error
+        return replace(result, duration_ms=round(_elapsed_ms(started)))
 
 
 class _LazyTemplateEasyOcrEngine:
@@ -140,6 +145,7 @@ class _LazyTemplateEasyOcrEngine:
         return find_spec("easyocr") is not None
 
     def recognize(self, source: DocumentSource) -> OcrResult:
+        started = time.perf_counter()
         if self._delegate is None:
             with self._lock:
                 if self._delegate is None:
@@ -150,9 +156,10 @@ class _LazyTemplateEasyOcrEngine:
                     except (ImportError, RuntimeError) as error:
                         raise TemplateTechnicalError("OCR_RUNTIME_UNAVAILABLE") from error
         try:
-            return self._delegate.recognize(source)
+            result = self._delegate.recognize(source)
         except RuntimeError as error:
             raise TemplateTechnicalError("OCR_PROCESSING_FAILED") from error
+        return replace(result, duration_ms=round(_elapsed_ms(started)))
 
 
 class TemplateProcessingService:
@@ -191,6 +198,8 @@ class TemplateProcessingService:
         *,
         result_reference: str | None = None,
     ) -> TemplateProcessingResult:
+        service_started = time.perf_counter()
+        intake_started = time.perf_counter()
         try:
             canonical = self._intake.execute(source)
         except DocumentIntakeError as error:
@@ -206,8 +215,10 @@ class TemplateProcessingService:
             }:
                 raise TemplateUnsupportedError("Unsupported file type") from error
             raise TemplateTechnicalError(error.code.value) from error
+        intake_total_ms = _elapsed_ms(intake_started)
         if canonical.source_format not in _SUPPORTED_TEMPLATE_FORMATS:
             raise TemplateUnsupportedError("Unsupported template source format")
+        template_started = time.perf_counter()
         detection = self._registry.detect(canonical)
         if detection is None:
             raise TemplateUnsupportedError("Document does not match an approved template")
@@ -241,12 +252,21 @@ class TemplateProcessingService:
             or f"template_first/results/{canonical.document_id}.json",
         }
         validate_process_variables(variables)
+        ocr_duration_ms = _ocr_duration_ms(canonical)
+        processing = _processing_metadata(canonical, ocr_confidence)
+        processing["timingSchemaVersion"] = STAGE_TIMING_SCHEMA_VERSION
+        processing["timingsMs"] = {
+            "intake": round(max(0.0, intake_total_ms - ocr_duration_ms), 3),
+            "ocr": ocr_duration_ms,
+            "template": _elapsed_ms(template_started),
+            "serviceTotal": _elapsed_ms(service_started),
+        }
         return TemplateProcessingResult(
             detection=detection,
             data=data,
             validation=validation,
             camunda_variables=dict(variables),
-            processing=_processing_metadata(canonical, ocr_confidence),
+            processing=processing,
         )
 
     def apply_corrections(
@@ -405,6 +425,19 @@ def _ocr_confidence(document: CanonicalDocument) -> float | None:
         if (confidence := getattr(block, "confidence", None)) is not None
     ]
     return round(sum(values) / len(values), 4) if values else None
+
+
+def _ocr_duration_ms(document: CanonicalDocument) -> float:
+    if not document.provenance:
+        return 0.0
+    value = document.provenance[-1].metadata.get("ocrDurationMs", 0)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0.0
+    return round(max(0.0, float(value)), 3)
+
+
+def _elapsed_ms(started: float) -> float:
+    return round((time.perf_counter() - started) * 1000, 3)
 
 
 def _require_ocr_review(

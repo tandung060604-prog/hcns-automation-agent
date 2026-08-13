@@ -154,6 +154,7 @@ from hcns_agent.ports.document_parser import DocumentSource
 from hcns_agent.templates.compatibility import canonicalize_template_payload
 from hcns_agent.templates.service import (
     LOCAL_TEMPLATE_RUNTIME_PROFILE,
+    STAGE_TIMING_SCHEMA_VERSION,
     TemplateProcessingService,
     TemplateTechnicalError,
     TemplateUnsupportedError,
@@ -1537,7 +1538,21 @@ class UserOCRService:
             "documentType"
         ) not in {"LEAVE_REQUEST", "OVERTIME_REQUEST"}:
             return None
-        return canonicalize_template_payload(payload)
+        payload = canonicalize_template_payload(payload)
+        performance_path = session_dir / "template_first" / "performance.json"
+        if performance_path.is_file():
+            try:
+                performance = json.loads(performance_path.read_text(encoding="utf-8"))
+                timings = performance.get("timingsMs")
+                processing = payload.get("processing")
+                if isinstance(timings, dict) and isinstance(processing, dict):
+                    processing["timingSchemaVersion"] = performance.get(
+                        "schemaVersion"
+                    )
+                    processing["timingsMs"] = timings
+            except (OSError, json.JSONDecodeError):
+                pass
+        return payload
 
     def template_source(self, session_id: str) -> Path | None:
         if self.template_result(session_id) is None:
@@ -1827,6 +1842,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     "declaredDocumentType": {"value": document_type, "type": "String"},
                 }
                 engine_url = _local_camunda_url()
+                camunda_started = time.perf_counter()
                 instance = _camunda_post(
                     f"{engine_url}/process-definition/key/hr_document_agent_mvp_v2/start",
                     {"variables": variables},
@@ -1843,11 +1859,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 if not isinstance(task_id, str):
                     raise RuntimeError("Camunda submission task is invalid")
                 _camunda_post(f"{engine_url}/task/{task_id}/complete", {"variables": variables})
+                camunda_duration_ms = round(
+                    (time.perf_counter() - camunda_started) * 1000,
+                    3,
+                )
                 self.send_json({
                     "status": "SUBMITTED",
                     "applicationId": application_id,
                     "processInstanceId": process_id,
                     "tasklistUrl": "http://localhost:8080/camunda/app/tasklist/default/",
+                    "performance": {
+                        "schemaVersion": STAGE_TIMING_SCHEMA_VERSION,
+                        "timingsMs": {"camunda": camunda_duration_ms},
+                    },
                 })
             except (ValueError, TypeError, json.JSONDecodeError) as exc:
                 self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
@@ -1892,6 +1916,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         "originalFileName": filename,
                     }
                 )
+                persistence_started = time.perf_counter()
                 session_dir = self.user_ocr.sessions_root / document_id
                 result_dir = session_dir / "template_first"
                 input_dir = session_dir / "input"
@@ -1904,6 +1929,31 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     json.dumps(payload, ensure_ascii=False, indent=2),
                     encoding="utf-8",
                 )
+                persistence_duration_ms = round(
+                    (time.perf_counter() - persistence_started) * 1000,
+                    3,
+                )
+                timings = payload["processing"].get("timingsMs")
+                if isinstance(timings, dict):
+                    timings["persistence"] = persistence_duration_ms
+                    service_total = timings.get("serviceTotal", 0.0)
+                    if isinstance(service_total, (int, float)) and not isinstance(
+                        service_total, bool
+                    ):
+                        timings["total"] = round(
+                            float(service_total) + persistence_duration_ms,
+                            3,
+                        )
+                    (result_dir / "performance.json").write_text(
+                        json.dumps(
+                            {
+                                "schemaVersion": STAGE_TIMING_SCHEMA_VERSION,
+                                "timingsMs": timings,
+                            },
+                            indent=2,
+                        ),
+                        encoding="utf-8",
+                    )
                 self.send_json(payload)
             except TemplateUnsupportedError as exc:
                 self.send_json(

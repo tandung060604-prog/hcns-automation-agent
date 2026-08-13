@@ -95,6 +95,7 @@ def test_template_endpoints_process_docx_without_ocr(tmp_path: Path) -> None:
         assert result["status"] == "SUCCESS"
         assert result["templateId"] == "leave-request-v1"
         assert result["quality"]["recommendedAction"] == "AUTO_CONTINUE"
+        assert result["processing"]["timingsMs"]["ocr"] == 0
         reference = Path(result["camundaVariables"]["extractedDataReference"])
         assert (tmp_path / reference).is_file()
 
@@ -465,6 +466,11 @@ def test_camunda_start_accepts_contract_cv_and_ielts_with_opaque_variables(
             "process-contract",
             "process-ielts",
         ]
+        assert all(
+            item["performance"]["schemaVersion"] == "hcns-stage-timing/1.0.0"
+            and item["performance"]["timingsMs"]["camunda"] >= 0
+            for item in responses
+        )
         starts = [payload for url, payload in posted if url.endswith("/start")]
         assert [
             item["variables"]["declaredDocumentType"]["value"]  # type: ignore[index]
@@ -778,6 +784,31 @@ def test_template_endpoint_accepts_ielts_image_with_local_ocr(
         assert result["templateId"] == "ielts-certificate-v2"
         assert result["processing"]["sourceFormat"] == "IMAGE"
         assert result["processing"]["usesOcr"] is True
+        assert result["processing"]["timingSchemaVersion"] == "hcns-stage-timing/1.0.0"
+        assert set(result["processing"]["timingsMs"]) == {
+            "intake",
+            "ocr",
+            "template",
+            "serviceTotal",
+            "persistence",
+            "total",
+        }
+        assert all(
+            isinstance(value, (int, float)) and value >= 0
+            for value in result["processing"]["timingsMs"].values()
+        )
+        assert result["processing"]["timingsMs"]["ocr"] == 1
+        performance_path = (
+            tmp_path
+            / "user_uploads"
+            / "sessions"
+            / result["data"]["documentId"]
+            / "template_first"
+            / "performance.json"
+        )
+        performance = json.loads(performance_path.read_text(encoding="utf-8"))
+        assert set(performance) == {"schemaVersion", "timingsMs"}
+        assert "Candidate name" not in json.dumps(performance)
         assert result["quality"]["recommendedAction"] == "MANUAL_REVIEW"
     finally:
         connection.close()
