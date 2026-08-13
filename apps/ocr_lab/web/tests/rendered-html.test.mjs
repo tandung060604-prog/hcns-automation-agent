@@ -116,7 +116,7 @@ test("exposes the Phase 15 multi-format IDP and field review flow", async () => 
   assert.match(dashboard, /\/user\/source/);
   assert.match(dashboard, /EvidenceInspector/);
   assert.doesNotMatch(dashboard, /upload HCNS local/);
-  assert.match(dashboard, /Tài liệu đã xử lý/);
+  assert.doesNotMatch(dashboard, /Tài liệu đã xử lý/);
   assert.match(dashboard, /CCCD Phase \$\{phase11Label/);
   assert.match(dashboard, /NGUỒN PREDICTION/);
   assert.match(dashboard, /Business JSON/);
@@ -238,15 +238,16 @@ test("exposes the DATA-08 independent contract review panel behind a private fla
 });
 
 test("exposes one Template-first upload with source preview and structured results", async () => {
-  const [dashboard, css, envExample] = await Promise.all([
+  const [dashboard, data29, css, envExample] = await Promise.all([
     readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/ExternalDatasetPrediction.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
   ]);
 
   assert.match(dashboard, /\/api\/templates/);
   assert.match(dashboard, /\/api\/documents\/process/);
-  assert.match(dashboard, /\/api\/documents\/sessions/);
+  assert.doesNotMatch(dashboard, /\/api\/documents\/sessions/);
   assert.match(dashboard, /\/api\/documents\/result\?id=/);
   assert.match(dashboard, /\/api\/documents\/source\?id=/);
   assert.match(dashboard, /useState<"template" \| "legacy">\("template"\)/);
@@ -258,13 +259,22 @@ test("exposes one Template-first upload with source preview and structured resul
   assert.match(dashboard, /Xem JSON đầy đủ/);
   assert.match(dashboard, /Không có trong tài liệu/);
   assert.match(dashboard, /TemplateResultPanel/);
+  assert.match(dashboard, /"CV", "CERTIFICATE", "EMPLOYMENT_CONTRACT"/);
+  assert.match(dashboard, /\/api\/camunda\/case\?id=/);
+  assert.match(dashboard, /processInstanceId/);
+  assert.match(dashboard, /Cập nhật trạng thái/);
   assert.match(dashboard, /TemplateComparisonPanel/);
   assert.match(dashboard, /\/api\/documents\/compare/);
   assert.match(dashboard, /\/api\/documents\/comparison\?id=/);
   assert.match(dashboard, /Prediction và Ground Truth theo từng field/);
   assert.match(dashboard, /data-testid="compare-current-file-button"/);
-  assert.match(dashboard, /DATA-29 · 4 tài liệu metric/);
+  assert.match(dashboard, /DATA-29 · 12 tài liệu metric · 3 Contract · 5 CV · 4 IELTS/);
   assert.match(dashboard, /ExternalDatasetPrediction version="data29"/);
+  assert.match(data29, /DATA29_CATEGORIES/);
+  assert.match(data29, /Contract/);
+  assert.match(data29, /IELTS/);
+  assert.match(data29, /item\.category === activeCategory/);
+  assert.doesNotMatch(data29, /DATA29_SHOWCASE_CASES/);
   assert.doesNotMatch(dashboard, /DEVELOPMENT_AGGREGATE/);
   assert.match(dashboard, /templateParserVersion/);
   assert.match(dashboard, /ocrModels/);
@@ -272,20 +282,6 @@ test("exposes one Template-first upload with source preview and structured resul
   assert.match(dashboard, /inspectCamundaDocument/);
   assert.match(dashboard, /Đang mở bản gốc và JSON local/);
   assert.match(dashboard, /window\.location\.hash = "upload"/);
-  assert.match(dashboard, /TemplateEvidenceInspector/);
-  assert.match(dashboard, /activeTemplateEvidencePreviewUrl/);
-  assert.match(dashboard, /\/api\/documents\/preview\?id=/);
-  assert.match(dashboard, /"template-evidence-image"/);
-  assert.match(dashboard, /"template-evidence-pdf"/);
-  assert.match(
-    dashboard,
-    /activeTemplateSession\?\.sourceFormat === "PDF_SCAN"/,
-  );
-  assert.match(dashboard, /PaddleOCR local/);
-  assert.match(
-    dashboard,
-    /Dữ liệu được đọc trực tiếp bằng native parser, không dùng OCR/,
-  );
   assert.match(dashboard, /\.docx,\.pdf/);
   assert.match(dashboard, /data-testid="local-document-input"/);
   assert.match(dashboard, /data-testid="template-document-preview"/);
@@ -300,7 +296,8 @@ test("exposes one Template-first upload with source preview and structured resul
   assert.match(css, /\.comparison-field-row/);
   assert.match(css, /\.comparison-status\.mismatch/);
   assert.match(css, /\.template-json/);
-  assert.match(css, /\.template-evidence-field-row/);
+  assert.match(css, /\.data29-category-switch/);
+  assert.match(css, /\.camunda-case-status/);
   assert.match(dashboard, /data-testid="product-showcase"/);
   assert.match(css, /\.product-showcase/);
   assert.match(envExample, /^VITE_SHOW_LEGACY_UPLOAD=false$/m);

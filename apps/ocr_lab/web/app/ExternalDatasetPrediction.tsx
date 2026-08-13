@@ -12,13 +12,13 @@ type Summary = {
   report?: RecordValue;
 };
 type Props = { version?: "data12" | "data13" | "data29" | "policy-v2" };
+type Data29Category = "contract" | "cv" | "ielts";
 
-const DATA29_SHOWCASE_CASES = new Set([
-  "contract-002",
-  "cv-002",
-  "cv-005",
-  "ielts-001",
-]);
+const DATA29_CATEGORIES: Array<{ id: Data29Category; label: string }> = [
+  { id: "contract", label: "Contract" },
+  { id: "cv", label: "CV" },
+  { id: "ielts", label: "IELTS" },
+];
 
 function object(value: unknown): RecordValue {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as RecordValue) : {};
@@ -32,14 +32,15 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
       : "/external-dataset/prediction";
   const [summary, setSummary] = useState<Summary | null>(null);
   const [activeCase, setActiveCase] = useState("");
+  const [activeCategory, setActiveCategory] = useState<Data29Category>("contract");
   const [detail, setDetail] = useState<RecordValue | null>(null);
   const [error, setError] = useState("");
   const visibleDocuments = useMemo(
     () =>
       summary?.documents.filter(
-        (item) => version !== "data29" || DATA29_SHOWCASE_CASES.has(item.caseId),
+        (item) => version !== "data29" || item.category === activeCategory,
       ) ?? [],
-    [summary, version],
+    [activeCategory, summary, version],
   );
 
   useEffect(() => {
@@ -51,11 +52,9 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
       })
       .then((payload) => {
         setSummary(payload);
-        setActiveCase(
-          payload.documents.find(
-            (item) => version !== "data29" || DATA29_SHOWCASE_CASES.has(item.caseId),
-          )?.caseId ?? "",
-        );
+        setActiveCase(payload.documents.find(
+          (item) => version !== "data29" || item.category === "contract",
+        )?.caseId ?? "");
       })
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Không đọc được DATA-12"));
   }, [endpoint, version]);
@@ -103,6 +102,28 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
             <span className="local-evidence-metric"><small>Schema errors</small><strong>{metrics ? String(report.schemaErrors ?? "—") : "—"}</strong></span>
             <span className="local-evidence-metric"><small>Decision</small><strong>{String(report.decision ?? "HOLD")}</strong></span>
           </div>
+          {version === "data29" ? (
+            <div className="data29-category-switch" role="tablist" aria-label="Loại tài liệu DATA-29">
+              {DATA29_CATEGORIES.map((category) => {
+                const documents = summary.documents.filter((item) => item.category === category.id);
+                return (
+                  <button
+                    className={activeCategory === category.id ? "active" : ""}
+                    key={category.id}
+                    onClick={() => {
+                      setActiveCategory(category.id);
+                      setActiveCase(documents[0]?.caseId ?? "");
+                    }}
+                    role="tab"
+                    aria-selected={activeCategory === category.id}
+                    type="button"
+                  >
+                    {category.label} <strong>{documents.length}</strong>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
           <div className="external-review-grid">
             <div className="external-review-list" role="list">
               {visibleDocuments.map((item) => (

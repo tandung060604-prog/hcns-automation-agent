@@ -1,5 +1,34 @@
 # Handoff
 
+## DATA-29 full explorer + Camunda three-family bridge (2026-08-13)
+
+- Delivery checkpoint: commit `729295e` on
+  `codex/data29-camunda-shadow-e2e`, PR #34 targeting `main`.
+
+- Evidence Explorer now shows every pinned DATA-29 source: Contract `3`, CV `5`,
+  IELTS `4`. The private upload-session tab and its frontend fetch/state/render
+  path were removed; private sessions themselves were not deleted.
+- Upload results for CV, probation contract and IELTS can start the existing
+  Camunda process. The API accepts only the five approved local-shadow types and
+  verifies that worker/dashboard private roots match before process start.
+- Start responses include `processInstanceId`; the new safe status endpoint and
+  result panel expose process state, current human task and incident count only.
+  Raw fields, file paths and document content are not returned.
+- Regression evidence: Python `543 passed`; Camunda/Template subset `60 passed`;
+  web build and rendered tests `14/14`; mypy passed for 90 source files; Ruff,
+  compileall, repository hygiene and diff check passed. ESLint has zero errors
+  and 23 pre-existing warnings.
+- Live Camunda 7.13 local shadow completed CV process
+  `9c1d6b81-96d5-11f1-9d8f-2e6dc137b103` and IELTS process
+  `9d181e50-96d5-11f1-9d8f-2e6dc137b103`. Both ended `COMPLETED` after HR
+  Review with zero incidents, one private result, one idempotency record and one
+  review audit per case. HRIS/notification values are `SIMULATED` and
+  `autoContinueEnabled=false`.
+- The private root has no probation-contract upload, so Contract live acceptance
+  remains open. Do not use DATA-29 as its E2E source and do not report production
+  readiness from this work.
+- Unrelated Phase 11.10.2 CCCD changes and local scripts remain outside scope.
+
 ## DATA-29 metric-linked document showcase (2026-08-13)
 
 - Template-first localhost now accepts CV and probation contract as DOCX/PDF,
@@ -14,7 +43,7 @@
   field-level evidence. They score `37/39` strict and `39/39` accepted as a
   display sample; the sealed 12-document aggregate remains `107/112` and `112/112`.
 - Detail comparison now derives matching policy `2.0.0` from the pinned DATA-29
-  report. DATA-29 is labeled as a synthetic development corpus, not real evidence.
+  report. DATA-29 is labeled as a development corpus, not production evidence.
 - Final validation: Python `540 passed`; web rendered-contract tests `14/14`;
   mypy passed for 90 source files; touched-file Ruff, compileall, repository
   hygiene and diff check passed. ESLint has zero errors and 23 existing warnings.

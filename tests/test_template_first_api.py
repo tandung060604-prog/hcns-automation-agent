@@ -346,6 +346,212 @@ def test_camunda_json_endpoint_rejects_oversized_body(tmp_path: Path) -> None:
         thread.join(timeout=5)
 
 
+def test_camunda_start_accepts_contract_cv_and_ielts_with_opaque_variables(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configure_handler(tmp_path)
+    monkeypatch.setenv("HCNS_CAMUNDA_PRIVATE_ROOT", str(tmp_path))
+    posted: list[tuple[str, dict[str, object]]] = []
+    process_ids = iter(["process-cv", "process-contract", "process-ielts"])
+
+    def fake_post(url: str, payload: dict[str, object]) -> object:
+        posted.append((url, payload))
+        if url.endswith("/process-definition/key/hr_document_agent_mvp_v2/start"):
+            return {"id": next(process_ids)}
+        return None
+
+    def fake_get(url: str) -> object:
+        if "task?processInstanceId=" in url and url.endswith("&taskDefinitionKey=Submit"):
+            return [{"id": f"submit-{len(posted)}"}]
+        raise AssertionError(url)
+
+    monkeypatch.setattr(dashboard_api, "_camunda_post", fake_post)
+    monkeypatch.setattr(dashboard_api, "_camunda_get", fake_get)
+    documents = [
+        ("cv.docx", docx_bytes(["CURRICULUM VITAE", "Kinh nghiem: QA", "Ky nang: Python"]), "CV"),
+        (
+            "contract.docx",
+            docx_bytes(["HOP DONG THU VIEC", "THOI GIAN THU VIEC: 60 ngay", "MUC LUONG: 10000000"]),
+            "EMPLOYMENT_CONTRACT",
+        ),
+        ("ielts.pdf", synthetic_text_pdf_bytes(ielts_lines()), "CERTIFICATE"),
+    ]
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+    try:
+        responses: list[dict[str, object]] = []
+        for index, (filename, content, expected_type) in enumerate(documents):
+            boundary = f"camunda-family-{index}"
+            upload = _multipart_payload(boundary, filename, content)
+            connection.request(
+                "POST",
+                "/api/documents/process",
+                body=upload,
+                headers={
+                    "Content-Type": f"multipart/form-data; boundary={boundary}",
+                    "Content-Length": str(len(upload)),
+                },
+            )
+            response = connection.getresponse()
+            result = json.loads(response.read().decode("utf-8"))
+            assert response.status == 200, result
+            assert result["documentType"] == expected_type
+
+            body = json.dumps({"documentId": result["data"]["documentId"]})
+            connection.request(
+                "POST",
+                "/api/camunda/start",
+                body=body,
+                headers={"Content-Type": "application/json"},
+            )
+            response = connection.getresponse()
+            payload = json.loads(response.read().decode("utf-8"))
+            assert response.status == 200, payload
+            responses.append(payload)
+
+        assert [item["processInstanceId"] for item in responses] == [
+            "process-cv",
+            "process-contract",
+            "process-ielts",
+        ]
+        starts = [payload for url, payload in posted if url.endswith("/start")]
+        assert [
+            item["variables"]["declaredDocumentType"]["value"]  # type: ignore[index]
+            for item in starts
+        ] == ["CV", "EMPLOYMENT_CONTRACT", "CERTIFICATE"]
+        assert all(set(item["variables"]) == {  # type: ignore[arg-type]
+            "applicationId", "documentReference", "declaredDocumentType"
+        } for item in starts)
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_camunda_start_rejects_unsupported_type_and_private_root_mismatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configure_handler(tmp_path)
+    document_id = str(uuid.uuid4())
+    monkeypatch.setattr(
+        DashboardHandler.user_ocr,
+        "template_result",
+        lambda _: {"documentType": "CITIZEN_ID"},
+    )
+    monkeypatch.setattr(
+        DashboardHandler.user_ocr,
+        "template_source",
+        lambda _: tmp_path / "private-source.docx",
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+    try:
+        body = json.dumps({"documentId": document_id})
+        connection.request(
+            "POST",
+            "/api/camunda/start",
+            body=body,
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        payload = json.loads(response.read().decode("utf-8"))
+        assert response.status == 400
+        assert payload == {
+            "error": "Document type is not available for Camunda local shadow"
+        }
+
+        monkeypatch.setattr(
+            DashboardHandler.user_ocr,
+            "template_result",
+            lambda _: {"documentType": "CV"},
+        )
+        monkeypatch.setenv("HCNS_CAMUNDA_PRIVATE_ROOT", str(tmp_path / "other-root"))
+        connection.request(
+            "POST",
+            "/api/camunda/start",
+            body=body,
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        payload = json.loads(response.read().decode("utf-8"))
+        assert response.status == 400
+        assert payload == {
+            "error": "HCNS_CAMUNDA_PRIVATE_ROOT must match the dashboard data root"
+        }
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_camunda_case_status_exposes_only_safe_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configure_handler(tmp_path)
+
+    def fake_get(url: str) -> object:
+        process_id = "process-active" if "process-active" in url else "process-rejected"
+        if "/task?" in url:
+            return ([{"id": "task-hr", "taskDefinitionKey": "HRReview", "name": "HR review"}]
+                    if process_id == "process-active" else [])
+        if "/incident?" in url:
+            return []
+        if "/history/process-instance/" in url:
+            return {"state": "ACTIVE" if process_id == "process-active" else "COMPLETED"}
+        if "/history/variable-instance?" in url:
+            variables: list[dict[str, str]] = [
+                {"name": "applicationId", "value": "LOCAL-CASE"},
+                {"name": "declaredDocumentType", "value": "CV"},
+                {"name": "ignoredRawValue", "value": "must-not-be-returned"},
+            ]
+            if process_id == "process-rejected":
+                variables.append({"name": "hrReviewDecision", "value": "REJECTED"})
+            return variables
+        raise AssertionError(url)
+
+    monkeypatch.setattr(dashboard_api, "_camunda_get", fake_get)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+    try:
+        expected = [
+            ("process-active", "AWAITING_HR_REVIEW", "task-hr"),
+            ("process-rejected", "REJECTED", None),
+        ]
+        for process_id, state, task_id in expected:
+            connection.request("GET", f"/api/camunda/case?id={process_id}")
+            response = connection.getresponse()
+            payload = json.loads(response.read().decode("utf-8"))
+            assert response.status == 200
+            assert payload["state"] == state
+            assert payload["taskId"] == task_id
+            assert payload["documentType"] == "CV"
+            assert payload["incidentCount"] == 0
+            assert "ignoredRawValue" not in payload
+
+        connection.request("GET", "/api/camunda/case?id=bad/id")
+        response = connection.getresponse()
+        assert response.status == 400
+        assert json.loads(response.read().decode("utf-8")) == {
+            "error": "Camunda process instance id is invalid"
+        }
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_local_camunda_queue_and_employee_review_use_opaque_reference(
     tmp_path: Path, monkeypatch: object
 ) -> None:

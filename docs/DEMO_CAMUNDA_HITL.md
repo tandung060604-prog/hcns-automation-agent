@@ -1,9 +1,12 @@
 # Kịch bản quay demo Camunda HITL — làm lại từ đầu
 
-Tài liệu này là checklist điều phối một buổi demo local cho hai loại tài liệu:
+Tài liệu này là checklist điều phối một buổi demo local cho năm loại tài liệu:
 
 - Đơn xin nghỉ phép (`LEAVE_REQUEST`)
 - Đơn xin tăng ca (`OVERTIME_REQUEST`)
+- CV (`CV`)
+- Hợp đồng thử việc (`EMPLOYMENT_CONTRACT`)
+- Chứng chỉ IELTS (`CERTIFICATE`)
 
 Mục tiêu là chứng minh một luồng **OCR/template extraction → người nộp kiểm tra →
 HCNS quyết định → Camunda điều phối → kết thúc**. File gốc, nội dung OCR và JSON
@@ -117,7 +120,21 @@ task `UploadAgain`; thao tác hoàn thành `UploadAgain` thực hiện trong Cam
 
 Không dùng Case C trong video ngắn nếu chưa cần trình bày chức năng tải lại.
 
-## 6. Checklist bàn giao từng checkpoint
+## 6. Case D–F — CV, hợp đồng và IELTS local shadow
+
+Với từng loại tài liệu, upload một file được cấp quyền tại khu vực tải tài liệu,
+kiểm tra đúng `documentType`, sau đó bấm **Đưa vào Camunda**. Ghi lại process ID
+hiển thị dưới kết quả, cập nhật đến khi xuất hiện User Review hoặc HR Review, rồi
+hoàn thành Human Review. Mỗi case đạt khi trạng thái cuối là `COMPLETED`, incident
+bằng `0`, hàng đợi không còn task của process và không có side effect thật.
+
+| Case | Loại | documentType |
+|---|---|---|
+| D | CV | `CV` |
+| E | Hợp đồng thử việc | `EMPLOYMENT_CONTRACT` |
+| F | IELTS | `CERTIFICATE` |
+
+## 7. Checklist bàn giao từng checkpoint
 
 Khi đến mỗi điểm dừng, gửi đúng ba thông tin sau:
 
@@ -139,15 +156,18 @@ Bước tiếp theo duy nhất: ...
 Không bấm Complete khi chưa nhận bàn giao checkpoint hiện tại. Điều này giúp giữ node active
 để Cockpit có thể hiển thị luồng di chuyển và tránh mất bằng chứng runtime.
 
-## 7. Bảng tổng kết report sau buổi demo
+## 8. Bảng tổng kết report sau buổi demo
 
 | Case | Loại tài liệu | Quyết định người nộp | Quyết định HCNS | Bằng chứng chính | Trạng thái |
 |---|---|---|---|---|---|
 | A | Leave Request | Chuyển HCNS | Chấp nhận | S1-A đến S5-A | Điền sau demo |
 | B | Overtime Request | Xác nhận chính xác | Không áp dụng | S1-B, S2-B, S5-B | Điền sau demo |
 | C | Overtime Request | Chuyển HCNS | Yêu cầu tải lại | Ảnh task UploadAgain | Tuỳ chọn |
+| D | CV | Theo routing | Xác nhận | Process ID + trạng thái local | Điền sau demo |
+| E | Hợp đồng thử việc | Theo routing | Xác nhận | Process ID + trạng thái local | Điền sau demo |
+| F | IELTS | Theo routing | Xác nhận | Process ID + trạng thái local | Điền sau demo |
 
-## 8. Sự cố thường gặp
+## 9. Sự cố thường gặp
 
 | Hiện tượng | Kiểm tra trước tiên |
 |---|---|
@@ -157,7 +177,7 @@ Không bấm Complete khi chưa nhận bàn giao checkpoint hiện tại. Điề
 | Cockpit không thấy case đã Complete | Bình thường: trang Runtime chỉ hiển thị case đang chạy; dùng S5 làm bằng chứng kết thúc |
 | Hàng đợi có case cũ | Không dùng lại case cũ; tạo case mới và xác nhận mã tham chiếu mới |
 
-## 9. Mốc bắt đầu lại
+## 10. Mốc bắt đầu lại
 
 Buổi demo mới luôn bắt đầu tại **S0**. Sau khi gửi S0, nhiệm vụ bàn giao đầu tiên là **A1 — tạo
 và trích xuất một Leave Request mới**. Không cần chạy lại benchmark hay thay đổi parser trong

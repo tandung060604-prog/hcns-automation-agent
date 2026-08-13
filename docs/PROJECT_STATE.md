@@ -1,4 +1,35 @@
 # Project State
+## DATA-29 full explorer + three-family Camunda bridge (2026-08-13)
+
+- Delivery checkpoint: commit `729295e` on
+  `codex/data29-camunda-shadow-e2e`, PR #34 targeting `main`.
+
+- Evidence Explorer no longer loads or renders private upload-session history.
+  DATA-29 now exposes all 12 metric-linked sources through Contract `3`, CV `5`
+  and IELTS `4` filters while retaining aggregate `107/112` exact and `112/112`
+  accepted from the pinned report.
+- Dashboard start allows `CV`, `CERTIFICATE` and `EMPLOYMENT_CONTRACT` alongside
+  Leave/Overtime. The request sends only application ID, session UUID and declared
+  type. `HCNS_CAMUNDA_PRIVATE_ROOT` must resolve to the dashboard `DataRoot`.
+- `GET /api/camunda/case?id=...` exposes only process/type/state/current-task/
+  incident metadata. The upload result shows processing, human-review, reupload,
+  completed, rejected and incident states without exposing document values.
+- Shadow policy remains unchanged: `autoContinueEnabled=false`, real HRIS and
+  notification side effects disabled. Production promotion remains out of scope.
+- Final validation: Python `543 passed`; Camunda/Template subset `60 passed`;
+  web build and rendered-contract tests `14/14`; mypy passed for 90 source
+  files; Ruff gates, compileall, repository hygiene and diff check passed.
+  ESLint has zero errors and retains 23 pre-existing warnings.
+- Live Camunda 7.13 local shadow completed one authorized CV process
+  (`9c1d6b81-96d5-11f1-9d8f-2e6dc137b103`) and one authorized IELTS process
+  (`9d181e50-96d5-11f1-9d8f-2e6dc137b103`). Both required HR Review, ended
+  `COMPLETED`, recorded one review audit, and had zero incidents. Each produced
+  one result and one idempotency record; HRIS and notification remained
+  `SIMULATED`, and `autoContinueEnabled=false`.
+- Contract live acceptance is still open because the authorized private root
+  currently contains one CV and one IELTS upload but no probation-contract
+  upload. DATA-29 is not substituted for this user-upload acceptance step.
+
 ## DATA-29 metric-linked document showcase (2026-08-13)
 
 - Template-first upload now follows the frozen manifest at both UI and API
@@ -15,7 +46,7 @@
   4/12 while retaining the full aggregate `107/112` strict and `112/112` accepted.
 - Per-document comparison derives matching policy `2.0.0` from the pinned report.
   Displayed cases reproduce `14/14`, `9/10`, `9/10` and `5/5` strict respectively.
-- DATA-29 is explicitly labeled a synthetic development corpus. Independent
+- DATA-29 is explicitly labeled a development corpus. Independent
   uploaded sessions remain available but no longer stand in for the metric corpus.
 - Final validation: Python full suite `540 passed`; frontend build and
   rendered-contract test `14/14`; mypy passed for 90 source files; repository

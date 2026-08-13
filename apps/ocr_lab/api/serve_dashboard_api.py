@@ -186,6 +186,19 @@ def _camunda_value(variables: object, name: str) -> str | None:
     return value["value"]
 
 
+def _camunda_history_value(variables: object, name: str) -> str | None:
+    if not isinstance(variables, list):
+        return None
+    for variable in variables:
+        if (
+            isinstance(variable, dict)
+            and variable.get("name") == name
+            and isinstance(variable.get("value"), str)
+        ):
+            return variable["value"]
+    return None
+
+
 def _local_camunda_url() -> str:
     return os.getenv("CAMUNDA_REST_URL", "http://127.0.0.1:8080/engine-rest").rstrip("/")
 
@@ -455,6 +468,16 @@ def build_local_benchmark_summary(handler: type[DashboardHandler]) -> dict[str, 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 MAX_REVIEW_BYTES = 2 * 1024 * 1024
 MAX_PDF_PAGES = 50
+CAMUNDA_UPLOAD_DOCUMENT_TYPES = frozenset(
+    {
+        "LEAVE_REQUEST",
+        "OVERTIME_REQUEST",
+        "CV",
+        "CERTIFICATE",
+        "EMPLOYMENT_CONTRACT",
+    }
+)
+CAMUNDA_PROCESS_ID_PATTERN = re.compile(r"[A-Za-z0-9-]{1,128}\Z")
 TEMPLATE_ALLOWED_EXTENSIONS = {
     ".docx",
     ".pdf",
@@ -1786,11 +1809,16 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 if result is None:
                     raise ValueError("Template session not found")
                 document_type = result.get("documentType")
-                if document_type not in {"LEAVE_REQUEST", "OVERTIME_REQUEST"}:
-                    raise ValueError("Only Leave Request and Overtime Request are available")
+                if document_type not in CAMUNDA_UPLOAD_DOCUMENT_TYPES:
+                    raise ValueError("Document type is not available for Camunda local shadow")
                 source = self.user_ocr.template_source(document_id)
                 if source is None:
                     raise ValueError("Private document source not found")
+                private_root = os.getenv("HCNS_CAMUNDA_PRIVATE_ROOT", "").strip()
+                if not private_root or Path(private_root).resolve() != self.data_root.resolve():
+                    raise ValueError(
+                        "HCNS_CAMUNDA_PRIVATE_ROOT must match the dashboard data root"
+                    )
                 application_id = f"LOCAL-{uuid.uuid4()}"
                 variables = {
                     "applicationId": {"value": application_id, "type": "String"},
@@ -1817,6 +1845,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self.send_json({
                     "status": "SUBMITTED",
                     "applicationId": application_id,
+                    "processInstanceId": process_id,
                     "tasklistUrl": "http://localhost:8080/camunda/app/tasklist/default/",
                 })
             except (ValueError, TypeError, json.JSONDecodeError) as exc:
@@ -2803,6 +2832,81 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self.send_json({"queue": queue})
             except (HTTPError, URLError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
                 self.send_json({"error": f"Camunda local is unavailable: {exc}"}, HTTPStatus.SERVICE_UNAVAILABLE)
+            return
+
+        if parsed.path == "/api/camunda/case":
+            process_id = query.get("id", [""])[0]
+            if CAMUNDA_PROCESS_ID_PATTERN.fullmatch(process_id) is None:
+                self.send_json(
+                    {"error": "Camunda process instance id is invalid"},
+                    HTTPStatus.BAD_REQUEST,
+                )
+                return
+            try:
+                engine_url = _local_camunda_url()
+                tasks = _camunda_get(
+                    f"{engine_url}/task?processInstanceId={process_id}"
+                )
+                incidents = _camunda_get(
+                    f"{engine_url}/incident?processInstanceId={process_id}"
+                )
+                history = _camunda_get(
+                    f"{engine_url}/history/process-instance/{process_id}"
+                )
+                variables = _camunda_get(
+                    f"{engine_url}/history/variable-instance?processInstanceId={process_id}"
+                )
+                task = next(
+                    (item for item in tasks if isinstance(item, dict)),
+                    None,
+                ) if isinstance(tasks, list) else None
+                incident_count = len(incidents) if isinstance(incidents, list) else 0
+                task_key = str(task.get("taskDefinitionKey", "")) if task else ""
+                if incident_count:
+                    state = "INCIDENT"
+                elif task_key == "UserReview":
+                    state = "AWAITING_USER_REVIEW"
+                elif task_key in {"HRReview", "FinalHR"}:
+                    state = "AWAITING_HR_REVIEW"
+                elif task_key == "UploadAgain":
+                    state = "REUPLOAD_REQUIRED"
+                elif isinstance(history, dict) and history.get("state") == "COMPLETED":
+                    rejected = (
+                        _camunda_history_value(variables, "hrReviewDecision") == "REJECTED"
+                        or _camunda_history_value(variables, "finalHrDecision") == "REJECTED"
+                    )
+                    state = "REJECTED" if rejected else "COMPLETED"
+                else:
+                    state = "PROCESSING"
+                self.send_json(
+                    {
+                        "processInstanceId": process_id,
+                        "applicationId": _camunda_history_value(variables, "applicationId"),
+                        "documentType": (
+                            _camunda_history_value(variables, "documentType")
+                            or _camunda_history_value(variables, "declaredDocumentType")
+                            or "HR_DOCUMENT"
+                        ),
+                        "state": state,
+                        "taskId": task.get("id") if task else None,
+                        "taskName": task.get("name") if task else None,
+                        "incidentCount": incident_count,
+                        "tasklistUrl": "http://localhost:8080/camunda/app/tasklist/default/",
+                    }
+                )
+            except HTTPError as exc:
+                if exc.code == HTTPStatus.NOT_FOUND:
+                    self.send_json({"error": "Camunda case not found"}, HTTPStatus.NOT_FOUND)
+                else:
+                    self.send_json(
+                        {"error": f"Camunda local is unavailable: {exc}"},
+                        HTTPStatus.SERVICE_UNAVAILABLE,
+                    )
+            except (URLError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
+                self.send_json(
+                    {"error": f"Camunda local is unavailable: {exc}"},
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                )
             return
 
         if parsed.path == "/api/documents/sessions":
