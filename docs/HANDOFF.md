@@ -1,5 +1,29 @@
 # Handoff
 
+## Local current-file comparison showcase (2026-08-13)
+
+- Template-first localhost now accepts CV and probation contract as DOCX/PDF,
+  and IELTS as PDF/PNG/JPG/JPEG. Template-specific format enforcement lives at
+  the dashboard API boundary so existing Camunda image behavior stays intact.
+- The workspace places the source beside a per-field Prediction/Ground Truth
+  comparison with confidence, evidence and Exact/Accepted/Mismatch/Missing/
+  Needs review badges. The summary is explicitly current-file HOLD/PASS and
+  never grants workflow promotion.
+- DATA-29 remains a separate development aggregate (`107/112` strict,
+  `112/112` accepted, HOLD). Template/parser, OCR backend/model/device/profile,
+  matching-policy version and processing time are visible in the result panel.
+- Synthetic API smoke covers CV DOCX/PDF, probation contract DOCX/PDF and IELTS
+  PDF/PNG/JPG. Browser E2E covered all three families; a real local PaddleOCR
+  run processed a synthetic IELTS PNG and exposed two parser mismatches for
+  review instead of hiding them.
+- Final validation: Python `538 passed`; web rendered-contract tests `14/14`;
+  mypy passed for 90 source files; touched-file Ruff, compileall, repository
+  hygiene and diff check passed. ESLint has zero errors and 23 existing warnings.
+- Delivery branch: `codex/localhost-comparison-showcase`, targeting `main`.
+  Separate local Phase 11.10.2 CCCD work and three untracked scripts are
+  preserved outside this delivery. PDF report generation remains out of scope;
+  PDF is supported only as a document input.
+
 ## Codebase review repair track (2026-08-12)
 
 - Completed the agreed order: R-005 result-store concurrency, R-007 dashboard

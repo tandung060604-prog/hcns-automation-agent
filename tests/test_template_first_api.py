@@ -8,9 +8,18 @@ import uuid
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
-from synthetic_fixtures import administrative_image_bytes, scanned_pdf_bytes
-from test_template_first import docx_bytes, leave_lines
+import pytest
+from synthetic_fixtures import (
+    administrative_image_bytes,
+    administrative_jpeg_bytes,
+    scanned_pdf_bytes,
+    synthetic_text_pdf_bytes,
+)
+from test_template_first import docx_bytes, ielts_lines, leave_lines
 
+from hcns_agent.adapters.mock_ocr import DeterministicMockOcrEngine
+from hcns_agent.bootstrap import build_default_intake
+from hcns_agent.templates.registry import build_default_template_registry
 from hcns_agent.templates.service import (
     TemplateProcessingService,
     TemplateTechnicalError,
@@ -19,6 +28,8 @@ from hcns_agent.templates.service import (
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "apps" / "ocr_lab" / "api"))
+
+from template_result_comparison import compare_template_result  # noqa: E402
 
 import apps.ocr_lab.api.serve_dashboard_api as dashboard_api  # noqa: E402
 from apps.ocr_lab.api.serve_dashboard_api import (  # noqa: E402
@@ -163,6 +174,129 @@ def test_api_root_redirects_to_local_dashboard(tmp_path: Path) -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def test_current_file_comparison_is_private_and_reopenable(tmp_path: Path) -> None:
+    configure_handler(tmp_path)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+    try:
+        boundary = "synthetic-template-boundary"
+        upload = _multipart_payload(boundary, "leave.docx", docx_bytes(leave_lines()))
+        connection.request(
+            "POST",
+            "/api/documents/process",
+            body=upload,
+            headers={
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "Content-Length": str(len(upload)),
+            },
+        )
+        response = connection.getresponse()
+        result = json.loads(response.read().decode("utf-8"))
+        assert response.status == 200
+        document_id = result["data"]["documentId"]
+
+        ground_truth = {
+            name: value
+            for name, value in result["data"].items()
+            if name
+            not in {
+                "documentId",
+                "documentType",
+                "templateId",
+                "templateVersion",
+                "schemaVersion",
+                "missingFields",
+                "validationErrors",
+                "confidence",
+                "recommendedAction",
+                "sourceFile",
+            }
+        }
+        body = json.dumps(
+            {"documentId": document_id, "groundTruth": ground_truth}
+        ).encode("utf-8")
+        connection.request(
+            "POST",
+            "/api/documents/compare",
+            body=body,
+            headers={"Content-Type": "application/json", "Content-Length": str(len(body))},
+        )
+        response = connection.getresponse()
+        comparison = json.loads(response.read().decode("utf-8"))
+        assert response.status == 200
+        assert comparison["scope"] == "CURRENT_FILE"
+        assert comparison["matchingPolicyVersion"] == "2.0.0"
+        assert comparison["summary"]["decision"] == "PASS"
+        assert comparison["summary"]["wrongFields"] == 0
+        assert comparison["workflow"]["promotionAllowed"] is False
+
+        comparison_path = (
+            tmp_path
+            / "user_uploads"
+            / "sessions"
+            / document_id
+            / "template_first"
+            / "comparison.json"
+        )
+        assert comparison_path.is_file()
+        connection.request("GET", f"/api/documents/comparison?id={document_id}")
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read().decode("utf-8")) == comparison
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_current_file_comparison_exposes_all_review_badges() -> None:
+    result = {
+        "documentType": "CV",
+        "templateId": "cv-v2",
+        "templateVersion": "2.0",
+        "data": {
+            "documentId": str(uuid.uuid4()),
+            "full_name": "CANDIDATE SYNTHETIC",
+            "skills": "Python Playwright extra",
+            "email": "wrong@example.test",
+            "phone_number": None,
+            "address": "SYNTHETIC ADDRESS",
+        },
+        "quality": {
+            "missingFields": ["phone_number"],
+            "confidence": 0.8,
+            "recommendedAction": "MANUAL_REVIEW",
+        },
+        "processing": {
+            "usesOcr": False,
+            "parserName": "docx/ooxml-native",
+        },
+    }
+    comparison = compare_template_result(
+        result,
+        {
+            "full_name": "CANDIDATE SYNTHETIC",
+            "skills": "Python Playwright",
+            "email": "synthetic@example.test",
+            "phone_number": "0000000000",
+        },
+    )
+
+    statuses = {field["name"]: field["status"] for field in comparison["fields"]}
+    assert statuses == {
+        "full_name": "EXACT",
+        "skills": "ACCEPTED",
+        "email": "MISMATCH",
+        "phone_number": "MISSING",
+        "address": "NEEDS_REVIEW",
+    }
+    assert comparison["summary"]["decision"] == "HOLD"
+    assert comparison["summary"]["wrongFields"] == 2
 
 
 def test_api_rejects_non_local_host_header(tmp_path: Path) -> None:
@@ -352,10 +486,18 @@ def test_template_endpoint_rejects_unsupported_extension_separately(
         thread.join(timeout=5)
 
 
-def test_template_endpoint_rejects_image_before_ocr(
+def test_template_endpoint_accepts_ielts_image_with_local_ocr(
     tmp_path: Path,
 ) -> None:
-    configure_handler(tmp_path)
+    ocr = DeterministicMockOcrEngine(text="\n".join(ielts_lines()), confidence=0.94)
+    configure_handler(
+        tmp_path,
+        TemplateProcessingService(
+            intake=build_default_intake(ocr),
+            registry=build_default_template_registry(),
+            ocr_engine=ocr,
+        ),
+    )
     server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -378,8 +520,11 @@ def test_template_endpoint_rejects_image_before_ocr(
         )
         response = connection.getresponse()
         result = json.loads(response.read().decode("utf-8"))
-        assert response.status == 415
-        assert result["errorCode"] == "OCR_DISABLED_BY_POLICY"
+        assert response.status == 200
+        assert result["templateId"] == "ielts-certificate-v2"
+        assert result["processing"]["sourceFormat"] == "IMAGE"
+        assert result["processing"]["usesOcr"] is True
+        assert result["quality"]["recommendedAction"] == "MANUAL_REVIEW"
     finally:
         connection.close()
         server.shutdown()
@@ -387,7 +532,159 @@ def test_template_endpoint_rejects_image_before_ocr(
         thread.join(timeout=5)
 
 
-def test_template_endpoint_rejects_image_even_when_ocr_is_unavailable(
+def test_template_endpoint_rejects_image_for_native_only_template(
+    tmp_path: Path,
+) -> None:
+    ocr = DeterministicMockOcrEngine(text="\n".join(leave_lines()), confidence=0.94)
+    configure_handler(
+        tmp_path,
+        TemplateProcessingService(
+            intake=build_default_intake(ocr),
+            registry=build_default_template_registry(),
+            ocr_engine=ocr,
+        ),
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+    try:
+        boundary = "synthetic-template-boundary"
+        upload = _multipart_payload(
+            boundary,
+            "leave.png",
+            administrative_image_bytes(),
+        )
+        connection.request(
+            "POST",
+            "/api/documents/process",
+            body=upload,
+            headers={
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "Content-Length": str(len(upload)),
+            },
+        )
+        response = connection.getresponse()
+        result = json.loads(response.read().decode("utf-8"))
+        assert response.status == 422
+        assert result["errorCode"] == "Template does not support this file type"
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "ocr_text", "expected_template", "expected_format"),
+    [
+        (
+            "cv.docx",
+            docx_bytes(["CURRICULUM VITAE", "Kinh nghiem: Synthetic", "Ky nang: Python"]),
+            "",
+            "cv-v2",
+            "DOCX",
+        ),
+        (
+            "cv.pdf",
+            synthetic_text_pdf_bytes(
+                ["CURRICULUM VITAE", "Kinh nghiem: Synthetic", "Ky nang: Python"]
+            ),
+            "",
+            "cv-v2",
+            "PDF_TEXT",
+        ),
+        (
+            "probation-contract.docx",
+            docx_bytes(["HOP DONG THU VIEC", "THOI GIAN THU VIEC: 60 ngay", "MUC LUONG: 10000000"]),
+            "",
+            "probation-contract-v2",
+            "DOCX",
+        ),
+        (
+            "probation-contract.pdf",
+            synthetic_text_pdf_bytes(
+                [
+                    "HOP DONG THU VIEC",
+                    "THOI GIAN THU VIEC: 60 ngay",
+                    "MUC LUONG: 10000000",
+                ]
+            ),
+            "",
+            "probation-contract-v2",
+            "PDF_TEXT",
+        ),
+        (
+            "ielts.pdf",
+            synthetic_text_pdf_bytes(ielts_lines()),
+            "",
+            "ielts-certificate-v2",
+            "PDF_TEXT",
+        ),
+        (
+            "ielts.png",
+            administrative_image_bytes(),
+            "\n".join(ielts_lines()),
+            "ielts-certificate-v2",
+            "IMAGE",
+        ),
+        (
+            "ielts.jpg",
+            administrative_jpeg_bytes(),
+            "\n".join(ielts_lines()),
+            "ielts-certificate-v2",
+            "IMAGE",
+        ),
+    ],
+)
+def test_template_endpoint_smoke_supported_family_formats(
+    tmp_path: Path,
+    filename: str,
+    content: bytes,
+    ocr_text: str,
+    expected_template: str,
+    expected_format: str,
+) -> None:
+    ocr = DeterministicMockOcrEngine(text=ocr_text, confidence=0.94)
+    configure_handler(
+        tmp_path,
+        TemplateProcessingService(
+            intake=build_default_intake(ocr),
+            registry=build_default_template_registry(),
+            ocr_engine=ocr,
+        ),
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+    try:
+        boundary = "synthetic-template-boundary"
+        upload = _multipart_payload(boundary, filename, content)
+        connection.request(
+            "POST",
+            "/api/documents/process",
+            body=upload,
+            headers={
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "Content-Length": str(len(upload)),
+            },
+        )
+        response = connection.getresponse()
+        result = json.loads(response.read().decode("utf-8"))
+        assert response.status == 200, result
+        assert result["templateId"] == expected_template
+        assert result["processing"]["sourceFormat"] == expected_format
+        assert result["processing"]["originalFileName"] == filename
+        assert result["processing"]["processedAt"]
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_template_endpoint_reports_when_image_ocr_is_unavailable(
     tmp_path: Path,
 ) -> None:
     configure_handler(tmp_path)
@@ -424,8 +721,8 @@ def test_template_endpoint_rejects_image_even_when_ocr_is_unavailable(
         )
         response = connection.getresponse()
         result = json.loads(response.read().decode("utf-8"))
-        assert response.status == 415
-        assert result["errorCode"] == "OCR_DISABLED_BY_POLICY"
+        assert response.status == 503
+        assert result["errorCode"] == "OCR_RUNTIME_UNAVAILABLE"
     finally:
         connection.close()
         server.shutdown()

@@ -24,8 +24,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
 from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
 import cv2
@@ -39,20 +39,44 @@ except ImportError:  # Evidence-only mode can run without PDF rendering.
     pdfium = None
 from cccd_heldout_review import (
     evaluate_once as evaluate_cccd_ground_truth_once,
+)
+from cccd_heldout_review import (
     load_evaluation_document,
     load_review_document,
     load_review_summary,
     lock_ground_truth,
     resolve_review_source,
-    save_review as save_cccd_ground_truth_review,
     set_review_disposition,
+)
+from cccd_heldout_review import (
+    save_review as save_cccd_ground_truth_review,
+)
+from document_route_safety import (
+    safe_existing_document_route,
+    selected_orientations_are_identity,
+)
+from external_dataset_prediction import (
+    PredictionArtifactError,
+    load_prediction_document,
+    load_prediction_summary,
+    resolve_prediction_paths,
 )
 from external_dataset_review import (
     load_review_document as load_external_review_document,
+)
+from external_dataset_review import (
     load_review_summary as load_external_review_summary,
+)
+from external_dataset_review import (
     load_text_preview as load_external_text_preview,
+)
+from external_dataset_review import (
     lock_ground_truth as lock_external_ground_truth,
+)
+from external_dataset_review import (
     resolve_review_source as resolve_external_review_source,
+)
+from external_dataset_review import (
     save_review as save_external_review,
 )
 from external_dataset_typed import (
@@ -62,22 +86,25 @@ from external_dataset_typed import (
     load_typed_summary,
     resolve_typed_paths,
 )
-from external_dataset_prediction import (
-    PredictionArtifactError,
-    load_prediction_document,
-    load_prediction_summary,
-    resolve_prediction_paths,
-)
-from document_route_safety import (
-    safe_existing_document_route,
-    selected_orientations_are_identity,
-)
 from local_server_security import require_local_host_header, require_loopback_host
+from template_result_comparison import compare_template_result
 
 try:
     from paddleocr import PaddleOCR
 except ImportError:  # Evidence-only mode can run while OCR env is repaired.
     PaddleOCR = None
+from ocr_ho_v2_diagnostic import (
+    document as load_ocr_ho_diagnostic_document,
+)
+from ocr_ho_v2_diagnostic import (
+    preview as resolve_ocr_ho_diagnostic_preview,
+)
+from ocr_ho_v2_diagnostic import (
+    save as save_ocr_ho_diagnostic,
+)
+from ocr_ho_v2_diagnostic import (
+    summary as load_ocr_ho_diagnostic_summary,
+)
 from phase9_pipeline import (
     classify_document,
     enrich_result,
@@ -85,6 +112,12 @@ from phase9_pipeline import (
     reading_order,
 )
 from phase10_review import review_payload, save_review
+from phase11_8_shadow_uat import (
+    load_shadow_document,
+    load_shadow_summary,
+    resolve_shadow_source,
+    save_shadow_review,
+)
 from phase11_cccd import (
     OCR_HO_V2_VERSION,
     ORIENTATION_POLICY,
@@ -94,18 +127,6 @@ from phase11_cccd import (
     orientation_diagnostics,
     prepare_identity_card_page,
     rotate_image,
-)
-from phase11_8_shadow_uat import (
-    load_shadow_document,
-    load_shadow_summary,
-    resolve_shadow_source,
-    save_shadow_review,
-)
-from ocr_ho_v2_diagnostic import (
-    document as load_ocr_ho_diagnostic_document,
-    preview as resolve_ocr_ho_diagnostic_preview,
-    save as save_ocr_ho_diagnostic,
-    summary as load_ocr_ho_diagnostic_summary,
 )
 from phase12_ingestion import (
     ingest_document,
@@ -123,20 +144,20 @@ from run_paddleocr_baseline import draw_ocr_boxes, jsonable
 from run_paddleocr_phase7 import PROFILES, prepare_image
 from upload_safety import validate_local_upload
 
-from hcns_agent.domain.errors import DocumentIntakeError
-from hcns_agent.domain.documents import SourceFormat
 from hcns_agent.application.ocr_scope import (
     ocr_allowed_for_document_type,
     ocr_scope_for,
 )
+from hcns_agent.domain.documents import SourceFormat
+from hcns_agent.domain.errors import DocumentIntakeError
 from hcns_agent.ports.document_parser import DocumentSource
+from hcns_agent.templates.compatibility import canonicalize_template_payload
 from hcns_agent.templates.service import (
     TemplateProcessingService,
     TemplateTechnicalError,
     TemplateUnsupportedError,
     build_local_template_processing_service,
 )
-from hcns_agent.templates.compatibility import canonicalize_template_payload
 
 
 def _camunda_post(url: str, payload: dict[str, Any]) -> Any:
@@ -379,6 +400,36 @@ def build_local_benchmark_summary(handler: type[DashboardHandler]) -> dict[str, 
         }
     )
 
+    aggregate_categories = [
+        metrics
+        for category in ("contract", "cv", "ielts")
+        if isinstance((metrics := by_category.get(category)), dict) and metrics
+    ]
+    aggregate_field_count = sum(int(metrics.get("fields", 0)) for metrics in aggregate_categories)
+    development_aggregate = {
+        "label": "DATA-29",
+        "scope": "DEVELOPMENT_AGGREGATE",
+        "fieldCount": aggregate_field_count,
+        "exactFieldCount": sum(
+            round(int(metrics.get("fields", 0)) * float(metrics.get("exactRate", 0.0)))
+            for metrics in aggregate_categories
+        ),
+        "acceptedFieldCount": sum(
+            round(
+                int(metrics.get("fields", 0))
+                * float(metrics.get("acceptedRate", metrics.get("exactRate", 0.0)))
+            )
+            for metrics in aggregate_categories
+        ),
+        "matchingPolicyVersion": (
+            benchmark_payload.get("matchingPolicyVersion")
+            or benchmark_payload.get("matchingPolicy", {}).get("version")
+        ),
+        "decision": "HOLD",
+        "promotionAllowed": False,
+        "displayOnly": True,
+    }
+
     return {
         "schemaVersion": "local-document-benchmark/1.0.0",
         "generatedAt": datetime.now(timezone.utc).isoformat(),
@@ -388,6 +439,7 @@ def build_local_benchmark_summary(handler: type[DashboardHandler]) -> dict[str, 
             benchmark_payload,
             benchmark_manifest,
         ),
+        "developmentAggregate": development_aggregate,
         "rows": [
             next(row for row in rows if row["key"] == key)
             for key in ("cv", "contract", "ielts", "cccd-front", "leave", "overtime")
@@ -406,6 +458,9 @@ MAX_PDF_PAGES = 50
 TEMPLATE_ALLOWED_EXTENSIONS = {
     ".docx",
     ".pdf",
+    ".png",
+    ".jpg",
+    ".jpeg",
 }
 ALLOWED_EXTENSIONS = {
     ".png",
@@ -1471,6 +1526,32 @@ class UserOCRService:
             return None
         return source_paths[0]
 
+    def template_comparison(self, session_id: str) -> dict[str, Any] | None:
+        session_dir = self.session_dir(session_id)
+        if session_dir is None or self.template_result(session_id) is None:
+            return None
+        comparison_path = session_dir / "template_first" / "comparison.json"
+        if not comparison_path.is_file():
+            return None
+        try:
+            payload = json.loads(comparison_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        return payload if payload.get("documentId") == session_id else None
+
+    def save_template_comparison(
+        self,
+        session_id: str,
+        comparison: dict[str, Any],
+    ) -> None:
+        session_dir = self.session_dir(session_id)
+        if session_dir is None or self.template_result(session_id) is None:
+            raise ValueError("Template session not found")
+        (session_dir / "template_first" / "comparison.json").write_text(
+            json.dumps(comparison, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
     def template_preview(self, session_id: str) -> tuple[bytes, str] | None:
         source_path = self.template_source(session_id)
         if source_path is None:
@@ -1530,7 +1611,9 @@ class UserOCRService:
                 {
                     "documentId": session_id,
                     "createdAt": created_at,
-                    "originalFileName": data.get("sourceFile") or "template-document.docx",
+                    "originalFileName": processing.get("originalFileName")
+                    or data.get("sourceFile")
+                    or "template-document.docx",
                     "documentType": result["documentType"],
                     "templateId": result["templateId"],
                     "templateVersion": result["templateVersion"],
@@ -1620,6 +1703,26 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if not self._request_host_is_local():
             return
         parsed = urlparse(self.path)
+        if parsed.path == "/api/documents/compare":
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+                if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                    raise ValueError("Comparison body is empty or exceeds 2 MB")
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                document_id = str(payload.get("documentId", ""))
+                uuid.UUID(document_id)
+                ground_truth = payload.get("groundTruth")
+                if not isinstance(ground_truth, dict):
+                    raise ValueError("Ground Truth must be an object")
+                result = self.user_ocr.template_result(document_id)
+                if result is None:
+                    raise ValueError("Template session not found")
+                comparison = compare_template_result(result, ground_truth)
+                self.user_ocr.save_template_comparison(document_id, comparison)
+                self.send_json(comparison)
+            except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
         if parsed.path == "/api/camunda/review":
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
@@ -1747,7 +1850,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     ),
                     result_reference=result_reference,
                 )
+                extension = Path(filename).suffix.casefold().lstrip(".")
+                if extension not in result.detection.definition.supported_file_types:
+                    raise TemplateUnsupportedError(
+                        "Template does not support this file type"
+                    )
                 payload = result.public_dict()
+                payload["processing"].update(
+                    {
+                        "processedAt": utc_now(),
+                        "originalFileName": filename,
+                    }
+                )
                 session_dir = self.user_ocr.sessions_root / document_id
                 result_dir = session_dir / "template_first"
                 input_dir = session_dir / "input"
@@ -2572,16 +2686,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
         filename = Path(submitted_filename).name
         suffix = Path(filename).suffix.casefold()
         if suffix not in TEMPLATE_ALLOWED_EXTENSIONS:
-            error_code = (
-                "OCR_DISABLED_BY_POLICY"
-                if suffix in {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp"}
-                else "SUPPORTED_TEMPLATE_FORMAT_REQUIRED"
-            )
             self.send_json(
                 {
                     "status": "REJECT_UNSUPPORTED",
                     "recommendedAction": "REJECT_UNSUPPORTED",
-                    "errorCode": error_code,
+                    "errorCode": "SUPPORTED_TEMPLATE_FORMAT_REQUIRED",
                 },
                 HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
             )
@@ -2809,6 +2918,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
                 return
             self.send_json(result)
+            return
+
+        if parsed.path == "/api/documents/comparison":
+            document_id = query.get("id", [""])[0]
+            comparison = self.user_ocr.template_comparison(document_id)
+            if comparison is None:
+                self.send_json(
+                    {"error": "Template comparison not found"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            self.send_json(comparison)
             return
 
         if parsed.path == "/api/documents/source":

@@ -132,6 +132,18 @@ def overtime_single_day_lines() -> list[str]:
     ]
 
 
+def ielts_lines() -> list[str]:
+    return [
+        "IELTS",
+        "TEST REPORT FORM",
+        "Candidate name: CANDIDATE SYNTHETIC",
+        "TRF number: SYNTHETIC-TRF-001",
+        "Test type: Academic",
+        "Overall band score: 7.5",
+        "Date of test: 01/08/2026",
+    ]
+
+
 def process(lines: list[str], filename: str = "opaque-upload.docx") -> dict[str, object]:
     service = build_default_template_processing_service()
     return service.process(
@@ -428,7 +440,7 @@ def test_template_ocr_sources_require_manual_review(
     content_factory: Callable[[], bytes],
 ) -> None:
     ocr = DeterministicMockOcrEngine(
-        text="\n".join(leave_lines()),
+        text="\n".join(ielts_lines()),
         confidence=0.93,
     )
     service = TemplateProcessingService(
@@ -446,7 +458,7 @@ def test_template_ocr_sources_require_manual_review(
         )
     ).public_dict()
 
-    assert response["documentType"] == "LEAVE_REQUEST"
+    assert response["documentType"] == "CERTIFICATE"
     assert response["quality"]["recommendedAction"] == "MANUAL_REVIEW"
     assert "OCR_REVIEW_REQUIRED" in response["quality"]["validationErrors"]
 

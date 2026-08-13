@@ -72,5 +72,16 @@ def test_benchmark_summary_uses_aggregate_evidence_without_exposing_values(
     assert payload["evidence"]["decision"] == "HOLD"
     assert payload["evidence"]["promotionAllowed"] is False
     assert payload["evidence"]["containsRawFieldValues"] is False
+    assert payload["developmentAggregate"] == {
+        "label": "DATA-29",
+        "scope": "DEVELOPMENT_AGGREGATE",
+        "fieldCount": 29,
+        "exactFieldCount": 28,
+        "acceptedFieldCount": 28,
+        "matchingPolicyVersion": None,
+        "decision": "HOLD",
+        "promotionAllowed": False,
+        "displayOnly": True,
+    }
     serialized = json.dumps(payload)
     assert "Candidate Synthetic" not in serialized

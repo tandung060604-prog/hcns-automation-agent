@@ -102,7 +102,7 @@ test("exposes the Phase 15 multi-format IDP and field review flow", async () => 
   ]);
 
   assert.match(dashboard, /\.docx,\.pdf/);
-  assert.match(dashboard, /DOCX hoặc PDF theo biểu mẫu đã cấu hình/);
+  assert.match(dashboard, /CV\/Hợp đồng: DOCX, PDF · IELTS\/CCCD: PDF, PNG, JPG\/JPEG/);
   assert.match(dashboard, /CV \/ hồ sơ ứng viên/);
   assert.match(dashboard, /Hợp đồng lao động/);
   assert.match(dashboard, /phase12\?:/);
@@ -253,11 +253,20 @@ test("exposes one Template-first upload with source preview and structured resul
   assert.match(dashboard, /SHOW_LEGACY_UPLOAD/);
   assert.match(dashboard, /Tải tài liệu HCNS/);
   assert.match(dashboard, /Trích xuất tài liệu/);
-  assert.match(dashboard, /TXT, DOCX, PDF, XLSX, PPTX, PNG, JPG\/JPEG/);
-  assert.match(dashboard, /Thông tin trích xuất từ biểu mẫu chuẩn/);
+  assert.match(dashboard, /CV\/Hợp đồng: DOCX, PDF · IELTS\/CCCD: PDF, PNG, JPG\/JPEG/);
+  assert.match(dashboard, /\.docx,\.pdf,\.png,\.jpg,\.jpeg/);
   assert.match(dashboard, /Xem JSON đầy đủ/);
   assert.match(dashboard, /Không có trong tài liệu/);
   assert.match(dashboard, /TemplateResultPanel/);
+  assert.match(dashboard, /TemplateComparisonPanel/);
+  assert.match(dashboard, /\/api\/documents\/compare/);
+  assert.match(dashboard, /\/api\/documents\/comparison\?id=/);
+  assert.match(dashboard, /Prediction và Ground Truth theo từng field/);
+  assert.match(dashboard, /data-testid="compare-current-file-button"/);
+  assert.match(dashboard, /DATA-29/);
+  assert.match(dashboard, /DEVELOPMENT_AGGREGATE/);
+  assert.match(dashboard, /templateParserVersion/);
+  assert.match(dashboard, /ocrModels/);
   assert.match(dashboard, /TemplateDocumentPreview/);
   assert.match(dashboard, /inspectCamundaDocument/);
   assert.match(dashboard, /Đang mở bản gốc và JSON local/);
@@ -286,6 +295,9 @@ test("exposes one Template-first upload with source preview and structured resul
   assert.match(css, /\.template-document-preview/);
   assert.match(css, /\.hero-workflow-visual/);
   assert.match(css, /\.template-field-grid/);
+  assert.match(css, /\.template-comparison/);
+  assert.match(css, /\.comparison-field-row/);
+  assert.match(css, /\.comparison-status\.mismatch/);
   assert.match(css, /\.template-json/);
   assert.match(css, /\.template-evidence-field-row/);
   assert.match(dashboard, /data-testid="product-showcase"/);
