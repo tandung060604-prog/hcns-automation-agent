@@ -70,6 +70,7 @@ if ($ExternalDatasetPredictionMarker -and -not (Test-Path -LiteralPath $External
 
 $env:PYTHONPATH = Join-Path $repoRoot "src"
 $env:HCNS_TEMPLATE_OCR_BACKEND = $TemplateOcrBackend
+$env:HCNS_CAMUNDA_PRIVATE_ROOT = (Resolve-Path -LiteralPath $DataRoot).Path
 
 function Get-ApiListener {
     $connection = Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1

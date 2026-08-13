@@ -1808,6 +1808,15 @@ footer { display: flex; justify-content: space-between; padding: 26px clamp(24px
 .external-review-status { display: grid; gap: 4px; text-align: right; color: var(--muted); }
 .external-review-status strong { color: var(--accent); font-size: 1.1rem; }
 .external-review-message { padding: 10px 12px; border: 1px solid #9cc9ad; background: #effaf2; color: #14532d; }
+.camunda-case-status { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 14px; border: 1px solid #9cc9ad; background: #effaf2; }
+.camunda-case-status > div { display: grid; gap: 4px; }
+.camunda-case-status > div:last-child { justify-items: end; }
+.camunda-case-status span, .camunda-case-status small { color: var(--muted); }
+.camunda-case-status button { padding: 8px 12px; border: 1px solid var(--accent); background: var(--paper); color: var(--accent); cursor: pointer; }
+.camunda-case-status[data-state="INCIDENT"], .camunda-case-status[data-state="REJECTED"] { border-color: #c77863; background: #fff3ef; }
+.data29-category-switch { display: flex; flex-wrap: wrap; gap: 8px; }
+.data29-category-switch button { display: inline-flex; gap: 8px; align-items: center; padding: 9px 14px; border: 1px solid var(--line); background: var(--paper); color: var(--muted); cursor: pointer; }
+.data29-category-switch button.active { border-color: var(--accent); background: #f0f8f3; color: var(--accent); }
 .external-review-grid { display: grid; grid-template-columns: 220px minmax(300px, 1fr) minmax(300px, .9fr); gap: 14px; min-height: 600px; }
 .external-review-list { display: grid; align-content: start; gap: 7px; max-height: 680px; overflow: auto; }
 .external-review-list button { display: grid; gap: 3px; text-align: left; padding: 11px; border: 1px solid var(--line); background: var(--paper); color: inherit; cursor: pointer; }
@@ -2017,6 +2026,8 @@ footer { display: flex; justify-content: space-between; padding: 26px clamp(24px
 }
 
 @media (max-width: 720px) {
+  .camunda-case-status { align-items: stretch; flex-direction: column; }
+  .camunda-case-status > div:last-child { justify-items: start; }
   .vinhris-nav { min-height: 64px; }
   .vinhris-nav nav { display: none; }
   .vinhris-nav-cta { margin-left: auto; }

@@ -1,5 +1,16 @@
 # Backlog
 
+## M5-CAM-009-THREE-FAMILY-LOCAL-SHADOW-E2E — IN PROGRESS (2026-08-13)
+
+Localhost bridge and status UI now support CV, probation contract and IELTS with
+opaque UUID/scalar-only variables and mandatory Human Review. DATA-29 Explorer
+shows the full 3/5/4 corpus and no longer mixes upload-session history. Remaining
+live Camunda 7.13 acceptance has completed for one authorized CV and one
+authorized IELTS upload with Human Review, zero incidents and simulated side
+effects. The remaining acceptance item is one user-uploaded probation contract;
+DATA-29 must not be substituted. Production pilot, real side effects and metric
+promotion remain closed.
+
 ## FINAL-PROJECT-CHECKPOINT - DONE (2026-08-11)
 
 PR #30 is merged at `14b78bc`; the final docs checkpoint is `77d47d6`, with

@@ -690,21 +690,6 @@ type TemplateComparison = {
   };
 };
 
-type TemplateSessionSummary = {
-  documentId: string;
-  createdAt: string;
-  originalFileName: string;
-  documentType: string;
-  templateId: string;
-  templateVersion: string;
-  status: string;
-  recommendedAction: string | null;
-  confidence: number | null;
-  sourceFormat: string;
-  usesOcr: boolean;
-  parserName: string;
-};
-
 type CamundaReviewTask = {
   taskId: string;
   role: "employee" | "hr";
@@ -713,6 +698,24 @@ type CamundaReviewTask = {
   documentType: string;
   created: string;
   inspectable: boolean;
+};
+
+type CamundaCaseStatus = {
+  processInstanceId: string;
+  applicationId: string | null;
+  documentType: string;
+  state:
+    | "PROCESSING"
+    | "AWAITING_USER_REVIEW"
+    | "AWAITING_HR_REVIEW"
+    | "REUPLOAD_REQUIRED"
+    | "COMPLETED"
+    | "REJECTED"
+    | "INCIDENT";
+  taskId: string | null;
+  taskName: string | null;
+  incidentCount: number;
+  tasklistUrl: string;
 };
 
 type UserSessionSummary = {
@@ -1701,107 +1704,6 @@ function EvidenceInspector({
   );
 }
 
-function TemplateEvidenceInspector({
-  result,
-  loading,
-  error,
-  view,
-  onViewChange,
-}: {
-  result: TemplateProcessingResult | null;
-  loading: boolean;
-  error: string;
-  view: "fields" | "json";
-  onViewChange: (view: "fields" | "json") => void;
-}) {
-  const fields = result
-    ? Object.entries(result.data).filter(
-        ([name]) => !TEMPLATE_RESULT_META_FIELDS.has(name),
-      )
-    : [];
-
-  return (
-    <aside className="evidence-inspector" aria-live="polite">
-      <header>
-        <div>
-          <span>SCHEMA / JSON</span>
-          <strong>{result?.documentType ?? "TEMPLATE-FIRST"}</strong>
-        </div>
-        <small>
-          {result
-            ? `${result.templateId} / phiên bản ${result.templateVersion}`
-            : "Kết quả biểu mẫu chỉ đọc trên localhost"}
-        </small>
-      </header>
-      {result ? (
-        <div className="evidence-prediction-source evidence-prediction-source-single">
-          <span>NGUỒN DỮ LIỆU</span>
-          <strong>
-            {result.processing?.sourceFormat ?? "DOCX"} /{" "}
-            {result.processing?.usesOcr
-              ? result.processing?.ocrEngine ?? "OCR local"
-              : "Native parser"}
-          </strong>
-          <small>
-            {result.processing?.parserName ?? "docx/ooxml"} ·{" "}
-            {result.quality.recommendedAction} / confidence{" "}
-            {pct(result.quality.confidence)}
-          </small>
-        </div>
-      ) : null}
-      <div className="evidence-inspector-tabs" role="tablist">
-        <button
-          className={view === "fields" ? "active" : ""}
-          onClick={() => onViewChange("fields")}
-          role="tab"
-          aria-selected={view === "fields"}
-        >
-          Trường schema
-        </button>
-        <button
-          className={view === "json" ? "active" : ""}
-          onClick={() => onViewChange("json")}
-          role="tab"
-          aria-selected={view === "json"}
-        >
-          JSON
-        </button>
-      </div>
-      {loading ? (
-        <div className="evidence-inspector-state">Đang tải kết quả Template-first...</div>
-      ) : error ? (
-        <div className="evidence-inspector-state error">{error}</div>
-      ) : !result ? (
-        <div className="evidence-inspector-state">
-          Chọn đơn nghỉ phép hoặc tăng ca để xem metadata và JSON.
-        </div>
-      ) : view === "fields" ? (
-        <div className="evidence-field-list">
-          <div className="template-evidence-field-heading">
-            <span>Trường schema</span>
-            <span>Giá trị trích xuất</span>
-            <span>Trạng thái</span>
-          </div>
-          {fields.map(([name, value]) => {
-            const isMissing = result.quality.missingFields.includes(name);
-            return (
-              <div className="template-evidence-field-row" key={name}>
-                <strong>{name}</strong>
-                <span>{formatTemplateValue(value)}</span>
-                <small data-status={isMissing ? "not_found" : "accepted"}>
-                  {isMissing ? "missing" : "extracted"}
-                </small>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <pre className="evidence-json">{JSON.stringify(result, null, 2)}</pre>
-      )}
-    </aside>
-  );
-}
-
 function phase11Label(result: UserResult) {
   if (result.phase11?.version === "1.1.0") {
     return "1.1";
@@ -2078,6 +1980,8 @@ function TemplateResultPanel({
   onDelete,
   onStartCamunda,
   camundaStatus,
+  camundaCase,
+  onRefreshCamunda,
 }: {
   result: TemplateProcessingResult;
   filename: string;
@@ -2085,6 +1989,8 @@ function TemplateResultPanel({
   onDelete: () => void;
   onStartCamunda: () => void;
   camundaStatus: string;
+  camundaCase: CamundaCaseStatus | null;
+  onRefreshCamunda: () => void;
 }) {
   const isAutoContinue =
     result.quality.recommendedAction === "AUTO_CONTINUE";
@@ -2154,7 +2060,7 @@ function TemplateResultPanel({
       </details>
 
       <div className="result-actions template-result-actions">
-        {result.documentType === "LEAVE_REQUEST" || result.documentType === "OVERTIME_REQUEST" ? (
+        {["LEAVE_REQUEST", "OVERTIME_REQUEST", "CV", "CERTIFICATE", "EMPLOYMENT_CONTRACT"].includes(result.documentType) ? (
           <button type="button" onClick={onStartCamunda}>
             Đưa vào Camunda
           </button>
@@ -2170,6 +2076,22 @@ function TemplateResultPanel({
         </button>
       </div>
       {camundaStatus ? <p className="review-help">{camundaStatus}</p> : null}
+      {camundaCase ? (
+        <div className="camunda-case-status" data-state={camundaCase.state}>
+          <div>
+            <span>CAMUNDA LOCAL SHADOW</span>
+            <strong>{camundaCase.state.replaceAll("_", " ")}</strong>
+            <small>
+              {camundaCase.documentType} · process {camundaCase.processInstanceId.slice(0, 12)}…
+              {camundaCase.taskName ? ` · ${camundaCase.taskName}` : ""}
+            </small>
+          </div>
+          <div>
+            <small>Incident: {camundaCase.incidentCount}</small>
+            <button type="button" onClick={onRefreshCamunda}>Cập nhật trạng thái</button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2268,19 +2190,12 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const groundTruthDocumentExcluded =
     groundTruthReviewDocument?.disposition === "OUT_OF_SCOPE_BACK";
   const [evidenceMode, setEvidenceMode] =
-    useState<"overview" | "templates" | "data29" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "ocr-ho-v2-shadow" | "ocr-ho-v2-diagnostic">(
+    useState<"overview" | "data29" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "ocr-ho-v2-shadow" | "ocr-ho-v2-diagnostic">(
       "data29",
     );
   const [evidenceInspectorView, setEvidenceInspectorView] =
     useState<"fields" | "json">("fields");
   const [activeCccdSessionId, setActiveCccdSessionId] = useState("");
-  const [templateSessions, setTemplateSessions] =
-    useState<TemplateSessionSummary[]>([]);
-  const [activeTemplateSessionId, setActiveTemplateSessionId] = useState("");
-  const [templateEvidenceResult, setTemplateEvidenceResult] =
-    useState<TemplateProcessingResult | null>(null);
-  const [templateEvidenceLoading, setTemplateEvidenceLoading] = useState(false);
-  const [templateEvidenceError, setTemplateEvidenceError] = useState("");
   const [cccdEvidenceResult, setCccdEvidenceResult] =
     useState<UserResult | null>(null);
   const [cccdEvidenceReview, setCccdEvidenceReview] =
@@ -2303,6 +2218,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [templateResult, setTemplateResult] =
     useState<TemplateProcessingResult | null>(null);
   const [camundaStatus, setCamundaStatus] = useState("");
+  const [camundaCase, setCamundaCase] = useState<CamundaCaseStatus | null>(null);
   const [camundaQueue, setCamundaQueue] = useState<CamundaReviewTask[]>([]);
   const [camundaQueueStatus, setCamundaQueueStatus] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -2395,6 +2311,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     setUploadPreviewUrl(file ? URL.createObjectURL(file) : "");
     setUploadError("");
     setTemplateResult(null);
+    setCamundaCase(null);
+    setCamundaStatus("");
     setLoadedUserResult(null);
     setDeleteArmed(false);
   };
@@ -2443,26 +2361,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       .catch(() => setUserSessions([]));
   };
 
-  const refreshTemplateSessions = () => {
-    fetch(`${API_BASE}/api/documents/sessions`)
-      .then((response) => {
-        if (!response.ok) throw new Error("Template sessions unavailable");
-        return response.json();
-      })
-      .then((payload: { sessions: TemplateSessionSummary[] }) => {
-        setTemplateSessions(payload.sessions);
-        setActiveTemplateSessionId((current) =>
-          payload.sessions.some((session) => session.documentId === current)
-            ? current
-            : payload.sessions[0]?.documentId ?? "",
-        );
-      })
-      .catch(() => {
-        setTemplateSessions([]);
-        setActiveTemplateSessionId("");
-      });
-  };
-
   const refreshCamundaQueue = () => {
     fetch(`${API_BASE}/api/camunda/queue`)
       .then((response) => {
@@ -2493,7 +2391,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       )
       .catch(() => setSupportedTemplates([]));
     refreshUserSessions();
-    refreshTemplateSessions();
     refreshCamundaQueue();
     if (!SHOW_OCR_HO_SHADOW_UAT) return;
     fetch(`${API_BASE}/phase14/benchmark`)
@@ -2992,6 +2889,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     setUploadError("");
     setLoadedUserResult(null);
     setTemplateResult(null);
+    setCamundaCase(null);
     setCamundaStatus("");
     setDeleteArmed(false);
     const formData = new FormData();
@@ -3036,8 +2934,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       if (processingMode === "template") {
         const result = payload as TemplateProcessingResult;
         setTemplateResult(result);
-        setActiveTemplateSessionId(result.data.documentId);
-        refreshTemplateSessions();
       } else {
         const userPayload = payload as UserResult;
         setLoadedUserResult(userPayload);
@@ -3063,8 +2959,24 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ documentId }),
       });
-      const payload = (await response.json()) as { error?: string; tasklistUrl?: string };
+      const payload = (await response.json()) as {
+        error?: string;
+        tasklistUrl?: string;
+        processInstanceId?: string;
+        applicationId?: string;
+      };
       if (!response.ok) throw new Error(payload.error ?? "Không thể tạo case Camunda");
+      if (!payload.processInstanceId) throw new Error("Camunda không trả process instance id");
+      setCamundaCase({
+        processInstanceId: payload.processInstanceId,
+        applicationId: payload.applicationId ?? null,
+        documentType: templateResult.documentType,
+        state: "PROCESSING",
+        taskId: null,
+        taskName: null,
+        incidentCount: 0,
+        tasklistUrl: payload.tasklistUrl ?? "http://localhost:8080/camunda/app/tasklist/default/",
+      });
       setCamundaStatus("Đã tạo case. Mở Camunda Tasklist để xác nhận dữ liệu.");
       refreshCamundaQueue();
       if (payload.tasklistUrl) window.open(payload.tasklistUrl, "_blank", "noopener");
@@ -3073,8 +2985,24 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     }
   };
 
+  const refreshCamundaCase = async () => {
+    if (!camundaCase) return;
+    setCamundaStatus("Đang cập nhật trạng thái Camunda local...");
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/camunda/case?id=${encodeURIComponent(camundaCase.processInstanceId)}`,
+      );
+      const payload = (await response.json()) as CamundaCaseStatus & { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Không đọc được trạng thái Camunda");
+      setCamundaCase(payload);
+      setCamundaStatus("Đã cập nhật trạng thái Camunda local.");
+      refreshCamundaQueue();
+    } catch (error) {
+      setCamundaStatus(error instanceof Error ? error.message : "Không đọc được trạng thái Camunda");
+    }
+  };
+
   const inspectCamundaDocument = async (documentId: string) => {
-    setActiveTemplateSessionId(documentId);
     setCamundaQueueStatus("Đang mở bản gốc và JSON local...");
     try {
       const response = await fetch(
@@ -3302,7 +3230,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       if (!response.ok) throw new Error("Không xóa được kết quả Template-first");
       selectUploadFile(null);
       setDeleteArmed(false);
-      refreshTemplateSessions();
     } catch (error) {
       setUploadError(
         error instanceof Error
@@ -3391,65 +3318,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     null;
   const cccdEvidenceMetrics =
     groundTruthReview?.evaluation?.metrics?.phase11_6 ?? null;
-  const activeTemplateSession =
-    templateSessions.find(
-      (session) => session.documentId === activeTemplateSessionId,
-    ) ??
-    templateSessions[0] ??
-    null;
-  const activeTemplateEvidenceId = activeTemplateSession?.documentId ?? "";
-  const activeTemplateEvidencePreviewUrl = activeTemplateEvidenceId
-    ? `${API_BASE}/api/documents/preview?id=${encodeURIComponent(
-        activeTemplateEvidenceId,
-      )}`
-    : "";
-  const activeTemplateEvidenceExtension =
-    activeTemplateSession?.originalFileName
-      .split(".")
-      .pop()
-      ?.toLocaleLowerCase() ?? "";
-  const activeTemplateEvidenceIsImage =
-    activeTemplateSession?.sourceFormat === "IMAGE" ||
-    ["png", "jpg", "jpeg"].includes(activeTemplateEvidenceExtension);
-  const activeTemplateEvidenceIsPdf =
-    activeTemplateSession?.sourceFormat === "PDF_TEXT" ||
-    activeTemplateSession?.sourceFormat === "PDF_SCAN" ||
-    activeTemplateEvidenceExtension === "pdf";
-  useEffect(() => {
-    if (!activeTemplateEvidenceId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale evidence when the selected template result disappears.
-      setTemplateEvidenceResult(null);
-      return;
-    }
-    let cancelled = false;
-    setTemplateEvidenceLoading(true);
-    setTemplateEvidenceError("");
-    fetch(
-      `${API_BASE}/api/documents/result?id=${encodeURIComponent(
-        activeTemplateEvidenceId,
-      )}`,
-    )
-      .then((response) => {
-        if (!response.ok) throw new Error("Template evidence unavailable");
-        return response.json() as Promise<TemplateProcessingResult>;
-      })
-      .then((result) => {
-        if (!cancelled) setTemplateEvidenceResult(result);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setTemplateEvidenceResult(null);
-        setTemplateEvidenceError(
-          "Không đọc được metadata và JSON của biểu mẫu này.",
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setTemplateEvidenceLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTemplateEvidenceId]);
   const activeCccdSession =
     reviewedCccdSessions.find(
       (session) => session.sessionId === activeCccdSessionId,
@@ -4220,10 +4088,12 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               )}
               {templateResult && (
                 <TemplateResultPanel
+                  camundaCase={camundaCase}
                   deleteArmed={deleteArmed}
                   filename={documentPreviewFilename || "Tài liệu HCNS"}
                   onDelete={deleteTemplateSession}
                   onStartCamunda={startCamundaCase}
+                  onRefreshCamunda={refreshCamundaCase}
                   camundaStatus={camundaStatus}
                   result={templateResult}
                 />
@@ -5519,8 +5389,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             <h2>Tài liệu gắn trực tiếp với metric</h2>
           </div>
           <p>
-            DATA-29 mở đúng source đã tạo metric development; tab tài liệu đã xử
-            lý giữ các session upload riêng. Hai phạm vi không đại diện cho nhau.
+            DATA-29 mở đúng 12 source đã tạo metric development và giữ nguyên
+            Prediction, Ground Truth cùng report đã khóa.
           </p>
         </div>
         <div className="evidence-switch" role="tablist">
@@ -5530,7 +5400,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             role="tab"
             aria-selected={evidenceMode === "data29"}
           >
-            DATA-29 · 4 tài liệu metric
+            DATA-29 · 12 tài liệu metric · 3 Contract · 5 CV · 4 IELTS
           </button>
           {SHOW_OCR_HO_DIAGNOSTIC_GT ? (
             <button
@@ -5552,14 +5422,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               OCR-HO-V2 v{ocrHoShadow?.candidateVersion ?? "11.10.0"} · Shadow UAT
             </button>
           ) : null}
-          <button
-            className={evidenceMode === "templates" ? "active" : ""}
-            onClick={() => setEvidenceMode("templates")}
-            role="tab"
-            aria-selected={evidenceMode === "templates"}
-          >
-            Tài liệu đã xử lý
-          </button>
           {SHOW_GROUND_TRUTH_REVIEW ? (
           <button
             className={evidenceMode === "cccd" ? "active" : ""}
@@ -5681,88 +5543,6 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           <ExternalDatasetPrediction version="data13" />
         ) : SHOW_EXTERNAL_DATASET_REVIEW && evidenceMode === "external-dataset" ? (
           <ExternalDatasetReview />
-        ) : evidenceMode === "templates" ? (
-          <div className="heldout-evidence-grid">
-            <div className="heldout-document-list" role="list">
-              {templateSessions.map((session, index) => (
-                <button
-                  className={
-                    session.documentId === activeTemplateSession?.documentId
-                      ? "active"
-                      : ""
-                  }
-                  key={session.documentId}
-                  onClick={() => inspectCamundaDocument(session.documentId)}
-                  role="listitem"
-                >
-                  <span>
-                    {(typeLabels[session.documentType] ?? session.documentType).toUpperCase()}
-                    -{String(index + 1).padStart(2, "0")}
-                  </span>
-                  <strong>{session.originalFileName}</strong>
-                  <small>
-                    {session.templateId} · {session.recommendedAction} ·{" "}
-                    {pct(session.confidence)}
-                  </small>
-                </button>
-              ))}
-            </div>
-            <div className="heldout-preview">
-              {activeTemplateSession &&
-              (activeTemplateEvidenceIsImage || activeTemplateEvidenceIsPdf) ? (
-                // eslint-disable-next-line @next/next/no-img-element -- loopback-only preview is not an optimizable public asset.
-                <img
-                  src={activeTemplateEvidencePreviewUrl}
-                  alt={`Biểu mẫu HCNS ${activeTemplateSession.originalFileName}`}
-                  data-testid={
-                    activeTemplateEvidenceIsPdf
-                      ? "template-evidence-pdf"
-                      : "template-evidence-image"
-                  }
-                />
-              ) : activeTemplateSession ? (
-                <div className="native-heldout-file template-native-preview">
-                  <span>{activeTemplateSession.sourceFormat}</span>
-                  <strong>{activeTemplateSession.originalFileName}</strong>
-                  <p>
-                    {typeLabels[activeTemplateSession.documentType] ??
-                      activeTemplateSession.documentType}
-                    .{" "}
-                    {activeTemplateSession.usesOcr
-                      ? "Dữ liệu được nhận diện bằng PaddleOCR local và bắt buộc Human Review."
-                      : "Dữ liệu được đọc trực tiếp bằng native parser, không dùng OCR."}
-                  </p>
-                </div>
-              ) : (
-                <div className="native-heldout-file">
-                  <strong>Chưa có đơn theo mẫu chuẩn</strong>
-                  <p>
-                    Upload đơn nghỉ phép hoặc tăng ca ở khu vực tải tài liệu để xem
-                    metadata và JSON tại đây.
-                  </p>
-                </div>
-              )}
-              {activeTemplateSession && (
-                <div className="heldout-preview-actions">
-                  <div>
-                    <strong>{activeTemplateSession.originalFileName}</strong>
-                    <span>
-                      {activeTemplateSession.templateId} / phiên bản{" "}
-                      {activeTemplateSession.templateVersion} · confidence{" "}
-                      {pct(activeTemplateSession.confidence)}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-            <TemplateEvidenceInspector
-              result={templateEvidenceResult}
-              loading={templateEvidenceLoading}
-              error={templateEvidenceError}
-              view={evidenceInspectorView}
-              onViewChange={setEvidenceInspectorView}
-            />
-          </div>
         ) : SHOW_GROUND_TRUTH_REVIEW && evidenceMode === "cccd" ? (
           <div className="heldout-evidence-grid">
             <div className="heldout-document-list" role="list">

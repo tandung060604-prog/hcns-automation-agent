@@ -44,16 +44,18 @@ gốc, OCR text và dữ liệu chi tiết vẫn được giữ trong môi trư�
 - **Kết luận rõ ràng:** mỗi lần đối chiếu có tổng số field đúng/sai và quyết định
   `HOLD`/`PASS`. `PASS` chỉ nói về phép so khớp file hiện tại; không tự phê duyệt
   nghiệp vụ và không mở promotion.
-- **Metric mở được tài liệu nguồn:** tab DATA-29 hiển thị 4/12 tài liệu đã trực
-  tiếp tạo ra aggregate `107/112`, không dùng file upload khác làm đại diện.
+- **Metric mở được toàn bộ tài liệu nguồn:** DATA-29 hiển thị đủ 12 tài liệu đã
+  trực tiếp tạo aggregate `107/112`, chia thành Contract `3`, CV `5`, IELTS `4`.
 - **Metadata thuật toán có thể kiểm tra:** template/parser version, intake parser,
   OCR backend/version/model/device/profile, matching policy và thời gian xử lý
   được hiển thị cùng kết quả.
 - **Đối chiếu đúng policy:** chi tiết từng tài liệu đọc matching policy `2.0.0`
   được pin trong chính report, nên số exact/accepted tái tạo cùng cách chấm DATA-29.
-- **Phạm vi được ghi rõ:** DATA-29 là development corpus synthetic đã được cấp
-  quyền local, không phải bằng chứng tài liệu thật hay tuyên bố production. Các
-  session upload riêng vẫn nằm ở tab **Tài liệu đã xử lý**.
+- **Explorer không trộn session upload:** khu vực evidence chỉ hiển thị source
+  thuộc DATA-29; session upload vẫn được giữ private cho màn kết quả và Camunda.
+- **Camunda cho ba họ tài liệu mới:** CV, hợp đồng thử việc và IELTS có thể đi từ
+  kết quả upload vào local shadow workflow, bắt buộc Human Review và không tạo
+  side effect HRIS/notification thật.
 
 Các cập nhật hardening ngày 12/08/2026 vẫn được giữ nguyên:
 
@@ -99,9 +101,9 @@ flowchart TD
 |---|---|---|
 | Đơn xin nghỉ phép | End-to-end | Template-first, Camunda và Human-in-the-loop |
 | Đơn xin tăng ca | End-to-end | Template-first, Camunda và Human-in-the-loop |
-| CV | Review-only | DOCX/PDF; có schema, Ground Truth và đối chiếu từng field |
-| Hợp đồng thử việc | Review-only | DOCX/PDF; không tự tạo quyết định nghiệp vụ |
-| Chứng chỉ IELTS | Review-only | PDF/PNG/JPG/JPEG; ảnh đi qua OCR local và luôn cần người duyệt |
+| CV | Local shadow E2E | DOCX/PDF; upload → extraction → Camunda → Human Review |
+| Hợp đồng thử việc | Local shadow E2E | DOCX/PDF; không tự tạo quyết định nghiệp vụ |
+| Chứng chỉ IELTS | Local shadow E2E | PDF/PNG/JPG/JPEG; ảnh đi qua OCR local và luôn cần người duyệt |
 | CCCD mặt trước | Review-only | Chỉ dùng cho kiểm tra nội bộ, không tự phê duyệt |
 | Hồ sơ chưa có schema | Intake/OCR | Không tự động đi tiếp cho đến khi có rule phù hợp |
 
@@ -120,7 +122,7 @@ lượng production. Trạng thái promotion hiện vẫn là `HOLD` và
 | Leave + Overtime native | 0/30 lỗi validation | Đủ điều kiện chuyển đến bước Human review |
 | Contract + CV + IELTS · DATA-29 | 107/112 field exact | Contract 42/42, CV 45/50, IELTS 20/20 |
 | DATA-29 accepted | 112/112 field accepted | Matching policy v2; decision `HOLD`, không promotion |
-| 4 tài liệu đang show | 37/39 exact, 39/39 accepted | 1 Contract PDF, 1 CV PDF text, 1 CV PDF scan, 1 IELTS PNG từ chính DATA-29 |
+| 12 tài liệu đang show | 107/112 exact, 112/112 accepted | Toàn bộ 3 Contract, 5 CV và 4 IELTS từ chính DATA-29 |
 | JSON Schema | 0 lỗi | Kiểm tra cấu trúc trước khi chuyển workflow |
 
 Dashboard chỉ hiển thị metric từ aggregate evidence đã seal. Inventory chỉ dùng
@@ -165,18 +167,28 @@ Sau khi khởi động:
 
 Hướng dẫn thao tác đầy đủ: [Demo Camunda + HITL](docs/DEMO_CAMUNDA_HITL.md).
 
+Dashboard launcher đặt `HCNS_CAMUNDA_PRIVATE_ROOT` bằng đúng `DataRoot`. Worker
+phải dùng cùng thư mục để giải tham chiếu UUID mà không đưa file hoặc field value
+vào Camunda:
+
+```powershell
+$env:CAMUNDA_REST_URL = "http://127.0.0.1:8080/engine-rest"
+$env:CAMUNDA_WORKER_ID = "hcns-local-shadow"
+$env:HCNS_CAMUNDA_PRIVATE_ROOT = "C:\duong-dan\private-data"
+hcns-agent-camunda-worker
+```
+
 ### Demo nhanh cho user hoặc mentor
 
 1. Mở `http://localhost:3000/workspace#explorer`.
-2. Chọn tab **DATA-29 · 4 tài liệu metric**.
-3. Chọn `contract-002`, `cv-002`, `cv-005` hoặc `ielts-001`.
+2. Chọn **DATA-29 · 12 tài liệu metric · 3 Contract · 5 CV · 4 IELTS**.
+3. Chọn bộ lọc Contract, CV hoặc IELTS rồi mở một tài liệu trong nhóm.
 4. Kiểm tra source ở giữa và Prediction ↔ Ground Truth theo từng field bên phải.
-5. Đối chiếu điểm riêng của file với aggregate toàn corpus phía trên; không dùng
-   điểm 4 file làm thay mẫu số 12 tài liệu.
+5. Đối chiếu điểm riêng của file với aggregate toàn corpus phía trên.
 
 DATA-29 source, Ground Truth, Prediction và report đều ở private local, không
-commit vào Git. Đây là development corpus synthetic; tài liệu upload mới được
-đánh giá riêng ở tab **Tài liệu đã xử lý** và không làm thay đổi metric DATA-29.
+commit vào Git. Đây là development corpus; tài liệu upload mới được đánh giá ở
+màn kết quả upload và không làm thay đổi metric DATA-29.
 
 ## Kiểm thử
 
@@ -196,10 +208,13 @@ npm run lint
 Pop-Location
 ```
 
-Checkpoint của thay đổi hiện tại: Python full suite `540 passed`; frontend build
-và rendered-contract test `14/14`; mypy pass trên 90 source files; repository
-hygiene, compileall và diff check đều pass. ESLint có 0 error và giữ nguyên 23
-warning nền ngoài phạm vi thay đổi này.
+Checkpoint hiện tại: Python `543 passed`; Camunda/Template subset `60 passed`;
+frontend build và rendered-contract test `14/14`; mypy pass trên 90 source files;
+Ruff, compileall, repository hygiene và diff check đều pass. ESLint có 0 error và
+23 warning nền. Camunda 7.13 local shadow đã hoàn tất một CV và một IELTS qua HR
+Review với incident bằng 0, HRIS/notification mô phỏng và
+`autoContinueEnabled=false`. Contract còn chờ một tài liệu do người dùng upload
+vào private root; DATA-29 không được dùng thay cho bước acceptance này.
 
 ## An toàn dữ liệu
 
@@ -248,6 +263,6 @@ Các hạng mục sau chưa được xem là tính năng production:
 - Tự động đưa ra quyết định nhân sự hoặc ghi trực tiếp vào HRIS.
 - Tối ưu scan phức tạp: deskew, denoise, rotation và layout nhiều cột/bảng biểu.
 - Promotion OCR cho các family đang ở trạng thái `HOLD`.
-- DATA-29 là development corpus synthetic; `107/112` không chứng minh chất lượng
+- DATA-29 là development corpus; `107/112` không chứng minh chất lượng
   trên tài liệu HCNS thật và không được dùng làm tuyên bố production-ready.
 - Đóng gói production bằng Docker/GPU serving và quan sát vận hành hoàn chỉnh.
