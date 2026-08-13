@@ -608,6 +608,7 @@ type TemplateProcessingResult = {
   documentType: string;
   templateId: string;
   templateVersion: string;
+  templateParserVersion: string;
   detection: {
     matchedAnchors: string[];
     detectionConfidence: number;
@@ -628,9 +629,77 @@ type TemplateProcessingResult = {
     parserVersion: string;
     usesOcr: boolean;
     ocrEngine: string | null;
+    ocrVersion?: string | null;
+    ocrModels?: string[];
+    ocrDevice?: string | null;
+    ocrProfile?: string;
     ocrConfidence: number | null;
+    processedAt?: string;
+    originalFileName?: string;
+    ocrFieldEvidence?: Array<{
+      field?: string;
+      confidence?: number;
+      box?: unknown;
+      recognizer?: string;
+      reason?: string;
+    }>;
   };
   camundaVariables: Record<string, unknown>;
+};
+
+type TemplateComparisonStatus =
+  | "EXACT"
+  | "ACCEPTED"
+  | "MISMATCH"
+  | "MISSING"
+  | "NEEDS_REVIEW";
+
+type TemplateComparison = {
+  schemaVersion: string;
+  scope: "CURRENT_FILE";
+  documentId: string;
+  matchingPolicyVersion: string;
+  comparedAt: string;
+  groundTruth: Record<string, unknown>;
+  fields: Array<{
+    name: string;
+    prediction: unknown;
+    groundTruth: unknown;
+    status: TemplateComparisonStatus;
+    confidence: number | null;
+    evidence: Record<string, unknown>;
+    matchType: string | null;
+    coverage: number | null;
+    diagnosis: string | null;
+  }>;
+  summary: {
+    totalFields: number;
+    comparedFields: number;
+    exactFields: number;
+    acceptedFields: number;
+    wrongFields: number;
+    mismatchFields: number;
+    missingFields: number;
+    needsReviewFields: number;
+    decision: "HOLD" | "PASS";
+  };
+  workflow: {
+    recommendedAction: string;
+    promotionAllowed: false;
+    note: string;
+  };
+};
+
+type DevelopmentAggregate = {
+  label: string;
+  scope: "DEVELOPMENT_AGGREGATE";
+  fieldCount: number;
+  exactFieldCount: number;
+  acceptedFieldCount: number;
+  matchingPolicyVersion: string | null;
+  decision: "HOLD";
+  promotionAllowed: false;
+  displayOnly: true;
 };
 
 type TemplateSessionSummary = {
@@ -939,6 +1008,7 @@ type Phase14Benchmark = {
 const API_BASE = "http://127.0.0.1:8765";
 const TEMPLATE_RESULT_META_FIELDS = new Set([
   "documentId",
+  "schemaVersion",
   "documentType",
   "templateId",
   "templateVersion",
@@ -1832,6 +1902,202 @@ function TemplateDocumentPreview({
   );
 }
 
+function TemplateComparisonPanel({ result }: { result: TemplateProcessingResult }) {
+  const fields = Object.entries(result.data).filter(
+    ([name]) => !TEMPLATE_RESULT_META_FIELDS.has(name),
+  );
+  const documentId = result.data.documentId;
+  const [groundTruthDraft, setGroundTruthDraft] = useState<Record<string, string>>({});
+  const [comparison, setComparison] = useState<TemplateComparison | null>(null);
+  const [aggregate, setAggregate] = useState<DevelopmentAggregate | null>(null);
+  const [isComparing, setIsComparing] = useState(false);
+  const [comparisonError, setComparisonError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/api/documents/comparison?id=${encodeURIComponent(documentId)}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: TemplateComparison | null) => {
+        if (cancelled || !payload) return;
+        setComparison(payload);
+        setGroundTruthDraft(
+          Object.fromEntries(
+            Object.entries(payload.groundTruth).map(([name, value]) => [
+              name,
+              value === null || value === undefined ? "" : String(value),
+            ]),
+          ),
+        );
+      })
+      .catch(() => undefined);
+    fetch(`${API_BASE}/benchmark/summary`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { developmentAggregate?: DevelopmentAggregate } | null) => {
+        if (!cancelled) setAggregate(payload?.developmentAggregate ?? null);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [documentId]);
+
+  const compare = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsComparing(true);
+    setComparisonError("");
+    try {
+      const groundTruth = Object.fromEntries(
+        fields.map(([name]) => [name, groundTruthDraft[name]?.trim() || null]),
+      );
+      const response = await fetch(`${API_BASE}/api/documents/compare`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId, groundTruth }),
+      });
+      const payload = (await response.json()) as TemplateComparison & { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Không đối chiếu được file hiện tại");
+      setComparison(payload);
+    } catch (error) {
+      setComparisonError(
+        error instanceof Error ? error.message : "Không đối chiếu được file hiện tại.",
+      );
+    } finally {
+      setIsComparing(false);
+    }
+  };
+
+  const comparisonByField = new Map(
+    comparison?.fields.map((field) => [field.name, field]) ?? [],
+  );
+  const processedAt = result.processing.processedAt
+    ? new Date(result.processing.processedAt).toLocaleString("vi-VN")
+    : "Phiên hiện tại";
+
+  return (
+    <section className="template-comparison" aria-label="Đối chiếu kết quả file hiện tại">
+      <header className="template-comparison-head">
+        <div>
+          <span>ĐỐI CHIẾU KẾT QUẢ · CURRENT FILE</span>
+          <h4>Prediction và Ground Truth theo từng field</h4>
+          <small>Ground Truth do người review nhập, chỉ lưu trong session localhost.</small>
+        </div>
+        <strong className={`comparison-decision ${comparison?.summary.decision === "PASS" ? "pass" : "hold"}`}>
+          {comparison?.summary.decision ?? "HOLD"}
+        </strong>
+      </header>
+
+      <div className="comparison-scope-strip">
+        <div>
+          <span>FILE HIỆN TẠI</span>
+          <strong>
+            {comparison
+              ? `${comparison.summary.exactFields} exact · ${comparison.summary.wrongFields} sai`
+              : "Chưa nhập Ground Truth"}
+          </strong>
+          <small>{processedAt} · ID {documentId.slice(0, 8)}</small>
+        </div>
+        <div>
+          <span>{aggregate?.label ?? "DATA-29"} · AGGREGATE</span>
+          <strong>
+            {aggregate?.fieldCount
+              ? `${aggregate.exactFieldCount}/${aggregate.fieldCount} strict · ${aggregate.acceptedFieldCount}/${aggregate.fieldCount} accepted`
+              : "Chưa cấu hình aggregate"}
+          </strong>
+          <small>Development display-only · HOLD · không phải kết quả file này</small>
+        </div>
+      </div>
+
+      <div className="algorithm-metadata" data-testid="template-algorithm-metadata">
+        <span>Template {result.templateVersion}</span>
+        <span>Parser mẫu {result.templateParserVersion}</span>
+        <span>Intake {result.processing.parserName} {result.processing.parserVersion}</span>
+        <span>
+          {result.processing.usesOcr
+            ? `${result.processing.ocrEngine ?? "OCR local"} ${result.processing.ocrVersion ?? ""}`
+            : "Native parser · không OCR"}
+        </span>
+        {result.processing.usesOcr && result.processing.ocrModels?.length ? (
+          <span>Models {result.processing.ocrModels.join(" + ")}</span>
+        ) : null}
+        {result.processing.usesOcr && result.processing.ocrDevice ? (
+          <span>Device {result.processing.ocrDevice}</span>
+        ) : null}
+        <span>Profile {result.processing.ocrProfile ?? "native-text"}</span>
+        <span>Matching {comparison?.matchingPolicyVersion ?? aggregate?.matchingPolicyVersion ?? "2.0.0"}</span>
+      </div>
+
+      <form onSubmit={compare}>
+        <div className="comparison-field-list">
+          <div className="comparison-field-heading">
+            <span>Field</span>
+            <span>Prediction</span>
+            <span>Ground Truth</span>
+            <span>Confidence / Evidence</span>
+            <span>Kết quả</span>
+          </div>
+          {fields.map(([name, prediction]) => {
+            const fieldComparison = comparisonByField.get(name);
+            const evidence = fieldComparison?.evidence ?? {};
+            return (
+              <div className="comparison-field-row" key={name}>
+                <div>
+                  <strong>{businessFieldLabels[name] ?? name}</strong>
+                  <small>{name}</small>
+                </div>
+                <span>{formatTemplateValue(prediction)}</span>
+                <textarea
+                  aria-label={`Ground Truth ${name}`}
+                  value={groundTruthDraft[name] ?? ""}
+                  onChange={(event) =>
+                    setGroundTruthDraft((current) => ({
+                      ...current,
+                      [name]: event.target.value,
+                    }))
+                  }
+                  placeholder="Để trống nếu không có trong nguồn"
+                  rows={2}
+                />
+                <div className="comparison-evidence">
+                  <strong>{pct(fieldComparison?.confidence ?? result.quality.confidence)}</strong>
+                  <small>
+                    {typeof evidence.recognizer === "string"
+                      ? evidence.recognizer
+                      : result.processing.usesOcr
+                        ? "OCR cấp tài liệu · chưa có bbox field"
+                        : "Native parser · không có bbox field"}
+                  </small>
+                  {fieldComparison?.matchType ? <small>{fieldComparison.matchType}</small> : null}
+                </div>
+                <span
+                  className={`comparison-status ${(fieldComparison?.status ?? "NEEDS_REVIEW").toLocaleLowerCase()}`}
+                >
+                  {fieldComparison?.status ?? "NEEDS_REVIEW"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="comparison-actions">
+          <div>
+            {comparison ? (
+              <span>
+                Đã chấm {comparison.summary.comparedFields}/{comparison.summary.totalFields} field · Exact {comparison.summary.exactFields} · Accepted {comparison.summary.acceptedFields} · Sai {comparison.summary.wrongFields}
+              </span>
+            ) : (
+              <span>Nhập Ground Truth từ tài liệu nguồn rồi chạy đối chiếu.</span>
+            )}
+            <small>PASS không đồng nghĩa tự duyệt nghiệp vụ; promotion luôn bị khóa.</small>
+          </div>
+          <button type="submit" disabled={isComparing} data-testid="compare-current-file-button">
+            {isComparing ? "Đang đối chiếu…" : comparison ? "Đối chiếu lại" : "Đối chiếu kết quả"}
+          </button>
+        </div>
+        {comparisonError ? <p className="comparison-error">{comparisonError}</p> : null}
+      </form>
+    </section>
+  );
+}
+
 function TemplateResultPanel({
   result,
   filename,
@@ -1847,9 +2113,6 @@ function TemplateResultPanel({
   onStartCamunda: () => void;
   camundaStatus: string;
 }) {
-  const fields = Object.entries(result.data).filter(
-    ([name]) => !TEMPLATE_RESULT_META_FIELDS.has(name),
-  );
   const isAutoContinue =
     result.quality.recommendedAction === "AUTO_CONTINUE";
 
@@ -1910,29 +2173,7 @@ function TemplateResultPanel({
         </div>
       )}
 
-      <section className="template-fields" aria-label="Kết quả trích xuất Template-first">
-        <div className="phase15-fields-head">
-          <div>
-            <span>STRUCTURED TEMPLATE FIELDS</span>
-            <h4>Thông tin trích xuất từ biểu mẫu chuẩn</h4>
-          </div>
-          <small>Giá trị trống được giữ null, không tự suy luận</small>
-        </div>
-        <div className="template-field-grid">
-          {fields.map(([name, value]) => (
-            <article
-              className={`template-field ${
-                value === null || value === "" ? "missing" : ""
-              }`}
-              key={name}
-            >
-              <span>{businessFieldLabels[name] ?? name}</span>
-              <strong>{formatTemplateValue(value)}</strong>
-              <small>{name}</small>
-            </article>
-          ))}
-        </div>
-      </section>
+      <TemplateComparisonPanel key={result.data.documentId} result={result} />
 
       <details className="template-json">
         <summary>Xem JSON đầy đủ</summary>
@@ -2773,10 +3014,10 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     if (!uploadFile || isUploading) return;
     if (
       processingMode === "template" &&
-      !/\.(docx|pdf)$/i.test(uploadFile.name)
+      !/\.(docx|pdf|png|jpe?g)$/i.test(uploadFile.name)
     ) {
       setUploadError(
-        "Định dạng hỗ trợ: TXT, DOCX, PDF, XLSX, PPTX, PNG, JPG/JPEG, TIF/TIFF và WEBP.",
+        "Template-first hiện hỗ trợ DOCX, PDF, PNG và JPG/JPEG theo từng mẫu tài liệu.",
       );
       return;
     }
@@ -3897,7 +4138,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                   data-testid="local-document-input"
                   accept={
                     processingMode === "template"
-                      ? ".docx,.pdf"
+                      ? ".docx,.pdf,.png,.jpg,.jpeg"
                       : ".png,.jpg,.jpeg,.pdf,.docx,.xlsx"
                   }
                   onChange={(event) =>
@@ -3912,7 +4153,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                   {uploadFile
                     ? `${(uploadFile.size / 1024 / 1024).toFixed(2)} MB`
                     : processingMode === "template"
-                      ? "DOCX hoặc PDF theo biểu mẫu đã cấu hình"
+                      ? "CV/Hợp đồng: DOCX, PDF · IELTS/CCCD: PDF, PNG, JPG/JPEG"
                       : "Ảnh/PDF scan: chọn đúng loại tài liệu; DOCX/XLSX/PDF có text: native parser"}
                 </p>
               </label>

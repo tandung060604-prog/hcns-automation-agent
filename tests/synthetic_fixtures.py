@@ -20,6 +20,32 @@ def administrative_image_bytes() -> bytes:
     return output.getvalue()
 
 
+def administrative_jpeg_bytes() -> bytes:
+    from PIL import Image, ImageDraw
+
+    image = Image.new("RGB", (640, 240), "white")
+    ImageDraw.Draw(image).text(
+        (24, 40),
+        "BIEU MAU HANH CHINH SYNTHETIC",
+        fill="black",
+    )
+    output = BytesIO()
+    image.save(output, format="JPEG", quality=90)
+    return output.getvalue()
+
+
+def synthetic_text_pdf_bytes(lines: list[str]) -> bytes:
+    import fitz
+
+    document = fitz.open()
+    page = document.new_page()
+    for index, line in enumerate(lines):
+        page.insert_text((72, 72 + index * 20), line)
+    payload = document.tobytes()
+    document.close()
+    return payload
+
+
 def synthetic_cv_pdf_bytes() -> bytes:
     import fitz
 

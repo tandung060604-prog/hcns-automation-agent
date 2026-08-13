@@ -33,6 +33,7 @@ liên kết ổn định. Không đổi tên tài liệu lịch sử nếu khôn
 | [CAMUNDA_MVP_V2_INTEGRATION_PLAN.md](CAMUNDA_MVP_V2_INTEGRATION_PLAN.md) | Kế hoạch tích hợp Camunda 7 |
 | [TEMPLATE_FIRST_PHASE1_PLAN.md](TEMPLATE_FIRST_PHASE1_PLAN.md) | Quy tắc mở template mới |
 | [TEMPLATE_FIRST_PHASE1_REPORT.md](TEMPLATE_FIRST_PHASE1_REPORT.md) | Bằng chứng nghiệm thu template-first |
+| [DEMO_LOCAL_COMPARISON.md](DEMO_LOCAL_COMPARISON.md) | Kịch bản upload và đối chiếu CV/Contract/IELTS trên localhost |
 
 Các quyết định kiến trúc khó đảo ngược nằm trong thư mục [`adr/`](adr/), theo quy
 ước `NNNN-kebab-case.md`.

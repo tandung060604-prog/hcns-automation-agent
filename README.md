@@ -28,15 +28,35 @@ gốc, OCR text và dữ liệu chi tiết vẫn được giữ trong môi trư�
 | Thành phần | Trạng thái | Ý nghĩa thực tế |
 |---|---|---|
 | Universal document intake | Hoạt động | Nhận TXT, DOCX, PDF, XLSX, PPTX, PNG và JPG/JPEG |
-| Template-first extraction | Hoạt động | Chọn schema theo loại biểu mẫu và xuất Business JSON có cấu trúc |
+| Template-first extraction | Hoạt động | CV/Hợp đồng nhận DOCX, PDF; IELTS/CCCD nhận PDF, PNG, JPG/JPEG theo manifest |
 | OCR local | Hoạt động | PaddleOCR hoặc EasyOCR cho ảnh và PDF scan |
-| Dashboard VinHRIS | Hoạt động | Upload, xem bản gốc, evidence, kết quả và hàng đợi review |
+| Dashboard VinHRIS | Hoạt động | Upload, xem nguồn, nhập Ground Truth và đối chiếu từng field ngay trên localhost |
 | Camunda 7 + Human-in-the-loop | Hoạt động ở shadow mode | Điều phối External Task/User Task, không tạo side effect nghiệp vụ thật |
 | Kết quả local/idempotency | Đã gia cố | Ghi kết quả an toàn khi nhiều request chạy đồng thời |
 | API dashboard | Chỉ local | Chỉ chấp nhận loopback Host và giới hạn kích thước request |
 | Chất lượng scan nhạy cảm | Review-only | Confidence thấp hoặc scan chưa chắc chắn luôn cần người duyệt |
 
-## Cập nhật mới nhất — 12/08/2026
+## Cập nhật mới nhất — 13/08/2026
+
+- **Đối chiếu file hiện tại ngay sau upload:** màn hình thống nhất hiển thị tài
+  liệu nguồn ở bên trái và Prediction, Ground Truth, confidence/evidence cùng
+  badge `EXACT`, `ACCEPTED`, `MISMATCH`, `MISSING` hoặc `NEEDS_REVIEW` ở bên phải.
+- **Kết luận rõ ràng:** mỗi lần đối chiếu có tổng số field đúng/sai và quyết định
+  `HOLD`/`PASS`. `PASS` chỉ nói về phép so khớp file hiện tại; không tự phê duyệt
+  nghiệp vụ và không mở promotion.
+- **Không trộn hai loại số liệu:** UI tách `CURRENT_FILE` khỏi aggregate DATA-29
+  display-only (`107/112` strict, `112/112` accepted, `HOLD`).
+- **Metadata thuật toán có thể kiểm tra:** template/parser version, intake parser,
+  OCR backend/version/model/device/profile, matching policy và thời gian xử lý
+  được hiển thị cùng kết quả.
+- **Upload theo đúng manifest:** CV và hợp đồng thử việc đã smoke-test DOCX/PDF;
+  IELTS đã smoke-test PDF/PNG/JPG. Runtime PaddleOCR thật trên localhost xử lý
+  thành công IELTS PNG synthetic và vẫn bắt buộc `MANUAL_REVIEW`.
+- **E2E local đã xác minh:** CV, hợp đồng thử việc và IELTS đi qua đủ luồng upload
+  → extraction → Ground Truth → comparison → kết luận. Visual QA cũng sửa lỗi
+  đếm metadata thành field và bố cục màn hình laptop.
+
+Các cập nhật hardening ngày 12/08/2026 vẫn được giữ nguyên:
 
 - **An toàn khi xử lý đồng thời:** result store dùng file lock đa tiến trình, tránh
   hai request cùng ghi đè index hoặc tạo kết quả xung đột cho một idempotency key.
@@ -65,12 +85,13 @@ flowchart TD
     D --> E
     E --> F["Trích xuất và chuẩn hóa trường dữ liệu"]
     F --> G["Kiểm tra schema, confidence và dữ liệu thiếu"]
-    G -->|"Cần xác minh"| H["Human review"]
-    H -->|"Sửa hoặc xác nhận"| I["Business JSON"]
-    H -->|"Yêu cầu tải lại"| A
-    G -->|"Đủ điều kiện"| I
-    I --> J["Camunda điều phối trạng thái"]
-    J --> K["Lưu kết quả và tham chiếu local"]
+    G --> H["Người review nhập Ground Truth từ nguồn"]
+    H --> I["Đối chiếu từng field và tạo HOLD/PASS"]
+    I -->|"Cần xác minh"| J["Human review"]
+    J -->|"Sửa hoặc xác nhận"| K["Business JSON"]
+    J -->|"Yêu cầu tải lại"| A
+    K --> L["Camunda điều phối trạng thái"]
+    L --> M["Lưu kết quả và tham chiếu local"]
 ```
 
 ## Phạm vi tài liệu
@@ -79,9 +100,9 @@ flowchart TD
 |---|---|---|
 | Đơn xin nghỉ phép | End-to-end | Template-first, Camunda và Human-in-the-loop |
 | Đơn xin tăng ca | End-to-end | Template-first, Camunda và Human-in-the-loop |
-| CV | Review-only | Có schema và evidence; scan luôn cần người duyệt |
-| Hợp đồng thử việc | Review-only | Không tự tạo quyết định nghiệp vụ |
-| Chứng chỉ IELTS | Review-only | Trích xuất có schema và đối chiếu thủ công |
+| CV | Review-only | DOCX/PDF; có schema, Ground Truth và đối chiếu từng field |
+| Hợp đồng thử việc | Review-only | DOCX/PDF; không tự tạo quyết định nghiệp vụ |
+| Chứng chỉ IELTS | Review-only | PDF/PNG/JPG/JPEG; ảnh đi qua OCR local và luôn cần người duyệt |
 | CCCD mặt trước | Review-only | Chỉ dùng cho kiểm tra nội bộ, không tự phê duyệt |
 | Hồ sơ chưa có schema | Intake/OCR | Không tự động đi tiếp cho đến khi có rule phù hợp |
 
@@ -99,6 +120,8 @@ lượng production. Trạng thái promotion hiện vẫn là `HOLD` và
 | Leave + Overtime native | 30/30 chọn đúng template | 15 Leave Request và 15 Overtime Request |
 | Leave + Overtime native | 0/30 lỗi validation | Đủ điều kiện chuyển đến bước Human review |
 | Contract + CV + IELTS | 107/112 field exact match | Contract 42/42, CV 45/50, IELTS 20/20 |
+| Smoke format hiện tại | 7/7 tổ hợp qua API | CV DOCX/PDF, Contract DOCX/PDF, IELTS PDF/PNG/JPG |
+| E2E localhost | 3/3 family hiển thị được | Source → Prediction/GT → badge → HOLD/PASS |
 | JSON Schema | 0 lỗi | Kiểm tra cấu trúc trước khi chuyển workflow |
 
 Dashboard chỉ hiển thị metric từ aggregate evidence đã seal. Inventory chỉ dùng
@@ -143,6 +166,20 @@ Sau khi khởi động:
 
 Hướng dẫn thao tác đầy đủ: [Demo Camunda + HITL](docs/DEMO_CAMUNDA_HITL.md).
 
+### Demo nhanh cho user hoặc mentor
+
+1. Mở `http://localhost:3000/workspace`, giữ chế độ **Biểu mẫu HCNS**.
+2. Upload CV/hợp đồng bằng DOCX hoặc PDF; với IELTS có thể dùng thêm PNG/JPG.
+3. Kiểm tra preview nguồn và Prediction. Với DOCX, UI ghi rõ native parser;
+   với ảnh, UI hiển thị OCR backend/model/profile đang chạy.
+4. Nhập Ground Truth đúng theo tài liệu nguồn rồi bấm **Đối chiếu kết quả**.
+5. Đọc badge từng field, tổng Exact/Accepted/Sai và quyết định `HOLD`/`PASS`.
+6. So sánh khối **FILE HIỆN TẠI** với **DATA-29 · AGGREGATE**; hai phạm vi này
+   độc lập và không được dùng thay thế cho nhau.
+
+Ground Truth và comparison được lưu trong session private local. Không dùng tài
+liệu thật nếu chưa có quyền xử lý; demo mặc định nên dùng fixture synthetic.
+
 ## Kiểm thử
 
 ```powershell
@@ -161,9 +198,10 @@ npm run lint
 Pop-Location
 ```
 
-Checkpoint gần nhất: Python `527 passed`; web rendered-contract `14/14 passed`;
-Ruff, mypy, compileall và repository hygiene đều pass. Web lint còn warning kỹ
-thuật nhưng không có error.
+Checkpoint của thay đổi hiện tại: Python full suite `538 passed`; frontend build
+và rendered-contract test `14/14`; mypy pass trên 90 source files; repository
+hygiene, compileall và diff check đều pass. ESLint có 0 error và giữ nguyên 23
+warning nền ngoài phạm vi thay đổi này.
 
 ## An toàn dữ liệu
 
@@ -200,6 +238,7 @@ Business JSON không đi qua process variables và mọi nhánh không chắc ch
 - [Human-in-the-loop](docs/HUMAN_IN_THE_LOOP.md)
 - [Phương pháp và metric đánh giá](docs/EVALUATION.md)
 - [Hướng dẫn demo Camunda](docs/DEMO_CAMUNDA_HITL.md)
+- [Demo đối chiếu CV/Contract/IELTS trên localhost](docs/DEMO_LOCAL_COMPARISON.md)
 - [Báo cáo demo cho mentor](docs/DEMO_CAMUNDA_HITL_REPORT.md)
 - [Handoff cho phiên phát triển tiếp theo](docs/HANDOFF.md)
 
@@ -211,4 +250,7 @@ Các hạng mục sau chưa được xem là tính năng production:
 - Tự động đưa ra quyết định nhân sự hoặc ghi trực tiếp vào HRIS.
 - Tối ưu scan phức tạp: deskew, denoise, rotation và layout nhiều cột/bảng biểu.
 - Promotion OCR cho các family đang ở trạng thái `HOLD`.
+- Parser review-only vẫn có thể gắn nhầm field dù OCR đọc đúng. E2E synthetic mới
+  đã bắt được ví dụ ở CV và IELTS; màn hình comparison giữ các trường này ở
+  `MISMATCH`/`HOLD` để người review nhìn thấy thay vì che bằng aggregate.
 - Đóng gói production bằng Docker/GPU serving và quan sát vận hành hoàn chỉnh.

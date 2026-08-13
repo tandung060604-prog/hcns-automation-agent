@@ -1,4 +1,29 @@
 # Project State
+## Local current-file comparison showcase (2026-08-13)
+
+- Template-first upload now follows the frozen manifest at both UI and API
+  boundaries: CV/probation contract accept DOCX/PDF; IELTS and CCCD accept
+  PDF/PNG/JPG/JPEG. The detected template is checked against its own allowed
+  file types before extraction continues.
+- A local-only comparison route stores reviewer-entered Ground Truth beside the
+  private Template-first session and applies matching policy v2. The workspace
+  shows source, Prediction, Ground Truth, confidence/evidence, field badges,
+  exact/wrong counts and a HOLD/PASS comparison decision. Promotion remains
+  disabled independently of the comparison decision.
+- The workspace explicitly separates `CURRENT_FILE` from the sealed DATA-29
+  development aggregate (`107/112` strict, `112/112` accepted, HOLD) and shows
+  template/parser, OCR model/profile/device, matching policy and processing time.
+- Synthetic API smoke covers CV DOCX/PDF, probation contract DOCX/PDF and IELTS
+  PDF/PNG/JPG. Manual browser E2E covered all three families; a real local
+  PaddleOCR run processed the synthetic IELTS PNG and produced a review-only
+  result. The comparison correctly exposed two parser-level mismatches instead
+  of conflating them with DATA-29.
+- Final validation: Python full suite `538 passed`; frontend build and
+  rendered-contract test `14/14`; mypy passed for 90 source files; repository
+  hygiene, compileall and diff check passed. ESLint has zero errors and retains
+  23 pre-existing warnings outside this delivery.
+- Delivery branch: `codex/localhost-comparison-showcase`, targeting `main`.
+
 ## Codebase review repair track - pipeline/hygiene consolidation DONE (2026-08-12)
 - The repository hygiene checker now inspects only Git-tracked paths through
   `git ls-files`; local worktrees, scratch output and private data are never

@@ -402,6 +402,10 @@ def _processing_metadata(
         "parserVersion": getattr(parser, "parser_version", "unknown"),
         "usesOcr": uses_ocr,
         "ocrEngine": getattr(model_manifest, "engine", None) if uses_ocr else None,
+        "ocrVersion": getattr(model_manifest, "version", None) if uses_ocr else None,
+        "ocrModels": list(getattr(model_manifest, "model_identifiers", ())) if uses_ocr else [],
+        "ocrDevice": getattr(model_manifest, "device", None) if uses_ocr else None,
+        "ocrProfile": "template-first-review" if uses_ocr else "native-text",
         "ocrConfidence": ocr_confidence if uses_ocr else None,
     }
     provenance_metadata = getattr(parser, "metadata", {})

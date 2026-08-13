@@ -126,6 +126,7 @@ class TemplateProcessingResult:
             "documentType": self.detection.definition.document_type.value,
             "templateId": self.detection.definition.template_id,
             "templateVersion": self.detection.definition.version,
+            "templateParserVersion": self.detection.definition.parser_version,
             "detection": self.detection.public_dict(),
             "data": self.data,
             "quality": {
