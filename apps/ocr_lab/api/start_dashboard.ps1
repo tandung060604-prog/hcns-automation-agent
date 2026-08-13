@@ -11,6 +11,9 @@ param(
     [string]$ExternalDatasetTypedProjection = "",
     [string]$ExternalDatasetTypedApproval = "",
     [string]$ExternalDatasetTypedReport = "",
+    [string]$ExternalDatasetPredictions = "",
+    [string]$ExternalDatasetPredictionReport = "",
+    [string]$ExternalDatasetPredictionMarker = "",
     [string]$PythonPath = "D:\venv_paddle\Scripts\python.exe",
     [ValidateSet("paddle", "easyocr")]
     [string]$TemplateOcrBackend = "paddle"
@@ -54,6 +57,15 @@ if ($ExternalDatasetTypedApproval -and -not (Test-Path -LiteralPath $ExternalDat
 }
 if ($ExternalDatasetTypedReport -and -not (Test-Path -LiteralPath $ExternalDatasetTypedReport)) {
     throw "External dataset typed report not found: $ExternalDatasetTypedReport"
+}
+if ($ExternalDatasetPredictions -and -not (Test-Path -LiteralPath $ExternalDatasetPredictions)) {
+    throw "External dataset predictions not found: $ExternalDatasetPredictions"
+}
+if ($ExternalDatasetPredictionReport -and -not (Test-Path -LiteralPath $ExternalDatasetPredictionReport)) {
+    throw "External dataset prediction report not found: $ExternalDatasetPredictionReport"
+}
+if ($ExternalDatasetPredictionMarker -and -not (Test-Path -LiteralPath $ExternalDatasetPredictionMarker)) {
+    throw "External dataset prediction marker not found: $ExternalDatasetPredictionMarker"
 }
 
 $env:PYTHONPATH = Join-Path $repoRoot "src"
@@ -127,6 +139,14 @@ if ($apiRunning -and $BenchmarkReport) {
         $apiRunning = $false
     }
 }
+if ($apiRunning -and $ExternalDatasetPredictions) {
+    $expectedPredictions = (Resolve-Path -LiteralPath $ExternalDatasetPredictions).Path
+    if ([string]$apiProcess.CommandLine -notlike "*$expectedPredictions*") {
+        Stop-Process -Id $apiProcess.ProcessId -Force
+        Start-Sleep -Milliseconds 500
+        $apiRunning = $false
+    }
+}
 
 if (-not $apiRunning) {
     $apiArguments = "-u `"$apiScript`" --data-root `"$DataRoot`" --host 127.0.0.1 --port 8765"
@@ -159,6 +179,15 @@ if (-not $apiRunning) {
     }
     if ($ExternalDatasetTypedReport) {
         $apiArguments += " --external-dataset-typed-report `"$ExternalDatasetTypedReport`""
+    }
+    if ($ExternalDatasetPredictions) {
+        $apiArguments += " --external-dataset-predictions `"$ExternalDatasetPredictions`""
+    }
+    if ($ExternalDatasetPredictionReport) {
+        $apiArguments += " --external-dataset-prediction-report `"$ExternalDatasetPredictionReport`""
+    }
+    if ($ExternalDatasetPredictionMarker) {
+        $apiArguments += " --external-dataset-prediction-marker `"$ExternalDatasetPredictionMarker`""
     }
     Start-Process `
         -FilePath $PythonPath `

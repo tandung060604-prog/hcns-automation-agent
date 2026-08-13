@@ -2555,9 +2555,15 @@ def load_prediction_document(
     case_id: str,
     ground_truth_path: Path | None = None,
     *,
-    policy_version: str = MATCHING_POLICY_V1,
+    policy_version: str | None = None,
 ) -> dict[str, Any]:
     artifact = _read_object(paths[0])
+    if policy_version is None:
+        policy_version = MATCHING_POLICY_V1
+        if paths[1].is_file():
+            report_policy = _read_object(paths[1]).get("matchingPolicy", {})
+            if isinstance(report_policy, dict):
+                policy_version = str(report_policy.get("version", MATCHING_POLICY_V1))
     document = next(
         (item for item in artifact.get("documents", []) if item.get("caseId") == case_id), None
     )
@@ -2568,6 +2574,7 @@ def load_prediction_document(
         "prediction": document,
         "localOnly": True,
         "predictionBlind": True,
+        "matchingPolicyVersion": policy_version,
     }
     if (
         paths[1].is_file()

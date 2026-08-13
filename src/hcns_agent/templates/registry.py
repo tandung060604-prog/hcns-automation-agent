@@ -47,6 +47,7 @@ class TemplateRegistry:
         text = document_text(document)
         normalized = normalize(text)
         normalized_plain = normalize_for_ocr_match(text)
+        normalized_compact = normalized_plain.replace(" ", "")
         uses_ocr_matching = document.source_format in {
             SourceFormat.IMAGE,
             SourceFormat.PDF_SCAN,
@@ -67,6 +68,8 @@ class TemplateRegistry:
                 if (
                     normalize(anchor) in normalized
                     or normalize_for_ocr_match(anchor) in normalized_plain
+                    or normalize_for_ocr_match(anchor).replace(" ", "")
+                    in normalized_compact
                     or (
                         uses_ocr_matching
                         and fuzzy_ocr_contains(text, anchor)

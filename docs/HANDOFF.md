@@ -1,6 +1,6 @@
 # Handoff
 
-## Local current-file comparison showcase (2026-08-13)
+## DATA-29 metric-linked document showcase (2026-08-13)
 
 - Template-first localhost now accepts CV and probation contract as DOCX/PDF,
   and IELTS as PDF/PNG/JPG/JPEG. Template-specific format enforcement lives at
@@ -9,20 +9,22 @@
   comparison with confidence, evidence and Exact/Accepted/Mismatch/Missing/
   Needs review badges. The summary is explicitly current-file HOLD/PASS and
   never grants workflow promotion.
-- DATA-29 remains a separate development aggregate (`107/112` strict,
-  `112/112` accepted, HOLD). Template/parser, OCR backend/model/device/profile,
-  matching-policy version and processing time are visible in the result panel.
-- Synthetic API smoke covers CV DOCX/PDF, probation contract DOCX/PDF and IELTS
-  PDF/PNG/JPG. Browser E2E covered all three families; a real local PaddleOCR
-  run processed a synthetic IELTS PNG and exposed two parser mismatches for
-  review instead of hiding them.
-- Final validation: Python `538 passed`; web rendered-contract tests `14/14`;
+- The default evidence tab shows four exact DATA-29 cases (`contract-002`,
+  `cv-002`, `cv-005`, `ielts-001`) with source, Prediction, Ground Truth and
+  field-level evidence. They score `37/39` strict and `39/39` accepted as a
+  display sample; the sealed 12-document aggregate remains `107/112` and `112/112`.
+- Detail comparison now derives matching policy `2.0.0` from the pinned DATA-29
+  report. DATA-29 is labeled as a synthetic development corpus, not real evidence.
+- Final validation: Python `540 passed`; web rendered-contract tests `14/14`;
   mypy passed for 90 source files; touched-file Ruff, compileall, repository
   hygiene and diff check passed. ESLint has zero errors and 23 existing warnings.
 - Delivery branch: `codex/localhost-comparison-showcase`, targeting `main`.
   Separate local Phase 11.10.2 CCCD work and three untracked scripts are
   preserved outside this delivery. PDF report generation remains out of scope;
   PDF is supported only as a document input.
+
+Older entries below are immutable implementation history. Their evidence is not
+part of the current showcase unless it belongs to the pinned DATA-29 chain above.
 
 ## Codebase review repair track (2026-08-12)
 

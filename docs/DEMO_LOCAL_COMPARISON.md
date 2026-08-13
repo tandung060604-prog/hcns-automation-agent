@@ -1,76 +1,41 @@
-# Kịch bản demo đối chiếu tài liệu trên localhost
+# Demo DATA-29: mở đúng tài liệu đã tạo metric
 
-Kịch bản này dành cho user, mentor hoặc reviewer muốn xem luồng đang hoạt động
-mà không cần khởi tạo Camunda. Dùng tài liệu synthetic hoặc tài liệu private đã
-được phép xử lý; không dùng PII thật trong ảnh chụp hoặc video công khai.
+Màn hình này nối trực tiếp aggregate DATA-29 với source, Prediction và Ground
+Truth đã tạo ra điểm số. DATA-29 là development corpus synthetic được cấp quyền
+chạy local; không phải bằng chứng chất lượng trên tài liệu HCNS thật.
 
-## Mục tiêu demo
+## Phạm vi
 
-Chứng minh một tài liệu đi qua đủ chuỗi:
+- Toàn corpus: 12 tài liệu, 112 field.
+- Strict exact: `107/112` — Contract `42/42`, CV `45/50`, IELTS `20/20`.
+- Accepted: `112/112` theo matching policy `2.0.0`.
+- Decision: `HOLD`; `promotionAllowed=false`.
+- Localhost hiển thị 4/12 tài liệu từ chính corpus, không dùng file đại diện.
 
-`upload → preview nguồn → extraction → Ground Truth → comparison → HOLD/PASS`
+| Case | Source thuộc DATA-29 | Định dạng | Điểm riêng |
+|---|---|---|---:|
+| `contract-002` | `02_contract_phuc_an_retail.pdf` | PDF text | 14/14 exact, 14/14 accepted |
+| `cv-002` | `05_cv_le_thu_trang.pdf` | PDF text | 9/10 exact, 10/10 accepted |
+| `cv-005` | `CV_02_Le_Quang_Huy_scan.pdf` | PDF scan | 9/10 exact, 10/10 accepted |
+| `ielts-001` | `07_ielts_nguyen_thu_phuong.png` | Image/OCR | 5/5 exact, 5/5 accepted |
 
-Ba family cần trình bày:
+Bốn tài liệu đang show cộng lại là `37/39 exact`, `39/39 accepted`. Con số này
+chỉ mô tả sample hiển thị; aggregate chính thức vẫn dùng đủ 12 tài liệu.
 
-| Family | Định dạng nên dùng | Kết quả cần thấy |
-|---|---|---|
-| CV | DOCX hoặc PDF | Template `cv-v2`, 10 field review-only |
-| Hợp đồng thử việc | DOCX hoặc PDF | Template `probation-contract-v2`, 14 field review-only |
-| IELTS | PDF, PNG hoặc JPG/JPEG | Template `ielts-certificate-v2`, 5 field; ảnh dùng OCR local |
+## Cách xem
 
-## Chuẩn bị
+1. Mở `http://localhost:3000/workspace#explorer`.
+2. Chọn **DATA-29 · 4 tài liệu metric**.
+3. Chọn một case trong danh sách.
+4. Đọc source ở giữa; đọc Prediction, Ground Truth, match type và evidence bên phải.
+5. Kiểm tra điểm riêng của case và matching policy `2.0.0`.
 
-1. Khởi động dashboard/API theo root `README.md`.
-2. Mở `http://localhost:3000/workspace`.
-3. Giữ chế độ **Biểu mẫu HCNS**.
-4. Chuẩn bị file synthetic hoặc private đã được phép. Không commit file, kết quả
-   OCR hoặc Ground Truth vào Git.
-5. Nếu demo ảnh IELTS, kiểm tra `GET /health` báo đúng OCR backend mong muốn.
+Source, inventory, sealed Ground Truth, Prediction và aggregate report đều nằm
+ngoài Git. SHA-256 của bốn source đã được xác minh khớp inventory; SHA-256 của
+Ground Truth và Prediction khớp marker DATA-29.
 
-## Thao tác cho mỗi tài liệu
+## Phân biệt hai tab
 
-1. Upload file và bấm **Trích xuất tài liệu**.
-2. Xác nhận bên trái hiển thị nguồn/preview; bên phải hiển thị đúng template,
-   document type, confidence và validation status.
-3. Kiểm tra khối metadata:
-   - template và parser version;
-   - intake parser;
-   - OCR backend/version/model/device/profile nếu dùng ảnh;
-   - matching policy và thời gian xử lý.
-4. Đọc từng Prediction trực tiếp với nguồn, sau đó nhập Ground Truth. Không sao
-   chép Prediction sang Ground Truth nếu chưa đối chiếu nguồn.
-5. Bấm **Đối chiếu kết quả**.
-6. Xác nhận mỗi field có một badge: `EXACT`, `ACCEPTED`, `MISMATCH`, `MISSING`
-   hoặc `NEEDS_REVIEW`.
-7. Ghi lại tổng Exact/Accepted/Sai và quyết định `HOLD`/`PASS`.
-
-## Cách trình bày kết quả
-
-- **FILE HIỆN TẠI** là kết quả vừa upload, dùng Ground Truth của chính file đó.
-- **DATA-29 · AGGREGATE** là bằng chứng development đã seal, chỉ để tham khảo:
-  strict `107/112`, accepted `112/112`, quyết định `HOLD`.
-- Không dùng aggregate để che một mismatch của file hiện tại.
-- `PASS` ở comparison không tự phê duyệt nghiệp vụ; `promotionAllowed=false`
-  vẫn giữ nguyên.
-
-## Checklist bằng chứng
-
-| Bằng chứng | Đạt khi |
-|---|---|
-| Upload | UI chỉ cho chọn định dạng hợp lệ theo family |
-| Source | Preview hoặc placeholder native hiển thị đúng file |
-| Prediction | Đủ field schema, không tự điền giá trị không có trong nguồn |
-| Ground Truth | Reviewer nhập từ nguồn và lưu trong session private |
-| Comparison | Badge và exact/wrong count khớp các field đang hiển thị |
-| Metadata | Nhìn thấy version thuật toán và profile đang chạy |
-| Safety | Kết luận review-only, không có cloud/HRIS side effect |
-
-## Kết quả smoke ngày 13/08/2026
-
-- API synthetic: 7/7 tổ hợp CV DOCX/PDF, Contract DOCX/PDF, IELTS PDF/PNG/JPG.
-- Browser E2E: 3/3 family hiển thị đủ source → comparison → conclusion.
-- PaddleOCR runtime thật: IELTS PNG nhận đúng template và giữ
-  `MANUAL_REVIEW`/`OCR_REVIEW_REQUIRED`.
-- Fixture IELTS synthetic hiện cho `3 exact · 2 sai`; hai mismatch parser được
-  giữ nguyên trên UI và quyết định là `HOLD`. Đây là bằng chứng màn hình bắt lỗi,
-  không phải tuyên bố chất lượng production.
+- **DATA-29 · 4 tài liệu metric:** đúng tài liệu đã tạo metric `107/112`.
+- **Tài liệu đã xử lý:** session upload độc lập; kết quả ở đây không đại diện và
+  không được cộng vào DATA-29.

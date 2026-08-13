@@ -14,6 +14,7 @@ from apps.ocr_lab.api.external_dataset_prediction import (
     _field_match,
     build_aggregate_report,
     build_gate_report,
+    load_prediction_document,
     resolve_prediction_source,
 )
 from apps.ocr_lab.api.phase15_idp import classify_phase15_document, extract_phase15_document
@@ -490,6 +491,60 @@ def test_cv_native_skill_normalization_matches_flattened_skill_tokens() -> None:
 
     assert match["matchType"] == "CANONICAL_EXACT"
     assert match["exact"] is True
+
+
+def test_prediction_document_uses_matching_policy_pinned_by_report() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        prediction = root / "prediction.json"
+        report = root / "report.json"
+        marker = root / "marker.json"
+        ground_truth = root / "ground-truth.json"
+        prediction.write_text(
+            json.dumps(
+                {
+                    "documents": [
+                        {
+                            "caseId": "cv-001",
+                            "category": "cv",
+                            "fields": {"full_name": {"value": "TEST USER"}},
+                            "processing": {"usesOcr": False},
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        report.write_text(
+            json.dumps({"matchingPolicy": {"version": MATCHING_POLICY_V2}}),
+            encoding="utf-8",
+        )
+        marker.write_text("{}", encoding="utf-8")
+        ground_truth.write_text(
+            json.dumps(
+                {
+                    "cases": [
+                        {
+                            "caseId": "cv-001",
+                            "fields": [
+                                {
+                                    "name": "full_name",
+                                    "value": "test user",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        detail = load_prediction_document(
+            (prediction, report, marker), "cv-001", ground_truth
+        )
+
+    assert detail["matchingPolicyVersion"] == MATCHING_POLICY_V2
+    assert detail["comparison"]["full_name"]["exact"] is True
 
 
 def test_cv_desired_role_normalizes_title_conjunction_without_touching_prose() -> None:

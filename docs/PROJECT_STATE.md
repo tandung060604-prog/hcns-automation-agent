@@ -1,5 +1,5 @@
 # Project State
-## Local current-file comparison showcase (2026-08-13)
+## DATA-29 metric-linked document showcase (2026-08-13)
 
 - Template-first upload now follows the frozen manifest at both UI and API
   boundaries: CV/probation contract accept DOCX/PDF; IELTS and CCCD accept
@@ -10,19 +10,21 @@
   shows source, Prediction, Ground Truth, confidence/evidence, field badges,
   exact/wrong counts and a HOLD/PASS comparison decision. Promotion remains
   disabled independently of the comparison decision.
-- The workspace explicitly separates `CURRENT_FILE` from the sealed DATA-29
-  development aggregate (`107/112` strict, `112/112` accepted, HOLD) and shows
-  template/parser, OCR model/profile/device, matching policy and processing time.
-- Synthetic API smoke covers CV DOCX/PDF, probation contract DOCX/PDF and IELTS
-  PDF/PNG/JPG. Manual browser E2E covered all three families; a real local
-  PaddleOCR run processed the synthetic IELTS PNG and produced a review-only
-  result. The comparison correctly exposed two parser-level mismatches instead
-  of conflating them with DATA-29.
-- Final validation: Python full suite `538 passed`; frontend build and
+- The default evidence tab now opens four exact DATA-29 source documents: one
+  Contract PDF, one CV PDF text, one CV PDF scan and one IELTS image. It shows
+  4/12 while retaining the full aggregate `107/112` strict and `112/112` accepted.
+- Per-document comparison derives matching policy `2.0.0` from the pinned report.
+  Displayed cases reproduce `14/14`, `9/10`, `9/10` and `5/5` strict respectively.
+- DATA-29 is explicitly labeled a synthetic development corpus. Independent
+  uploaded sessions remain available but no longer stand in for the metric corpus.
+- Final validation: Python full suite `540 passed`; frontend build and
   rendered-contract test `14/14`; mypy passed for 90 source files; repository
   hygiene, compileall and diff check passed. ESLint has zero errors and retains
   23 pre-existing warnings outside this delivery.
 - Delivery branch: `codex/localhost-comparison-showcase`, targeting `main`.
+
+Older entries below are retained as an audit trail only. Their evidence is not
+loaded unless it belongs to the pinned DATA-29 chain described above.
 
 ## Codebase review repair track - pipeline/hygiene consolidation DONE (2026-08-12)
 - The repository hygiene checker now inspects only Git-tracked paths through

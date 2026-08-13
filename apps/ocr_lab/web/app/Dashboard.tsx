@@ -690,18 +690,6 @@ type TemplateComparison = {
   };
 };
 
-type DevelopmentAggregate = {
-  label: string;
-  scope: "DEVELOPMENT_AGGREGATE";
-  fieldCount: number;
-  exactFieldCount: number;
-  acceptedFieldCount: number;
-  matchingPolicyVersion: string | null;
-  decision: "HOLD";
-  promotionAllowed: false;
-  displayOnly: true;
-};
-
 type TemplateSessionSummary = {
   documentId: string;
   createdAt: string;
@@ -1043,6 +1031,7 @@ const typeLabels: Record<string, string> = {
   EMPLOYMENT_CONTRACT: "Hợp đồng",
   PROBATION_AGREEMENT: "Hợp đồng thử việc",
   CV: "CV",
+  CERTIFICATE: "IELTS / chứng chỉ",
   EMPLOYEE_INFORMATION_FORM: "Phiếu nhân viên",
   EMPLOYEE_INFO_UPDATE: "Phiếu cập nhật nhân sự",
   EMPLOYEE_MASTER_LIST: "Danh sách nhân sự",
@@ -1909,7 +1898,6 @@ function TemplateComparisonPanel({ result }: { result: TemplateProcessingResult 
   const documentId = result.data.documentId;
   const [groundTruthDraft, setGroundTruthDraft] = useState<Record<string, string>>({});
   const [comparison, setComparison] = useState<TemplateComparison | null>(null);
-  const [aggregate, setAggregate] = useState<DevelopmentAggregate | null>(null);
   const [isComparing, setIsComparing] = useState(false);
   const [comparisonError, setComparisonError] = useState("");
 
@@ -1928,12 +1916,6 @@ function TemplateComparisonPanel({ result }: { result: TemplateProcessingResult 
             ]),
           ),
         );
-      })
-      .catch(() => undefined);
-    fetch(`${API_BASE}/benchmark/summary`)
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { developmentAggregate?: DevelopmentAggregate } | null) => {
-        if (!cancelled) setAggregate(payload?.developmentAggregate ?? null);
       })
       .catch(() => undefined);
     return () => {
@@ -1986,7 +1968,7 @@ function TemplateComparisonPanel({ result }: { result: TemplateProcessingResult 
         </strong>
       </header>
 
-      <div className="comparison-scope-strip">
+      <div className="comparison-scope-strip single">
         <div>
           <span>FILE HIỆN TẠI</span>
           <strong>
@@ -1995,15 +1977,6 @@ function TemplateComparisonPanel({ result }: { result: TemplateProcessingResult 
               : "Chưa nhập Ground Truth"}
           </strong>
           <small>{processedAt} · ID {documentId.slice(0, 8)}</small>
-        </div>
-        <div>
-          <span>{aggregate?.label ?? "DATA-29"} · AGGREGATE</span>
-          <strong>
-            {aggregate?.fieldCount
-              ? `${aggregate.exactFieldCount}/${aggregate.fieldCount} strict · ${aggregate.acceptedFieldCount}/${aggregate.fieldCount} accepted`
-              : "Chưa cấu hình aggregate"}
-          </strong>
-          <small>Development display-only · HOLD · không phải kết quả file này</small>
         </div>
       </div>
 
@@ -2023,7 +1996,7 @@ function TemplateComparisonPanel({ result }: { result: TemplateProcessingResult 
           <span>Device {result.processing.ocrDevice}</span>
         ) : null}
         <span>Profile {result.processing.ocrProfile ?? "native-text"}</span>
-        <span>Matching {comparison?.matchingPolicyVersion ?? aggregate?.matchingPolicyVersion ?? "2.0.0"}</span>
+        <span>Matching {comparison?.matchingPolicyVersion ?? "2.0.0"}</span>
       </div>
 
       <form onSubmit={compare}>
@@ -2295,14 +2268,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const groundTruthDocumentExcluded =
     groundTruthReviewDocument?.disposition === "OUT_OF_SCOPE_BACK";
   const [evidenceMode, setEvidenceMode] =
-    useState<"overview" | "templates" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "ocr-ho-v2-shadow" | "ocr-ho-v2-diagnostic">(
-      SHOW_OCR_HO_DIAGNOSTIC_GT
-        ? "ocr-ho-v2-diagnostic"
-        : SHOW_OCR_HO_SHADOW_UAT
-        ? "ocr-ho-v2-shadow"
-          : SHOW_EXTERNAL_DATASET_REVIEW
-            ? "external-dataset"
-          : "overview",
+    useState<"overview" | "templates" | "data29" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "ocr-ho-v2-shadow" | "ocr-ho-v2-diagnostic">(
+      "data29",
     );
   const [evidenceInspectorView, setEvidenceInspectorView] =
     useState<"fields" | "json">("fields");
@@ -5548,23 +5515,22 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       <section className="section explorer-section" id="explorer">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">LOCAL REAL-DOCUMENT EVIDENCE</p>
-            <h2>Sáu family tài liệu HCNS</h2>
+            <p className="eyebrow">LOCAL DOCUMENT EVIDENCE</p>
+            <h2>Tài liệu gắn trực tiếp với metric</h2>
           </div>
           <p>
-            Khu vực này hiển thị đủ sáu family active. Leave/OT có E2E thật;
-            bốn family còn lại hiển thị benchmark hoặc trạng thái HOLD theo
-            artifact hiện có, không trộn vào kết quả E2E.
+            DATA-29 mở đúng source đã tạo metric development; tab tài liệu đã xử
+            lý giữ các session upload riêng. Hai phạm vi không đại diện cho nhau.
           </p>
         </div>
         <div className="evidence-switch" role="tablist">
           <button
-            className={evidenceMode === "overview" ? "active" : ""}
-            onClick={() => setEvidenceMode("overview")}
+            className={evidenceMode === "data29" ? "active" : ""}
+            onClick={() => setEvidenceMode("data29")}
             role="tab"
-            aria-selected={evidenceMode === "overview"}
+            aria-selected={evidenceMode === "data29"}
           >
-            TỔNG QUAN ĐỐI CHIẾU LOCAL
+            DATA-29 · 4 tài liệu metric
           </button>
           {SHOW_OCR_HO_DIAGNOSTIC_GT ? (
             <button
@@ -5592,7 +5558,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             role="tab"
             aria-selected={evidenceMode === "templates"}
           >
-            E2E thật · Leave + OT
+            Tài liệu đã xử lý
           </button>
           {SHOW_GROUND_TRUTH_REVIEW ? (
           <button
@@ -5635,7 +5601,9 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             </>
             ) : null}
         </div>
-        {evidenceMode === "overview" ? (
+        {evidenceMode === "data29" ? (
+          <ExternalDatasetPrediction version="data29" />
+        ) : evidenceMode === "overview" ? (
           <LocalEvidenceOverview
             onOpen={(mode) => setEvidenceMode(mode)}
           />
@@ -5724,15 +5692,11 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                       : ""
                   }
                   key={session.documentId}
-                  onClick={() =>
-                    setActiveTemplateSessionId(session.documentId)
-                  }
+                  onClick={() => inspectCamundaDocument(session.documentId)}
                   role="listitem"
                 >
                   <span>
-                    {session.documentType === "LEAVE_REQUEST"
-                      ? "NGHỈ PHÉP"
-                      : "TĂNG CA"}
+                    {(typeLabels[session.documentType] ?? session.documentType).toUpperCase()}
                     -{String(index + 1).padStart(2, "0")}
                   </span>
                   <strong>{session.originalFileName}</strong>
@@ -5761,9 +5725,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                   <span>{activeTemplateSession.sourceFormat}</span>
                   <strong>{activeTemplateSession.originalFileName}</strong>
                   <p>
-                    {activeTemplateSession.documentType === "LEAVE_REQUEST"
-                      ? "Đơn xin nghỉ phép"
-                      : "Đơn xin tăng ca"}
+                    {typeLabels[activeTemplateSession.documentType] ??
+                      activeTemplateSession.documentType}
                     .{" "}
                     {activeTemplateSession.usesOcr
                       ? "Dữ liệu được nhận diện bằng PaddleOCR local và bắt buộc Human Review."
