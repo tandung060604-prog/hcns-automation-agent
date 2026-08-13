@@ -44,18 +44,16 @@ gốc, OCR text và dữ liệu chi tiết vẫn được giữ trong môi trư�
 - **Kết luận rõ ràng:** mỗi lần đối chiếu có tổng số field đúng/sai và quyết định
   `HOLD`/`PASS`. `PASS` chỉ nói về phép so khớp file hiện tại; không tự phê duyệt
   nghiệp vụ và không mở promotion.
-- **Chỉ hiển thị kết quả file đang xem:** showcase tài liệu thật chỉ dùng
-  `CURRENT_FILE` và Ground Truth nhập trực tiếp từ chính tài liệu đó; không nạp
-  aggregate của corpus khác vào màn hình đối chiếu.
+- **Metric mở được tài liệu nguồn:** tab DATA-29 hiển thị 4/12 tài liệu đã trực
+  tiếp tạo ra aggregate `107/112`, không dùng file upload khác làm đại diện.
 - **Metadata thuật toán có thể kiểm tra:** template/parser version, intake parser,
   OCR backend/version/model/device/profile, matching policy và thời gian xử lý
   được hiển thị cùng kết quả.
-- **Bằng chứng bằng tài liệu thật đã được cấp quyền:** CV cá nhân PDF và IELTS Test
-  Report Form PNG đã đi qua runtime localhost, Ground Truth được đối chiếu trực
-  tiếp từ nguồn và cả hai đều giữ `MANUAL_REVIEW`/`HOLD`.
-- **Không thay bằng dữ liệu mô phỏng:** hiện chưa có hợp đồng thật đủ điều kiện
-  trong các nguồn local đã kiểm tra, nên showcase không công bố kết quả contract.
-  Visual QA vẫn cho thấy source, Prediction, Ground Truth và mismatch theo field.
+- **Đối chiếu đúng policy:** chi tiết từng tài liệu đọc matching policy `2.0.0`
+  được pin trong chính report, nên số exact/accepted tái tạo cùng cách chấm DATA-29.
+- **Phạm vi được ghi rõ:** DATA-29 là development corpus synthetic đã được cấp
+  quyền local, không phải bằng chứng tài liệu thật hay tuyên bố production. Các
+  session upload riêng vẫn nằm ở tab **Tài liệu đã xử lý**.
 
 Các cập nhật hardening ngày 12/08/2026 vẫn được giữ nguyên:
 
@@ -120,9 +118,9 @@ lượng production. Trạng thái promotion hiện vẫn là `HOLD` và
 |---|---:|---|
 | Leave + Overtime native | 30/30 chọn đúng template | 15 Leave Request và 15 Overtime Request |
 | Leave + Overtime native | 0/30 lỗi validation | Đủ điều kiện chuyển đến bước Human review |
-| CV thật hiện tại | 0/10 field exact, `HOLD` | PDF cá nhân; parser nhận sai cả 10 field |
-| IELTS thật hiện tại | 0/5 field exact, `HOLD` | PNG Test Report Form; PaddleOCR đọc được nguồn nhưng parser gắn sai field |
-| Hợp đồng thật | Chưa có bằng chứng | Không dùng tài liệu mô phỏng để lấp khoảng trống |
+| Contract + CV + IELTS · DATA-29 | 107/112 field exact | Contract 42/42, CV 45/50, IELTS 20/20 |
+| DATA-29 accepted | 112/112 field accepted | Matching policy v2; decision `HOLD`, không promotion |
+| 4 tài liệu đang show | 37/39 exact, 39/39 accepted | 1 Contract PDF, 1 CV PDF text, 1 CV PDF scan, 1 IELTS PNG từ chính DATA-29 |
 | JSON Schema | 0 lỗi | Kiểm tra cấu trúc trước khi chuyển workflow |
 
 Dashboard chỉ hiển thị metric từ aggregate evidence đã seal. Inventory chỉ dùng
@@ -169,18 +167,16 @@ Hướng dẫn thao tác đầy đủ: [Demo Camunda + HITL](docs/DEMO_CAMUNDA_H
 
 ### Demo nhanh cho user hoặc mentor
 
-1. Mở `http://localhost:3000/workspace`, giữ chế độ **Biểu mẫu HCNS**.
-2. Upload CV/hợp đồng bằng DOCX hoặc PDF; với IELTS có thể dùng thêm PNG/JPG.
-3. Kiểm tra preview nguồn và Prediction. Với DOCX, UI ghi rõ native parser;
-   với ảnh, UI hiển thị OCR backend/model/profile đang chạy.
-4. Nhập Ground Truth đúng theo tài liệu nguồn rồi bấm **Đối chiếu kết quả**.
-5. Đọc badge từng field, tổng Exact/Accepted/Sai và quyết định `HOLD`/`PASS`.
-6. Kết luận theo khối **FILE HIỆN TẠI**. Không dùng một aggregate khác để thay
-   kết quả của tài liệu đang xem.
+1. Mở `http://localhost:3000/workspace#explorer`.
+2. Chọn tab **DATA-29 · 4 tài liệu metric**.
+3. Chọn `contract-002`, `cv-002`, `cv-005` hoặc `ielts-001`.
+4. Kiểm tra source ở giữa và Prediction ↔ Ground Truth theo từng field bên phải.
+5. Đối chiếu điểm riêng của file với aggregate toàn corpus phía trên; không dùng
+   điểm 4 file làm thay mẫu số 12 tài liệu.
 
-Ground Truth và comparison được lưu trong session private local. Showcase chỉ
-dùng tài liệu thật đã được chủ sở hữu cho phép; file nguồn, Ground Truth và output
-không được commit vào Git.
+DATA-29 source, Ground Truth, Prediction và report đều ở private local, không
+commit vào Git. Đây là development corpus synthetic; tài liệu upload mới được
+đánh giá riêng ở tab **Tài liệu đã xử lý** và không làm thay đổi metric DATA-29.
 
 ## Kiểm thử
 
@@ -200,7 +196,7 @@ npm run lint
 Pop-Location
 ```
 
-Checkpoint của thay đổi hiện tại: Python full suite `538 passed`; frontend build
+Checkpoint của thay đổi hiện tại: Python full suite `540 passed`; frontend build
 và rendered-contract test `14/14`; mypy pass trên 90 source files; repository
 hygiene, compileall và diff check đều pass. ESLint có 0 error và giữ nguyên 23
 warning nền ngoài phạm vi thay đổi này.
@@ -252,7 +248,6 @@ Các hạng mục sau chưa được xem là tính năng production:
 - Tự động đưa ra quyết định nhân sự hoặc ghi trực tiếp vào HRIS.
 - Tối ưu scan phức tạp: deskew, denoise, rotation và layout nhiều cột/bảng biểu.
 - Promotion OCR cho các family đang ở trạng thái `HOLD`.
-- Parser review-only hiện gắn nhầm field nghiêm trọng trên CV và IELTS thật vừa
-  kiểm tra. Màn hình comparison giữ nguyên `MISMATCH`/`HOLD`; chưa được dùng các
-  family này cho quyết định nghiệp vụ hoặc tuyên bố production-ready.
+- DATA-29 là development corpus synthetic; `107/112` không chứng minh chất lượng
+  trên tài liệu HCNS thật và không được dùng làm tuyên bố production-ready.
 - Đóng gói production bằng Docker/GPU serving và quan sát vận hành hoàn chỉnh.

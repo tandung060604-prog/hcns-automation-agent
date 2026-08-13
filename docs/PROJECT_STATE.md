@@ -1,5 +1,5 @@
 # Project State
-## Local current-file comparison showcase (2026-08-13)
+## DATA-29 metric-linked document showcase (2026-08-13)
 
 - Template-first upload now follows the frozen manifest at both UI and API
   boundaries: CV/probation contract accept DOCX/PDF; IELTS and CCCD accept
@@ -10,24 +10,21 @@
   shows source, Prediction, Ground Truth, confidence/evidence, field badges,
   exact/wrong counts and a HOLD/PASS comparison decision. Promotion remains
   disabled independently of the comparison decision.
-- The real-document showcase now uses only current-file results. Aggregate
-  evidence is not loaded into the document-comparison panel.
-  Template/parser, OCR model/profile/device, matching policy and processing time
-  remain visible.
-- Authorized real-document E2E currently covers the user's CV PDF and an IELTS
-  Test Report Form PNG. Source hashes are recorded locally; Ground Truth and
-  output remain outside Git. Current results are CV `0/10` exact and IELTS `0/5`
-  exact, both `HOLD`, exposing material parser errors rather than hiding them.
-- No eligible real probation contract was found. Contract showcase evidence is
-  intentionally absent instead of being substituted with simulated data.
-- Final validation: Python full suite `539 passed`; frontend build and
+- The default evidence tab now opens four exact DATA-29 source documents: one
+  Contract PDF, one CV PDF text, one CV PDF scan and one IELTS image. It shows
+  4/12 while retaining the full aggregate `107/112` strict and `112/112` accepted.
+- Per-document comparison derives matching policy `2.0.0` from the pinned report.
+  Displayed cases reproduce `14/14`, `9/10`, `9/10` and `5/5` strict respectively.
+- DATA-29 is explicitly labeled a synthetic development corpus. Independent
+  uploaded sessions remain available but no longer stand in for the metric corpus.
+- Final validation: Python full suite `540 passed`; frontend build and
   rendered-contract test `14/14`; mypy passed for 90 source files; repository
   hygiene, compileall and diff check passed. ESLint has zero errors and retains
   23 pre-existing warnings outside this delivery.
 - Delivery branch: `codex/localhost-comparison-showcase`, targeting `main`.
 
-Older entries below are retained as an audit trail only. Their development-test
-evidence is not loaded into the current real-document showcase.
+Older entries below are retained as an audit trail only. Their evidence is not
+loaded unless it belongs to the pinned DATA-29 chain described above.
 
 ## Codebase review repair track - pipeline/hygiene consolidation DONE (2026-08-12)
 - The repository hygiene checker now inspects only Git-tracked paths through

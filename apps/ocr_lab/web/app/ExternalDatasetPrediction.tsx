@@ -11,7 +11,14 @@ type Summary = {
   documents: Array<{ caseId: string; category: string; sourceFormat: string; sourceFile: string; evaluationIncluded?: boolean; ocrScope?: string; recommendedAction?: string }>;
   report?: RecordValue;
 };
-type Props = { version?: "data12" | "data13" | "policy-v2" };
+type Props = { version?: "data12" | "data13" | "data29" | "policy-v2" };
+
+const DATA29_SHOWCASE_CASES = new Set([
+  "contract-002",
+  "cv-002",
+  "cv-005",
+  "ielts-001",
+]);
 
 function object(value: unknown): RecordValue {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as RecordValue) : {};
@@ -27,6 +34,13 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
   const [activeCase, setActiveCase] = useState("");
   const [detail, setDetail] = useState<RecordValue | null>(null);
   const [error, setError] = useState("");
+  const visibleDocuments = useMemo(
+    () =>
+      summary?.documents.filter(
+        (item) => version !== "data29" || DATA29_SHOWCASE_CASES.has(item.caseId),
+      ) ?? [],
+    [summary, version],
+  );
 
   useEffect(() => {
     fetch(`${API_BASE}${endpoint}/summary`)
@@ -37,10 +51,14 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
       })
       .then((payload) => {
         setSummary(payload);
-        setActiveCase(payload.documents[0]?.caseId ?? "");
+        setActiveCase(
+          payload.documents.find(
+            (item) => version !== "data29" || DATA29_SHOWCASE_CASES.has(item.caseId),
+          )?.caseId ?? "",
+        );
       })
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Không đọc được DATA-12"));
-  }, [endpoint]);
+  }, [endpoint, version]);
 
   useEffect(() => {
     if (!activeCase) return;
@@ -54,19 +72,22 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Không đọc được prediction"));
   }, [activeCase, endpoint]);
 
-  const active = useMemo(() => summary?.documents.find((item) => item.caseId === activeCase) ?? null, [summary, activeCase]);
+  const active = useMemo(() => visibleDocuments.find((item) => item.caseId === activeCase) ?? null, [visibleDocuments, activeCase]);
   const prediction = object(detail?.prediction);
   const fields = object(prediction.fields);
   const comparison = object(detail?.comparison);
   const hasComparison = Object.keys(comparison).length > 0;
   const report = object(summary?.report);
   const metrics = object(report.metrics);
+  const comparedFields = Object.values(comparison).map(object);
+  const exactFields = comparedFields.filter((item) => item.exact === true).length;
+  const acceptedFields = comparedFields.filter((item) => item.match === true).length;
 
   return (
     <section className="external-review-panel data12-prediction" data-testid="external-dataset-prediction">
       {version === "policy-v2" ? <div className="external-review-message">DATA-25 Policy v2 post-hoc audit · DATA-24 official evaluate-once remains immutable</div> : null}
       <div className="external-review-heading">
-        <div><span>{version === "data13" ? "DATA-13 · OCR SCOPE" : "DATA-12 · LOCAL-ONLY"}</span><h2>Prediction ↔ Ground Truth</h2></div>
+        <div><span>{version === "data29" ? "DATA-29 · DEVELOPMENT CORPUS" : version === "data13" ? "DATA-13 · OCR SCOPE" : "DATA-12 · LOCAL-ONLY"}</span><h2>Prediction ↔ Ground Truth</h2></div>
         <strong>{summary?.status ?? "LOADING"}</strong>
       </div>
       {summary && !hasComparison ? <div className="external-review-message">Prediction-only: Ground Truth not supplied; Field exact not evaluated.</div> : null}
@@ -76,15 +97,15 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
           <div className="local-evidence-metrics">
             {version === "policy-v2" ? <span className="local-evidence-metric"><small>Canonical exact</small><strong>{metrics.fieldExactMatchRate !== undefined ? `${(Number(metrics.fieldExactMatchRate) * 100).toFixed(1)}%` : "—"}</strong></span> : null}
             {version === "policy-v2" ? <span className="local-evidence-metric"><small>Raw exact</small><strong>{metrics.fieldRawExactMatchRate !== undefined ? `${(Number(metrics.fieldRawExactMatchRate) * 100).toFixed(1)}%` : "—"}</strong></span> : null}
-            <span className="local-evidence-metric"><small>Tài liệu</small><strong>{summary.documentCount}</strong></span>
-            <span className="local-evidence-metric"><small>Field exact (strict)</small><strong>{metrics.fieldExactMatchRate !== undefined ? `${(Number(metrics.fieldExactMatchRate) * 100).toFixed(1)}%` : "—"}</strong></span>
-            <span className="local-evidence-metric"><small>Field accepted (text ≥80%)</small><strong>{metrics.fieldAcceptedMatchRate !== undefined ? `${(Number(metrics.fieldAcceptedMatchRate) * 100).toFixed(1)}%` : "—"}</strong></span>
+            <span className="local-evidence-metric"><small>Tài liệu đang show</small><strong>{version === "data29" ? `${visibleDocuments.length}/${summary.documentCount}` : summary.documentCount}</strong></span>
+            <span className="local-evidence-metric"><small>Field exact (toàn corpus)</small><strong>{metrics.fieldExactMatchCount !== undefined ? `${String(metrics.fieldExactMatchCount)}/${String(report.fieldCount ?? "—")}` : "—"}</strong></span>
+            <span className="local-evidence-metric"><small>Field accepted (toàn corpus)</small><strong>{metrics.fieldAcceptedMatchCount !== undefined ? `${String(metrics.fieldAcceptedMatchCount)}/${String(report.fieldCount ?? "—")}` : "—"}</strong></span>
             <span className="local-evidence-metric"><small>Schema errors</small><strong>{metrics ? String(report.schemaErrors ?? "—") : "—"}</strong></span>
             <span className="local-evidence-metric"><small>Decision</small><strong>{String(report.decision ?? "HOLD")}</strong></span>
           </div>
           <div className="external-review-grid">
             <div className="external-review-list" role="list">
-              {summary.documents.map((item) => (
+              {visibleDocuments.map((item) => (
                 <button className={item.caseId === activeCase ? "active" : ""} key={item.caseId} onClick={() => setActiveCase(item.caseId)} type="button">
                   <small>{item.evaluationIncluded === false ? "UNSUPPORTED_FORMAT · MANUAL_REVIEW" : item.recommendedAction === "MANUAL_REVIEW" ? "MANUAL_REVIEW" : item.ocrScope ?? "—"}</small>
                   <span>{item.caseId}</span><strong>{item.category.toUpperCase()}</strong><small>{item.sourceFormat} · {item.sourceFile}</small>
@@ -99,13 +120,13 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
                 </div>
               ) : active && !["DOCX", "PLAIN_TEXT"].includes(active.sourceFormat) ? (
                 active.sourceFormat === "PDF_SCAN" || active.sourceFormat === "PDF_TEXT" ?
-                  <iframe title={`Preview ${active.caseId}`} src={`${API_BASE}/external-dataset/prediction/source?id=${encodeURIComponent(active.caseId)}&mode=preview`} /> :
+                  <iframe title={`Preview ${active.caseId}`} src={`${API_BASE}/external-dataset/review/document?id=${encodeURIComponent(active.caseId)}&mode=preview`} /> :
                   // eslint-disable-next-line @next/next/no-img-element -- loopback-only source preview.
-                  <img src={`${API_BASE}/external-dataset/prediction/source?id=${encodeURIComponent(active.caseId)}&mode=preview`} alt={active.sourceFile} />
+                  <img src={`${API_BASE}/external-dataset/review/document?id=${encodeURIComponent(active.caseId)}&mode=preview`} alt={active.sourceFile} />
               ) : <div className="native-heldout-file"><strong>{active?.sourceFile}</strong><p>Native source; prediction lấy từ parser local.</p></div>}
             </div>
             <div className="external-review-form">
-              <div className="external-review-form-heading"><div><span>FIELD-LEVEL EVIDENCE</span><strong>{activeCase}</strong></div><small>{detail?.predictionBlind === false ? "PREDICTION + GT" : "PREDICTION ONLY"}</small></div>
+              <div className="external-review-form-heading"><div><span>FIELD-LEVEL EVIDENCE</span><strong>{activeCase}</strong></div><small>{hasComparison ? `${exactFields}/${comparedFields.length} exact · ${acceptedFields}/${comparedFields.length} accepted` : detail?.predictionBlind === false ? "PREDICTION + GT" : "PREDICTION ONLY"}</small></div>
               {active?.evaluationIncluded === false ? <div className="external-review-message">Ảnh/PDF scan ngoài CCCD hoặc chứng chỉ bị loại theo DATA-13; hệ thống không gọi OCR và không tính metric.</div> : null}
               {Object.entries(fields).map(([name, field]) => {
                 const item = object(field);

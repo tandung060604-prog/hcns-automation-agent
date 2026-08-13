@@ -2268,8 +2268,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const groundTruthDocumentExcluded =
     groundTruthReviewDocument?.disposition === "OUT_OF_SCOPE_BACK";
   const [evidenceMode, setEvidenceMode] =
-    useState<"overview" | "templates" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "ocr-ho-v2-shadow" | "ocr-ho-v2-diagnostic">(
-      "templates",
+    useState<"overview" | "templates" | "data29" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "ocr-ho-v2-shadow" | "ocr-ho-v2-diagnostic">(
+      "data29",
     );
   const [evidenceInspectorView, setEvidenceInspectorView] =
     useState<"fields" | "json">("fields");
@@ -5515,16 +5515,23 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       <section className="section explorer-section" id="explorer">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">LOCAL REAL-DOCUMENT EVIDENCE</p>
-            <h2>Bằng chứng tài liệu thật đã xử lý</h2>
+            <p className="eyebrow">LOCAL DOCUMENT EVIDENCE</p>
+            <h2>Tài liệu gắn trực tiếp với metric</h2>
           </div>
           <p>
-            Chỉ các session local có tài liệu nguồn đã được cấp quyền mới xuất
-            hiện ở đây. Chọn một tài liệu để mở nguồn, Prediction, Ground Truth
-            và kết luận của chính file đó.
+            DATA-29 mở đúng source đã tạo metric development; tab tài liệu đã xử
+            lý giữ các session upload riêng. Hai phạm vi không đại diện cho nhau.
           </p>
         </div>
         <div className="evidence-switch" role="tablist">
+          <button
+            className={evidenceMode === "data29" ? "active" : ""}
+            onClick={() => setEvidenceMode("data29")}
+            role="tab"
+            aria-selected={evidenceMode === "data29"}
+          >
+            DATA-29 · 4 tài liệu metric
+          </button>
           {SHOW_OCR_HO_DIAGNOSTIC_GT ? (
             <button
               className={evidenceMode === "ocr-ho-v2-diagnostic" ? "active" : ""}
@@ -5594,7 +5601,9 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             </>
             ) : null}
         </div>
-        {evidenceMode === "overview" ? (
+        {evidenceMode === "data29" ? (
+          <ExternalDatasetPrediction version="data29" />
+        ) : evidenceMode === "overview" ? (
           <LocalEvidenceOverview
             onOpen={(mode) => setEvidenceMode(mode)}
           />

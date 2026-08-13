@@ -1,63 +1,41 @@
-# Demo đối chiếu tài liệu thật trên localhost
+# Demo DATA-29: mở đúng tài liệu đã tạo metric
 
-Kịch bản này dành cho user, mentor hoặc reviewer xem trực tiếp tài liệu đã được
-chủ sở hữu cho phép. Showcase không dùng dữ liệu mô phỏng để thay cho tài liệu
-thật và không khởi tạo Camunda.
+Màn hình này nối trực tiếp aggregate DATA-29 với source, Prediction và Ground
+Truth đã tạo ra điểm số. DATA-29 là development corpus synthetic được cấp quyền
+chạy local; không phải bằng chứng chất lượng trên tài liệu HCNS thật.
 
-## Quy tắc dữ liệu
+## Phạm vi
 
-- Chỉ dùng tài liệu thật đã có quyền xem và xử lý.
-- Xác minh file nguồn trước khi chạy; lưu SHA-256 trong bằng chứng local.
-- File nguồn, Ground Truth, OCR output và comparison chỉ nằm trong data root
-  private, không commit vào Git.
-- Nếu chưa có tài liệu thật của một family, ghi rõ `CHƯA CÓ BẰNG CHỨNG`; không
-  thay bằng tài liệu minh họa.
-- Kết quả `PASS`/`HOLD` chỉ áp dụng cho file đang xem và không tự duyệt nghiệp vụ.
+- Toàn corpus: 12 tài liệu, 112 field.
+- Strict exact: `107/112` — Contract `42/42`, CV `45/50`, IELTS `20/20`.
+- Accepted: `112/112` theo matching policy `2.0.0`.
+- Decision: `HOLD`; `promotionAllowed=false`.
+- Localhost hiển thị 4/12 tài liệu từ chính corpus, không dùng file đại diện.
 
-## Bằng chứng đang có ngày 13/08/2026
+| Case | Source thuộc DATA-29 | Định dạng | Điểm riêng |
+|---|---|---|---:|
+| `contract-002` | `02_contract_phuc_an_retail.pdf` | PDF text | 14/14 exact, 14/14 accepted |
+| `cv-002` | `05_cv_le_thu_trang.pdf` | PDF text | 9/10 exact, 10/10 accepted |
+| `cv-005` | `CV_02_Le_Quang_Huy_scan.pdf` | PDF scan | 9/10 exact, 10/10 accepted |
+| `ielts-001` | `07_ielts_nguyen_thu_phuong.png` | Image/OCR | 5/5 exact, 5/5 accepted |
 
-| Family | File nguồn local | SHA-256 | Kết quả hiện tại |
-|---|---|---|---|
-| CV | CV PDF cá nhân trong data root private | `8ad0b6f60f40f8f7e9c442958e3cd608199f5f272ffc11ed53d8c88d9e6e1a30` | `0/10 exact`, `HOLD` |
-| IELTS | `ielts-001.png` | `b49a069f8f78753b96e201cdab9d9c3b6414a364567f6331f98a64ce0c5dc8be` | `0/5 exact`, `HOLD` |
-| Hợp đồng thử việc | Chưa có file thật đủ điều kiện | — | Chưa có bằng chứng |
+Bốn tài liệu đang show cộng lại là `37/39 exact`, `39/39 accepted`. Con số này
+chỉ mô tả sample hiển thị; aggregate chính thức vẫn dùng đủ 12 tài liệu.
 
-CV được đọc bằng `pdf/pymupdf-native`. IELTS được xử lý bằng PaddleOCR
-`PP-OCRv5_mobile_det + latin_PP-OCRv5_mobile_rec` trên CPU. Hai file đều được
-nhập Ground Truth trực tiếp từ nguồn và giữ `MANUAL_REVIEW`.
+## Cách xem
 
-Kết quả xấu là bằng chứng quan trọng: thuật toán hiện nhận diện đúng family nhưng
-parser gắn sai field trên cả CV và IELTS. Không dùng hai family này cho quyết định
-nghiệp vụ hoặc tuyên bố production-ready.
+1. Mở `http://localhost:3000/workspace#explorer`.
+2. Chọn **DATA-29 · 4 tài liệu metric**.
+3. Chọn một case trong danh sách.
+4. Đọc source ở giữa; đọc Prediction, Ground Truth, match type và evidence bên phải.
+5. Kiểm tra điểm riêng của case và matching policy `2.0.0`.
 
-## Cách mở kết quả đã lưu
+Source, inventory, sealed Ground Truth, Prediction và aggregate report đều nằm
+ngoài Git. SHA-256 của bốn source đã được xác minh khớp inventory; SHA-256 của
+Ground Truth và Prediction khớp marker DATA-29.
 
-1. Khởi động API bằng data root private chứa các session thật, không truyền báo
-   cáo aggregate của corpus khác.
-2. Mở `http://localhost:3000/workspace`.
-3. Tại **Kho hồ sơ**, chọn **Tài liệu đã xử lý**.
-4. Chọn CV hoặc IELTS. UI hiển thị source, template, parser và giá trị trích xuất.
-5. Bấm vào tài liệu để mở khu **Đối chiếu kết quả · Current file**.
-6. Đọc từng cột Prediction, Ground Truth, confidence/evidence và badge kết quả.
+## Phân biệt hai tab
 
-## Cách chạy một tài liệu thật mới
-
-1. Xác nhận quyền sử dụng và tính nguyên bản của tài liệu.
-2. Tính SHA-256 trước khi upload.
-3. Upload trong chế độ **Biểu mẫu HCNS** và bấm **Trích xuất tài liệu**.
-4. Đối chiếu preview với từng Prediction rồi nhập Ground Truth từ chính nguồn.
-5. Bấm **Đối chiếu kết quả** và ghi lại số Exact/Accepted/Sai cùng `HOLD`/`PASS`.
-6. Giữ toàn bộ session ngoài Git. Nếu parser sai, giữ nguyên mismatch và mở task
-   sửa thuật toán; không sửa Ground Truth để làm đẹp chỉ số.
-
-## Checklist trình bày
-
-| Bằng chứng | Điều kiện đạt |
-|---|---|
-| Quyền sử dụng | Chủ sở hữu đã cho phép xem và xử lý |
-| Nguồn | Preview đúng file, hash nguồn đã ghi local |
-| Prediction | Kết quả do runtime hiện tại tạo ra |
-| Ground Truth | Reviewer nhập trực tiếp từ tài liệu nguồn |
-| Comparison | Badge và tổng số đúng/sai khớp từng field |
-| Metadata | Thấy template/parser/OCR model/profile đang chạy |
-| Safety | Local-only, review-only, không có HRIS/Camunda side effect |
+- **DATA-29 · 4 tài liệu metric:** đúng tài liệu đã tạo metric `107/112`.
+- **Tài liệu đã xử lý:** session upload độc lập; kết quả ở đây không đại diện và
+  không được cộng vào DATA-29.
