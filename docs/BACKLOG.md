@@ -1,5 +1,16 @@
 # Backlog
 
+## PERF-001-STAGE-TIMING — DONE / LOCAL HOLD (2026-08-13)
+
+Safe stage timing and a resumable aggregate-only runner are implemented. One
+cold plus 30 warm DATA-29 runs completed for DOCX, PDF text, PDF scan and image.
+Native p95 is below `0.3 s`; image p95 is `28.5 s` and PDF scan p95 is `67.5 s`.
+Camunda timing smoke passed, but its p50/p95 is `NOT_MEASURED` to avoid creating
+31 pending review cases. Quality remains DATA-29 `107/112` strict and `112/112`
+accepted. Next READY: ALG-002, then PDF-001; CCCD and Contract-image expansion
+remain closed.
+
+
 ## M5-CAM-009-THREE-FAMILY-LOCAL-SHADOW-E2E — IN PROGRESS (2026-08-13)
 
 Localhost bridge and status UI now support CV, probation contract and IELTS with
@@ -116,6 +127,9 @@ promotion or evaluate-once change is allowed. Aggregate-only artifact:
 
 | ID | Trạng thái | Mục tiêu | Phụ thuộc | Ưu tiên |
 |---|---|---|---|---|
+| PERF-001-STAGE-TIMING | DONE / LOCAL HOLD | Đo cold/warm p50/p95 cho intake, OCR, template, persistence và instrument Camunda bằng aggregate-only evidence | ALG-001 | P0 |
+| ALG-002 | READY | Dùng một canonical parser path cho upload và DATA-29, giữ chất lượng 107/112 strict và 112/112 accepted | PERF-001-STAGE-TIMING | P0 |
+| PDF-001 | PLANNED | Tối ưu memory/latency PDF scan và chạy lại quality/performance gate | ALG-002 | P0 |
 | LONGRUN-MAINT-001 | DONE | Chốt checkpoint, archive evidence cũ và kiểm tra nhất quán state/handoff | Current branch state | P1 |
 | OCR-HO-V2-011 | REVIEW | Deterministic address ROI replay failed exact-improvement/DER gate; keep shadow-only and restore secondary recognizer runtime before next replay | OCR-HO-V2-009 | P0 |
 | OCR-HO-V2-012 | REVIEW | Restored full secondary recognizers; v11.9.1 passes development gate but remains shadow-only pending explicit promotion decision | OCR-HO-V2-011 | P0 |

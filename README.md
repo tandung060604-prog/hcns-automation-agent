@@ -56,6 +56,10 @@ gốc, OCR text và dữ liệu chi tiết vẫn được giữ trong môi trư�
 - **Camunda cho ba họ tài liệu mới:** CV, hợp đồng thử việc và IELTS có thể đi từ
   kết quả upload vào local shadow workflow, bắt buộc Human Review và không tạo
   side effect HRIS/notification thật.
+- **Baseline hiệu năng theo từng stage:** 30 warm run cho mỗi input class cho thấy
+  DOCX/PDF text có p95 dưới `0,3 giây`, trong khi ảnh là `28,5 giây` và PDF scan
+  là `67,5 giây` trên máy CPU 8 GB. Vì vậy chưa mở rộng CCCD/ảnh Contract; ưu
+  tiên thống nhất parser path và tối ưu scan trước.
 
 Các cập nhật hardening ngày 12/08/2026 vẫn được giữ nguyên:
 
@@ -123,6 +127,8 @@ lượng production. Trạng thái promotion hiện vẫn là `HOLD` và
 | Contract + CV + IELTS · DATA-29 | 107/112 field exact | Contract 42/42, CV 45/50, IELTS 20/20 |
 | DATA-29 accepted | 112/112 field accepted | Matching policy v2; decision `HOLD`, không promotion |
 | 12 tài liệu đang show | 107/112 exact, 112/112 accepted | Toàn bộ 3 Contract, 5 CV và 4 IELTS từ chính DATA-29 |
+| Latency native warm p95 | DOCX 285 ms; PDF text 158 ms | 30 run/input class, local CPU 8 GB |
+| Latency visual warm p95 | Ảnh 28,5 s; PDF scan 67,5 s | Chủ yếu nằm ở EasyOCR; chưa đạt gate mở rộng |
 | JSON Schema | 0 lỗi | Kiểm tra cấu trúc trước khi chuyển workflow |
 
 Dashboard chỉ hiển thị metric từ aggregate evidence đã seal. Inventory chỉ dùng
