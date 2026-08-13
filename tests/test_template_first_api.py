@@ -17,6 +17,7 @@ from synthetic_fixtures import (
 )
 from test_template_first import docx_bytes, ielts_lines, leave_lines
 
+import hcns_agent.templates.service as template_service
 from hcns_agent.adapters.mock_ocr import DeterministicMockOcrEngine
 from hcns_agent.bootstrap import build_default_intake
 from hcns_agent.templates.registry import build_default_template_registry
@@ -24,6 +25,7 @@ from hcns_agent.templates.service import (
     TemplateProcessingService,
     TemplateTechnicalError,
     build_default_template_processing_service,
+    build_local_template_processing_service,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -312,6 +314,52 @@ def test_api_rejects_non_local_host_header(tmp_path: Path) -> None:
         assert json.loads(response.read().decode("utf-8")) == {
             "error": "Local dashboard Host header is required"
         }
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_health_exposes_active_template_runtime_without_document_data(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(template_service, "find_spec", lambda name: object())
+    configure_handler(
+        tmp_path,
+        build_local_template_processing_service(ocr_backend="easyocr"),
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+    try:
+        connection.request("GET", "/health")
+        response = connection.getresponse()
+        payload = json.loads(response.read().decode("utf-8"))
+
+        assert response.status == 200
+        upload = payload["userUpload"]
+        assert upload["runtimeProfile"] == "template-first"
+        assert upload["templateOcrBackend"] == "easyocr"
+        assert upload["templateOcrProfile"] == "easyocr/vi-greedy"
+        assert upload["backendAvailable"] is True
+        assert len(upload["pipelines"]) == 6
+        assert set(upload["pipelines"][0]) == {
+            "documentType",
+            "templateId",
+            "templateVersion",
+            "parserId",
+            "parserVersion",
+            "supportedFileTypes",
+            "lifecycle",
+        }
+        serialized = json.dumps(upload)
+        assert "sourceFile" not in serialized
+        assert "documentId" not in serialized
+        assert "private" not in serialized.casefold()
+        assert "paddleOcrAvailable" in upload
     finally:
         connection.close()
         server.shutdown()

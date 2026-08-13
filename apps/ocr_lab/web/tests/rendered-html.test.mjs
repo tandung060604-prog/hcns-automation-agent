@@ -108,9 +108,15 @@ test("exposes the Phase 15 multi-format IDP and field review flow", async () => 
   assert.match(dashboard, /phase12\?:/);
   assert.match(dashboard, /phase15\?:/);
   assert.match(dashboard, /PHASE 15 \/ UNIFIED INTAKE/);
-  assert.match(dashboard, /Phương pháp nào đang thực sự chạy/);
-  assert.match(dashboard, /primaryProfile=vietocr_vgg_seq2seq/);
-  assert.match(dashboard, /Không auto-switch fallback/);
+  assert.match(dashboard, /SYSTEM \/ ALGORITHM VERSION/);
+  assert.match(dashboard, /runtimeHealth/);
+  assert.match(dashboard, /runtime-pipeline-grid/);
+  assert.match(dashboard, /templateOcrProfile/);
+  assert.match(dashboard, /SHOW_ADVANCED_DIAGNOSTICS &&/);
+  assert.match(
+    dashboard,
+    /\{SHOW_LEGACY_UPLOAD \? \(\s*<section className="section" id="legacy-recognition-policy">/s,
+  );
   assert.match(dashboard, /Tài liệu gắn trực tiếp với metric/);
   assert.match(dashboard, /CCCD đã Ground Truth/);
   assert.match(dashboard, /\/user\/source/);
@@ -144,7 +150,7 @@ test("does not expose the deleted legacy held-out corpus", async () => {
   assert.doesNotMatch(envExample, /VITE_SHOW_HELDOUT/);
   assert.match(
     dashboard,
-    /const SHOW_GROUND_TRUTH_REVIEW =\s+import\.meta\.env\.VITE_SHOW_GROUND_TRUTH_REVIEW === "true"/,
+    /const SHOW_GROUND_TRUTH_REVIEW = SHOW_ADVANCED_DIAGNOSTICS &&\s+import\.meta\.env\.VITE_SHOW_GROUND_TRUTH_REVIEW === "true"/,
   );
   assert.match(envExample, /^VITE_SHOW_GROUND_TRUTH_REVIEW=false$/m);
   assert.match(dashboard, /\/cccd-heldout\/review\/summary/);
@@ -246,6 +252,12 @@ test("exposes one Template-first upload with source preview and structured resul
   ]);
 
   assert.match(dashboard, /\/api\/templates/);
+  assert.match(
+    dashboard,
+    /return response\.json\(\) as Promise<\{ userUpload: RuntimeHealth \}>/,
+  );
+  assert.match(dashboard, /runtime-system-panel/);
+  assert.match(dashboard, /pipeline\.parserId/);
   assert.match(dashboard, /\/api\/documents\/process/);
   assert.doesNotMatch(dashboard, /\/api\/documents\/sessions/);
   assert.match(dashboard, /\/api\/documents\/result\?id=/);
@@ -301,6 +313,7 @@ test("exposes one Template-first upload with source preview and structured resul
   assert.match(dashboard, /data-testid="product-showcase"/);
   assert.match(css, /\.product-showcase/);
   assert.match(envExample, /^VITE_SHOW_LEGACY_UPLOAD=false$/m);
+  assert.match(envExample, /^VITE_ADVANCED_DIAGNOSTICS=false$/m);
 });
 
 test("shows the reviewed Phase 14 recognizer decision", async () => {

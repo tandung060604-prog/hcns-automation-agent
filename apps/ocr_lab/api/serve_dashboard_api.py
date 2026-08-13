@@ -153,6 +153,7 @@ from hcns_agent.domain.errors import DocumentIntakeError
 from hcns_agent.ports.document_parser import DocumentSource
 from hcns_agent.templates.compatibility import canonicalize_template_payload
 from hcns_agent.templates.service import (
+    LOCAL_TEMPLATE_RUNTIME_PROFILE,
     TemplateProcessingService,
     TemplateTechnicalError,
     TemplateUnsupportedError,
@@ -3629,6 +3630,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/health":
+            template_pipelines = [
+                {
+                    "documentType": row["documentType"],
+                    "templateId": row["templateId"],
+                    "templateVersion": row["version"],
+                    "parserId": row["parserId"],
+                    "parserVersion": row["parserVersion"],
+                    "supportedFileTypes": row["supportedFileTypes"],
+                    "lifecycle": row["lifecycle"],
+                }
+                for row in self.template_processor.list_templates()
+            ]
             self.send_json(
                 {
                     "status": "ok",
@@ -3646,9 +3659,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         "phase14_8VerifierEnabled": True,
                         "phase14LineReviewEnabled": True,
                         "paddleOcrAvailable": PaddleOCR is not None,
-                        "templateOcrBackend": os.getenv(
-                            "HCNS_TEMPLATE_OCR_BACKEND", "easyocr"
+                        "runtimeProfile": LOCAL_TEMPLATE_RUNTIME_PROFILE,
+                        "templateOcrBackend": self.template_processor.ocr_backend,
+                        "templateOcrProfile": self.template_processor.ocr_profile,
+                        "backendAvailable": (
+                            self.template_processor.ocr_backend_available
                         ),
+                        "pipelines": template_pipelines,
                         "modelLoaded": self.user_ocr.model_loaded,
                         "templateOcrModelLoaded": (
                             self.template_processor.ocr_model_loaded

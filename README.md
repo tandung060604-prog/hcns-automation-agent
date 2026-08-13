@@ -135,7 +135,7 @@ vẫn đọc được qua compatibility projection; kết quả mới phát ra t
 
 - Python 3.10+
 - Node.js 22+
-- PaddleOCR hoặc EasyOCR nếu cần xử lý ảnh/PDF scan
+- EasyOCR cho luồng Template-first mặc định; PaddleOCR chỉ cần khi dùng rollback
 - Camunda 7.13 nếu cần demo workflow end-to-end
 
 ### Cài đặt
@@ -143,7 +143,11 @@ vẫn đọc được qua compatibility projection; kết quả mới phát ra t
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev,paddle]"
+$env:PYTHONUTF8 = "1" # cần thiết nếu đường dẫn repo có ký tự tiếng Việt
+python -m pip install -e ".[dev,easyocr]"
+
+# Chỉ cài thêm khi cần rollback sang PaddleOCR
+python -m pip install -e ".[paddle]"
 
 Push-Location .\apps\ocr_lab\web
 npm ci
@@ -155,9 +159,13 @@ Pop-Location
 ```powershell
 .\apps\ocr_lab\api\start_dashboard.ps1 `
   -DataRoot "C:\duong-dan\private-data" `
-  -PythonPath ".\.venv\Scripts\python.exe" `
-  -TemplateOcrBackend paddle
+  -PythonPath ".\.venv\Scripts\python.exe"
 ```
+
+Launcher mặc định chọn EasyOCR và chỉ báo sẵn sàng khi package của backend đang
+chọn khả dụng. Dùng `-TemplateOcrBackend paddle` khi cần rollback rõ ràng. Mục
+**System / Algorithm Version** trên workspace đọc trực tiếp `/health` để hiển thị
+Template-first profile, OCR backend và parser/version của sáu template.
 
 Sau khi khởi động:
 
@@ -208,7 +216,7 @@ npm run lint
 Pop-Location
 ```
 
-Checkpoint hiện tại: Python `543 passed`; Camunda/Template subset `60 passed`;
+Checkpoint hiện tại: Python `546 passed`; Camunda/Template subset `60 passed`;
 frontend build và rendered-contract test `14/14`; mypy pass trên 90 source files;
 Ruff, compileall, repository hygiene và diff check đều pass. ESLint có 0 error và
 23 warning nền. Camunda 7.13 local shadow đã hoàn tất một CV và một IELTS qua HR
