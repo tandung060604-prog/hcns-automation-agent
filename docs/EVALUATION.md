@@ -1,5 +1,25 @@
 # Evaluation
 
+## PERF-001 Template-first stage timing (2026-08-13)
+
+The authorized DATA-29 performance run used one representative source for each
+detected input class and completed one cold plus 30 warm runs per class. It did
+not read Ground Truth. The aggregate report is numbers-only and
+`promotionAllowed=false`.
+
+| Input class | Warm total p50 | Warm total p95 | Dominant stage |
+|---|---:|---:|---|
+| DOCX | 167 ms | 285 ms | Template parsing/validation |
+| PDF text | 134 ms | 158 ms | Template parsing/validation |
+| Image | 19.5 s | 28.5 s | EasyOCR |
+| PDF scan | 33.1 s | 67.5 s | EasyOCR plus rasterization/paging |
+
+Cold total was `168 ms`, `135 ms`, `31.0 s` and `35.9 s` respectively. A live
+Camunda handoff smoke returned `1.215 s`; p50/p95 is `NOT_MEASURED`. Existing
+quality remains DATA-29 `107/112` strict and `112/112` accepted; this task did
+not rerun or modify predictions or Ground Truth.
+
+
 ## Final project checkpoint (2026-08-11)
 
 This is a release/state checkpoint, not a new evaluation. PR #30 merged at

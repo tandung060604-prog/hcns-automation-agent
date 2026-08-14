@@ -223,6 +223,7 @@ class ScannedPdfDocumentParser:
     def parse(self, source: DocumentSource, context: ParseContext) -> CanonicalDocument:
         pages: list[Page] = []
         manifest_data: dict[str, str] = {}
+        ocr_duration_ms = 0
         engine_name = self._ocr_engine.name
         for rasterized in self._rasterizer.rasterize(source):
             page_source = DocumentSource(
@@ -233,6 +234,7 @@ class ScannedPdfDocumentParser:
                 source_reference=source.source_reference,
             )
             result = self._ocr_engine.recognize(page_source)
+            ocr_duration_ms += result.duration_ms
             manifest_data = result.model_manifest
             blocks: list[Paragraph] = []
             block_index = 0
@@ -300,6 +302,7 @@ class ScannedPdfDocumentParser:
                     model_manifest=manifest,
                     metadata={
                         "rasterizer": "PyMuPDF",
+                        "ocrDurationMs": ocr_duration_ms,
                         "ocrRoiEvidence": manifest_data.get("roiRecovery", "[]"),
                     },
                 ),

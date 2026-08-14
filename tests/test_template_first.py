@@ -323,7 +323,13 @@ def test_lazy_ocr_engine_initializes_once_under_concurrency(
         results = list(executor.map(engine.recognize, [source] * 8))
 
     assert calls == 1
-    assert results == [result] * 8
+    assert all(item.document_id == result.document_id for item in results)
+    assert all(item.engine == result.engine for item in results)
+    assert all(item.pages == result.pages for item in results)
+    assert any(item.duration_ms > result.duration_ms for item in results)
+    assert all(item.duration_ms >= result.duration_ms for item in results)
+
+
 def test_overtime_template_parses_and_normalizes_time() -> None:
     response = process(overtime_lines())
     data = response["data"]
