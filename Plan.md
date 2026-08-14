@@ -97,9 +97,8 @@ Nguồn trạng thái: [PROJECT_STATE](docs/PROJECT_STATE.md),
 - UI đang đặt product flow, benchmark và engineering diagnostic trong cùng workspace
   (`/workspace`), đúng kế hoạch tách thành `/app`, `/hr`, `/admin`, `/lab`.
 - **Không có branch `api-prod-001`, `store-prod-001`, `obs-001`, `sec-data-001`,
-  `local-staging-001`.** Chỉ có hai branch thực sự đang mở với work chưa merge:
-  `codex/alg-001-runtime-identity` (runtime identity) và `codex/perf-001-stage-timing`
-  (benchmark stage timing). Các capability production còn lại phải được xây mới từ đầu,
+  `local-staging-001`.** Các capability production (API boundary, storage, telemetry,
+  private-root security, local staging) chưa có code trên `main`; phải xây mới từ đầu,
   không có "work đã làm sẵn" để port.
 - Baseline đo gần nhất (PERF-001) cho thấy ảnh/PDF scan chậm và ngốn RAM hơn native
   document. Do đó upload phải chạy bất đồng bộ, worker concurrency ban đầu là `1` và
@@ -301,17 +300,9 @@ Một host trước, chưa tách microservice theo hạ tầng:
 Chưa thêm Redis, RabbitMQ, Kubernetes, MinIO cluster hoặc service mesh. Camunda đã là
 orchestrator; chỉ thêm thành phần khi đo được giới hạn của cấu hình một host.
 
-### 6.1 Work từ các branch đang mở
-
-Hai branch có work liên quan production đã được merge vào `main` trong PR #35
-(`codex/alg-001-runtime-identity`: lock template-first runtime identity, device/
-backend policy, manifest, API/UI hiển thị) và PR #37 (`codex/perf-001-stage-timing`:
-benchmark stage timing và kết quả PERF-001). Các capability này giờ là một phần của
-baseline `0b7b107`.
-
-Các capability production khác (production API boundary, Postgres, storage,
-telemetry redacted, private-root security, local staging) hiện chưa có branch hay code;
-phải xây mới trong M0 chứ không phải "port work cũ".
+Các capability production còn thiếu (production API boundary, Postgres, storage,
+telemetry redacted, private-root security, local staging) hiện chưa có trên `main`;
+phải xây mới trong M0.
 
 ## 7. Lựa chọn deployment và chi phí
 
@@ -415,8 +406,7 @@ short-lived response; không tạo public URL lâu dài.
 
 ### M0 - Reconcile baseline và quyết định deploy (2-3 ngày)
 
-- Xác nhận capability từ `codex/alg-001-runtime-identity` (runtime identity) và
-  `codex/perf-001-stage-timing` (stage timing) đã có trên `main`; dùng luôn.
+- Xác nhận trạng thái `main` hiện tại và các capability đã có trên `main`.
 - Xây mới từ đầu các capability production còn thiếu: production API boundary, storage,
   telemetry redacted, private-root security và stage timing.
 - Chốt một ADR cho website/auth/deployment; tạo Docker Compose tối thiểu sau khi ADR duyệt.
@@ -581,9 +571,6 @@ thay đổi đều đối chiếu với source code thực tế trong repo, gồ
   "Đã duyệt" -> chặn người lạ/sai role -> timeline + tải DOCX/PDF).
 - **§1.8 - Chiến lược deploy của MVP:** local trước, viết Docker Compose/runbook từ
   M0, chỉ mua VPS khi demo cần always-on/dữ liệu thật.
-- **§6.1 - Work từ các branch đang mở:** ghi nhận `codex/alg-001-runtime-identity`
-  và `codex/perf-001-stage-timing` đã merge vào `main` (PR #35, #37) tại baseline
-  `0b7b107`; các capability production còn lại chưa có code, phải xây mới.
 - Bảng §7 thêm **GitHub Pages** (repo đã có workflow static demo).
 - §7.1 ghi rõ Profile A là mặc định của MVP demo; VPS chỉ nâng khi cần.
 - §2.1 ghi rõ template đang `FROZEN_V2` (`config/template_version_manifest.json`),
@@ -592,20 +579,19 @@ thay đổi đều đối chiếu với source code thực tế trong repo, gồ
 
 ### 16.2 Sửa cho đúng hiện trạng repo (bản cũ ghi sai)
 
-- **Baseline** `cb29592` -> `0b7b107` (cập nhật theo sig khi alg-001 và perf-001 được merge).
-- **§2.2 - Sửa sai lầm nghiêm trọng về branch:** bản cũ nói có các branch
-  `api-prod-001`, `store-prod-001`, `obs-001`, `sec-data-001`, `local-staging-001`
-  "có nhiều work đã làm". Kiểm tra `git branch -a` và `git for-each-ref` cho thấy những
-  branch này **không tồn tại**. Đổi luận điểm: không "port work cũ" mà phải
-  **xây mới từ đầu** các capability production trong M0.
+- **Baseline:** `cb29592` -> `0b7b107`.
+- **§2.2 - Sửa sai lầm về branch:** bản cũ nói có các branch `api-prod-001`,
+  `store-prod-001`, `obs-001`, `sec-data-001`, `local-staging-001` "có nhiều work đã
+  làm". Các branch này **không tồn tại** trên repo; capability production chưa có code
+  trên `main`, phải **xây mới từ đầu** trong M0.
 - **§2.2 - UI workspace:** ghi rõ hiện tại là `/workspace`, kế hoạch tách
   `/app`, `/hr`, `/admin`, `/lab`.
 - **§2.2 - Database:** ghi rõ `drizzle-orm` đã khai báo nhưng chưa có schema/deploy;
   `.openai/hosting.json` đang `d1`/`r2` = `null`.
 - **§4.1, M2:** parser/validator `leave-request-v1` đã `FROZEN` sẵn, không phải xây
   lại từ đầu.
-- **M0:** đổi từ "audit các branch production" thành "port 2 branch thật + xây mới
-  các capability còn thiếu".
+- **M0:** đổi từ "audit các branch production" thành "xác nhận `main` + xây mới các
+  capability còn thiếu".
 - **§14.7:** ghi rõ chưa mua VPS trong MVP; cần chốt ngân sách/region trước khi nâng
   Profile A lên B.
 
