@@ -4,7 +4,7 @@ Trạng thái: `PROPOSAL`
 
 Ngày rà soát: 14/08/2026
 
-Baseline: `origin/main` tại `5e907ce`
+Baseline: `origin/main` tại `0b7b107`
 
 Phạm vi: website vận hành, phân quyền, biểu mẫu HCNS, Camunda/External Task Worker,
 notification và deployment. Tài liệu này không phải phê duyệt đưa PII thật lên cloud
@@ -303,14 +303,13 @@ orchestrator; chỉ thêm thành phần khi đo được giới hạn của cấ
 
 ### 6.1 Work từ các branch đang mở
 
-Chỉ có hai branch có work chưa merge và cần review/port lên `main`:
+Hai branch có work liên quan production đã được merge vào `main` trong PR #35
+(`codex/alg-001-runtime-identity`: lock template-first runtime identity, device/
+backend policy, manifest, API/UI hiển thị) và PR #37 (`codex/perf-001-stage-timing`:
+benchmark stage timing và kết quả PERF-001). Các capability này giờ là một phần của
+baseline `0b7b107`.
 
-- `codex/alg-001-runtime-identity`: lock template-first runtime identity
-  (device/backend policy, manifest, API/UI hiển thị).
-- `codex/perf-001-stage-timing`: benchmark stage timing và kết quả PERF-001.
-
-Không merge/cherry-pick cả chuỗi lớn một cách mù quáng; port từng capability bằng PR
-nhỏ trên latest `main`. Các capability production khác (API boundary, storage,
+Các capability production khác (production API boundary, Postgres, storage,
 telemetry redacted, private-root security, local staging) hiện chưa có branch hay code;
 phải xây mới trong M0 chứ không phải "port work cũ".
 
@@ -416,10 +415,10 @@ short-lived response; không tạo public URL lâu dài.
 
 ### M0 - Reconcile baseline và quyết định deploy (2-3 ngày)
 
-- Review và port `codex/alg-001-runtime-identity`, `codex/perf-001-stage-timing` bằng
-  PR nhỏ trên latest `main`.
+- Xác nhận capability từ `codex/alg-001-runtime-identity` (runtime identity) và
+  `codex/perf-001-stage-timing` (stage timing) đã có trên `main`; dùng luôn.
 - Xây mới từ đầu các capability production còn thiếu: production API boundary, storage,
-  telemetry redacted, private-root security, runtime identity và stage timing.
+  telemetry redacted, private-root security và stage timing.
 - Chốt một ADR cho website/auth/deployment; tạo Docker Compose tối thiểu sau khi ADR duyệt.
 - Chạy CI hiện tại và synthetic local smoke; không dùng private corpus cho CI.
 
@@ -582,7 +581,9 @@ thay đổi đều đối chiếu với source code thực tế trong repo, gồ
   "Đã duyệt" -> chặn người lạ/sai role -> timeline + tải DOCX/PDF).
 - **§1.8 - Chiến lược deploy của MVP:** local trước, viết Docker Compose/runbook từ
   M0, chỉ mua VPS khi demo cần always-on/dữ liệu thật.
-- **§6.1 - Work từ các branch đang mở:** liệt kê đúng 2 branch thật có work chưa merge.
+- **§6.1 - Work từ các branch đang mở:** ghi nhận `codex/alg-001-runtime-identity`
+  và `codex/perf-001-stage-timing` đã merge vào `main` (PR #35, #37) tại baseline
+  `0b7b107`; các capability production còn lại chưa có code, phải xây mới.
 - Bảng §7 thêm **GitHub Pages** (repo đã có workflow static demo).
 - §7.1 ghi rõ Profile A là mặc định của MVP demo; VPS chỉ nâng khi cần.
 - §2.1 ghi rõ template đang `FROZEN_V2` (`config/template_version_manifest.json`),
@@ -591,12 +592,11 @@ thay đổi đều đối chiếu với source code thực tế trong repo, gồ
 
 ### 16.2 Sửa cho đúng hiện trạng repo (bản cũ ghi sai)
 
-- **Baseline** `cb29592` -> `5e907ce`.
-- **§2.2 - Sửa sai lầm nghiêm trọng về branch:** bản cũ khẳng định có các branch
+- **Baseline** `cb29592` -> `0b7b107` (cập nhật theo sig khi alg-001 và perf-001 được merge).
+- **§2.2 - Sửa sai lầm nghiêm trọng về branch:** bản cũ nói có các branch
   `api-prod-001`, `store-prod-001`, `obs-001`, `sec-data-001`, `local-staging-001`
-  "có nhiều work đã làm". Kiểm tra `git branch -a` và `git for-each-ref` cho thấy
-  **các branch này không tồn tại**. Chỉ có `codex/alg-001-runtime-identity` và
-  `codex/perf-001-stage-timing`. Do đó đổi luận điểm: không "port work cũ" mà phải
+  "có nhiều work đã làm". Kiểm tra `git branch -a` và `git for-each-ref` cho thấy những
+  branch này **không tồn tại**. Đổi luận điểm: không "port work cũ" mà phải
   **xây mới từ đầu** các capability production trong M0.
 - **§2.2 - UI workspace:** ghi rõ hiện tại là `/workspace`, kế hoạch tách
   `/app`, `/hr`, `/admin`, `/lab`.
