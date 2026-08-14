@@ -23,6 +23,7 @@ Chỉ đọc các file cần cho tác vụ:
 | Workflow/HITL | `docs/WORKFLOWS.md`, `docs/HUMAN_IN_THE_LOOP.md` |
 | Camunda 7 integration | `docs/CAMUNDA_MVP_V2_INTEGRATION_PLAN.md`, ADR-0002 |
 | Template-first MVP | `docs/TEMPLATE_FIRST_PHASE1_PLAN.md`, `docs/TEMPLATE_FIRST_PHASE1_REPORT.md` |
+| Website/RBAC/deploy | `Plan.md`, `docs/ARCHITECTURE.md`, `docs/WORKFLOWS.md`, `docs/DATA_SECURITY.md` |
 | Kiến trúc | `docs/ARCHITECTURE.md`, ADR liên quan |
 | Schema | `schemas/`, `docs/DATA_SECURITY.md` |
 | Test/benchmark | `docs/EVALUATION.md`, `docs/adr/0006-ocr-acc-001-dataset-split.md`, `tests/AGENTS.md` |
