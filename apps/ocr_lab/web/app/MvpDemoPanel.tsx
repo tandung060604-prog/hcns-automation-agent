@@ -83,7 +83,7 @@ export default function MvpDemoPanel({
 }: {
   onSessionChange?: (session: MvpSession | null) => void;
 }) {
-  const [session, setSession] = useState<Session | null>(() => readStoredSession());
+  const [session, setSession] = useState<Session | null>(null);
   const [username, setUsername] = useState("user");
   const [password, setPassword] = useState("user123");
   const [loginError, setLoginError] = useState("");
@@ -124,6 +124,13 @@ export default function MvpDemoPanel({
     else window.localStorage.removeItem(STORAGE_KEY);
     onSessionChange?.(value);
   };
+
+  useEffect(() => {
+    const stored = readStoredSession();
+    setSession(stored);
+    onSessionChange?.(stored);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const login = async () => {
     setLoginError("");
