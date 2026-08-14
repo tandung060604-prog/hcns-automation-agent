@@ -4,7 +4,7 @@ Trạng thái: `PROPOSAL`
 
 Ngày rà soát: 14/08/2026
 
-Baseline: `origin/main` tại `cb29592`
+Baseline: `origin/main` tại `5e907ce`
 
 Phạm vi: website vận hành, phân quyền, biểu mẫu HCNS, Camunda/External Task Worker,
 notification và deployment. Tài liệu này không phải phê duyệt đưa PII thật lên cloud
@@ -32,6 +32,27 @@ hoặc bật tự động phê duyệt nghiệp vụ.
    - **Staging chi phí thấp**: một VPS x86 `4 vCPU / 8 GB RAM` chạy Docker Compose.
 7. Không public sign-up trong MVP. Admin tạo/invite tài khoản nội bộ; phiên đăng nhập
    dùng cookie an toàn và mọi quyền đều được backend kiểm tra.
+8. **Chiến lược deploy của MVP: local trước, VPS khi cần remote always-on.** Viết
+   Docker Compose + runbook trong M0 để đảm bảo parity, nhưng buổi demo MVP chạy trên
+   máy hiện có + named Cloudflare Tunnel theo phiên. Chỉ mua VPS khi demo phải luôn
+   bật cho nhiều người/dữ liệu thật phát sinh, vì lúc đó privacy/DPA/region mới tham chiếu.
+
+### 1.1 Mục tiêu output MVP demo (Acceptance)
+
+Buổi demo đầu tiên phải chứng minh đủ luồng sau, với synthetic accounts và
+synthetic documents:
+
+1. Admin tạo tài khoản `USER` và `HR_REVIEWER`; gán role; thay đổi có audit.
+2. `USER` đăng nhập, điền đơn nghỉ phép theo `leave-request-v1`, nộp.
+3. Camunda tạo process và task (User Task/HR Task theo BPMN hiện có).
+4. `HR_REVIEWER` đăng nhập, thấy đúng task được giao, duyệt đơn.
+5. `USER` nhận in-app notification `"Đã duyệt"`.
+6. Người lạ hoặc sai role không truy cập được hồ sơ (401/403, horizontal access).
+7. `USER` xem được timeline và tải bản DOCX/PDF của đơn khi cần.
+
+Bug/feature để đạt output này được ghim vào M1-M4 bên dưới; phần render DOCX/PDF là
+ticket bắt buộc trong M2, dùng đúng template `hcns format/01_don_xin_nghi_phep_v1.docx`
+đã có, không tạo văn bản mới rồi OCR lại.
 
 ## 2. Cơ sở của kế hoạch
 
@@ -39,13 +60,22 @@ hoặc bật tự động phê duyệt nghiệp vụ.
 
 - Intake an toàn cho DOCX, PDF text, PDF scan, ảnh và các định dạng native khác.
 - Sáu nhóm active: CV, IELTS, probation contract, leave, overtime và CCCD mặt trước.
+  Template registry và `config/template_version_manifest.json` đều đang
+  `FROZEN_V2`; template CV/IELTS/probation có alias v1 -> v2.
 - Template/parser/schema versioned, provenance và quality gate review-first.
 - Dashboard local có upload, source preview, Prediction/Ground Truth comparison và
-  bridge Camunda cho CV/IELTS/probation contract.
+  bridge Camunda cho CV/IELTS/probation contract; template-first cũng nối được
+  leave/overtime qua local shadow.
 - Camunda 7.13 External Task REST worker, BPMN/DMN, scalar/opaque-only variables,
-  idempotency và Human Review ở shadow mode.
-- `autoContinueEnabled=false`; HRIS và notification thật chưa được bật.
-- Frontend dùng Next/React qua vinext và đã có cấu hình Cloudflare Workers.
+  idempotency và Human Review ở shadow mode (`config/camunda_m5_shadow_policy.json`:
+  `autoContinueEnabled=false`, closed set 6 loại).
+- Worker chỉ xử lý một task mỗi poll (`max_tasks=1`); document_parse_content dùng
+  lock extension để xử lý ảnh/PDF scan.
+- `autoContinueEnabled=false`; HRIS và notification thật chưa được bật (chỉ SIMULATED).
+- Frontend là Next 16 / React 19 qua vinext tại `apps/ocr_lab/web`, đã có
+  `worker/index.ts` cho Cloudflare, `wrangler` và một workflow GitHub Pages static demo.
+- Có launcher PowerShell (`start_dashboard.ps1`) và launcher Linux
+  (`scripts/start_dashboard_linux.sh`) cho API + web local.
 
 Nguồn trạng thái: [PROJECT_STATE](docs/PROJECT_STATE.md),
 [VISION](docs/VISION.md), [ARCHITECTURE](docs/ARCHITECTURE.md),
@@ -59,16 +89,21 @@ Nguồn trạng thái: [PROJECT_STATE](docs/PROJECT_STATE.md),
 - `chatgpt-auth.ts` chỉ phù hợp preview/hosting context hiện tại, không thay thế
   identity và phân quyền VinHRIS.
 - Chưa có database production đã merge vào `main` cho user, document metadata,
-  notification và audit.
+  notification và audit. `drizzle-orm` đã khai báo trong package.json nhưng chưa
+  có schema/lệnh deploy; `.openai/hosting.json` đang để `d1`/`r2` = `null`.
 - Review queue hiện tại phục vụ local demo; chưa áp quyền theo tài khoản đăng nhập.
 - File/result vẫn phụ thuộc private local data root; retention, backup/restore và
   deletion workflow production chưa hoàn chỉnh.
-- UI đang đặt product flow, benchmark và engineering diagnostic trong cùng workspace.
-- Các branch production API/store/telemetry/security/local-staging có nhiều work đã
-  làm nhưng chưa nằm trên `origin/main`; không được coi là capability đã phát hành.
-- Baseline đo gần nhất cho thấy ảnh/PDF scan chậm và ngốn RAM hơn native document.
-  Do đó upload phải chạy bất đồng bộ, worker concurrency ban đầu là `1` và UI phải
-  hiển thị trạng thái thay vì giữ một HTTP request dài.
+- UI đang đặt product flow, benchmark và engineering diagnostic trong cùng workspace
+  (`/workspace`), đúng kế hoạch tách thành `/app`, `/hr`, `/admin`, `/lab`.
+- **Không có branch `api-prod-001`, `store-prod-001`, `obs-001`, `sec-data-001`,
+  `local-staging-001`.** Chỉ có hai branch thực sự đang mở với work chưa merge:
+  `codex/alg-001-runtime-identity` (runtime identity) và `codex/perf-001-stage-timing`
+  (benchmark stage timing). Các capability production còn lại phải được xây mới từ đầu,
+  không có "work đã làm sẵn" để port.
+- Baseline đo gần nhất (PERF-001) cho thấy ảnh/PDF scan chậm và ngốn RAM hơn native
+  document. Do đó upload phải chạy bất đồng bộ, worker concurrency ban đầu là `1` và
+  UI phải hiển thị trạng thái thay vì giữ một HTTP request dài.
 
 ### 2.3 Nguyên tắc không được phá vỡ
 
@@ -166,7 +201,9 @@ audit. Cockpit chỉ dành cho vận hành nội bộ và không public.
 
 ### 4.1 Tạo từ biểu mẫu
 
-MVP chỉ mở `leave-request-v1`, sau đó `overtime-request-v1`.
+MVP chỉ mở `leave-request-v1`, sau đó `overtime-request-v1`. Hai template này đã có
+parser/validator `FROZEN` trong registry; biểu mẫu form-first sẽ dùng lại đúng
+schema và required fields đang có.
 
 1. User chọn template.
 2. Server tạo draft và pin `templateId/templateVersion`.
@@ -264,9 +301,18 @@ Một host trước, chưa tách microservice theo hạ tầng:
 Chưa thêm Redis, RabbitMQ, Kubernetes, MinIO cluster hoặc service mesh. Camunda đã là
 orchestrator; chỉ thêm thành phần khi đo được giới hạn của cấu hình một host.
 
-Các branch `api-prod-001`, `store-prod-001`, `obs-001`, `sec-data-001`,
-`local-staging-001`, `alg-001` và `perf-001` phải được review và port từng capability
-trên latest `main`; không merge/cherry-pick cả chuỗi lớn một cách mù quáng.
+### 6.1 Work từ các branch đang mở
+
+Chỉ có hai branch có work chưa merge và cần review/port lên `main`:
+
+- `codex/alg-001-runtime-identity`: lock template-first runtime identity
+  (device/backend policy, manifest, API/UI hiển thị).
+- `codex/perf-001-stage-timing`: benchmark stage timing và kết quả PERF-001.
+
+Không merge/cherry-pick cả chuỗi lớn một cách mù quáng; port từng capability bằng PR
+nhỏ trên latest `main`. Các capability production khác (API boundary, storage,
+telemetry redacted, private-root security, local staging) hiện chưa có branch hay code;
+phải xây mới trong M0 chứ không phải "port work cũ".
 
 ## 7. Lựa chọn deployment và chi phí
 
@@ -276,6 +322,7 @@ Giá/giới hạn dưới đây được kiểm tra ngày 14/08/2026 và phải 
 |---|---:|---|
 | Máy hiện có + named Cloudflare Tunnel/Access | Gần `0 USD/tháng` ngoài điện/domain | **Chọn cho partner demo có thời hạn**. Không SLA; chỉ synthetic hoặc dữ liệu được phép. Quick Tunnel chỉ dùng test, không production. |
 | Cloudflare Workers/Pages | Free tier; Paid từ khoảng `5 USD/tháng` | Frontend phù hợp vì repo đã có vinext/Worker config. Không chạy được Camunda/OCR worker. D1/R2 chỉ xem xét sau data approval; không tạo data store thứ hai trong MVP. |
+| GitHub Pages | `0 USD/tháng` | Đã có workflow static demo; chỉ là landing/evidence, không phải app động. |
 | Vercel Hobby | `0 USD/tháng` | Chỉ personal/non-commercial; không phù hợp partner/business production và không chạy worker liên tục. Có thể dùng preview cá nhân, không phải kiến trúc chính. |
 | Railway Free | Sau trial giới hạn khoảng `0.5 GB RAM/service` | Không đủ cho OCR + Camunda. |
 | Railway Hobby | Tối thiểu `5 USD/tháng` rồi tính usage | Tốt cho spike/deploy nhanh, nhưng nhiều service luôn chạy và RAM OCR có thể tốn hơn một VPS cố định. Không chọn mặc định. |
@@ -304,6 +351,8 @@ Nguồn kiểm tra:
 - Dùng synthetic demo accounts và synthetic documents. Nếu dùng file thật đã được
   cho phép thì file vẫn ở private local root và phải xóa theo retention đã duyệt.
 - Seed một flow leave request để partner luôn demo được ngay cả khi OCR visual chậm.
+- **Đây là profile mặc định của MVP demo** theo quyết định §1.8. VPS chỉ mua khi demo
+  phải always-on cho nhiều người hoặc có dữ liệu thật.
 
 ### 7.2 Profile B - Staging chi phí thấp
 
@@ -367,8 +416,9 @@ short-lived response; không tạo public URL lâu dài.
 
 ### M0 - Reconcile baseline và quyết định deploy (2-3 ngày)
 
-- Audit các branch production đang mở, dependency và conflict với latest `main`.
-- Port từng capability cần thiết bằng PR nhỏ: production API boundary, storage,
+- Review và port `codex/alg-001-runtime-identity`, `codex/perf-001-stage-timing` bằng
+  PR nhỏ trên latest `main`.
+- Xây mới từ đầu các capability production còn thiếu: production API boundary, storage,
   telemetry redacted, private-root security, runtime identity và stage timing.
 - Chốt một ADR cho website/auth/deployment; tạo Docker Compose tối thiểu sau khi ADR duyệt.
 - Chạy CI hiện tại và synthetic local smoke; không dùng private corpus cho CI.
@@ -388,13 +438,17 @@ không có HR role; khóa account revoke session.
 
 ### M2 - Leave form-first end-to-end (4-6 ngày)
 
-- Template picker chỉ mở `leave-request-v1`.
+- Template picker chỉ mở `leave-request-v1` (parser/validator `FROZEN` đã sẵn sàng).
 - Create/edit/save draft, schema validation, preview và immutable submit version.
 - Start Camunda bằng reference-only variables, idempotency và status timeline.
-- Không OCR structured form; optional render artifact sau submit.
+- Không OCR structured form.
+- Render artifact: sinh DOCX/PDF từ `hcns format/01_don_xin_nghi_phep_v1.docx` +
+  field đã submit, lưu dưới dạng output artifact, download có authorization. Đây là
+  ticket bắt buộc của MVP demo (không che nó vào phần "nếu cần").
 
 Gate: retry không tạo duplicate document/process; template version được pin; Camunda
-không nhận raw field; User chỉ thấy document của mình.
+không nhận raw field; User chỉ thấy document của mình; artifact render đúng field và
+download sai người trả 403.
 
 ### M3 - HR Review trong app (4-6 ngày)
 
@@ -416,14 +470,19 @@ User Task là nguồn trạng thái; scan/sensitive vẫn review-only.
 Gate: notification không PII/không duplicate; role change được audit; Admin không vượt
 quyền document.
 
-### M5 - Partner demo gần 0 đồng (2-4 ngày)
+### M5 - Partner demo (2-4 ngày)
 
-- Compose, healthcheck, Caddy, named Tunnel/Access allowlist và demo seed synthetic.
-- Backup/restore smoke, worker concurrency limit, incident/retry drill.
-- Runbook start/stop/demo/rollback và cost note.
+- Chạy trên máy demo hiện có (8 GB RAM) bằng Compose + launcher Linux/Windows; không
+  bắt buộc VPS.
+- Caddy, healthcheck, named Cloudflare Tunnel/Access allowlist, demo seed synthetic
+  (1 Admin, 1 USER, 1 HR, 1 leave form, 1 case Camunda).
+- Backup/restore smoke, worker concurrency `1`, incident/retry drill.
+- Runbook start/stop/demo/rollback và cost note; ghi rõ bước nâng lên VPS khi cần
+  always-on.
 
-Gate: một người mới có thể theo runbook để chạy flow User -> Camunda -> HR -> User;
-không expose Camunda/API private, không cần secret trong repo.
+Gate: một người mới theo runbook chạy được flow User -> Camunda -> HR -> User (output
+§1.1); không expose Camunda/API private; khi cần remote nhiều ngày thì deploy VPS từ
+cùng Compose, không sửa lại code.
 
 ### M6 - Low-cost staging và mở rộng có kiểm soát (3-5 ngày)
 
@@ -498,7 +557,8 @@ Những câu hỏi này không chặn M0-M2 với synthetic data, nhưng chặn 
 4. Retention cho từng loại document, backup và audit.
 5. HR candidate group/assignment rule, SLA và escalation owner.
 6. Có bắt buộc xuất DOCX/PDF có giá trị hành chính hay chỉ cần submission record.
-7. Ngân sách staging hàng tháng và region ưu tiên gần Việt Nam.
+7. Ngân sách staging hàng tháng và region ưu tiên gần Việt Nam (chưa mua VPS trong
+   MVP; cần chốt trước khi nâng Profile A lên B).
 8. Kế hoạch giữ Camunda 7.13 hay upgrade có kiểm soát sau khi compatibility test.
 9. Ai là security/privacy approver và ai có quyền rollback production.
 
@@ -509,3 +569,59 @@ Những câu hỏi này không chặn M0-M2 với synthetic data, nhưng chặn 
 Không giao toàn bộ chuỗi cho một người trong một PR. Có thể song song UI shell và
 production API/storage sau khi contract/auth boundary được chốt; Camunda, HR review và
 notification phụ thuộc document ownership/RBAC đã merge.
+
+## 16. Lịch sử thay đổi so với Plan cũ (baseline `cb29592`)
+
+Bản này cập nhật Plan gốc tại commit `cb29592`; baseline mới là `5e907ce`. Tất cả
+thay đổi đều đối chiếu với source code thực tế trong repo, gồm:
+
+### 16.1 Bổ sung mới
+
+- **§1.1 - Mục tiêu output MVP demo (Acceptance):** thêm 7 bước demo cụ thể (Admin
+  tạo tài khoản -> User điền/nộp -> Camunda tạo task -> HR duyệt -> notification
+  "Đã duyệt" -> chặn người lạ/sai role -> timeline + tải DOCX/PDF).
+- **§1.8 - Chiến lược deploy của MVP:** local trước, viết Docker Compose/runbook từ
+  M0, chỉ mua VPS khi demo cần always-on/dữ liệu thật.
+- **§6.1 - Work từ các branch đang mở:** liệt kê đúng 2 branch thật có work chưa merge.
+- Bảng §7 thêm **GitHub Pages** (repo đã có workflow static demo).
+- §7.1 ghi rõ Profile A là mặc định của MVP demo; VPS chỉ nâng khi cần.
+- §2.1 ghi rõ template đang `FROZEN_V2` (`config/template_version_manifest.json`),
+  Camunda policy `camunda_m5_shadow_policy.json`, worker `max_tasks=1`, launcher
+  Linux `scripts/start_dashboard_linux.sh`.
+
+### 16.2 Sửa cho đúng hiện trạng repo (bản cũ ghi sai)
+
+- **Baseline** `cb29592` -> `5e907ce`.
+- **§2.2 - Sửa sai lầm nghiêm trọng về branch:** bản cũ khẳng định có các branch
+  `api-prod-001`, `store-prod-001`, `obs-001`, `sec-data-001`, `local-staging-001`
+  "có nhiều work đã làm". Kiểm tra `git branch -a` và `git for-each-ref` cho thấy
+  **các branch này không tồn tại**. Chỉ có `codex/alg-001-runtime-identity` và
+  `codex/perf-001-stage-timing`. Do đó đổi luận điểm: không "port work cũ" mà phải
+  **xây mới từ đầu** các capability production trong M0.
+- **§2.2 - UI workspace:** ghi rõ hiện tại là `/workspace`, kế hoạch tách
+  `/app`, `/hr`, `/admin`, `/lab`.
+- **§2.2 - Database:** ghi rõ `drizzle-orm` đã khai báo nhưng chưa có schema/deploy;
+  `.openai/hosting.json` đang `d1`/`r2` = `null`.
+- **§4.1, M2:** parser/validator `leave-request-v1` đã `FROZEN` sẵn, không phải xây
+  lại từ đầu.
+- **M0:** đổi từ "audit các branch production" thành "port 2 branch thật + xây mới
+  các capability còn thiếu".
+- **§14.7:** ghi rõ chưa mua VPS trong MVP; cần chốt ngân sách/region trước khi nâng
+  Profile A lên B.
+
+### 16.3 Làm rõ và ghim trách nhiệm
+
+- **M2 - Render DOCX/PDF** chuyển từ "optional" thành **ticket bắt buộc** (dùng
+  `hcns format/01_don_xin_nghi_phep_v1.docx` + field đã submit). Gate bổ sung:
+  "download sai người trả 403".
+- **M5 - Partner demo** (bỏ chữ "gần 0 đồng" khỏi tiêu đề): chạy trên máy demo 8 GB
+  bằng Compose, seed 1 Admin/1 USER/1 HR/1 leave form/1 case Camunda; ghi rõ bước
+  nâng lên VPS từ cùng Compose, không sửa code.
+- **§1.1** ghim thẳng output demo vào M1-M5 làm acceptance để team cùng hiểu đích.
+
+### 16.4 Giữ nguyên
+
+Khung kiến trúc một host, bảng persona/quyền (§3.1), hai luồng tài liệu (§4),
+sequence diagram Camunda (§5), dữ liệu tối thiểu (§8), auth/security gate (§9),
+M1/M3/M4/M6, Definition of Done (§11), tự phản biện (§12), quy tắc Git (§13) và
+các câu hỏi owner (§14) giữ nguyên vì đã đúng hướng và khớp code.
