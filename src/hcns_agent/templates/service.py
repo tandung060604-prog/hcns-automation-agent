@@ -6,6 +6,7 @@ import json
 import os
 import threading
 from collections.abc import Mapping
+from importlib.util import find_spec
 from pathlib import PurePath
 from typing import cast
 
@@ -47,6 +48,8 @@ _SUPPORTED_TEMPLATE_FORMATS = frozenset(
     }
 )
 _OCR_TEMPLATE_FORMATS = frozenset({SourceFormat.PDF_SCAN, SourceFormat.IMAGE})
+DEFAULT_TEMPLATE_OCR_BACKEND = "easyocr"
+LOCAL_TEMPLATE_RUNTIME_PROFILE = "template-first"
 
 
 class TemplateUnsupportedError(ValueError):
@@ -66,15 +69,23 @@ class TemplateTechnicalError(RuntimeError):
 
 
 class _ForbiddenTemplateOcrEngine:
+    backend = "disabled"
+
     @property
     def name(self) -> str:
         return "template-first/ocr-forbidden"
+
+    @property
+    def available(self) -> bool:
+        return False
 
     def recognize(self, source: DocumentSource) -> OcrResult:
         raise RuntimeError("OCR is outside template-first Phase 1")
 
 
 class _LazyTemplatePaddleOcrEngine:
+    backend = "paddle"
+
     def __init__(self, *, device: str = "cpu") -> None:
         self._device = device
         self._delegate: PaddleOcrEngine | None = None
@@ -87,6 +98,10 @@ class _LazyTemplatePaddleOcrEngine:
     @property
     def model_loaded(self) -> bool:
         return self._delegate is not None
+
+    @property
+    def available(self) -> bool:
+        return find_spec("paddleocr") is not None
 
     def recognize(self, source: DocumentSource) -> OcrResult:
         if self._delegate is None:
@@ -105,6 +120,8 @@ class _LazyTemplatePaddleOcrEngine:
 class _LazyTemplateEasyOcrEngine:
     """Load the evidence-backed Vietnamese recognizer only on OCR intake."""
 
+    backend = "easyocr"
+
     def __init__(self, *, device: str = "cpu") -> None:
         self._device = device
         self._delegate: OcrEngine | None = None
@@ -117,6 +134,10 @@ class _LazyTemplateEasyOcrEngine:
     @property
     def model_loaded(self) -> bool:
         return self._delegate is not None
+
+    @property
+    def available(self) -> bool:
+        return find_spec("easyocr") is not None
 
     def recognize(self, source: DocumentSource) -> OcrResult:
         if self._delegate is None:
@@ -151,6 +172,18 @@ class TemplateProcessingService:
     @property
     def ocr_model_loaded(self) -> bool:
         return bool(getattr(self._ocr_engine, "model_loaded", False))
+
+    @property
+    def ocr_backend(self) -> str:
+        return str(getattr(self._ocr_engine, "backend", "custom"))
+
+    @property
+    def ocr_profile(self) -> str:
+        return self._ocr_engine.name
+
+    @property
+    def ocr_backend_available(self) -> bool:
+        return bool(getattr(self._ocr_engine, "available", True))
 
     def process(
         self,
@@ -347,7 +380,9 @@ def build_local_template_processing_service(
     ocr_backend: str | None = None,
 ) -> TemplateProcessingService:
     selected_backend = (
-        ocr_backend or os.getenv("HCNS_TEMPLATE_OCR_BACKEND") or "easyocr"
+        ocr_backend
+        or os.getenv("HCNS_TEMPLATE_OCR_BACKEND")
+        or DEFAULT_TEMPLATE_OCR_BACKEND
     ).casefold()
     if selected_backend == "paddle":
         ocr_engine: OcrEngine = _LazyTemplatePaddleOcrEngine(device=device)

@@ -40,6 +40,20 @@ def test_template_version_mismatch_fails_closed(tmp_path: Path) -> None:
         )
 
 
+def test_template_parser_id_mismatch_fails_closed(tmp_path: Path) -> None:
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    manifest["templates"][0]["parserId"] = "legacy/parser"
+    mutated = tmp_path / "template_version_manifest.json"
+    mutated.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(TemplateVersionGovernanceError, match="parserId"):
+        validate_template_version_manifest(
+            root=ROOT,
+            registry=build_default_template_registry(),
+            manifest_path=mutated,
+        )
+
+
 def test_schema_version_mismatch_fails_closed(tmp_path: Path) -> None:
     schema_path = ROOT / "schemas/templates/cv_v2.schema.json"
     schema = json.loads(schema_path.read_text(encoding="utf-8"))

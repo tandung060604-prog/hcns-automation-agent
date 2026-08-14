@@ -117,6 +117,7 @@ def build_default_template_registry() -> TemplateRegistry:
             template_id="leave-request-v1",
             document_type=DocumentType.LEAVE_REQUEST,
             version="1.0",
+            parser_id="leave-request/parser",
             supported_file_types=_NATIVE_TEMPLATE_FILE_TYPES,
             required_fields=(
                 "employeeName",
@@ -157,6 +158,7 @@ def build_default_template_registry() -> TemplateRegistry:
             template_id="overtime-request-v1",
             document_type=DocumentType.OVERTIME_REQUEST,
             version="1.0",
+            parser_id="overtime-request/parser",
             supported_file_types=_NATIVE_TEMPLATE_FILE_TYPES,
             required_fields=(
                 "employeeName",
@@ -209,6 +211,7 @@ def build_default_template_registry() -> TemplateRegistry:
             template_id=template_id,
             document_type=document_type,
             version=version,
+            parser_id="review-only/label-next-line",
             supported_file_types=supported_file_types,
             required_fields=required_fields,
             optional_fields=(),

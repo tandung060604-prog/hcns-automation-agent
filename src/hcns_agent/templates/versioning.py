@@ -52,6 +52,7 @@ def validate_template_version_manifest(
             "documentType",
             "version",
             "schemaRef",
+            "parserId",
             "parserVersion",
             "lifecycle",
             "supportedFileTypes",

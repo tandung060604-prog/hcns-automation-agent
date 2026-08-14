@@ -1,4 +1,30 @@
 # Project State
+## ALG-001 runtime identity and backend lock (2026-08-13)
+
+- Template Registry now exposes stable `parserId` plus `parserVersion` for all
+  six frozen templates; the tracked manifest and registry fail closed on drift.
+- Local Template-first startup defaults to EasyOCR. Paddle remains an explicit
+  rollback, and the launcher checks the selected backend through `/health`
+  instead of treating Paddle availability as universal runtime readiness.
+- `/health.userUpload` additively exposes the active runtime profile, selected
+  OCR backend/profile, package availability and six safe pipeline descriptors.
+  It does not expose document values, paths or private references.
+- The default workspace renders System/Algorithm Version from runtime data.
+  Historical hybrid/VietOCR policy remains available only behind the existing
+  private legacy-upload flag.
+- Validation: Python `546 passed`; focused Template/API suite `56 passed`; mypy
+  passed for 90 source files; CI-equivalent Ruff, compileall, repository hygiene,
+  diff check, web build and rendered tests `14/14` passed. ESLint has zero errors
+  and retains 23 pre-existing warnings.
+- Local runtime verification passed with EasyOCR 1.7.2, PyTorch 2.13 CPU and
+  OpenCV 4.14; `/health` reports `template-first`, `easyocr/vi-greedy`,
+  `backendAvailable=true` and all six registered pipelines. PaddleOCR 3.7
+  remains importable as the explicit rollback.
+- Authorized DATA-29 IELTS image smoke passed through the local product API:
+  `CERTIFICATE`, `IMAGE`, EasyOCR 1.7.2, zero missing fields,
+  `MANUAL_REVIEW`, `modelLoaded=true`; cold end-to-end request was 27.8 seconds.
+  No OCR text or field value was written to tracked evidence.
+
 ## DATA-29 full explorer + three-family Camunda bridge (2026-08-13)
 
 - Delivery checkpoint: commit `729295e` on

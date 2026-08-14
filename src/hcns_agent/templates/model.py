@@ -55,6 +55,7 @@ class TemplateDefinition:
     template_id: str
     document_type: DocumentType
     version: str
+    parser_id: str
     supported_file_types: tuple[str, ...]
     required_fields: tuple[str, ...]
     optional_fields: tuple[str, ...]
@@ -70,8 +71,8 @@ class TemplateDefinition:
             raise ValueError("Template id and version are required")
         if not self.schema_ref or not self.schema_ref.endswith(".json"):
             raise ValueError("Template schema reference is required")
-        if not self.parser_version:
-            raise ValueError("Template parser version is required")
+        if not self.parser_id or not self.parser_version:
+            raise ValueError("Template parser id and version are required")
         if not 1 <= self.minimum_anchor_matches <= len(self.anchors):
             raise ValueError("Template anchor threshold is invalid")
 
@@ -81,6 +82,7 @@ class TemplateDefinition:
             "documentType": self.document_type.value,
             "version": self.version,
             "schemaRef": self.schema_ref,
+            "parserId": self.parser_id,
             "parserVersion": self.parser_version,
             "lifecycle": "FROZEN",
             "supportedFileTypes": list(self.supported_file_types),
@@ -126,6 +128,7 @@ class TemplateProcessingResult:
             "documentType": self.detection.definition.document_type.value,
             "templateId": self.detection.definition.template_id,
             "templateVersion": self.detection.definition.version,
+            "templateParserId": self.detection.definition.parser_id,
             "templateParserVersion": self.detection.definition.parser_version,
             "detection": self.detection.public_dict(),
             "data": self.data,

@@ -9,17 +9,24 @@ import ExternalDatasetPrediction from "./ExternalDatasetPrediction";
 import LocalEvidenceOverview from "./LocalEvidenceOverview";
 import OcrHoDiagnostic from "./OcrHoDiagnostic";
 
-const SHOW_GROUND_TRUTH_REVIEW =
+const SHOW_ADVANCED_DIAGNOSTICS =
+  import.meta.env.VITE_ADVANCED_DIAGNOSTICS === "true";
+const SHOW_GROUND_TRUTH_REVIEW = SHOW_ADVANCED_DIAGNOSTICS &&
   import.meta.env.VITE_SHOW_GROUND_TRUTH_REVIEW === "true";
 const SHOW_EXTERNAL_DATASET_REVIEW =
+  SHOW_ADVANCED_DIAGNOSTICS &&
   import.meta.env.VITE_SHOW_EXTERNAL_DATASET_REVIEW === "true";
 const SHOW_LEGACY_EXPLORER_TABS =
+  SHOW_ADVANCED_DIAGNOSTICS &&
   import.meta.env.VITE_SHOW_LEGACY_EXPLORER_TABS === "true";
 const SHOW_OCR_HO_SHADOW_UAT =
+  SHOW_ADVANCED_DIAGNOSTICS &&
   import.meta.env.VITE_SHOW_OCR_HO_SHADOW_UAT === "true";
 const SHOW_OCR_HO_DIAGNOSTIC_GT =
+  SHOW_ADVANCED_DIAGNOSTICS &&
   import.meta.env.VITE_SHOW_OCR_HO_DIAGNOSTIC_GT === "true";
 const SHOW_LEGACY_UPLOAD =
+  SHOW_ADVANCED_DIAGNOSTICS &&
   import.meta.env.VITE_SHOW_LEGACY_UPLOAD === "true";
 
 type Sample = {
@@ -598,9 +605,31 @@ type SupportedTemplate = {
   templateId: string;
   documentType: string;
   version: string;
+  parserId: string;
+  parserVersion: string;
+  lifecycle: string;
   supportedFileTypes: string[];
   requiredFields: string[];
   optionalFields: string[];
+};
+
+type RuntimePipeline = {
+  documentType: string;
+  templateId: string;
+  templateVersion: string;
+  parserId: string;
+  parserVersion: string;
+  supportedFileTypes: string[];
+  lifecycle: string;
+};
+
+type RuntimeHealth = {
+  runtimeProfile: string;
+  templateOcrBackend: string;
+  templateOcrProfile: string;
+  backendAvailable: boolean;
+  templateOcrModelLoaded: boolean;
+  pipelines: RuntimePipeline[];
 };
 
 type TemplateProcessingResult = {
@@ -608,6 +637,7 @@ type TemplateProcessingResult = {
   documentType: string;
   templateId: string;
   templateVersion: string;
+  templateParserId: string;
   templateParserVersion: string;
   detection: {
     matchedAnchors: string[];
@@ -1884,7 +1914,7 @@ function TemplateComparisonPanel({ result }: { result: TemplateProcessingResult 
 
       <div className="algorithm-metadata" data-testid="template-algorithm-metadata">
         <span>Template {result.templateVersion}</span>
-        <span>Parser mẫu {result.templateParserVersion}</span>
+        <span>Parser {result.templateParserId} · {result.templateParserVersion}</span>
         <span>Intake {result.processing.parserName} {result.processing.parserVersion}</span>
         <span>
           {result.processing.usesOcr
@@ -2215,6 +2245,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   >("IDENTITY_CARD");
   const [supportedTemplates, setSupportedTemplates] =
     useState<SupportedTemplate[]>([]);
+  const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealth | null>(null);
   const [templateResult, setTemplateResult] =
     useState<TemplateProcessingResult | null>(null);
   const [camundaStatus, setCamundaStatus] = useState("");
@@ -2378,9 +2409,16 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     fetch(`${API_BASE}/health`)
       .then((response) => {
         if (!response.ok) throw new Error("offline");
-        setApiOnline(true);
+        return response.json() as Promise<{ userUpload: RuntimeHealth }>;
       })
-      .catch(() => setApiOnline(false));
+      .then((payload) => {
+        setApiOnline(true);
+        setRuntimeHealth(payload.userUpload);
+      })
+      .catch(() => {
+        setApiOnline(false);
+        setRuntimeHealth(null);
+      });
     fetch(`${API_BASE}/api/templates`)
       .then((response) => {
         if (!response.ok) throw new Error("Template registry unavailable");
@@ -5068,7 +5106,56 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         </div>
       </section>
 
-      <section className="section" id="phases">
+      <section className="section" id="phases" data-testid="runtime-system-panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">SYSTEM / ALGORITHM VERSION</p>
+            <h2>Pipeline đang thực sự chạy</h2>
+          </div>
+          <p>
+            Thông tin được đọc trực tiếp từ runtime và Template Registry, không
+            suy ra từ benchmark hoặc tên file thuật toán.
+          </p>
+        </div>
+        <div className="phase-grid" data-testid="runtime-pipeline-grid">
+          <article className="phase-card">
+            <div className="phase-top">
+              <span>RUN</span>
+              <b>{runtimeHealth?.backendAvailable ? "Available" : "Unavailable"}</b>
+            </div>
+            <h3>{runtimeHealth?.runtimeProfile ?? "Chưa kết nối runtime"}</h3>
+            <p>Luồng sản phẩm mặc định dùng Template-first và luôn giữ Human Review.</p>
+            <small>
+              modelLoaded={String(runtimeHealth?.templateOcrModelLoaded ?? false)}
+            </small>
+          </article>
+          <article className="phase-card">
+            <div className="phase-top">
+              <span>OCR</span>
+              <b>{runtimeHealth?.backendAvailable ? "Active" : "Check runtime"}</b>
+            </div>
+            <h3>{runtimeHealth?.templateOcrBackend ?? "Chưa xác định"}</h3>
+            <p>{runtimeHealth?.templateOcrProfile ?? "Chưa có OCR profile"}</p>
+            <small>Paddle chỉ được dùng khi chọn rollback rõ ràng.</small>
+          </article>
+          {(runtimeHealth?.pipelines ?? []).map((pipeline, index) => (
+            <article className="phase-card" key={pipeline.templateId}>
+              <div className="phase-top">
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <b>{pipeline.lifecycle}</b>
+              </div>
+              <h3>{pipeline.documentType}</h3>
+              <p>{pipeline.templateId} · template {pipeline.templateVersion}</p>
+              <small>
+                {pipeline.parserId} · {pipeline.parserVersion} · {pipeline.supportedFileTypes.join(", ")}
+              </small>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {SHOW_LEGACY_UPLOAD ? (
+      <section className="section" id="legacy-recognition-policy">
         <div className="section-heading">
           <div>
             <p className="eyebrow">LOCKED RECOGNITION POLICY</p>
@@ -5132,6 +5219,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           </article>
         </div>
       </section>
+      ) : null}
 
       {SHOW_GROUND_TRUTH_REVIEW ? (
         <section className="section ground-truth-review-section" id="ground-truth-review">

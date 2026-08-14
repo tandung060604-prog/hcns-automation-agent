@@ -174,6 +174,16 @@ def test_registry_lists_six_approved_templates() -> None:
     assert templates[1]["supportedFileTypes"] == ["pdf", "png", "jpg", "jpeg"]
     assert templates[2]["supportedFileTypes"] == templates[0]["supportedFileTypes"]
     assert all(template["lifecycle"] == "FROZEN" for template in templates)
+    parser_ids = {
+        template["templateId"]: template["parserId"] for template in templates
+    }
+    assert parser_ids["leave-request-v1"] == "leave-request/parser"
+    assert parser_ids["overtime-request-v1"] == "overtime-request/parser"
+    assert set(parser_ids.values()) == {
+        "leave-request/parser",
+        "overtime-request/parser",
+        "review-only/label-next-line",
+    }
     parser_versions = {
         template["templateId"]: template["parserVersion"] for template in templates
     }

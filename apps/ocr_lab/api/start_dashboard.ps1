@@ -16,7 +16,7 @@ param(
     [string]$ExternalDatasetPredictionMarker = "",
     [string]$PythonPath = "D:\venv_paddle\Scripts\python.exe",
     [ValidateSet("paddle", "easyocr")]
-    [string]$TemplateOcrBackend = "paddle"
+    [string]$TemplateOcrBackend = "easyocr"
 )
 
 $ErrorActionPreference = "Stop"
@@ -85,7 +85,13 @@ function Wait-ApiHealth {
 
     for ($attempt = 0; $attempt -lt 30; $attempt++) {
         try {
-            Invoke-RestMethod "http://127.0.0.1:8765/health" -TimeoutSec 2 | Out-Null
+            $health = Invoke-RestMethod "http://127.0.0.1:8765/health" -TimeoutSec 2
+            $runtimeReady = [bool]$health.userUpload.backendAvailable
+            $backendMatches = [string]$health.userUpload.templateOcrBackend -eq $TemplateOcrBackend
+            if (-not $runtimeReady -or -not $backendMatches) {
+                Start-Sleep -Milliseconds 500
+                continue
+            }
             if (-not $RequireOcrHo) {
                 return
             }
@@ -101,7 +107,7 @@ function Wait-ApiHealth {
     if ($RequireOcrHo) {
         throw "OCR-HO diagnostic API is empty or points to the wrong private root. Check -OcrHoShadowRoot."
     }
-    throw "Local API did not become healthy on port 8765."
+    throw "Local API did not become healthy with the selected $TemplateOcrBackend backend on port 8765."
 }
 
 $apiProcess = Get-ApiListener
@@ -109,7 +115,7 @@ $apiRunning = $null -ne $apiProcess
 if ($apiRunning) {
     try {
         $health = Invoke-RestMethod "http://127.0.0.1:8765/health" -TimeoutSec 2
-        $runtimeReady = [bool]$health.userUpload.paddleOcrAvailable
+        $runtimeReady = [bool]$health.userUpload.backendAvailable
         $backendMatches = [string]$health.userUpload.templateOcrBackend -eq $TemplateOcrBackend
         if (-not $runtimeReady -or -not $backendMatches) {
             Stop-Process -Id $apiProcess.ProcessId -Force
