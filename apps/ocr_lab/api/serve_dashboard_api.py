@@ -2060,9 +2060,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 if role == "employee" and document_ref is not None:
                     self._require_document_access(reviewer, document_ref)
                 assignee = task.get("assignee")
-                if assignee not in {None, "", review_policy[1]}:
-                    raise ValueError("Task is already claimed by another reviewer")
                 if assignee != review_policy[1]:
+                    if assignee not in {None, ""}:
+                        _camunda_post(f"{engine_url}/task/{task_id}/unclaim", {})
                     _camunda_post(
                         f"{engine_url}/task/{task_id}/claim",
                         {"userId": review_policy[1]},
@@ -3168,7 +3168,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     if not isinstance(task, dict):
                         continue
                     definition_key = task.get("taskDefinitionKey")
-                    if definition_key not in {"UserReview", "HRReview", "FinalHR"}:
+                    if definition_key not in {"UserReview", "HRReview"}:
                         continue
                     task_id = task.get("id")
                     if not isinstance(task_id, str):
