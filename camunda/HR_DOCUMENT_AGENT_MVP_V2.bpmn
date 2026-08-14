@@ -2,7 +2,7 @@
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:modeler="http://camunda.org/schema/modeler/1.0" xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Definitions_HR_Document_Agent_MVP_V2" targetNamespace="http://example.com/hr-document-agent-mvp-v2" exporter="OpenAI BPMN Review" exporterVersion="2.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.13.0">
   <bpmn:error id="Error_Document_Input_Invalid" name="Document input invalid" errorCode="DOCUMENT_INPUT_INVALID"/>
   <bpmn:error id="Error_Correction_Invalid" name="Correction invalid" errorCode="CORRECTION_INVALID"/>
-  <bpmn:process id="hr_document_agent_mvp_v2" name="HR Document Processing and Onboarding Agent MVP V2" isExecutable="true" camunda:versionTag="2.4.0-shadow">
+  <bpmn:process id="hr_document_agent_mvp_v2" name="HR Document Processing and Onboarding Agent MVP V2" isExecutable="true" camunda:versionTag="2.4.0-shadow" camunda:historyTimeToLive="30">
     <bpmn:documentation>Camunda 7 M5 review-first closed set for six HR document types: leave, overtime, CV, IELTS certificate, probation contract and front-side Vietnamese citizen ID. Raw files, OCR text and full PII remain outside Camunda; autoContinueEnabled=false and HRIS/notification side effects are simulated.</bpmn:documentation>
     <bpmn:startEvent id="Start" name="Bắt đầu">
       <bpmn:documentation>Khởi tạo reuploadCount=0, maxReuploadAttempts=3 và autoContinueEnabled=false trong engine; người nộp không được sửa chính sách này.</bpmn:documentation>
@@ -141,9 +141,8 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
         <camunda:taskListener event="complete">
           <camunda:script scriptFormat="javascript">var assignee = task.getAssignee();
 if (assignee == null || String(assignee).trim().length == 0) { throw 'REVIEWER_ASSIGNMENT_REQUIRED'; }
-var Instant = Java.type('java.time.Instant');
 task.setVariable('reviewerId', String(assignee));
-task.setVariable('reviewedAt', String(Instant.now()));
+task.setVariable('reviewedAt', new Date().toISOString());
 task.setVariable('reviewStage', 'USER');</camunda:script>
         </camunda:taskListener>
         <camunda:formData>
@@ -200,9 +199,8 @@ task.setVariable('reviewStage', 'USER');</camunda:script>
         <camunda:taskListener event="complete">
           <camunda:script scriptFormat="javascript">var assignee = task.getAssignee();
 if (assignee == null || String(assignee).trim().length == 0) { throw 'REVIEWER_ASSIGNMENT_REQUIRED'; }
-var Instant = Java.type('java.time.Instant');
 task.setVariable('reviewerId', String(assignee));
-task.setVariable('reviewedAt', String(Instant.now()));
+task.setVariable('reviewedAt', new Date().toISOString());
 task.setVariable('reviewStage', 'HR');</camunda:script>
         </camunda:taskListener>
         <camunda:formData>

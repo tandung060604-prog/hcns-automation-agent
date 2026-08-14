@@ -11,10 +11,10 @@ dung, nhận diện biểu mẫu, trích xuất dữ liệu có cấu trúc và 
 chắc chắn cho người dùng kiểm tra. Camunda 7 điều phối trạng thái quy trình; file
 gốc, OCR text và dữ liệu chi tiết vẫn được giữ trong môi trường nội bộ.
 
-> **Trạng thái ngày 14/08/2026:** MVP local/shadow chạy được end-to-end trên một
-> máy phát triển. Đây chưa phải website nhiều người dùng và chưa được phép public
-> production: chưa có đăng nhập, RBAC, account management, notification thật hoặc
-> production API. HRIS và notification hiện chỉ trả trạng thái `SIMULATED`.
+> **Trạng thái ngày 14/08/2026:** MVP demo theo [Plan.md §1.1](Plan.md) đã chạy
+> end-to-end với login, RBAC `USER | HR_REVIEWER | ADMIN`, in-app notification và
+> tải bản DOCX/PDF. Toàn bộ dữ liệu vẫn ở local/self-hosted; chưa mở production
+> multi-user, chưa có HRIS thật (chỉ `SIMULATED`) và chưa deploy public.
 
 ## Giá trị chính
 
@@ -24,16 +24,107 @@ gốc, OCR text và dữ liệu chi tiết vẫn được giữ trong môi trư�
 - Luôn giữ con người trong vòng quyết định với xác nhận, chỉnh sửa, tải lại hoặc từ chối.
 - Chỉ chuyển metadata và mã tham chiếu cần thiết sang Camunda, không đẩy file gốc vào workflow.
 
-## Output hiện có
+## MVP demo (Plan.md §1.1) — 7/7 tiêu chí đạt
 
-Với một tài liệu hợp lệ, hệ thống tạo kết quả JSON theo schema gồm loại tài liệu,
-field đã chuẩn hóa, confidence, validation, evidence/provenance và action khuyến
-nghị. Output còn có template/parser/OCR version, thời gian từng stage, source/result
-reference nội bộ, User Task/HR Task và review audit trong Camunda local shadow.
+Demo end-to-end trên máy local với synthetic accounts và synthetic documents:
 
-Hệ thống **chưa** có tài khoản User/HR/Admin, biểu mẫu HCNS điền trực tiếp trên
-web, notification inbox, email/SMS, cập nhật HRIS thật hoặc quyết định nhân sự tự
-động. Các phần này thuộc [kế hoạch website](Plan.md).
+1. Admin tạo tài khoản `USER` và `HR_REVIEWER`; gán role; thay đổi có audit. ✅
+2. `USER` đăng nhập, điền đơn nghỉ phép theo `leave-request-v1`, nộp. ✅
+3. Camunda tạo process và task (User Task/HR Task theo BPMN hiện có). ✅
+4. `HR_REVIEWER` đăng nhập, thấy đúng task được giao, duyệt đơn. ✅
+5. `USER` nhận in-app notification `"Đã duyệt"`. ✅
+6. Người lạ hoặc sai role không truy cập được hồ sơ (401/403, horizontal access). ✅
+7. `USER` xem được timeline và tải bản DOCX/PDF của đơn khi cần. ✅
+
+Ví dụ thực tế đã chạy: đơn nghỉ phép nộp → User Review `UNRESOLVED` → HR Review
+tạo đúng → HR `CONFIRMED` → process COMPLETED → user nhận notification "Đã duyệt";
+người lạ nhận `401`, user khác truy cập hồ sơ nhận `403`.
+
+## Cài đặt và chạy local
+
+### Yêu cầu
+
+- Python 3.10+
+- Node.js 22+
+- EasyOCR cho luồng Template-first mặc định; PaddleOCR chỉ cần khi dùng rollback
+- Camunda 7.13 (bản `run-latest` không cần login) để demo workflow end-to-end
+
+### Cài đặt
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+$env:PYTHONUTF8 = "1" # cần thiết nếu đường dẫn repo có ký tự tiếng Việt
+python -m pip install -e ".[dev,easyocr]"
+
+# Chỉ cài thêm khi cần rollback sang PaddleOCR
+python -m pip install -e ".[paddle]"
+
+Push-Location .\apps\ocr_lab\web
+npm ci
+Pop-Location
+```
+
+### Khởi động các tiến trình
+
+Một demo Camunda đầy đủ cần ba tiến trình độc lập:
+
+1. Camunda 7.13 đã chạy và đã deploy BPMN/DMN trong `camunda/` (deployment hiện
+   tại `hr_document_agent_mvp_v2:14`, phiên bản BPMN `2.4.0-shadow`).
+2. Launcher bên dưới khởi động local API và web.
+3. External Task Worker chạy ở terminal riêng và dùng cùng private data root.
+
+Windows:
+
+```powershell
+.\apps\ocr_lab\api\start_dashboard.ps1 `
+  -DataRoot "C:\duong-dan\private-data" `
+  -PythonPath ".\.venv\Scripts\python.exe"
+```
+
+Linux:
+
+```bash
+bash scripts/start_dashboard_linux.sh "$HOME/private-data"
+```
+
+Launcher mặc định chọn EasyOCR và chỉ báo sẵn sàng khi package của backend đang
+chọn khả dụng. Dùng `-TemplateOcrBackend paddle` (hoặc
+`HCNS_TEMPLATE_OCR_BACKEND=paddle` trên Linux) khi cần rollback rõ ràng.
+
+Sau khi khởi động:
+
+- VinHRIS Dashboard: `http://localhost:3000/workspace`
+- Local API: `http://127.0.0.1:8765`
+- Camunda Tasklist: `http://localhost:8080/camunda`
+
+Worker dùng cùng thư mục để giải tham chiếu UUID mà không đưa file hoặc field
+value vào Camunda:
+
+```powershell
+$env:CAMUNDA_REST_URL = "http://127.0.0.1:8080/engine-rest"
+$env:CAMUNDA_WORKER_ID = "hcns-local-shadow"
+$env:HCNS_CAMUNDA_PRIVATE_ROOT = "C:\duong-dan\private-data"
+$env:HCNS_TEMPLATE_OCR_BACKEND = "easyocr"
+hcns-agent-camunda-worker
+```
+
+Launcher **không** tự khởi động Camunda hoặc worker; repository chưa có Docker
+Compose production để quản lý startup/health/shutdown của toàn stack.
+
+### Demo nhanh MVP (7 tiêu chí)
+
+1. Mở `http://localhost:3000/workspace` — trang yêu cầu đăng nhập (auth gate).
+2. Đăng nhập `admin/admin123` → tạo tài khoản User và HR (tab Admin).
+3. Đăng nhập `user/user123` → điền đơn nghỉ phép (employeeName, startDate,
+   endDate, reason) → nộp.
+4. Đăng nhập `hr/hr123` → mở task được giao → `CONFIRMED`.
+5. Về `user/user123` → xem notification `"Đã duyệt"` và timeline; tải DOCX/PDF.
+6. Thử đường ngoài: chưa đăng nhập → `401`; user khác mở hồ sơ → `403`.
+
+Tài khoản demo: `admin/admin123`, `hr/hr123`, `user/user123` (pass ≥ 6 ký tự).
+
+Hướng dẫn thao tác đầy đủ: [Demo Camunda + HITL](docs/DEMO_CAMUNDA_HITL.md).
 
 ## Trạng thái hiện tại
 
@@ -42,82 +133,38 @@ web, notification inbox, email/SMS, cập nhật HRIS thật hoặc quyết đ�
 | Universal document intake | Hoạt động | Nhận TXT, DOCX, PDF, XLSX, PPTX, PNG và JPG/JPEG |
 | Template-first extraction | Hoạt động | CV/Hợp đồng nhận DOCX, PDF; IELTS/CCCD nhận PDF, PNG, JPG/JPEG theo manifest |
 | OCR local | Hoạt động | PaddleOCR hoặc EasyOCR cho ảnh và PDF scan |
-| Dashboard VinHRIS | Hoạt động local | Upload, xem nguồn, queue demo, Ground Truth và diagnostic đang dùng chung workspace |
-| Camunda 7 + Human-in-the-loop | Hoạt động ở shadow mode | Điều phối External Task/User Task, không tạo side effect nghiệp vụ thật |
+| Dashboard VinHRIS | Hoạt động local | Auth gate, upload, queue role-aware, notification, timeline, admin |
+| Camunda 7 + Human-in-the-loop | Hoạt động ở shadow mode | External Task/User Task với ISO timestamp; không tạo side effect HRIS thật |
 | Kết quả local/idempotency | Đã gia cố | Ghi kết quả an toàn khi nhiều request chạy đồng thời |
-| API dashboard | Chỉ local | Bind loopback, CORS chỉ cho localhost; chưa có authentication/RBAC |
-| Chất lượng scan nhạy cảm | Review-only | Confidence thấp hoặc scan chưa chắc chắn luôn cần người duyệt |
-| Website User/HR/Admin | Chưa có | Hai cột vai trò hiện chỉ là demo UI, chưa xác thực danh tính hoặc quyền |
-| HRIS/notification | Mô phỏng | External handlers trả `SIMULATED`; không gửi notification thật |
+| API dashboard | Chỉ local | Bind loopback, CORS allow localhost/127.0.0.1 × 3000/4173; chưa mở LAN |
+| Login/RBAC | MVP local | Session + owner scoping + `USER | HR_REVIEWER | ADMIN`; role do server chứng thực |
+| Notification in-app | Hoạt động | Inbox + đánh dấu đã đọc; chưa có email/SMS |
+| HRIS | Mô phỏng | External handler trả `SIMULATED`; không ghi HRIS thật |
 | Production deploy | Chưa đóng gói | Chưa có Compose, HTTPS gateway, production database/API và backup/restore |
 
 ### Nếu người khác có link thì có dùng được không?
 
-Không ở cấu hình hiện tại. API bind vào `127.0.0.1`, kiểm tra loopback Host và chỉ
-cho frontend `http://localhost:3000`; người ở máy khác không thể dùng chỉ bằng một
-URL. Không đổi host sang `0.0.0.0` hoặc mở port trực tiếp vì hệ thống chưa có
-authentication/RBAC. Demo cho partner sau này phải đặt sau HTTPS và access
-allowlist có thời hạn; xem [Plan.md](Plan.md).
+Không ở cấu hình hiện tại. API bind vào `127.0.0.1`, kiểm tra loopback Host và
+CORS chỉ cho `localhost`/`127.0.0.1`; người ở máy khác không thể dùng chỉ bằng
+một URL. Không đổi host sang `0.0.0.0` hoặc mở port trực tiếp. Demo cho partner
+sau này phải đặt sau HTTPS và access allowlist có thời hạn; xem [Plan.md](Plan.md).
 
-## Cập nhật mới nhất — 14/08/2026
+## Cập nhật mới nhất — 14/08/2026 (nhánh `feat/mvp-leave-request-end-to-end`)
 
-Review trực tiếp API, Template-first service, result store, Camunda worker/BPMN và
-UI cho thấy lõi kỹ thuật đã có kỷ luật tốt: native-first, versioned contract,
-idempotency, atomic persistence, lock extension/retry, opaque-only Camunda
-variables và fail-closed về Human Review. Tuy nhiên quy trình mới đạt mức local
-shadow, chưa đạt production multi-user vì các khoảng trống sau:
-
-1. **Identity và authorization:** thêm login/logout, session, owner scoping và
-   RBAC `USER | HR_REVIEWER | ADMIN`. Role gửi từ trình duyệt không phải bằng chứng quyền.
-2. **Tách App khỏi Lab:** `/workspace` đang trộn upload nghiệp vụ, queue Camunda,
-   Ground Truth, DATA-29 và diagnostic; product flow phải tách khỏi `/lab` có bảo vệ.
-3. **Production composition:** launcher mới khởi động API + web, chưa khởi động
-   Camunda/worker thành một stack có healthcheck, startup order và shutdown thống nhất.
-4. **Resource gate:** local API dùng `ThreadingHTTPServer`, trong khi visual OCR
-   chậm và tốn RAM; production cần job bất đồng bộ và worker concurrency ban đầu `1`.
-5. **Product data/side effect:** chưa có database user/document/notification/audit;
-   HRIS và notification thật vẫn phải giữ đóng.
-
-- **Đối chiếu file hiện tại ngay sau upload:** màn hình thống nhất hiển thị tài
-  liệu nguồn ở bên trái và Prediction, Ground Truth, confidence/evidence cùng
-  badge `EXACT`, `ACCEPTED`, `MISMATCH`, `MISSING` hoặc `NEEDS_REVIEW` ở bên phải.
-- **Kết luận rõ ràng:** mỗi lần đối chiếu có tổng số field đúng/sai và quyết định
-  `HOLD`/`PASS`. `PASS` chỉ nói về phép so khớp file hiện tại; không tự phê duyệt
-  nghiệp vụ và không mở promotion.
-- **Metric mở được toàn bộ tài liệu nguồn:** DATA-29 hiển thị đủ 12 tài liệu đã
-  trực tiếp tạo aggregate `107/112`, chia thành Contract `3`, CV `5`, IELTS `4`.
-- **Metadata thuật toán có thể kiểm tra:** template/parser version, intake parser,
-  OCR backend/version/model/device/profile, matching policy và thời gian xử lý
-  được hiển thị cùng kết quả.
-- **Đối chiếu đúng policy:** chi tiết từng tài liệu đọc matching policy `2.0.0`
-  được pin trong chính report, nên số exact/accepted tái tạo cùng cách chấm DATA-29.
-- **Explorer không trộn session upload:** khu vực evidence chỉ hiển thị source
-  thuộc DATA-29; session upload vẫn được giữ private cho màn kết quả và Camunda.
-- **Camunda cho ba họ tài liệu mới:** CV, hợp đồng thử việc và IELTS có thể đi từ
-  kết quả upload vào local shadow workflow, bắt buộc Human Review và không tạo
-  side effect HRIS/notification thật.
-- **Baseline hiệu năng theo từng stage:** 30 warm run cho mỗi input class cho thấy
-  DOCX/PDF text có p95 dưới `0,3 giây`, trong khi ảnh là `28,5 giây` và PDF scan
-  là `67,5 giây` trên máy CPU 8 GB. Vì vậy chưa mở rộng CCCD/ảnh Contract; ưu
-  tiên thống nhất parser path và tối ưu scan trước.
-
-Các cập nhật hardening ngày 12/08/2026 vẫn được giữ nguyên:
-
-- **An toàn khi xử lý đồng thời:** result store dùng file lock đa tiến trình, tránh
-  hai request cùng ghi đè index hoặc tạo kết quả xung đột cho một idempotency key.
-- **Biên API local rõ ràng hơn:** dashboard từ chối Host không phải loopback và
-  trả `413` cho Camunda JSON body rỗng hoặc vượt giới hạn 2 MB.
-- **Khởi tạo OCR ổn định:** PaddleOCR và EasyOCR lazy backend chỉ được khởi tạo
-  một lần khi nhiều request đầu tiên đến cùng lúc.
-- **CI chạy đúng toàn bộ test:** pipeline chuyển sang `pytest`, không còn bỏ sót
-  test viết theo pytest style; fixture tạm hoạt động trên cả Windows và Linux.
-- **Web contract đồng bộ giao diện:** rendered tests đã bám theo metadata và nội
-  dung tiếng Việt hiện tại của VinHRIS.
-- **Repository gọn và an toàn hơn:** hygiene checker chỉ kiểm tra file Git đang
-  theo dõi; `.worktrees/`, `output/` và `tmp/` không bị quét hoặc đưa vào commit.
-
-Chi tiết kỹ thuật và lịch sử xác minh nằm trong
-[PROJECT_STATE](docs/PROJECT_STATE.md) và [HANDOFF](docs/HANDOFF.md).
+- **BPMN deploy v14, fix lỗi "UNRESOLVED không tạo HR Review":** task listener cũ
+  set `reviewedAt = String(Instant.now())` (epoch millis) trong khi worker yêu cầu
+  ISO-8601 → business error `DOCUMENT_INPUT_INVALID` → process terminate. Đổi cả
+  hai task listener (User Review/HR Review) sang `new Date().toISOString()`; flow
+  UNRESOLVED → HR Review đã verify chạy đúng.
+- **MVP demo UI:** `MvpDemoPanel` — login, nộp đơn leave-request-v1, queue theo
+  role, notification inbox, timeline, tải DOCX/PDF, admin quản lý users + audit,
+  trạng thái hệ thống (API/Camunda) và 5 bước demo.
+- **Auth gate cho toàn bộ `/workspace`:** chưa đăng nhập chỉ thấy màn đăng nhập;
+  session lưu localStorage key `mvp-demo-session`, khôi phục sau khi reload.
+- **CORS mở đúng nguồn dev:** cho phép cả `localhost:3000` và `127.0.0.1:3000`
+  (plus 4173 cho preview), theo `Origin` header thay vì fix cứng một host.
+- **Export DOCX/PDF:** đơn nghỉ phép render theo template `hcns format` và tải
+  về từ màn kết quả; kiểm tra quyền theo owner/role trước khi phục vụ.
 
 ## Luồng đang vận hành
 
@@ -125,20 +172,14 @@ Chi tiết kỹ thuật và lịch sử xác minh nằm trong
 
 ```mermaid
 flowchart TD
-    A["Upload trên localhost"] --> B["Kiểm tra extension, MIME, magic bytes, size/page/ZIP"]
-    B --> C["Lưu source trong private data root"]
-    C --> D{"Có text layer?"}
-    D -->|"Có"| E["Native parser"]
-    D -->|"Không"| F["EasyOCR local"]
-    E --> G["Nhận diện template, trích xuất và validate"]
-    F --> G
-    G --> H["Lưu result + provenance + runtime identity + timings"]
-    H --> I["Start Camunda bằng opaque references"]
-    I --> J["External Task Worker fetch-and-lock"]
-    J --> K["User Review / HR Review"]
-    K -->|"Sửa hoặc xác nhận"| L["Audit và complete workflow"]
-    K -->|"Yêu cầu tải lại"| A
-    L --> M["HRIS + notification = SIMULATED"]
+    A["USER đăng nhập và nộp đơn leave-request-v1"] --> B["Lưu source trong private data root"]
+    B --> C["Start Camunda bằng opaque references"]
+    C --> D["External Task Worker fetch-and-lock"]
+    D --> E["User Review / HR Review"]
+    E -->|"UNRESOLVED / CONFIRMED"| F["Audit và complete workflow"]
+    E -->|"Yêu cầu tải lại"| A
+    F --> G["In-app notification cho USER"]
+    F --> H["HRIS = SIMULATED"]
 ```
 
 ### Luồng lab/evidence — không phải bước nghiệp vụ
@@ -160,7 +201,7 @@ thường không phải nhập Ground Truth để nộp hồ sơ.
 
 | Nhóm tài liệu | Mức hỗ trợ | Chính sách hiện tại |
 |---|---|---|
-| Đơn xin nghỉ phép | Local shadow E2E | Template-first, Camunda và hai điểm Human Review |
+| Đơn xin nghỉ phép | MVP E2E qua app | Template-first, Camunda, hai điểm Human Review, DOCX/PDF export |
 | Đơn xin tăng ca | Local shadow E2E | Có nhánh xác nhận nhanh hoặc chuyển HR |
 | CV | Local shadow E2E | DOCX/PDF; upload → extraction → Camunda → Human Review |
 | Hợp đồng thử việc | Local shadow E2E | DOCX/PDF; không tự tạo quyết định nghiệp vụ |
@@ -187,93 +228,14 @@ lượng production. Trạng thái promotion hiện vẫn là `HOLD` và
 | Latency native warm p95 | DOCX 285 ms; PDF text 158 ms | 30 run/input class, local CPU 8 GB |
 | Latency visual warm p95 | Ảnh 28,5 s; PDF scan 67,5 s | Chủ yếu nằm ở EasyOCR; chưa đạt gate mở rộng |
 | JSON Schema | 0 lỗi | Kiểm tra cấu trúc trước khi chuyển workflow |
+| MVP demo (Plan.md §1.1) | 7/7 criteria pass | Login, submit, Camunda task, HR duyệt, notification, 401/403, export |
 
-Dashboard chỉ hiển thị metric từ aggregate evidence đã seal. Inventory chỉ dùng
-để đếm tài liệu local, không được dùng để tự tạo điểm số. Kết quả template v1 cũ
-vẫn đọc được qua compatibility projection; kết quả mới phát ra theo contract v2.
+Dashboard chỉ hiển thị metric từ aggregate evidence đã seal. Kết quả template v1
+cũ vẫn đọc được qua compatibility projection; kết quả mới phát ra theo contract v2.
 
 Co-resident benchmark API + scan từng thất bại khi EasyOCR cần thêm khoảng 1,20 GB
 RAM; isolated scan pass 30/30. Vì vậy result store ghi đồng thời an toàn không có
 nghĩa là visual OCR đã sẵn sàng chạy nhiều job song song.
-
-## Chạy local
-
-### Yêu cầu
-
-- Python 3.10+
-- Node.js 22+
-- EasyOCR cho luồng Template-first mặc định; PaddleOCR chỉ cần khi dùng rollback
-- Camunda 7.13 nếu cần demo workflow end-to-end
-
-### Cài đặt
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-$env:PYTHONUTF8 = "1" # cần thiết nếu đường dẫn repo có ký tự tiếng Việt
-python -m pip install -e ".[dev,easyocr]"
-
-# Chỉ cài thêm khi cần rollback sang PaddleOCR
-python -m pip install -e ".[paddle]"
-
-Push-Location .\apps\ocr_lab\web
-npm ci
-Pop-Location
-```
-
-### Khởi động các tiến trình
-
-Một demo Camunda đầy đủ cần ba tiến trình độc lập:
-
-1. Camunda 7.13 đã chạy và đã deploy BPMN/DMN trong `camunda/`.
-2. Launcher bên dưới khởi động local API và web.
-3. External Task Worker chạy ở terminal riêng và dùng cùng private data root.
-
-```powershell
-.\apps\ocr_lab\api\start_dashboard.ps1 `
-  -DataRoot "C:\duong-dan\private-data" `
-  -PythonPath ".\.venv\Scripts\python.exe"
-```
-
-Launcher mặc định chọn EasyOCR và chỉ báo sẵn sàng khi package của backend đang
-chọn khả dụng. Dùng `-TemplateOcrBackend paddle` khi cần rollback rõ ràng. Mục
-**System / Algorithm Version** trên workspace đọc trực tiếp `/health` để hiển thị
-Template-first profile, OCR backend và parser/version của sáu template.
-
-Sau khi khởi động:
-
-- VinHRIS Dashboard: `http://localhost:3000`
-- Local API: `http://127.0.0.1:8765`
-- Camunda: `http://localhost:8080/camunda`
-
-Hướng dẫn thao tác đầy đủ: [Demo Camunda + HITL](docs/DEMO_CAMUNDA_HITL.md).
-
-Dashboard launcher đặt `HCNS_CAMUNDA_PRIVATE_ROOT` bằng đúng `DataRoot`. Worker
-phải dùng cùng thư mục để giải tham chiếu UUID mà không đưa file hoặc field value
-vào Camunda:
-
-```powershell
-$env:CAMUNDA_REST_URL = "http://127.0.0.1:8080/engine-rest"
-$env:CAMUNDA_WORKER_ID = "hcns-local-shadow"
-$env:HCNS_CAMUNDA_PRIVATE_ROOT = "C:\duong-dan\private-data"
-$env:HCNS_TEMPLATE_OCR_BACKEND = "easyocr"
-hcns-agent-camunda-worker
-```
-
-Launcher **không** tự khởi động Camunda hoặc worker; repository cũng chưa có một
-Docker Compose production để quản lý startup/health/shutdown của toàn stack.
-
-### Demo nhanh cho user hoặc mentor
-
-1. Mở `http://localhost:3000/workspace#explorer`.
-2. Chọn **DATA-29 · 12 tài liệu metric · 3 Contract · 5 CV · 4 IELTS**.
-3. Chọn bộ lọc Contract, CV hoặc IELTS rồi mở một tài liệu trong nhóm.
-4. Kiểm tra source ở giữa và Prediction ↔ Ground Truth theo từng field bên phải.
-5. Đối chiếu điểm riêng của file với aggregate toàn corpus phía trên.
-
-DATA-29 source, Ground Truth, Prediction và report đều ở private local, không
-commit vào Git. Đây là development corpus; tài liệu upload mới được đánh giá ở
-màn kết quả upload và không làm thay đổi metric DATA-29.
 
 ## Kiểm thử
 
@@ -295,35 +257,30 @@ Pop-Location
 
 Checkpoint đã ghi nhận trên baseline trước review: Python `546 passed`, frontend
 rendered-contract `14/14`, mypy pass 90 source files và ESLint 0 error/23 warning
-nền. Lần review ngày 14/08/2026 chạy lại subset trọng yếu Template/Camunda/API/
-upload/architecture đạt `112/112` trong 18,68 giây. Full local suite cần timeout
-dài hơn 120 giây; CI vẫn là gate chính thức cho merge.
-
-Camunda 7.13 local shadow đã hoàn tất một CV và một IELTS qua HR Review với
-incident bằng 0, HRIS/notification mô phỏng và `autoContinueEnabled=false`.
-Contract còn chờ một tài liệu do người dùng upload vào private root; DATA-29
-không được dùng thay cho acceptance này.
+nền. Full local suite cần timeout dài hơn 120 giây; CI vẫn là gate chính thức cho
+merge.
 
 ## An toàn dữ liệu
 
 - Không upload tài liệu HCNS lên cloud trong runtime local hiện tại.
 - Không commit dataset, file upload, model weights, OCR output thật, secret hoặc PII.
-- API dashboard chỉ nhận loopback Host, CORS chỉ cho `localhost:3000`; không mở port ra LAN/Internet.
+- API dashboard chỉ nhận loopback Host, CORS chỉ cho `localhost`/`127.0.0.1`; không mở port ra LAN/Internet.
 - Camunda chỉ nhận scalar metadata và opaque result reference, không nhận raw Business JSON.
 - Result store dùng idempotency key và khóa ghi để tránh kết quả trùng/xung đột.
 - Trường thiếu, confidence thấp hoặc tài liệu scan luôn được chuyển sang Human review.
 - Mọi action có thể tác động HRM/BPM cần policy cho phép và human approval.
+- Session/login có owner scoping và RBAC; role không tin tưởng từ trình duyệt.
 
 ## Kiến trúc repository
 
 ```text
 src/hcns_agent/        Domain, application services, ports và adapters
-apps/ocr_lab/api/      Local API và cầu nối Camunda
-apps/ocr_lab/web/      Giao diện VinHRIS
+apps/ocr_lab/api/      Local API, bridge Camunda và MVP store/docs
+apps/ocr_lab/web/      Giao diện VinHRIS (Dashboard + MvpDemoPanel)
 camunda/               BPMN, DMN và cấu hình workflow
 schemas/               JSON Schema cho output contract
 tests/                 Contract, integration và regression tests
-scripts/               Công cụ đánh giá và repository checks
+scripts/               Công cụ đánh giá, launcher và repository checks
 docs/                  Kiến trúc, vận hành, tiến độ và bằng chứng
 ```
 
@@ -348,8 +305,8 @@ Business JSON không đi qua process variables và mọi nhánh không chắc ch
 
 Các hạng mục sau chưa được xem là tính năng production:
 
-- Login/logout, session, owner authorization và RBAC `USER | HR_REVIEWER | ADMIN`.
-- Biểu mẫu HCNS điền trên app, notification inbox và quản trị tài khoản.
+- Sản phẩm nhiều người dùng: account lifecycle hoàn chỉnh, reset password, MFA.
+- Notification email/SMS; hiện chỉ có in-app inbox.
 - Production API/database, encrypted storage lifecycle, backup/restore và audit đầy đủ.
 - Một stack deploy có HTTPS, healthcheck, resource limit và worker concurrency `1`.
 - Chữ viết tay và CCCD mặt sau.
@@ -359,11 +316,10 @@ Các hạng mục sau chưa được xem là tính năng production:
 - DATA-29 là development corpus; `107/112` không chứng minh chất lượng
   trên tài liệu HCNS thật và không được dùng làm tuyên bố production-ready.
 
-Mốc sản phẩm tiếp theo ưu tiên một vertical slice `leave-request-v1`: đăng nhập →
-User điền biểu mẫu có cấu trúc → submit idempotent → Camunda → HR review →
-notification in-app. Sau khi đạt authorization, audit, retention và resource gate
-mới mở upload public hoặc thêm loại biểu mẫu. Không đặt GPU làm điều kiện mặc định;
-chỉ bổ sung acceleration sau khi đo được nhu cầu.
+Mốc sản phẩm tiếp theo là vertical slice `leave-request-v1` đang chạy ở mức MVP
+trên máy local. Sau khi đạt authorization production, audit, retention và resource
+gate mới mở upload public hoặc thêm loại biểu mẫu. Không đặt GPU làm điều kiện mặc
+định; chỉ bổ sung acceleration sau khi đo được nhu cầu.
 
 Deployment chi phí thấp và Git workflow được chốt trong [Plan.md](Plan.md): demo
 partner có thời hạn trên máy hiện có sau access allowlist; staging trên một VPS x86

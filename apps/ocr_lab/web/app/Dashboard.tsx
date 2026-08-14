@@ -7,6 +7,7 @@ import {
 import ExternalDatasetReview from "./ExternalDatasetReview";
 import ExternalDatasetPrediction from "./ExternalDatasetPrediction";
 import LocalEvidenceOverview from "./LocalEvidenceOverview";
+import MvpDemoPanel, { type MvpSession } from "./MvpDemoPanel";
 import OcrHoDiagnostic from "./OcrHoDiagnostic";
 
 const SHOW_ADVANCED_DIAGNOSTICS =
@@ -2177,6 +2178,19 @@ function RoleReviewQueue({
 
 export default function Dashboard({ data }: { data: DashboardData }) {
   const showLegacyUpload = SHOW_LEGACY_UPLOAD;
+  const [demoSession, setDemoSession] = useState<MvpSession | null>(null);
+  const [demoSessionLoaded, setDemoSessionLoaded] = useState(false);
+  useEffect(() => {
+    let stored: MvpSession | null = null;
+    try {
+      const raw = window.localStorage.getItem("mvp-demo-session");
+      stored = raw ? (JSON.parse(raw) as MvpSession) : null;
+    } catch {
+      stored = null;
+    }
+    setDemoSession(stored);
+    setDemoSessionLoaded(true);
+  }, []);
   const [query, setQuery] = useState("");
   const [type, setType] = useState("ALL");
   const [variant, setVariant] = useState("ALL");
@@ -3464,6 +3478,29 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       ? templateResult.data.sourceFile
       : "");
 
+  const signedIn = demoSessionLoaded && demoSession !== null;
+
+  if (!signedIn) {
+    return (
+      <main className="operations-site">
+        <header className="topbar">
+          <a className="brand" href="#overview" aria-label="Về đầu trang">
+            <span className="brand-mark">V</span>
+            <span>VinHRIS</span><small>HCNS</small>
+          </a>
+          <nav aria-label="Điều hướng chính">
+            <a href="#mvp-demo">Demo</a>
+          </nav>
+          <span className="live">
+            <i />
+            Đăng nhập để sử dụng workspace
+          </span>
+        </header>
+        <MvpDemoPanel onSessionChange={setDemoSession} />
+      </main>
+    );
+  }
+
   return (
     <main className="operations-site">
       <header className="topbar">
@@ -3483,6 +3520,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           {apiOnline ? "Hệ thống sẵn sàng" : "Chế độ xem dữ liệu"}
         </span>
       </header>
+
+      <MvpDemoPanel onSessionChange={setDemoSession} />
 
       <section className="hero" id="overview">
         <div className="hero-copy">

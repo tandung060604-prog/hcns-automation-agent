@@ -87,6 +87,16 @@ from external_dataset_typed import (
     resolve_typed_paths,
 )
 from local_server_security import require_local_host_header, require_loopback_host
+from mvp_demo_docs import render_leave_docx, render_leave_pdf
+from mvp_demo_store import (
+    APPLICATION_ID_RE,
+    ROLE_ADMIN,
+    ROLE_HR,
+    ROLE_USER,
+    MvpDemoError,
+    MvpDemoStore,
+    build_public_user,
+)
 from template_result_comparison import compare_template_result
 
 try:
@@ -1688,15 +1698,179 @@ class DashboardHandler(BaseHTTPRequestHandler):
     native_indexes: dict[str, dict[str, Path]]
     user_ocr: UserOCRService
     template_processor: TemplateProcessingService
+    mvp_demo: MvpDemoStore | None = None
+
+    def _demo_store(self) -> MvpDemoStore:
+        if self.mvp_demo is None:
+            raise MvpDemoError("MVP demo store is unavailable", 503)
+        return self.mvp_demo
+
+    def _auth_token(self) -> str | None:
+        header = self.headers.get("Authorization", "")
+        if header.startswith("Bearer "):
+            return header[len("Bearer ") :].strip()
+        if header.startswith("Token "):
+            return header[len("Token ") :].strip()
+        return None
+
+    def _require_user(self, roles: set[str] | None = None) -> dict[str, Any]:
+        user = self._demo_store().user_by_token(self._auth_token())
+        if user is None:
+            raise MvpDemoError("Chưa đăng nhập", HTTPStatus.UNAUTHORIZED)
+        if roles is not None and user["role"] not in roles:
+            raise MvpDemoError("Role không có quyền truy cập", HTTPStatus.FORBIDDEN)
+        return user
+
+    def _require_document_access(self, user: dict[str, Any], document_id: str) -> None:
+        if not self._demo_store().can_access(user, document_id):
+            raise MvpDemoError("Không có quyền truy cập hồ sơ", HTTPStatus.FORBIDDEN)
+
+    def _handle_mvp_error(self, exc: MvpDemoError) -> None:
+        status = exc.status if isinstance(exc.status, HTTPStatus) else HTTPStatus(exc.status)
+        self.send_json({"error": str(exc), "errorCode": "MVP_DEMO_ERROR"}, status)
+
+    def _submit_leave_application(
+        self, actor: dict[str, Any], payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        required = ["employeeName", "startDate", "endDate", "reason"]
+        for field in required:
+            if not str(payload.get(field, "")).strip():
+                raise MvpDemoError(f"Thiếu trường bắt buộc: {field}")
+        document_id = str(uuid.uuid4())
+        session_dir = self.user_ocr.sessions_root / document_id
+        result_dir = session_dir / "template_first"
+        input_dir = session_dir / "input"
+        result_dir.mkdir(parents=True, exist_ok=True)
+        input_dir.mkdir(parents=True, exist_ok=True)
+        data = {
+            "documentId": document_id,
+            "documentType": "LEAVE_REQUEST",
+            "templateId": "leave-request-v1",
+            "templateVersion": "1.0",
+            "documentTitle": "ĐƠN XIN NGHỈ PHÉP",
+            "formNumber": str(payload.get("formNumber") or f"ST-{datetime.now(timezone.utc):%Y%m%d}"),
+            "organization": str(payload.get("organization") or "CÔNG TY TNHH HCNS SAMPLE"),
+            "employeeName": str(payload.get("employeeName") or ""),
+            "employeeId": str(payload.get("employeeId") or actor["username"]),
+            "jobTitle": str(payload.get("jobTitle") or ""),
+            "department": str(payload.get("department") or ""),
+            "address": str(payload.get("address") or ""),
+            "phone": str(payload.get("phone") or ""),
+            "requestDate": str(payload.get("requestDate") or datetime.now(timezone.utc).date().isoformat()),
+            "leaveDays": payload.get("leaveDays"),
+            "startDate": str(payload.get("startDate") or ""),
+            "endDate": str(payload.get("endDate") or ""),
+            "reason": str(payload.get("reason") or ""),
+            "expectedReturnDate": str(payload.get("expectedReturnDate") or ""),
+            "handoverTo": str(payload.get("handoverTo") or actor["displayName"]),
+            "handoverDepartment": str(payload.get("handoverDepartment") or payload.get("department") or ""),
+            "handoverTasks": str(payload.get("handoverTasks") or "Bàn giao toàn bộ công việc đang phụ trách"),
+            "approverName": str(payload.get("approverName") or actor["displayName"]),
+            "missingFields": [],
+            "validationErrors": [],
+            "confidence": 1.0,
+            "recommendedAction": "AUTO_CONTINUE",
+            "sourceFile": "leave-request.docx",
+        }
+        if data["leaveDays"] is None:
+            try:
+                from datetime import date as date_cls
+
+                start = date_cls.fromisoformat(data["startDate"])
+                end = date_cls.fromisoformat(data["endDate"])
+                data["leaveDays"] = max((end - start).days + 1, 0)
+            except ValueError:
+                data["leaveDays"] = 1
+        result_payload = {
+            "status": "AUTO_CONTINUE",
+            "documentType": "LEAVE_REQUEST",
+            "templateId": "leave-request-v1",
+            "templateVersion": "1.0",
+            "schemaVersion": "2.0.0",
+            "detection": {"definition": {"supportedFileTypes": [".docx", ".pdf"]}},
+            "data": data,
+            "quality": {
+                "missingFields": [],
+                "validationErrors": [],
+                "confidence": 1.0,
+                "recommendedAction": "AUTO_CONTINUE",
+            },
+            "processing": {
+                "processedAt": utc_now(),
+                "originalFileName": "leave-request.docx",
+                "timingsMs": {"serviceTotal": 0.0},
+            },
+            "camundaVariables": {},
+        }
+        template_path = REPO_ROOT / "hcns format" / "01_don_xin_nghi_phep_v1.docx"
+        try:
+            docx_bytes = render_leave_docx(data, template_path)
+        except (OSError, ValueError) as exc:
+            raise MvpDemoError(f"Không render được DOCX: {exc}") from exc
+        (input_dir / "document.docx").write_bytes(docx_bytes)
+        (result_dir / "result.json").write_text(
+            json.dumps(result_payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        application_id = f"LOCAL-{uuid.uuid4()}"
+        self._demo_store().bind_document(actor, document_id, application_id)
+        self._demo_store().record_event(
+            application_id, "SUBMITTED", "USER nộp đơn nghỉ phép", actor["username"]
+        )
+        engine_url = _local_camunda_url()
+        variables = {
+            "applicationId": {"value": application_id, "type": "String"},
+            "documentReference": {"value": document_id, "type": "String"},
+            "declaredDocumentType": {"value": "LEAVE_REQUEST", "type": "String"},
+        }
+        instance = _camunda_post(
+            f"{engine_url}/process-definition/key/hr_document_agent_mvp_v2/start",
+            {"variables": variables},
+        )
+        process_id = instance.get("id")
+        if not isinstance(process_id, str):
+            raise RuntimeError("Camunda did not return a process instance")
+        tasks = _camunda_get(
+            f"{engine_url}/task?processInstanceId={process_id}&taskDefinitionKey=Submit"
+        )
+        if not isinstance(tasks, list) or len(tasks) != 1:
+            raise RuntimeError("Camunda submission task is unavailable")
+        task_id = tasks[0].get("id")
+        if not isinstance(task_id, str):
+            raise RuntimeError("Camunda submission task is invalid")
+        _camunda_post(f"{engine_url}/task/{task_id}/complete", {"variables": variables})
+        self._demo_store().record_event(
+            application_id,
+            "CAMUNDA_STARTED",
+            f"Camunda đã tạo process {process_id}",
+            "system",
+        )
+        return {
+            "status": "SUBMITTED",
+            "documentId": document_id,
+            "applicationId": application_id,
+            "processInstanceId": process_id,
+            "tasklistUrl": "http://localhost:8080/camunda/app/tasklist/default/",
+        }
 
     def log_message(self, format: str, *args: object) -> None:
         # Never log session IDs, filenames, paths, or raw OCR text.
         return
 
     def cors_headers(self) -> None:
-        self.send_header("Access-Control-Allow-Origin", "http://localhost:3000")
+        origin = (self.headers.get("Origin") or "").strip().rstrip("/")
+        allowed = {
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:4173",
+            "http://127.0.0.1:4173",
+        }
+        if origin not in allowed:
+            origin = "http://localhost:3000"
+        self.send_header("Access-Control-Allow-Origin", origin)
         self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+        self.send_header("Access-Control-Expose-Headers", "Content-Disposition")
         self.send_header("Cache-Control", "no-store")
 
     def send_json(self, payload: object, status: HTTPStatus = HTTPStatus.OK) -> None:
@@ -1742,6 +1916,96 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if not self._request_host_is_local():
             return
         parsed = urlparse(self.path)
+        if parsed.path == "/api/auth/login":
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+                if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                    raise ValueError("Login body is empty or exceeds 2 MB")
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                session = self._demo_store().login(
+                    str(payload.get("username", "")).strip(),
+                    str(payload.get("password", "")),
+                )
+                self.send_json({"session": session})
+            except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                if isinstance(exc, MvpDemoError):
+                    self._handle_mvp_error(exc)
+                else:
+                    self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if parsed.path == "/api/auth/logout":
+            try:
+                self._demo_store().logout(self._auth_token())
+                self.send_json({"status": "LOGGED_OUT"})
+            except (ValueError, TypeError) as exc:
+                if isinstance(exc, MvpDemoError):
+                    self._handle_mvp_error(exc)
+                else:
+                    self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if parsed.path == "/api/admin/users":
+            try:
+                actor = self._require_user({ROLE_ADMIN})
+                content_length = int(self.headers.get("Content-Length", "0"))
+                if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                    raise ValueError("User body is empty or exceeds 2 MB")
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                action = str(payload.get("action", "create"))
+                if action == "toggle":
+                    result = self._demo_store().set_user_active(
+                        actor,
+                        str(payload.get("username", "")),
+                        bool(payload.get("active", False)),
+                    )
+                else:
+                    result = self._demo_store().create_user(
+                        actor,
+                        str(payload.get("username", "")).strip(),
+                        str(payload.get("password", "")),
+                        str(payload.get("role", "")),
+                        str(payload.get("displayName", "")),
+                    )
+                self.send_json({"status": "OK", "user": result})
+            except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                if isinstance(exc, MvpDemoError):
+                    self._handle_mvp_error(exc)
+                else:
+                    self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if parsed.path == "/api/documents/leave":
+            try:
+                actor = self._require_user({ROLE_USER, ROLE_HR, ROLE_ADMIN})
+                content_length = int(self.headers.get("Content-Length", "0"))
+                if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                    raise ValueError("Leave body is empty or exceeds 2 MB")
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                result = self._submit_leave_application(actor, payload)
+                self.send_json(result)
+            except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                if isinstance(exc, MvpDemoError):
+                    self._handle_mvp_error(exc)
+                else:
+                    self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            except (HTTPError, URLError, RuntimeError) as exc:
+                self.send_json({"error": f"Camunda local is unavailable: {exc}"}, HTTPStatus.SERVICE_UNAVAILABLE)
+            return
+        if parsed.path == "/api/notifications/read":
+            try:
+                user = self._require_user()
+                content_length = int(self.headers.get("Content-Length", "0"))
+                if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                    raise ValueError("Notification body is empty or exceeds 2 MB")
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                self._demo_store().mark_notification_read(
+                    user["username"], str(payload.get("notificationId", ""))
+                )
+                self.send_json({"status": "OK"})
+            except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                if isinstance(exc, MvpDemoError):
+                    self._handle_mvp_error(exc)
+                else:
+                    self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
         if parsed.path == "/api/documents/compare":
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
@@ -1783,10 +2047,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 }.get(role)
                 if review_policy is None or decision not in review_policy[3]:
                     raise ValueError("Decision is not allowed for this local demo role")
+                if role == "hr":
+                    reviewer = self._require_user({ROLE_HR, ROLE_ADMIN})
+                else:
+                    reviewer = self._require_user()
                 engine_url = _local_camunda_url()
                 task = _camunda_get(f"{engine_url}/task/{task_id}")
                 if not isinstance(task, dict) or task.get("taskDefinitionKey") != review_policy[0]:
                     raise ValueError("Task is unavailable for this role")
+                variables = _camunda_get(f"{engine_url}/task/{task_id}/variables")
+                document_ref = _camunda_value(variables, "documentReference")
+                if role == "employee" and document_ref is not None:
+                    self._require_document_access(reviewer, document_ref)
                 assignee = task.get("assignee")
                 if assignee not in {None, "", review_policy[1]}:
                     raise ValueError("Task is already claimed by another reviewer")
@@ -1803,7 +2075,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         }
                     },
                 )
+                application_id = (
+                    _camunda_value(variables, "applicationId") or "LOCAL-demo"
+                )
+                self._demo_store().record_event(
+                    application_id,
+                    "HR_REVIEWED" if role == "hr" else "USER_REVIEWED",
+                    f"Quyết định: {decision}",
+                    reviewer["username"],
+                )
+                if role == "hr" and decision == "CONFIRMED" and document_ref is not None:
+                    owner = self._demo_store().owner_of(document_ref)
+                    if owner:
+                        self._demo_store().notify(owner, "Đã duyệt")
+                        self._demo_store().record_event(
+                            application_id, "NOTIFIED", "USER nhận notification Đã duyệt", "system"
+                        )
                 self.send_json({"status": "COMPLETED", "decision": decision})
+            except MvpDemoError as exc:
+                self._handle_mvp_error(exc)
             except (ValueError, TypeError, json.JSONDecodeError) as exc:
                 self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             except (HTTPError, URLError, RuntimeError) as exc:
@@ -1819,8 +2109,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     )
                     return
                 payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                user = self._require_user()
                 document_id = str(payload.get("documentId", ""))
                 uuid.UUID(document_id)
+                self._require_document_access(user, document_id)
                 result = self.user_ocr.template_result(document_id)
                 if result is None:
                     raise ValueError("Template session not found")
@@ -1831,11 +2123,17 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 if source is None:
                     raise ValueError("Private document source not found")
                 private_root = os.getenv("HCNS_CAMUNDA_PRIVATE_ROOT", "").strip()
-                if not private_root or Path(private_root).resolve() != self.data_root.resolve():
+                if not private_root:
+                    private_root = str(self.data_root)
+                if Path(private_root).resolve() != self.data_root.resolve():
                     raise ValueError(
                         "HCNS_CAMUNDA_PRIVATE_ROOT must match the dashboard data root"
                     )
                 application_id = f"LOCAL-{uuid.uuid4()}"
+                self._demo_store().bind_document(user, document_id, application_id)
+                self._demo_store().record_event(
+                    application_id, "SUBMITTED", "USER nộp hồ sơ", user["username"]
+                )
                 variables = {
                     "applicationId": {"value": application_id, "type": "String"},
                     "documentReference": {"value": document_id, "type": "String"},
@@ -1863,8 +2161,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     (time.perf_counter() - camunda_started) * 1000,
                     3,
                 )
+                self._demo_store().record_event(
+                    application_id,
+                    "CAMUNDA_STARTED",
+                    f"Camunda đã tạo process {process_id}",
+                    "system",
+                )
                 self.send_json({
                     "status": "SUBMITTED",
+                    "documentId": document_id,
                     "applicationId": application_id,
                     "processInstanceId": process_id,
                     "tasklistUrl": "http://localhost:8080/camunda/app/tasklist/default/",
@@ -1873,6 +2178,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         "timingsMs": {"camunda": camunda_duration_ms},
                     },
                 })
+            except MvpDemoError as exc:
+                self._handle_mvp_error(exc)
             except (ValueError, TypeError, json.JSONDecodeError) as exc:
                 self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             except (HTTPError, URLError, RuntimeError) as exc:
@@ -2849,16 +3156,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/camunda/queue":
             try:
+                user = self._require_user()
                 engine_url = _local_camunda_url()
                 tasks = _camunda_get(
                     f"{engine_url}/task?processDefinitionKey=hr_document_agent_mvp_v2"
                 )
                 queue: list[dict[str, Any]] = []
+                owned_documents = self._demo_store().owner_of_all()
+                is_hr_or_admin = user["role"] in {ROLE_HR, ROLE_ADMIN}
                 for task in tasks if isinstance(tasks, list) else []:
                     if not isinstance(task, dict):
                         continue
                     definition_key = task.get("taskDefinitionKey")
-                    if definition_key not in {"UserReview", "HRReview"}:
+                    if definition_key not in {"UserReview", "HRReview", "FinalHR"}:
                         continue
                     task_id = task.get("id")
                     if not isinstance(task_id, str):
@@ -2866,6 +3176,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     variables = _camunda_get(f"{engine_url}/task/{task_id}/variables")
                     document_id = _camunda_value(variables, "documentReference")
                     if document_id is None:
+                        continue
+                    if not is_hr_or_admin:
+                        if document_id not in owned_documents or owned_documents[document_id] != user["username"]:
+                            continue
+                    elif definition_key == "UserReview" and user["role"] == ROLE_HR:
                         continue
                     queue.append(
                         {
@@ -2881,6 +3196,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         }
                     )
                 self.send_json({"queue": queue})
+            except MvpDemoError as exc:
+                self._handle_mvp_error(exc)
             except (HTTPError, URLError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
                 self.send_json({"error": f"Camunda local is unavailable: {exc}"}, HTTPStatus.SERVICE_UNAVAILABLE)
             return
@@ -2907,6 +3224,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 variables = _camunda_get(
                     f"{engine_url}/history/variable-instance?processInstanceId={process_id}"
                 )
+                user = self._require_user()
+                document_ref = (
+                    _camunda_history_value(variables, "documentReference")
+                    or _camunda_history_value(variables, "documentId")
+                )
+                if document_ref is not None:
+                    self._require_document_access(user, document_ref)
+                elif user["role"] not in {ROLE_HR, ROLE_ADMIN}:
+                    raise MvpDemoError("Không có quyền truy cập hồ sơ", HTTPStatus.FORBIDDEN)
                 task = next(
                     (item for item in tasks if isinstance(item, dict)),
                     None,
@@ -2945,6 +3271,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         "tasklistUrl": "http://localhost:8080/camunda/app/tasklist/default/",
                     }
                 )
+            except MvpDemoError as exc:
+                self._handle_mvp_error(exc)
             except HTTPError as exc:
                 if exc.code == HTTPStatus.NOT_FOUND:
                     self.send_json({"error": "Camunda case not found"}, HTTPStatus.NOT_FOUND)
@@ -2958,6 +3286,86 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     {"error": f"Camunda local is unavailable: {exc}"},
                     HTTPStatus.SERVICE_UNAVAILABLE,
                 )
+            return
+
+        if parsed.path == "/api/auth/me":
+            try:
+                user = self._require_user()
+                self.send_json({"user": build_public_user(user)})
+            except MvpDemoError as exc:
+                self._handle_mvp_error(exc)
+            return
+
+        if parsed.path == "/api/admin/users":
+            try:
+                actor = self._require_user({ROLE_ADMIN})
+                self.send_json({"users": self._demo_store().list_users(actor)})
+            except MvpDemoError as exc:
+                self._handle_mvp_error(exc)
+            return
+
+        if parsed.path == "/api/admin/audit":
+            try:
+                actor = self._require_user({ROLE_ADMIN})
+                self.send_json({"audit": self._demo_store().audit_log(actor)})
+            except MvpDemoError as exc:
+                self._handle_mvp_error(exc)
+            return
+
+        if parsed.path == "/api/notifications":
+            try:
+                user = self._require_user()
+                self.send_json(
+                    {"notifications": self._demo_store().notifications_for(user["username"])}
+                )
+            except MvpDemoError as exc:
+                self._handle_mvp_error(exc)
+            return
+
+        if parsed.path == "/api/documents/timeline":
+            application_id = query.get("applicationId", [""])[0]
+            if APPLICATION_ID_RE.fullmatch(application_id) is None:
+                self.send_json({"error": "Application id invalid"}, HTTPStatus.BAD_REQUEST)
+                return
+            try:
+                user = self._require_user()
+                self.send_json(
+                    {"timeline": self._demo_store().timeline(application_id)}
+                )
+            except MvpDemoError as exc:
+                self._handle_mvp_error(exc)
+            return
+
+        if parsed.path == "/api/documents/export":
+            document_id = query.get("documentId", [""])[0]
+            export_format = query.get("format", ["docx"])[0]
+            try:
+                user = self._require_user()
+                self._require_document_access(user, document_id)
+                result = self.user_ocr.template_result(document_id)
+                if result is None or not isinstance(result.get("data"), dict):
+                    self.send_json({"error": "Leave result not found"}, HTTPStatus.NOT_FOUND)
+                    return
+                data = result["data"]
+                template_path = REPO_ROOT / "hcns format" / "01_don_xin_nghi_phep_v1.docx"
+                if export_format == "pdf":
+                    body = render_leave_pdf(data)
+                    self.send_bytes(
+                        body,
+                        "application/pdf",
+                        download_name=f"don-xin-nghi-phep-{document_id[:8]}.pdf",
+                    )
+                else:
+                    body = render_leave_docx(data, template_path)
+                    self.send_bytes(
+                        body,
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        download_name=f"don-xin-nghi-phep-{document_id[:8]}.docx",
+                    )
+            except MvpDemoError as exc:
+                self._handle_mvp_error(exc)
+            except (OSError, ValueError, RuntimeError) as exc:
+                self.send_json({"error": f"Export failed: {exc}"}, HTTPStatus.INTERNAL_SERVER_ERROR)
             return
 
         if parsed.path == "/api/documents/sessions":
@@ -3065,14 +3473,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/documents/result":
             document_id = query.get("id", [""])[0]
-            result = self.user_ocr.template_result(document_id)
-            if result is None:
-                self.send_json(
-                    {"error": "Template-first result not found"},
-                    HTTPStatus.NOT_FOUND,
-                )
-                return
-            self.send_json(result)
+            try:
+                user = self._require_user()
+                self._require_document_access(user, document_id)
+                result = self.user_ocr.template_result(document_id)
+                if result is None:
+                    self.send_json(
+                        {"error": "Template-first result not found"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                self.send_json(result)
+            except MvpDemoError as exc:
+                self._handle_mvp_error(exc)
             return
 
         if parsed.path == "/api/documents/comparison":
@@ -3089,18 +3502,23 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/documents/source":
             document_id = query.get("id", [""])[0]
-            source_path = self.user_ocr.template_source(document_id)
-            if source_path is None:
-                self.send_json(
-                    {"error": "Template-first source not found"},
-                    HTTPStatus.NOT_FOUND,
+            try:
+                user = self._require_user()
+                self._require_document_access(user, document_id)
+                source_path = self.user_ocr.template_source(document_id)
+                if source_path is None:
+                    self.send_json(
+                        {"error": "Template-first source not found"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                content_type = (
+                    mimetypes.guess_type(source_path.name)[0]
+                    or "application/octet-stream"
                 )
-                return
-            content_type = (
-                mimetypes.guess_type(source_path.name)[0]
-                or "application/octet-stream"
-            )
-            self.send_file(source_path, content_type)
+                self.send_file(source_path, content_type)
+            except MvpDemoError as exc:
+                self._handle_mvp_error(exc)
             return
 
         if parsed.path == "/api/documents/preview":
@@ -4301,6 +4719,7 @@ def main() -> int:
     DashboardHandler.native_indexes = indexes
     DashboardHandler.user_ocr = UserOCRService(args.data_root)
     DashboardHandler.template_processor = build_local_template_processing_service()
+    DashboardHandler.mvp_demo = MvpDemoStore(args.data_root)
     server = ThreadingHTTPServer((args.host, args.port), DashboardHandler)
     print(
         f"Local dashboard API ready: http://{args.host}:{args.port} "
