@@ -3472,11 +3472,18 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           <span>VinHRIS</span><small>HCNS</small>
         </a>
         <nav aria-label="Điều hướng chính">
-          <a href="#upload">Tiếp nhận hồ sơ</a>
-          <a href="#roles">Hàng đợi kiểm tra</a>
-          <a href="#explorer">Kho hồ sơ</a>
-          <a href="#phases">Tiêu chí xử lý</a>
-          <a href="#next">Việc tiếp theo</a>
+          <a href="#overview">Tổng quan</a>
+          <a href="#upload">Tiếp nhận</a>
+          <a href="#roles">Hàng đợi</a>
+          <a href="#explorer">Evidence</a>
+          <a
+            className="camunda-link"
+            href="http://localhost:8080/camunda/app/tasklist/default/"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Camunda <span aria-hidden="true">↗</span>
+          </a>
         </nav>
         <span className={`live ${apiOnline ? "online" : ""}`}>
           <i />
@@ -3486,75 +3493,124 @@ export default function Dashboard({ data }: { data: DashboardData }) {
 
       <section className="hero" id="overview">
         <div className="hero-copy">
-          <p className="eyebrow">KHU VỰC TÁC NGHIỆP</p>
+          <p className="eyebrow">Nền tảng xử lý hồ sơ HCNS</p>
           <h1>
-            Xử lý hồ sơ HCNS
-            <span> trên một luồng rõ ràng.</span>
+            Hồ sơ vào một chỗ.
+            <span> Quy trình đi đúng nơi.</span>
           </h1>
           <p className="hero-lead">
-            Tiếp nhận tài liệu, trích xuất thông tin và chuyển hồ sơ đến đúng người kiểm tra.
+            Tiếp nhận, trích xuất và chuyển hồ sơ đến đúng người kiểm tra trong một luồng local an toàn.
           </p>
-          <div className="hero-feature-list">
-            <span>Tài liệu được xử lý trong môi trường nội bộ</span>
-            <span>Kết quả gắn với nguồn trích xuất</span>
-            <span>Camunda điều phối bước kiểm tra</span>
-          </div>
           <div className="hero-actions">
             <a className="primary-button" href="#upload">
-              Tiếp nhận tài liệu
+              Tiếp nhận hồ sơ
             </a>
-            <a className="text-button" href="#product">
+            <a className="text-button" href="#workflow">
               Xem quy trình <span>→</span>
             </a>
           </div>
         </div>
-        <figure className="hero-product" aria-label="Khả năng xử lý biểu mẫu HCNS">
+        <figure className="hero-product" aria-label="Không gian xử lý tài liệu HCNS local">
           <div
             className="hero-product-frame hero-workflow-visual"
             data-testid="product-showcase"
           >
             <img
-              alt="Luồng xử lý biểu mẫu HCNS local từ DOCX, PDF và ảnh scan tới JSON và Human Review"
-              src="/assets/template-first-local-workflow.png"
+              alt="Nhân sự kiểm tra tài liệu trong không gian làm việc số"
+              src="/assets/hr-document-intelligence-context.webp"
             />
+            <div className="hero-image-note">
+              <span>LOCAL ONLY</span>
+              <strong>Template-first + Human Review</strong>
+            </div>
           </div>
           <figcaption>
-            Từ tài liệu đầu vào đến dữ liệu có cấu trúc, với bước kiểm tra khi cần.
+            File và kết quả được giữ trong private storage của môi trường local.
           </figcaption>
         </figure>
       </section>
 
-      <section className="section product-section" id="product">
-        <figure className="product-context">
-          <img
-            src="/assets/template-first-local-workflow.png"
-            alt="Luồng xử lý tài liệu local từ nguồn vào tới JSON và human review"
-          />
-        </figure>
-        <div className="product-story">
-          <h2>Hồ sơ vào một chỗ. Quyết định đi đúng nơi.</h2>
+      <section className="section product-section" id="platform">
+        <div className="platform-intro">
+          <p className="section-eyebrow">Một nền tảng thống nhất</p>
+          <h2>Từ file đầu vào đến quyết định có kiểm soát.</h2>
           <p>
-            Hệ thống nhận ảnh, PDF, DOCX và XLSX, chọn cách đọc phù hợp rồi tạo dữ liệu
-            có cấu trúc để người dùng kiểm tra.
+            Mỗi bước dùng đúng parser, lưu đúng evidence và dừng lại cho con người xác nhận khi cần.
           </p>
-          <dl className="product-capabilities">
-            <div>
-              <dt>Tiếp nhận</dt>
-              <dd>Ảnh và PDF scan đi qua OCR. DOCX và XLSX ưu tiên dữ liệu gốc.</dd>
-            </div>
-            <div>
-              <dt>Đối chiếu</dt>
-              <dd>Mỗi kết quả gắn với trang, nội dung nhận diện và độ tin cậy.</dd>
-            </div>
-            <div>
-              <dt>Kiểm tra ngoại lệ</dt>
-              <dd>Trường chưa chắc chắn được chuyển cho người phụ trách xác nhận.</dd>
-            </div>
-          </dl>
-          <a className="primary-button product-cta" href="#upload">
-            Bắt đầu tiếp nhận
-          </a>
         </div>
+        <ol className="platform-rail" aria-label="Năm lớp của nền tảng xử lý hồ sơ">
+          <li><span>01</span><strong>Intake</strong><small>DOCX, PDF và ảnh</small></li>
+          <li><span>02</span><strong>OCR</strong><small>Native trước, OCR khi cần</small></li>
+          <li><span>03</span><strong>Template</strong><small>Parser có version</small></li>
+          <li><span>04</span><strong>Human Review</strong><small>Xác nhận trường nhạy cảm</small></li>
+          <li><span>05</span><strong>Camunda</strong><small>Điều phối local shadow</small></li>
+        </ol>
+      </section>
+
+      <section className="section document-family-section" id="document-types">
+        <div className="section-heading">
+          <div>
+            <p className="section-eyebrow">Ba nhóm tài liệu hiện có</p>
+            <h2>Ưu tiên độ tin cậy trước khi mở rộng.</h2>
+          </div>
+          <p>Chỉ số dưới đây thuộc DATA-29 development corpus và không đại diện cho chất lượng production.</p>
+        </div>
+        <div className="document-family-layout">
+          <article className="document-family-primary">
+            <span className="document-index">01 / Contract</span>
+            <div>
+              <h3>Hợp đồng lao động</h3>
+              <p>Template extraction đã được đối chiếu. Camunda local shadow đang chờ hoàn tất case Contract đầu tiên.</p>
+            </div>
+            <strong>42 / 42 exact</strong>
+            <small>3 tài liệu development</small>
+          </article>
+          <div className="document-family-list">
+            <article>
+              <span className="document-index">02 / CV</span>
+              <h3>Hồ sơ ứng viên</h3>
+              <p>45 / 50 exact, 50 / 50 accepted</p>
+              <small>5 tài liệu development</small>
+            </article>
+            <article>
+              <span className="document-index">03 / IELTS</span>
+              <h3>Chứng chỉ IELTS</h3>
+              <p>20 / 20 exact và accepted</p>
+              <small>4 tài liệu development</small>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section className="section quality-overview-section" id="quality">
+        <div className="quality-copy">
+          <p className="section-eyebrow">Quality evidence</p>
+          <h2>Con số có nguồn. Giới hạn được nói rõ.</h2>
+          <p>
+            DATA-29 khóa đúng 12 tài liệu development: 3 Contract, 5 CV và 4 IELTS. Ground Truth không được sửa trong lần thiết kế này.
+          </p>
+          <a className="text-button" href="#explorer">Mở Evidence <span>→</span></a>
+        </div>
+        <dl className="quality-numbers">
+          <div><dt>Exact match</dt><dd>107<span>/112</span></dd></div>
+          <div><dt>Accepted</dt><dd>112<span>/112</span></dd></div>
+          <div className="quality-gate"><dt>Promotion gate</dt><dd>HOLD</dd><small>Chưa phải bằng chứng production</small></div>
+        </dl>
+      </section>
+
+      <section className="section workflow-section" id="workflow">
+        <div className="workflow-heading">
+          <p className="section-eyebrow">Quy trình local shadow</p>
+          <h2>Một hồ sơ, một đường đi có thể kiểm tra.</h2>
+          <p>Camunda chỉ nhận reference và metadata an toàn. Nội dung file không đi vào process variables.</p>
+        </div>
+        <ol className="workflow-timeline" aria-label="Quy trình xử lý hồ sơ từ upload tới hoàn tất">
+          <li><span>01</span><div><strong>Upload local</strong><small>Kiểm tra định dạng và an toàn file</small></div></li>
+          <li><span>02</span><div><strong>Đọc tài liệu</strong><small>Native parser hoặc OCR theo source</small></div></li>
+          <li><span>03</span><div><strong>Trích xuất</strong><small>Template và parser versioned</small></div></li>
+          <li><span>04</span><div><strong>Human Review</strong><small>Người dùng xác nhận kết quả</small></div></li>
+          <li><span>05</span><div><strong>Camunda hoàn tất</strong><small>Audit local, không side effect thật</small></div></li>
+        </ol>
       </section>
 
       <RoleReviewQueue

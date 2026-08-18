@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import unicodedata
 from pathlib import Path
 
 
@@ -60,14 +62,86 @@ def _candidate_allowed(candidate: str, original: str) -> bool:
     return len(candidate) <= max(80, len(original) * 2.5)
 
 
+_SECTION_HEADINGS = frozenset(
+    {
+        "muc tieu nghe nghiep",
+        "hoc van",
+        "kinh nghiem",
+        "kinh nghiem lam viec",
+        "ky nang",
+        "chung chi",
+        "du an",
+        "so thich",
+        "nguoi tham chieu",
+    }
+)
+
+
+def _fold_text(value: object) -> str:
+    text = unicodedata.normalize("NFC", str(value or "")).casefold()
+    decomposed = unicodedata.normalize("NFD", text)
+    plain = "".join(
+        "d" if character == "đ" else character
+        for character in decomposed
+        if unicodedata.category(character) != "Mn"
+    )
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", plain).split())
+
+
+def _section_heading(text: object) -> str | None:
+    key = _fold_text(text)
+    return next(
+        (
+            heading
+            for heading in sorted(_SECTION_HEADINGS, key=len, reverse=True)
+            if key == heading or key.startswith(f"{heading} ")
+        ),
+        None,
+    )
+
+
+def _load_vietocr_config(config_root: Path) -> object:
+    from vietocr.tool.config import Cfg
+
+    base_path = config_root / "base.yml"
+    model_path = config_root / "vgg-seq2seq.yml"
+    missing = [str(path) for path in (base_path, model_path) if not path.is_file()]
+    if missing:
+        raise SystemExit(
+            "Offline VietOCR config is incomplete; missing: " + ", ".join(missing)
+        )
+    base = Cfg.load_config_from_file(str(base_path))
+    model = Cfg.load_config_from_file(str(model_path))
+    base.update(model)
+    return Cfg(base)
+
+
 def _refine_lines(path: Path, results: list[object], predictor: object) -> list[dict[str, object]]:
     from PIL import Image
 
     with Image.open(path).convert("RGB") as image:
         groups = _line_groups(results)
+        active_sections: list[str | None] = []
+        current_section: str | None = None
+        for group in groups:
+            original = " ".join(
+                str(item[1]).strip()
+                for item in sorted(group, key=lambda item: _bounds(item[0])[0])
+                if str(item[1]).strip()
+            )
+            heading = _section_heading(original)
+            if heading is not None:
+                current_section = heading
+            active_sections.append(current_section)
         crops: list[object] = []
         crop_groups: list[list[object]] = []
-        for group in groups:
+        for index, group in enumerate(groups):
+            # VietOCR line refinement is useful for narrative OCR, but on CV
+            # skill lists it can replace a good EasyOCR token with a noisy one.
+            # Keep the promoted EasyOCR output for this section and avoid the
+            # extra crop/model work as a small memory guard.
+            if active_sections[index] == "ky nang":
+                continue
             bounds = [_bounds(item[0]) for item in group]
             y0 = max(0, int(min(item[1] for item in bounds)) - 8)
             y1 = min(image.height, int(max(item[3] for item in bounds)) + 8)
@@ -89,11 +163,15 @@ def _refine_lines(path: Path, results: list[object], predictor: object) -> list[
             id(group): str(candidate)
             for group, candidate in zip(crop_groups, candidates, strict=True)
         }
-        for group in groups:
+        for index, group in enumerate(groups):
             original_group = group
             group = sorted(original_group, key=lambda item: _bounds(item[0])[0])
             text = " ".join(str(item[1]).strip() for item in group if str(item[1]).strip())
-            candidate = candidate_by_group.get(id(original_group))
+            candidate = (
+                None
+                if active_sections[index] == "ky nang"
+                else candidate_by_group.get(id(original_group))
+            )
             if candidate and _candidate_allowed(candidate, text):
                 text = " ".join(candidate.split())
             bounds = [_bounds(item[0]) for item in group]
@@ -117,7 +195,10 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--model-root", type=Path, required=True)
     parser.add_argument("--vietocr-model-root", type=Path)
+    parser.add_argument("--vietocr-config-root", type=Path)
     parser.add_argument("--vietocr-line-refine", action="store_true")
+    parser.add_argument("--canvas-size", type=int, default=1280)
+    parser.add_argument("--mag-ratio", type=float, default=1.3)
     options = parser.parse_args()
 
     import easyocr
@@ -139,7 +220,11 @@ def main() -> int:
             from vietocr.tool.config import Cfg
             from vietocr.tool.predictor import Predictor
 
-            config = Cfg.load_config_from_name("vgg_seq2seq")
+            config = (
+                _load_vietocr_config(options.vietocr_config_root)
+                if options.vietocr_config_root
+                else Cfg.load_config_from_name("vgg_seq2seq")
+            )
             config["device"] = "cpu"
             config["weights"] = str(weight)
             config["predictor"]["beamsearch"] = False
@@ -155,7 +240,8 @@ def main() -> int:
             paragraph=False,
             decoder="beamsearch",
             batch_size=1,
-            mag_ratio=1.3,
+            canvas_size=options.canvas_size,
+            mag_ratio=options.mag_ratio,
         )
         refined = _refine_lines(path, results, predictor) if predictor else None
         if refined is not None:

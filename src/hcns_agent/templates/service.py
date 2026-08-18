@@ -108,6 +108,20 @@ class _LazyTemplatePaddleOcrEngine:
 
     def recognize(self, source: DocumentSource) -> OcrResult:
         started = time.perf_counter()
+        self._ensure_delegate()
+        delegate = self._delegate
+        if delegate is None:
+            raise TemplateTechnicalError("OCR_RUNTIME_UNAVAILABLE")
+        try:
+            result = delegate.recognize(source)
+        except RuntimeError as error:
+            raise TemplateTechnicalError("OCR_PROCESSING_FAILED") from error
+        return replace(result, duration_ms=round(_elapsed_ms(started)))
+
+    def warm_up(self) -> None:
+        self._ensure_delegate()
+
+    def _ensure_delegate(self) -> None:
         if self._delegate is None:
             with self._lock:
                 if self._delegate is None:
@@ -115,11 +129,6 @@ class _LazyTemplatePaddleOcrEngine:
                         self._delegate = PaddleOcrEngine.from_default(device=self._device)
                     except RuntimeError as error:
                         raise TemplateTechnicalError("OCR_RUNTIME_UNAVAILABLE") from error
-        try:
-            result = self._delegate.recognize(source)
-        except RuntimeError as error:
-            raise TemplateTechnicalError("OCR_PROCESSING_FAILED") from error
-        return replace(result, duration_ms=round(_elapsed_ms(started)))
 
 
 class _LazyTemplateEasyOcrEngine:
@@ -146,6 +155,20 @@ class _LazyTemplateEasyOcrEngine:
 
     def recognize(self, source: DocumentSource) -> OcrResult:
         started = time.perf_counter()
+        self._ensure_delegate()
+        delegate = self._delegate
+        if delegate is None:
+            raise TemplateTechnicalError("OCR_RUNTIME_UNAVAILABLE")
+        try:
+            result = delegate.recognize(source)
+        except RuntimeError as error:
+            raise TemplateTechnicalError("OCR_PROCESSING_FAILED") from error
+        return replace(result, duration_ms=round(_elapsed_ms(started)))
+
+    def warm_up(self) -> None:
+        self._ensure_delegate()
+
+    def _ensure_delegate(self) -> None:
         if self._delegate is None:
             with self._lock:
                 if self._delegate is None:
@@ -155,11 +178,6 @@ class _LazyTemplateEasyOcrEngine:
                         self._delegate = EasyOcrEngine.from_default(device=self._device)
                     except (ImportError, RuntimeError) as error:
                         raise TemplateTechnicalError("OCR_RUNTIME_UNAVAILABLE") from error
-        try:
-            result = self._delegate.recognize(source)
-        except RuntimeError as error:
-            raise TemplateTechnicalError("OCR_PROCESSING_FAILED") from error
-        return replace(result, duration_ms=round(_elapsed_ms(started)))
 
 
 class TemplateProcessingService:
@@ -191,6 +209,11 @@ class TemplateProcessingService:
     @property
     def ocr_backend_available(self) -> bool:
         return bool(getattr(self._ocr_engine, "available", True))
+
+    def warm_up_ocr(self) -> None:
+        warm_up = getattr(self._ocr_engine, "warm_up", None)
+        if callable(warm_up):
+            warm_up()
 
     def process(
         self,

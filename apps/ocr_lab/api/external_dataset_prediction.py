@@ -18,6 +18,12 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from hcns_agent.templates.structured_hr import (
+    STRUCTURED_HR_PARSER_ID,
+    STRUCTURED_HR_PARSER_VERSION,
+    extract_structured_hr_fields,
+)
+
 try:
     from .external_dataset_review import (
         ALLOWED_SUFFIXES,
@@ -1197,6 +1203,11 @@ def _external_fields(
     *,
     ocr: bool,
 ) -> dict[str, dict[str, Any]]:
+    # DATA-29 and user upload must execute the same promoted field parser.
+    return extract_structured_hr_fields(canonical, category, ocr=ocr)
+
+    # Historical implementation retained temporarily for artifact compatibility
+    # review; CLEAN-001 removes it after ALG-002 promotion evidence is sealed.
     phase_fields = extraction.get("fields", {})
 
     def direct(name: str, aliases: tuple[str, ...] = ()) -> dict[str, Any]:
@@ -1779,7 +1790,8 @@ def build_prediction_artifact(
                     "ocrScope": "OCR_ALLOWED" if ocr_required else "NATIVE_ONLY",
                     "recommendedAction": "MANUAL_REVIEW" if ocr_required else "USER_REVIEW",
                     "ingestionMode": canonical.get("ingestionMode"),
-                    "parserVersion": extraction.get("parserVersion"),
+                    "parserId": STRUCTURED_HR_PARSER_ID,
+                    "parserVersion": STRUCTURED_HR_PARSER_VERSION,
                 },
             }
         )

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -17,6 +18,8 @@ for path in (ROOT, API):
 
 from external_dataset_prediction import (  # noqa: E402
     ACTIVE_CATEGORIES,
+    MATCHING_POLICY_V1,
+    MATCHING_POLICY_V2,
     OUT_OF_SCOPE_REVIEW_FORMATS,
     _docx_media,
     _ocr_pages,
@@ -76,7 +79,11 @@ def _easyocr_pages(
     python_path: Path,
     model_root: Path,
     vietocr_model_root: Path | None = None,
+    vietocr_config_root: Path | None = None,
+    easyocr_site_packages: Path | None = None,
     vietocr_line_refine: bool = False,
+    canvas_size: int = 1280,
+    mag_ratio: float = 1.3,
 ) -> _MappedEasyOcr:
     inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
     paths: list[Path] = []
@@ -110,7 +117,14 @@ def _easyocr_pages(
     ]
     if vietocr_line_refine and vietocr_model_root is not None:
         command.extend(["--vietocr-model-root", str(vietocr_model_root), "--vietocr-line-refine"])
-    subprocess.run(command, check=True, cwd=str(ROOT))
+    if vietocr_config_root is not None:
+        command.extend(["--vietocr-config-root", str(vietocr_config_root)])
+    command.extend(["--canvas-size", str(canvas_size), "--mag-ratio", str(mag_ratio)])
+    child_env = None
+    if easyocr_site_packages is not None:
+        child_env = os.environ.copy()
+        child_env["PYTHONPATH"] = str(easyocr_site_packages)
+    subprocess.run(command, check=True, cwd=str(ROOT), env=child_env)
     payload = json.loads(output.read_text(encoding="utf-8"))
     engine_name = "easyocr/vi+en+vietocr-line" if vietocr_line_refine else "easyocr/vi+en"
     return _MappedEasyOcr(payload.get("pages", {}), engine_name=engine_name)
@@ -123,7 +137,11 @@ def _hybrid_pages(
     python_path: Path,
     model_root: Path,
     vietocr_model_root: Path | None = None,
+    vietocr_config_root: Path | None = None,
+    easyocr_site_packages: Path | None = None,
     vietocr_line_refine: bool = False,
+    canvas_size: int = 1280,
+    mag_ratio: float = 1.3,
 ) -> _MappedEasyOcr:
     easy = _easyocr_pages(
         root,
@@ -132,7 +150,11 @@ def _hybrid_pages(
         python_path,
         model_root,
         vietocr_model_root,
+        vietocr_config_root,
+        easyocr_site_packages,
         vietocr_line_refine,
+        canvas_size,
+        mag_ratio,
     )
     paddle = _paddle()
     for key in list(easy.pages):
@@ -173,7 +195,18 @@ def args() -> argparse.Namespace:
         type=Path,
         default=Path(r"C:\Camunda\private-data\paddleocr-hr-baseline\runtime\vietocr_models"),
     )
+    parser.add_argument("--vietocr-config-root", type=Path)
+    parser.add_argument(
+        "--easyocr-site-packages",
+        type=Path,
+        default=Path(
+            r"C:\Camunda\private-data\paddleocr-hr-baseline\runtime\easyocr_venv\Lib\site-packages"
+        ),
+    )
     parser.add_argument("--vietocr-line-refine", action="store_true")
+    parser.add_argument("--easyocr-canvas-size", type=int, default=1280)
+    parser.add_argument("--easyocr-mag-ratio", type=float, default=1.3)
+    parser.add_argument("--matching-policy", choices=("v1", "v2"), default="v2")
     parser.add_argument("command", choices=("predict", "evaluate"))
     return parser.parse_args()
 
@@ -202,7 +235,15 @@ def main() -> int:
                 options.easyocr_python.expanduser().resolve(),
                 options.easyocr_model_root.expanduser().resolve(),
                 options.vietocr_model_root.expanduser().resolve(),
+                options.vietocr_config_root.expanduser().resolve()
+                if options.vietocr_config_root
+                else None,
+                options.easyocr_site_packages.expanduser().resolve()
+                if options.easyocr_site_packages
+                else None,
                 options.vietocr_line_refine,
+                options.easyocr_canvas_size,
+                options.easyocr_mag_ratio,
             )
             if options.ocr_engine == "hybrid"
             else _easyocr_pages(
@@ -212,7 +253,15 @@ def main() -> int:
                 options.easyocr_python.expanduser().resolve(),
                 options.easyocr_model_root.expanduser().resolve(),
                 options.vietocr_model_root.expanduser().resolve(),
+                options.vietocr_config_root.expanduser().resolve()
+                if options.vietocr_config_root
+                else None,
+                options.easyocr_site_packages.expanduser().resolve()
+                if options.easyocr_site_packages
+                else None,
                 options.vietocr_line_refine,
+                options.easyocr_canvas_size,
+                options.easyocr_mag_ratio,
             )
             if options.ocr_engine == "easyocr"
             else _paddle()
@@ -239,7 +288,14 @@ def main() -> int:
         options.ground_truth.expanduser().resolve().read_text(encoding="utf-8")
     )
     prediction_payload = json.loads(prediction.read_text(encoding="utf-8"))
-    aggregate = build_aggregate_report(prediction_payload, ground_truth)
+    policy_version = (
+        MATCHING_POLICY_V2 if options.matching_policy == "v2" else MATCHING_POLICY_V1
+    )
+    aggregate = build_aggregate_report(
+        prediction_payload,
+        ground_truth,
+        policy_version=policy_version,
+    )
     _write(report, aggregate)
     _write(
         marker,
@@ -250,13 +306,14 @@ def main() -> int:
             "datasetId": aggregate["datasetId"],
             "predictionSha256": __import__("hashlib").sha256(prediction.read_bytes()).hexdigest(),
             "aggregateReportSha256": __import__("hashlib").sha256(report.read_bytes()).hexdigest(),
+            "matchingPolicyVersion": policy_version,
             "promotionAllowed": False,
         },
     )
     print(
         f"{options.scope_policy.upper()} aggregate evaluated once: "
         f"field_exact={aggregate['metrics']['fieldExactMatchCount']}"
-        f"/{aggregate['fieldCount']} decision={aggregate['decision']}"
+        f"/{aggregate['fieldCount']} policy={policy_version} decision={aggregate['decision']}"
     )
     return 0
 

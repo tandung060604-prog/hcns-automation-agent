@@ -2,11 +2,13 @@ import json
 from pathlib import Path
 
 from scripts.benchmark_template_stages import (
+    MEMORY_METRICS,
     STAGES,
     TIMING_SCHEMA_VERSION,
     _failure_code,
     _load_record,
     _summarize,
+    _summarize_memory,
 )
 
 
@@ -42,3 +44,17 @@ def test_failure_code_does_not_expose_exception_message() -> None:
         code = "OCR_PROCESSING_FAILED"
 
     assert _failure_code(SafeFailure("private value")) == "OCR_PROCESSING_FAILED"
+
+
+def test_memory_summary_is_aggregate_only_and_handles_missing_rss() -> None:
+    records = [
+        {"peakPythonMemoryBytes": 100, "peakRssBytes": 1_000},
+        {"peakPythonMemoryBytes": 300, "peakRssBytes": None},
+        {"peakPythonMemoryBytes": 200, "peakRssBytes": 1_200},
+    ]
+
+    summary = _summarize_memory(records)
+
+    assert set(summary) == set(MEMORY_METRICS)
+    assert summary["peakPythonMemoryBytes"] == {"p50": 200.0, "p95": 300.0, "samples": 3}
+    assert summary["peakRssBytes"] == {"p50": 1_000.0, "p95": 1_200.0, "samples": 2}

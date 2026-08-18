@@ -12,10 +12,15 @@ from hcns_agent.templates.common import (
 )
 from hcns_agent.templates.leave_request.parser import LeaveRequestParser
 from hcns_agent.templates.leave_request.validator import LeaveRequestValidator
-from hcns_agent.templates.model import TemplateDefinition, TemplateDetection
+from hcns_agent.templates.model import TemplateDefinition, TemplateDetection, TemplateParser
 from hcns_agent.templates.overtime_request.parser import OvertimeRequestParser
 from hcns_agent.templates.overtime_request.validator import OvertimeRequestValidator
 from hcns_agent.templates.review_only import ReviewOnlyParser, ReviewOnlyValidator
+from hcns_agent.templates.structured_hr import (
+    STRUCTURED_HR_PARSER_ID,
+    STRUCTURED_HR_PARSER_VERSION,
+    StructuredHrParser,
+)
 
 _NATIVE_TEMPLATE_FILE_TYPES = ("docx", "pdf")
 _OCR_TEMPLATE_FILE_TYPES = ("pdf", "png", "jpg", "jpeg")
@@ -206,12 +211,14 @@ def build_default_template_registry() -> TemplateRegistry:
         field_labels: dict[str, tuple[str, ...]],
         version: str = "1.0",
         parser_version: str = "1.0.0",
+        parser_id: str = "review-only/label-next-line",
+        parser: TemplateParser | None = None,
     ) -> TemplateDefinition:
         return TemplateDefinition(
             template_id=template_id,
             document_type=document_type,
             version=version,
-            parser_id="review-only/label-next-line",
+            parser_id=parser_id,
             supported_file_types=supported_file_types,
             required_fields=required_fields,
             optional_fields=(),
@@ -219,7 +226,7 @@ def build_default_template_registry() -> TemplateRegistry:
             parser_version=parser_version,
             anchors=anchors,
             minimum_anchor_matches=minimum_anchor_matches,
-            parser=ReviewOnlyParser(field_labels),
+            parser=parser or ReviewOnlyParser(field_labels),
             validator=ReviewOnlyValidator(),
         )
 
@@ -244,7 +251,9 @@ def build_default_template_registry() -> TemplateRegistry:
             ),
             minimum_anchor_matches=2,
             version="2.0",
-            parser_version="2.0.0",
+            parser_version=STRUCTURED_HR_PARSER_VERSION,
+            parser_id=STRUCTURED_HR_PARSER_ID,
+            parser=StructuredHrParser(),
             field_labels={
                 "contract_number": ("contract number", "so hop dong"),
                 "contract_sign_date": ("contract sign date", "ngay ky hop dong"),
@@ -276,7 +285,9 @@ def build_default_template_registry() -> TemplateRegistry:
             anchors=("curriculum vitae", "kinh nghiem", "ky nang"),
             minimum_anchor_matches=2,
             version="2.0",
-            parser_version="2.0.0",
+            parser_version=STRUCTURED_HR_PARSER_VERSION,
+            parser_id=STRUCTURED_HR_PARSER_ID,
+            parser=StructuredHrParser(),
             field_labels={
                 "full_name": ("full name", "ho va ten", "name"),
                 "headline": ("headline", "muc tieu nghe nghiep", "position"),
@@ -304,7 +315,9 @@ def build_default_template_registry() -> TemplateRegistry:
             anchors=("ielts", "test report form", "overall band score"),
             minimum_anchor_matches=2,
             version="2.0",
-            parser_version="2.0.0",
+            parser_version=STRUCTURED_HR_PARSER_VERSION,
+            parser_id=STRUCTURED_HR_PARSER_ID,
+            parser=StructuredHrParser(),
             field_labels={
                 "recipient_name": ("recipient name", "candidate name", "name"),
                 "credential_id": ("credential id", "test report form number", "trf number"),

@@ -95,6 +95,28 @@ test("shows Phase 11.5 Unicode, ASCII and crop evidence controls", async () => {
   assert.match(source, /Prediction không dấu/);
 });
 
+test("keeps the VinHRIS workspace information architecture and local boundaries visible", async () => {
+  const [dashboard, css] = await Promise.all([
+    readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(dashboard, /Hồ sơ vào một chỗ\./);
+  assert.match(dashboard, /Quy trình đi đúng nơi\./);
+  assert.match(dashboard, /Intake/);
+  assert.match(dashboard, /Human Review/);
+  assert.match(dashboard, /107<span>\/112<\/span>/);
+  assert.match(dashboard, /Chưa phải bằng chứng production/);
+  assert.match(dashboard, /http:\/\/localhost:8080\/camunda\/app\/tasklist\/default\//);
+  assert.match(dashboard, /Nội dung file không đi vào process variables/);
+  assert.match(dashboard, /hr-document-intelligence-context\.webp/);
+  assert.match(css, /--ops-navy: #061a28/);
+  assert.match(css, /--ops-cyan: #25c6c8/);
+  assert.match(css, /\.operations-site \.topbar nav::-webkit-scrollbar/);
+  assert.match(css, /scroll-margin-top: 108px/);
+  assert.match(css, /prefers-reduced-motion: reduce/);
+});
+
 test("exposes the Phase 15 multi-format IDP and field review flow", async () => {
   const [dashboard, css] = await Promise.all([
     readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
@@ -298,7 +320,7 @@ test("exposes one Template-first upload with source preview and structured resul
   assert.match(dashboard, /data-testid="local-document-input"/);
   assert.match(dashboard, /data-testid="template-document-preview"/);
   assert.match(dashboard, /data-testid="template-result-panel"/);
-  assert.match(dashboard, /\/assets\/template-first-local-workflow\.png/);
+  assert.match(dashboard, /\/assets\/hr-document-intelligence-context\.webp/);
   assert.match(css, /\.upload-mode-switch/);
   assert.match(css, /\.upload-workspace/);
   assert.match(css, /\.template-document-preview/);

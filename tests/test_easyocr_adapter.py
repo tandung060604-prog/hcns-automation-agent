@@ -1,6 +1,25 @@
 from __future__ import annotations
 
-from hcns_agent.adapters.easyocr import _group_readtext_results
+from io import BytesIO
+
+from PIL import Image
+
+from hcns_agent.adapters.easyocr import (
+    EASYOCR_CANVAS_SIZE,
+    EASYOCR_MAG_RATIO,
+    EasyOcrEngine,
+    _group_readtext_results,
+)
+from hcns_agent.ports.document_parser import DocumentSource
+
+
+class _Reader:
+    def __init__(self) -> None:
+        self.kwargs: dict[str, object] = {}
+
+    def readtext(self, _image: object, **kwargs: object) -> list[object]:
+        self.kwargs = kwargs
+        return []
 
 
 def test_easyocr_groups_same_row_and_drops_contained_duplicate() -> None:
@@ -16,3 +35,21 @@ def test_easyocr_groups_same_row_and_drops_contained_duplicate() -> None:
     assert len(lines) == 2
     assert lines[0].text == "Bộ phận: Phòng Công nghệ"
     assert lines[1].text == "Lý do"
+
+
+def test_easyocr_uses_bounded_scan_settings() -> None:
+    image = Image.new("RGB", (32, 32), "white")
+    output = BytesIO()
+    image.save(output, format="PNG")
+    reader = _Reader()
+
+    EasyOcrEngine(reader).recognize(
+        DocumentSource(
+            document_id="SYNTHETIC-EASYOCR",
+            filename="page.png",
+            content=output.getvalue(),
+        )
+    )
+
+    assert reader.kwargs["canvas_size"] == EASYOCR_CANVAS_SIZE
+    assert reader.kwargs["mag_ratio"] == EASYOCR_MAG_RATIO

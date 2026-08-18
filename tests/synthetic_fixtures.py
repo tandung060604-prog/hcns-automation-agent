@@ -72,6 +72,20 @@ def scanned_pdf_bytes() -> bytes:
     return payload
 
 
+def mixed_pdf_bytes() -> bytes:
+    import fitz
+
+    image = administrative_image_bytes()
+    document = fitz.open()
+    text_page = document.new_page(width=640, height=240)
+    text_page.insert_text((24, 72), "MIXED PDF NATIVE PAGE")
+    scan_page = document.new_page(width=640, height=240)
+    scan_page.insert_image(scan_page.rect, stream=image)
+    payload = document.tobytes()
+    document.close()
+    return payload
+
+
 def encrypted_pdf_bytes() -> bytes:
     import fitz
 

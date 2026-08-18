@@ -48,6 +48,11 @@ class UniversalDocumentIntake:
             source_descriptor=descriptor,
             source_format=detection.source_format,
             media_type=detection.media_type,
+            pdf_content_profile=(
+                detection.pdf_inspection.content_profile
+                if detection.pdf_inspection is not None
+                else None
+            ),
         )
         document = parser.parse(source, context)
         if document.source_format is not detection.source_format:

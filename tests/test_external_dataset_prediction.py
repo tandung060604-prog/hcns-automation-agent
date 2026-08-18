@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import apps.ocr_lab.api.external_dataset_prediction as prediction_module
 from apps.ocr_lab.api.external_dataset_prediction import (
     MATCHING_POLICY_V2,
     _cv_header_fields,
@@ -81,6 +82,23 @@ def _positioned_ocr_canonical(items: list[tuple[str, int, int, int]]) -> dict[st
         "pages": [{"blocks": blocks, "ocrBlocks": blocks}],
         "tables": [],
     }
+
+
+def test_data29_adapter_delegates_to_promoted_parser(monkeypatch: Any) -> None:
+    expected = {"field": {"value": None}}
+    calls: list[tuple[object, str, bool]] = []
+
+    def promoted(canonical: object, category: str, *, ocr: bool) -> object:
+        calls.append((canonical, category, ocr))
+        return expected
+
+    monkeypatch.setattr(prediction_module, "extract_structured_hr_fields", promoted)
+    canonical = {"pages": []}
+
+    result = _external_fields("cv", canonical, {"fields": {}}, ocr=True)
+
+    assert result is expected
+    assert calls == [(canonical, "cv", True)]
 
 
 def test_prediction_source_resolution_is_inventory_only() -> None:
@@ -408,7 +426,7 @@ def test_family_mapping_keeps_multiline_cv_and_contract_evidence() -> None:
     assert cv_fields["full_name"]["value"] == "NGUYỄN VĂN A"
     assert cv_fields["headline"]["value"] == "KỸ SƯ DỮ LIỆU"
     assert cv_fields["address"]["value"] == "Hà Nội"
-    assert cv_fields["headline"]["extractor"] == "phase17-family-layout"
+    assert cv_fields["headline"]["extractor"] == "structured-hr/family-layout"
 
     contract = _canonical(
         [

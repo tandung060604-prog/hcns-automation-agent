@@ -20,6 +20,9 @@ from typing import Any
 from hcns_agent.ports.document_parser import DocumentSource
 from hcns_agent.ports.ocr import OcrLine, OcrPage, OcrResult
 
+EASYOCR_CANVAS_SIZE = 1280
+EASYOCR_MAG_RATIO = 1.3
+
 
 @dataclass(frozen=True, slots=True)
 class _ReadTextItem:
@@ -100,7 +103,8 @@ class EasyOcrEngine:
             detail=1,
             paragraph=False,
             rotation_info=None,
-            mag_ratio=1.5,
+            canvas_size=EASYOCR_CANVAS_SIZE,
+            mag_ratio=EASYOCR_MAG_RATIO,
         )
         lines = _group_readtext_results(read_results)
         return OcrResult(
