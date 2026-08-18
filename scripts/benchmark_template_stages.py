@@ -11,7 +11,11 @@ import argparse
 import importlib.metadata
 import json
 import platform
+import subprocess
+import sys
+import threading
 import time
+import tracemalloc
 import uuid
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
@@ -38,6 +42,7 @@ INPUT_CLASSES = (
     SourceFormat.IMAGE,
 )
 STAGES = ("intake", "ocr", "template", "persistence", "total")
+MEMORY_METRICS = ("peakPythonMemoryBytes", "peakRssBytes")
 
 
 def parse_args() -> argparse.Namespace:
@@ -61,6 +66,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--camunda-session-id")
     parser.add_argument("--camunda-warm-runs", type=int, default=0)
     parser.add_argument("--allow-local-shadow-processes", action="store_true")
+    parser.add_argument(
+        "--isolate-pdf-scan-runs",
+        action="store_true",
+        help="Run each PDF scan sample in a fresh child process to bound OCR memory.",
+    )
+    parser.add_argument("--single-run-source", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--single-run-root", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--single-run-count", type=int, default=1, help=argparse.SUPPRESS)
+    parser.add_argument("--prime-single-run", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
@@ -81,6 +95,9 @@ def main() -> int:
     work_root.mkdir(parents=True, exist_ok=True)
     output.parent.mkdir(parents=True, exist_ok=True)
 
+    if args.single_run_source is not None:
+        return _run_single_sample(args)
+
     input_classes = (
         tuple(SourceFormat(item) for item in args.input_classes)
         if args.input_classes
@@ -91,14 +108,31 @@ def main() -> int:
     failures: dict[str, int] = {}
     for source_format in input_classes:
         source_path = selected[source_format]
+        if source_format is SourceFormat.PDF_SCAN and args.isolate_pdf_scan_runs:
+            report, isolated_failures = _run_isolated_pdf_scan(
+                source_path=source_path,
+                dataset_root=root,
+                work_root=work_root,
+                args=args,
+            )
+            class_reports[source_format.value] = report
+            for code, count in isolated_failures.items():
+                failures[code] = failures.get(code, 0) + count
+            continue
         content = source_path.read_bytes()
         service = build_local_template_processing_service(ocr_backend=args.ocr_backend)
         cold_root = work_root / source_format.value / "cold"
         cold = _load_record(cold_root) if args.resume else None
+        cold_memory = _load_memory_record(cold_root) if args.resume else None
         service_is_warm = False
         try:
             if cold is None:
-                cold = _run_once(service, source_path.suffix, content, cold_root)
+                cold, cold_memory = _run_once(
+                    service,
+                    source_path.suffix,
+                    content,
+                    cold_root,
+                )
                 service_is_warm = True
         except Exception as error:  # noqa: BLE001 - aggregate failure without raw data
             code = _failure_code(error)
@@ -113,6 +147,7 @@ def main() -> int:
             }
             continue
         warm: list[dict[str, float]] = []
+        warm_memory: list[dict[str, int | None]] = []
         for run_index in range(args.warm_runs):
             run_root = (
                 work_root
@@ -123,19 +158,22 @@ def main() -> int:
             existing = _load_record(run_root) if args.resume else None
             if existing is not None:
                 warm.append(existing)
+                existing_memory = _load_memory_record(run_root)
+                if existing_memory is not None:
+                    warm_memory.append(existing_memory)
                 continue
             try:
                 if not service_is_warm:
                     _prime_service(service, source_path.suffix, content)
                     service_is_warm = True
-                warm.append(
-                    _run_once(
-                        service,
-                        source_path.suffix,
-                        content,
-                        run_root,
-                    )
+                stage_record, memory_record = _run_once(
+                    service,
+                    source_path.suffix,
+                    content,
+                    run_root,
                 )
+                warm.append(stage_record)
+                warm_memory.append(memory_record)
             except Exception as error:  # noqa: BLE001 - report safe aggregate and continue
                 code = _failure_code(error)
                 failures[code] = failures.get(code, 0) + 1
@@ -145,6 +183,14 @@ def main() -> int:
             "status": "COMPLETE" if len(warm) == args.warm_runs else "INCOMPLETE",
             "cold": cold,
             "warm": _summarize(warm),
+            "memory": {
+                "cold": cold_memory,
+                "warm": _summarize_memory(warm_memory),
+                "measurement": (
+                    "tracemalloc peak Python heap; sampled process RSS peak when "
+                    "psutil is available"
+                ),
+            },
             "successfulWarmRuns": len(warm),
             "requestedWarmRuns": args.warm_runs,
         }
@@ -181,6 +227,9 @@ def main() -> int:
             "warmDefinition": (
                 "measured call after the backend is initialized in the same process; "
                 "resume primes a new process before measuring remaining runs"
+                if not args.isolate_pdf_scan_runs
+                else "measured call after a private child primes EasyOCR; each PDF scan "
+                "sample runs in a fresh process to bound model memory"
             ),
             "inputClasses": [item.value for item in input_classes],
             "stageDefinitions": {
@@ -231,33 +280,222 @@ def _select_inputs(
     return selected
 
 
+def _run_isolated_pdf_scan(
+    *,
+    source_path: Path,
+    dataset_root: Path,
+    work_root: Path,
+    args: argparse.Namespace,
+) -> tuple[dict[str, object], dict[str, int]]:
+    cold: dict[str, float] | None = None
+    cold_memory: dict[str, int | None] | None = None
+    warm: list[dict[str, float]] = []
+    warm_memory: list[dict[str, int | None]] = []
+    failures: dict[str, int] = {}
+    cold_records, cold_failures = _run_single_child(
+        source_path=source_path,
+        dataset_root=dataset_root,
+        run_root=work_root / SourceFormat.PDF_SCAN.value / "cold",
+        args=args,
+        count=1,
+        prime=False,
+    )
+    for code, count in cold_failures.items():
+        failures[code] = failures.get(code, 0) + count
+    if cold_records:
+        cold, cold_memory = cold_records[0]
+    print("PDF_SCAN isolated cold", flush=True)
+
+    batch_size = 5
+    for batch_index, start in enumerate(range(0, args.warm_runs, batch_size), start=1):
+        count = min(batch_size, args.warm_runs - start)
+        batch_records, batch_failures = _run_single_child(
+            source_path=source_path,
+            dataset_root=dataset_root,
+            run_root=(
+                work_root
+                / SourceFormat.PDF_SCAN.value
+                / "warm"
+                / f"batch-{batch_index:03d}"
+            ),
+            args=args,
+            count=count,
+            prime=True,
+        )
+        for code, count in batch_failures.items():
+            failures[code] = failures.get(code, 0) + count
+        for stage_record, memory_record in batch_records:
+            warm.append(stage_record)
+            warm_memory.append(memory_record)
+        print(
+            f"PDF_SCAN isolated warm {len(warm)}/{args.warm_runs}",
+            flush=True,
+        )
+
+    complete = cold is not None and len(warm) == args.warm_runs
+    return (
+        {
+            "status": "COMPLETE" if complete else "INCOMPLETE",
+            "cold": cold,
+            "warm": _summarize(warm),
+            "memory": {
+                "cold": cold_memory,
+                "warm": _summarize_memory(warm_memory),
+                "measurement": (
+                    "tracemalloc peak Python heap; sampled process RSS peak when "
+                    "psutil is available"
+                ),
+            },
+            "isolation": (
+                "fresh child process per batch of at most five PDF scan samples; "
+                "each child loads EasyOCR before measuring samples"
+            ),
+            "successfulWarmRuns": len(warm),
+            "requestedWarmRuns": args.warm_runs,
+        },
+        failures,
+    )
+
+
+def _run_single_child(
+    *,
+    source_path: Path,
+    dataset_root: Path,
+    run_root: Path,
+    args: argparse.Namespace,
+    count: int,
+    prime: bool,
+) -> tuple[list[tuple[dict[str, float], dict[str, int | None]]], dict[str, int]]:
+    command = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "--dataset-root",
+        str(dataset_root),
+        "--work-root",
+        str(run_root.parent),
+        "--output",
+        str(run_root.parent / "worker-report.json"),
+        "--dataset-id",
+        str(args.dataset_id),
+        "--warm-runs",
+        str(args.warm_runs),
+        "--ocr-backend",
+        str(args.ocr_backend),
+        "--authorization-confirmed",
+        "--overwrite",
+        "--single-run-source",
+        str(source_path),
+        "--single-run-root",
+        str(run_root),
+        "--single-run-count",
+        str(count),
+    ]
+    if prime:
+        command.append("--prime-single-run")
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return [], {"ISOLATED_RUN_FAILED": count}
+    if completed.returncode != 0:
+        failure_paths = [run_root / "failure.json", *run_root.glob("run-*/failure.json")]
+        for failure_path in failure_paths:
+            if failure_path.is_file():
+                try:
+                    failure = json.loads(failure_path.read_text(encoding="utf-8"))
+                    code = failure.get("failureCode")
+                    if isinstance(code, str) and code:
+                        return [], {code: count}
+                except (OSError, json.JSONDecodeError):
+                    pass
+        return [], {"ISOLATED_RUN_FAILED": count}
+    records: list[tuple[dict[str, float], dict[str, int | None]]] = []
+    roots = (
+        [run_root]
+        if count == 1
+        else [
+            run_root / f"run-{index:03d}"
+            for index in range(1, count + 1)
+        ]
+    )
+    for sample_root in roots:
+        stage_record = _load_record(sample_root)
+        memory_record = _load_memory_record(sample_root)
+        if stage_record is None or memory_record is None:
+            return records, {"ISOLATED_RUN_INCOMPLETE": count - len(records)}
+        records.append((stage_record, memory_record))
+    return records, {}
+
+
+def _run_single_sample(args: argparse.Namespace) -> int:
+    if args.single_run_root is None:
+        raise SystemExit("Single-run benchmark requires --single-run-root")
+    source = args.single_run_source.resolve(strict=True)
+    run_root = args.single_run_root.resolve()
+    _require_private_path(source)
+    _require_private_path(run_root)
+    count = int(args.single_run_count)
+    if count <= 0:
+        raise SystemExit("Single-run benchmark count must be positive")
+    if run_root.exists():
+        raise SystemExit("Single-run benchmark root already exists")
+    content = source.read_bytes()
+    service = build_local_template_processing_service(ocr_backend=args.ocr_backend)
+    try:
+        if args.prime_single_run:
+            _prime_service(service, source.suffix, content)
+        for index in range(count):
+            sample_root = (
+                run_root
+                if count == 1
+                else run_root / f"run-{index + 1:03d}"
+            )
+            _run_once(service, source.suffix, content, sample_root)
+    except Exception as error:  # noqa: BLE001 - safe child failure artifact
+        failure_root = sample_root if "sample_root" in locals() else run_root
+        failure_root.mkdir(parents=True, exist_ok=True)
+        (failure_root / "failure.json").write_text(
+            json.dumps({"failureCode": _failure_code(error)}) + "\n",
+            encoding="utf-8",
+        )
+        return 1
+    return 0
+
+
 def _run_once(
     service: TemplateProcessingService,
     suffix: str,
     content: bytes,
     run_root: Path,
-) -> dict[str, float]:
+) -> tuple[dict[str, float], dict[str, int | None]]:
     document_id = str(uuid.uuid4())
     total_started = time.perf_counter()
-    result = service.process(
-        DocumentSource(
-            document_id=document_id,
-            filename=f"document{suffix.casefold()}",
-            content=content,
-            source_reference=document_id,
-        ),
-        result_reference=f"performance/{document_id}/result.json",
-    )
-    payload = result.public_dict()
-    timings = _timings(result.processing)
-    persistence_started = time.perf_counter()
-    (run_root / "input").mkdir(parents=True, exist_ok=False)
-    (run_root / "input" / f"document{suffix.casefold()}").write_bytes(content)
-    (run_root / "result.json").write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    persistence = _elapsed_ms(persistence_started)
+    with _MemoryProbe() as memory_probe:
+        result = service.process(
+            DocumentSource(
+                document_id=document_id,
+                filename=f"document{suffix.casefold()}",
+                content=content,
+                source_reference=document_id,
+            ),
+            result_reference=f"performance/{document_id}/result.json",
+        )
+        payload = result.public_dict()
+        timings = _timings(result.processing)
+        persistence_started = time.perf_counter()
+        (run_root / "input").mkdir(parents=True, exist_ok=False)
+        (run_root / "input" / f"document{suffix.casefold()}").write_bytes(content)
+        (run_root / "result.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        persistence = _elapsed_ms(persistence_started)
+    memory = memory_probe.result()
     record = {
         "intake": timings["intake"],
         "ocr": timings["ocr"],
@@ -274,7 +512,11 @@ def _run_once(
         + "\n",
         encoding="utf-8",
     )
-    return record
+    (run_root / "memory.json").write_text(
+        json.dumps(memory, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return record, memory
 
 
 def _prime_service(
@@ -282,6 +524,10 @@ def _prime_service(
     suffix: str,
     content: bytes,
 ) -> None:
+    warm_up = getattr(service, "warm_up_ocr", None)
+    if callable(warm_up):
+        warm_up()
+        return
     document_id = str(uuid.uuid4())
     service.process(
         DocumentSource(
@@ -316,6 +562,25 @@ def _load_record(run_root: Path) -> dict[str, float] | None:
     return record
 
 
+def _load_memory_record(run_root: Path) -> dict[str, int | None] | None:
+    path = run_root / "memory.json"
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit("Stored benchmark memory is unreadable") from error
+    record: dict[str, int | None] = {}
+    for metric in MEMORY_METRICS:
+        value = payload.get(metric)
+        if value is not None and (
+            isinstance(value, bool) or not isinstance(value, int) or value < 0
+        ):
+            raise SystemExit("Stored benchmark memory is invalid")
+        record[metric] = value
+    return record
+
+
 def _timings(value: object) -> dict[str, float]:
     if not isinstance(value, Mapping):
         raise RuntimeError("Template processing metadata is unavailable")
@@ -339,6 +604,81 @@ def _summarize(records: Sequence[Mapping[str, float]]) -> dict[str, object]:
         }
         for stage in STAGES
     }
+
+
+def _summarize_memory(
+    records: Sequence[Mapping[str, int | None]],
+) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for metric in MEMORY_METRICS:
+        values = [
+            float(value)
+            for record in records
+            if (value := record.get(metric)) is not None
+        ]
+        result[metric] = {
+            "p50": percentile(values, 0.50) if values else None,
+            "p95": percentile(values, 0.95) if values else None,
+            "samples": len(values),
+        }
+    return result
+
+
+class _MemoryProbe:
+    """Capture aggregate-only memory telemetry around one local run."""
+
+    def __init__(self) -> None:
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._peak_rss: int | None = None
+        self._peak_python = 0
+        self._was_tracing = False
+
+    def __enter__(self) -> _MemoryProbe:
+        self._was_tracing = tracemalloc.is_tracing()
+        if not self._was_tracing:
+            tracemalloc.start()
+        self._peak_rss = _rss_bytes()
+        if self._peak_rss is not None:
+            self._thread = threading.Thread(
+                target=self._sample_rss,
+                name="hcns-benchmark-memory",
+                daemon=True,
+            )
+            self._thread.start()
+        return self
+
+    def __exit__(self, _exc_type: object, _exc: object, _traceback: object) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+        _current, self._peak_python = tracemalloc.get_traced_memory()
+        if not self._was_tracing:
+            tracemalloc.stop()
+        current_rss = _rss_bytes()
+        if current_rss is not None:
+            self._peak_rss = max(self._peak_rss or 0, current_rss)
+
+    def result(self) -> dict[str, int | None]:
+        return {
+            "peakPythonMemoryBytes": int(self._peak_python),
+            "peakRssBytes": self._peak_rss,
+        }
+
+    def _sample_rss(self) -> None:
+        while not self._stop.wait(0.05):
+            current = _rss_bytes()
+            if current is not None:
+                self._peak_rss = max(self._peak_rss or 0, current)
+
+
+def _rss_bytes() -> int | None:
+    try:
+        import psutil
+
+        return int(psutil.Process().memory_info().rss)
+    except (ImportError, OSError):
+        return None
 
 
 def _camunda_report(args: argparse.Namespace, work_root: Path) -> dict[str, object]:

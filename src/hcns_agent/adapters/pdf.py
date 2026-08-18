@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any
 
 from hcns_agent.domain.canonical import (
@@ -27,6 +28,7 @@ from hcns_agent.ports.document_parser import (
     ParserCapabilities,
 )
 from hcns_agent.ports.inspection import (
+    PdfContentProfile,
     PdfInspection,
     PdfPageRasterizer,
     RasterizedPage,
@@ -36,7 +38,7 @@ from hcns_agent.ports.ocr import OcrEngine
 
 def _fitz() -> Any:
     try:
-        import fitz  # type: ignore[import-untyped]
+        import fitz
     except ImportError as error:
         raise RuntimeError("PyMuPDF is required for PDF inspection and parsing") from error
     return fitz
@@ -58,16 +60,23 @@ class PyMuPdfInspector:
                         has_usable_text=False,
                         encrypted=True,
                     )
-                text_characters = 0
+                usable_text_pages = 0
                 for page in document:
-                    text_characters += sum(
+                    text_characters = sum(
                         1 for character in page.get_text("text") if not character.isspace()
                     )
-                    if text_characters >= self._minimum_text_characters:
-                        break
+                    usable_text_pages += int(text_characters >= self._minimum_text_characters)
+                content_profile: PdfContentProfile = (
+                    "native"
+                    if page_count > 0 and usable_text_pages == page_count
+                    else "scan"
+                    if usable_text_pages == 0
+                    else "mixed"
+                )
                 return PdfInspection(
                     page_count=page_count,
-                    has_usable_text=text_characters >= self._minimum_text_characters,
+                    has_usable_text=usable_text_pages > 0,
+                    content_profile=content_profile,
                 )
         except Exception:
             return PdfInspection(
@@ -171,9 +180,8 @@ class PyMuPdfRasterizer:
         self._dpi = dpi
         self._maximum_page_pixels = maximum_page_pixels
 
-    def rasterize(self, source: DocumentSource) -> tuple[RasterizedPage, ...]:
+    def iter_pages(self, source: DocumentSource) -> Iterator[RasterizedPage]:
         fitz = _fitz()
-        rendered: list[RasterizedPage] = []
         try:
             with fitz.open(stream=source.content, filetype="pdf") as document:
                 matrix = fitz.Matrix(self._dpi / 72.0, self._dpi / 72.0)
@@ -184,13 +192,11 @@ class PyMuPdfRasterizer:
                             IntakeErrorCode.FILE_TOO_LARGE,
                             "Rasterized PDF page exceeds the configured pixel limit",
                         )
-                    rendered.append(
-                        RasterizedPage(
-                            page_index=page_index,
-                            content=pixmap.tobytes("png"),
-                            width=int(pixmap.width),
-                            height=int(pixmap.height),
-                        )
+                    yield RasterizedPage(
+                        page_index=page_index,
+                        content=pixmap.tobytes("png"),
+                        width=int(pixmap.width),
+                        height=int(pixmap.height),
                     )
         except DocumentIntakeError:
             raise
@@ -201,7 +207,11 @@ class PyMuPdfRasterizer:
                 kind=ErrorKind.TECHNICAL,
                 retryable=False,
             ) from error
-        return tuple(rendered)
+
+    def rasterize(self, source: DocumentSource) -> tuple[RasterizedPage, ...]:
+        """Keep the tuple API while the scan parser consumes pages lazily."""
+
+        return tuple(self.iter_pages(source))
 
 
 class ScannedPdfDocumentParser:
@@ -225,7 +235,11 @@ class ScannedPdfDocumentParser:
         manifest_data: dict[str, str] = {}
         ocr_duration_ms = 0
         engine_name = self._ocr_engine.name
-        for rasterized in self._rasterizer.rasterize(source):
+        iter_pages = getattr(self._rasterizer, "iter_pages", None)
+        rasterized_pages = (
+            iter_pages(source) if callable(iter_pages) else self._rasterizer.rasterize(source)
+        )
+        for rasterized in rasterized_pages:
             page_source = DocumentSource(
                 document_id=f"{source.document_id}-page-{rasterized.page_index}",
                 filename=f"{source.document_id}-page-{rasterized.page_index}.png",
@@ -302,6 +316,7 @@ class ScannedPdfDocumentParser:
                     model_manifest=manifest,
                     metadata={
                         "rasterizer": "PyMuPDF",
+                        "pdfContentProfile": context.pdf_content_profile or "scan",
                         "ocrDurationMs": ocr_duration_ms,
                         "ocrRoiEvidence": manifest_data.get("roiRecovery", "[]"),
                     },

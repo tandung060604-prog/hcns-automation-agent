@@ -71,7 +71,9 @@ class FormatDetector:
                     IntakeErrorCode.CORRUPTED_FILE, "PDF structure is corrupted"
                 )
             detected = (
-                SourceFormat.PDF_TEXT if pdf_inspection.has_usable_text else SourceFormat.PDF_SCAN
+                SourceFormat.PDF_TEXT
+                if pdf_inspection.content_profile == "native"
+                else SourceFormat.PDF_SCAN
             )
             media_type = "application/pdf"
         elif image_media_type := _detect_image_media_type(source.content):
