@@ -42,7 +42,7 @@ web, notification inbox, email/SMS, cập nhật HRIS thật hoặc quyết đ�
 | Universal document intake | Hoạt động | Nhận TXT, DOCX, PDF, XLSX, PPTX, PNG và JPG/JPEG |
 | Template-first extraction | Hoạt động | CV/Hợp đồng nhận DOCX, PDF; IELTS/CCCD nhận PDF, PNG, JPG/JPEG theo manifest |
 | OCR local | Hoạt động | PaddleOCR hoặc EasyOCR cho ảnh và PDF scan |
-| Dashboard VinHRIS | Hoạt động local | Upload, xem nguồn, queue demo, Ground Truth và diagnostic đang dùng chung workspace |
+| Dashboard VinHRIS | Hoạt động local | Điều hướng product-first cho Intake, Human Review, Evidence và Camunda; diagnostic nâng cao vẫn nằm trong cùng workspace |
 | Camunda 7 + Human-in-the-loop | Hoạt động ở shadow mode | Điều phối External Task/User Task, không tạo side effect nghiệp vụ thật |
 | Kết quả local/idempotency | Đã gia cố | Ghi kết quả an toàn khi nhiều request chạy đồng thời |
 | API dashboard | Chỉ local | Bind loopback, CORS chỉ cho localhost; chưa có authentication/RBAC |
@@ -78,14 +78,25 @@ shadow, chưa đạt production multi-user vì các khoảng trống sau:
 5. **Product data/side effect:** chưa có database user/document/notification/audit;
    HRIS và notification thật vẫn phải giữ đóng.
 
+- **Một parser chuẩn cho ba họ tài liệu:** upload Template-first và bộ đối chiếu
+  DATA-29 hiện cùng gọi `structured-hr/family-layout/2.1.0` cho Contract, CV và
+  IELTS; test delegation sẽ báo lỗi nếu hai luồng tách thành thuật toán khác nhau.
+- **Workspace dễ đọc hơn:** giao diện dùng một hệ navy/trắng với accent cyan,
+  tách rõ tổng quan nền tảng, ba nhóm tài liệu, quality evidence, quy trình local
+  shadow, hàng đợi review và vùng tiếp nhận; API, private storage và Camunda policy
+  không thay đổi.
 - **Đối chiếu file hiện tại ngay sau upload:** màn hình thống nhất hiển thị tài
   liệu nguồn ở bên trái và Prediction, Ground Truth, confidence/evidence cùng
   badge `EXACT`, `ACCEPTED`, `MISMATCH`, `MISSING` hoặc `NEEDS_REVIEW` ở bên phải.
 - **Kết luận rõ ràng:** mỗi lần đối chiếu có tổng số field đúng/sai và quyết định
   `HOLD`/`PASS`. `PASS` chỉ nói về phép so khớp file hiện tại; không tự phê duyệt
   nghiệp vụ và không mở promotion.
-- **Metric mở được toàn bộ tài liệu nguồn:** DATA-29 hiển thị đủ 12 tài liệu đã
-  trực tiếp tạo aggregate `107/112`, chia thành Contract `3`, CV `5`, IELTS `4`.
+- **Metric mở được toàn bộ tài liệu nguồn:** DATA-29 hiển thị đủ 12 tài liệu của
+  aggregate đã khóa `107/112`, chia thành Contract `3`, CV `5`, IELTS `4`. Đây là
+  baseline dùng hybrid OCR, không phải kết quả EasyOCR-only mới.
+- **Replay IELTS của ALG-002:** bốn tài liệu đã được chạy cô lập bằng Paddle và
+  parser chuẩn đạt `20/20 exact`, `20/20 accepted`; full offline hybrid replay
+  đạt `107/112 exact`, `112/112 accepted` trên đủ 12 tài liệu.
 - **Metadata thuật toán có thể kiểm tra:** template/parser version, intake parser,
   OCR backend/version/model/device/profile, matching policy và thời gian xử lý
   được hiển thị cùng kết quả.
@@ -96,10 +107,11 @@ shadow, chưa đạt production multi-user vì các khoảng trống sau:
 - **Camunda cho ba họ tài liệu mới:** CV, hợp đồng thử việc và IELTS có thể đi từ
   kết quả upload vào local shadow workflow, bắt buộc Human Review và không tạo
   side effect HRIS/notification thật.
-- **Baseline hiệu năng theo từng stage:** 30 warm run cho mỗi input class cho thấy
-  DOCX/PDF text có p95 dưới `0,3 giây`, trong khi ảnh là `28,5 giây` và PDF scan
-  là `67,5 giây` trên máy CPU 8 GB. Vì vậy chưa mở rộng CCCD/ảnh Contract; ưu
-  tiên thống nhất parser path và tối ưu scan trước.
+- **Hiệu năng PDF scan sau PDF-001:** 30 warm run aggregate-only trên tài liệu
+  được cấp quyền cho thấy total p50/p95 là `9,378/12,532 giây`, OCR p50/p95 là
+  `7,918/10,945 giây`, peak RSS p95 `1,694 GB`, không có failure. So với
+  baseline PERF-001 `67,5 giây` p95, đây là cải thiện rõ rệt; scan vẫn luôn
+  `MANUAL_REVIEW` và chưa phải production gate.
 
 Các cập nhật hardening ngày 12/08/2026 vẫn được giữ nguyên:
 
@@ -181,20 +193,25 @@ lượng production. Trạng thái promotion hiện vẫn là `HOLD` và
 |---|---:|---|
 | Leave + Overtime native | 30/30 chọn đúng template | 15 Leave Request và 15 Overtime Request |
 | Leave + Overtime native | 0/30 lỗi validation | Đủ điều kiện chuyển đến bước Human review |
-| Contract + CV + IELTS · DATA-29 | 107/112 field exact | Contract 42/42, CV 45/50, IELTS 20/20 |
-| DATA-29 accepted | 112/112 field accepted | Matching policy v2; decision `HOLD`, không promotion |
-| 12 tài liệu đang show | 107/112 exact, 112/112 accepted | Toàn bộ 3 Contract, 5 CV và 4 IELTS từ chính DATA-29 |
+| Contract + CV · parser chuẩn hiện tại | 87/92 exact; 92/92 accepted | Replay đủ 3 Contract và 5 CV; cùng parser với luồng upload |
+| DATA-29 · full offline hybrid replay | 107/112 exact; 112/112 accepted | Contract 42/42, CV 45/50, IELTS 20/20; matching policy 2.0.0 |
+| IELTS · replay ALG-002 | 20/20 exact; 20/20 accepted | Paddle chỉ dùng cho IELTS branch; parser `structured-hr/family-layout/2.1.0` |
+| ALG-002 safety/quality checks | OCR 29/30; applicable 99/99 | Schema errors, parser regressions, sensitive false acceptance và residual replay process đều 0 |
+| 12 tài liệu đang show | 107/112 exact; 112/112 accepted | Dashboard hiển thị đúng 3 Contract, 5 CV và 4 IELTS từ baseline đã khóa |
 | Latency native warm p95 | DOCX 285 ms; PDF text 158 ms | 30 run/input class, local CPU 8 GB |
-| Latency visual warm p95 | Ảnh 28,5 s; PDF scan 67,5 s | Chủ yếu nằm ở EasyOCR; chưa đạt gate mở rộng |
+| Latency visual warm p95 | Ảnh 28,5 s; PDF scan mới 12,532 s | PDF-001 đã giảm scan p95; ảnh và production gate vẫn HOLD |
 | JSON Schema | 0 lỗi | Kiểm tra cấu trúc trước khi chuyển workflow |
 
-Dashboard chỉ hiển thị metric từ aggregate evidence đã seal. Inventory chỉ dùng
-để đếm tài liệu local, không được dùng để tự tạo điểm số. Kết quả template v1 cũ
-vẫn đọc được qua compatibility projection; kết quả mới phát ra theo contract v2.
+Dashboard chỉ hiển thị metric từ aggregate evidence đã seal; không được đổi nhãn
+baseline hybrid thành kết quả EasyOCR hiện tại. Inventory chỉ dùng để đếm tài
+liệu local, không được dùng để tự tạo điểm số. Kết quả template v1 cũ vẫn đọc
+được qua compatibility projection; kết quả mới phát ra theo contract v2 và parser
+`structured-hr/family-layout/2.1.0`.
 
 Co-resident benchmark API + scan từng thất bại khi EasyOCR cần thêm khoảng 1,20 GB
-RAM; isolated scan pass 30/30. Vì vậy result store ghi đồng thời an toàn không có
-nghĩa là visual OCR đã sẵn sàng chạy nhiều job song song.
+RAM. PDF-001 dùng child process riêng theo batch tối đa năm mẫu để giới hạn
+memory; gate 30/30 pass nhưng điều này không có nghĩa visual OCR đã sẵn sàng chạy
+nhiều job song song.
 
 ## Chạy local
 
@@ -244,7 +261,9 @@ Sau khi khởi động:
 
 - VinHRIS Dashboard: `http://localhost:3000`
 - Local API: `http://127.0.0.1:8765`
-- Camunda: `http://localhost:8080/camunda`
+- Camunda welcome: `http://localhost:8080/camunda/app/`
+- Camunda Tasklist: `http://localhost:8080/camunda/app/tasklist/default/`
+- Camunda Cockpit: `http://localhost:8080/camunda/app/cockpit/default/`
 
 Hướng dẫn thao tác đầy đủ: [Demo Camunda + HITL](docs/DEMO_CAMUNDA_HITL.md).
 

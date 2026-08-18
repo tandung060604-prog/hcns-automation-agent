@@ -1,50 +1,95 @@
 # Project State
 
-Current milestone: PERF-001 DONE / LOCAL HOLD
-Checkpoint task: `PERF-001-STAGE-TIMING`
+Current milestone: UX-001 WORKSPACE REFRESH / VERIFIED LOCAL
+Checkpoint task: `UX-001`
+Next READY task: `CAM-001` is BLOCKED pending an authorized Contract upload
 
 Repository:
-- Branch: `codex/perf-001-stage-timing`
-- HEAD: `406bf3d6f019e3c5d6ecd516d8a200ea45ebc509`
-- Base PR: ALG-001 PR #35, CI passed on Python 3.10/3.12 and OCR Lab Web.
+- Branch: `codex/alg-002-canonical-parser`
+- Base at task start: `cfbdd78`; `origin/main` is now `b07c879` with a
+  Plan.md-only delta. Implementation is not committed or pushed.
+- ALG-001 PR #35 and corrective PERF-001 PR #37 are merged into `main` with CI green.
 
-## PERF-001 stage timing baseline (2026-08-13)
+## UX-001 workspace refresh (2026-08-14)
 
-- Template-first emits additive `hcns-stage-timing/1.0.0` metadata for intake,
-  OCR, template parsing/validation, private persistence and total time. Camunda
-  start responses expose the same safe schema for the handoff stage.
-- The resumable aggregate-only runner completed one cold plus `30` warm runs
-  for each authorized DATA-29 class: DOCX, PDF text, PDF scan and image. It did
-  not read Ground Truth and its report contains no field value, OCR text, path,
-  filename, document/process ID or UUID.
-- Warm total p50/p95 on this 8 GB CPU machine: DOCX `167/285 ms`, PDF text
-  `134/158 ms`, image `19.5/28.5 s`, PDF scan `33.1/67.5 s`. OCR dominates the
-  visual classes; native OCR timing is `0` by design.
-- A co-resident API plus scan benchmark initially failed a 1.20 GB EasyOCR
-  allocation. Isolated scan execution completed `30/30`, proving a local memory
-  concurrency limit rather than a document/template failure.
-- One live Camunda 7.13 start smoke returned safe timing metadata in `1.215 s`.
-  Camunda p50/p95 remains `NOT_MEASURED` because no 31-case Human Review cohort
-  was created only for benchmarking.
-- Quality remains pinned DATA-29 `107/112` strict and `112/112` accepted;
-  PERF-001 did not rerun or modify Ground Truth, prediction or matching policy.
+- `/workspace` now uses a product-first navy/white interface with one cyan
+  accent. Navigation exposes Overview, Intake, Review Queue, Evidence and the
+  local Camunda Tasklist without changing any API or process contract.
+- The page explains the five runtime layers, the Contract/CV/IELTS scope,
+  DATA-29 development-only metrics and the local-shadow workflow before the
+  existing operational panels. The upload workspace remains the same local,
+  private flow and is visually wider and easier to scan.
+- The hero uses the existing local no-PII context asset. It does not render a
+  Contract, CV or IELTS source document and does not introduce external asset
+  requests.
+- Responsive navigation remains available as a horizontal mobile rail;
+  reduced-motion behavior is preserved. Browser inspection at 1280px found no
+  horizontal overflow.
+
+## PDF-001 PDF scan gate (2026-08-14)
+
+- PDF page inspection now distinguishes native, scan and mixed profiles. Mixed
+  documents route to the scan/manual-review path; the authorized corpus had 2
+  native and 1 scan PDF, with mixed covered by a PII-free regression fixture.
+- Scan rasterization is consumed page-by-page, and canonical EasyOCR uses the
+  bounded `canvas_size=1280`, `mag_ratio=1.3` configuration.
+- One cold plus 30 warm isolated samples completed with zero failures. Warm total
+  p50/p95: `9.378/12.532 s`; OCR p50/p95: `7.918/10.945 s`; peak RSS p95:
+  `1.694 GB`; peak Python heap p95: `66.2 MB`.
+- The authorized PDF_SCAN quality slice reached `9/10` exact required fields,
+  `10/10` accepted, `9/9` applicable present, classification `1/1`, and manual
+  review `1/1`. Promotion remains disabled.
 - Private aggregate report:
-  `C:\tmp\hcns-perf-001-data29-20260813-v2\aggregate-report.json`
-  (`sha256:ce53c2bf4e00bf5f6b77c7bd97ac5b284cc09c732d43982c089d0af2d630b709`).
+  `C:\tmp\pdf001-template-scan-report-20260814-v6.json`.
+
+## ALG-002 canonical parser (2026-08-14)
+
+- Contract, CV and IELTS now share parser ID `structured-hr/family-layout`,
+  version `2.1.0`, through the existing `TemplateRegistry`.
+- User upload and the DATA-29 adapter call one promoted field parser. A delegation
+  test fails if the evidence adapter drifts back to a separate implementation.
+- Native PDF lines, CV multi-column geometry, Contract party boundaries and IELTS
+  review-only layout rules are preserved. English Contract labels remain backward
+  compatible with the Camunda acceptance fixtures.
+- Health/manifest/prediction metadata expose the same parser identity. No raw
+  field, private path or content was added to public metadata.
+
+## Quality and provenance
+
+- Authorized Contract + CV replay is verified on all `8` documents: `87/92`
+  strict and `92/92` accepted; Contract `42/42`, CV `45/50` and `50/50` accepted.
+- Isolated Paddle replay is verified on all `4` IELTS documents: `20/20` strict
+  and `20/20` accepted with parser `structured-hr/family-layout/2.1.0`.
+- The full offline hybrid replay completed on 12 documents at `107/112` strict
+  and `112/112` accepted under matching policy `2.0.0`: Contract `42/42`, CV
+  `45/50`, IELTS `20/20`.
+- OCR exact was `29/30`, applicable presence was `99/99`, and schema errors,
+  parser regressions and sensitive false acceptance were all zero.
+- The EasyOCR child is isolated from the Paddle parent; local VietOCR config is
+  loaded explicitly. CV skill sections keep EasyOCR text to avoid line-refine
+  list noise; other narrative lines retain refinement.
+- Ground Truth, sealed prediction and sealed report were not changed.
+
+## Verification
+
+- Python `550 passed`; ALG-002 targeted tests `30 passed`; targeted Ruff and
+  parser mypy checks pass; compileall, repository hygiene and diff checks pass.
+- Web build and rendered tests `15/15`; ESLint `0` errors with `22` warnings;
+  production dependency audit reports `0` vulnerabilities.
+- Full-repository Ruff/mypy retain legacy findings outside ALG-002 (105 Ruff
+  findings and 6 unused-ignore findings); no unrelated cleanup was mixed in.
 
 ## Active product/runtime state
 
-- Local product runtime is Template-first + EasyOCR; Paddle is explicit rollback.
-- `/health` reports the selected backend and six frozen template/parser pipelines.
-- DATA-29 Explorer shows 3 Contract, 5 CV and 4 IELTS metric-linked sources.
-- CV and IELTS live Camunda shadow E2E passed with Human Review and zero incident;
-  Contract live acceptance still needs an independent authorized user upload.
-- `autoContinueEnabled=false`; HRIS and notification remain simulated.
-- CCCD held-out/WIP and Contract-image expansion remain closed.
+- Default runtime remains Template-first + EasyOCR; Paddle is explicit rollback.
+- `autoContinueEnabled=false`; HRIS and notifications remain simulated.
+- The original dirty worktree and unrelated CORS/VITE/CCCD files are untouched;
+  PDF-001 changes are limited to the canonical PDF intake, EasyOCR adapter and
+  aggregate benchmark runner.
+- CCCD held-out, Contract images and production pilot remain closed.
 
-Next action: Implement ALG-002 so upload and DATA-29 share one canonical parser path,
-then run PDF-001 memory/latency and quality gates with the PERF-001 runner.
-Next READY task: `ALG-002`
+Next action: resolve the blocked authorized Contract E2E (`CAM-001`). Production
+pilot, CCCD held-out and Contract-image expansion remain closed until their
+independent data/quality gates pass.
 
-Archive: full prior state is in `docs/archive/PROJECT_STATE_HISTORY_2026-08-13.md`;
-older evidence remains in `docs/archive/PROJECT_STATE_HISTORY_2026-08-06.md`.
+Archive: prior state is in `docs/archive/PROJECT_STATE_HISTORY_2026-08-13.md`.

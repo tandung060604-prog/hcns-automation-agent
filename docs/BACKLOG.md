@@ -1,14 +1,55 @@
 # Backlog
 
+## PDF-001 — DONE / VERIFIED / LOCAL HOLD (2026-08-14)
+
+PDF scan intake now classifies page content as native, scan or mixed. Mixed PDFs
+are routed through the bounded scan/manual-review path so an image page is not
+silently lost. PyMuPDF rasterization is consumed page-by-page, and the canonical
+EasyOCR adapter uses `canvas_size=1280` and `mag_ratio=1.3`, the settings already
+verified by the ALG-002 replay.
+
+The authorized DATA-29 PDF gate completed one cold plus 30 warm isolated samples
+without failure. Warm total p50/p95 is `9.378/12.532 s`; OCR p50/p95 is
+`7.918/10.945 s`; peak RSS p95 is `1.694 GB`. The real PDF_SCAN case scored
+`9/10` exact required fields (`90%`), `10/10` accepted, `9/9` applicable fields
+present, and remained `MANUAL_REVIEW`. Native/scan/mixed classification is
+covered by parser tests; the authorized corpus contained 2 native and 1 scan
+PDF, while mixed was verified with a PII-free regression fixture. Aggregate
+artifacts remain outside Git; promotion is still disabled.
+
+## ALG-002 — DONE / VERIFIED (2026-08-14)
+
+Template-first upload and DATA-29 now call one Contract/CV/IELTS parser,
+`structured-hr/family-layout/2.1.0`. The full authorized DATA-29 replay uses
+EasyOCR offline with the local VietOCR configuration and Paddle only for the
+IELTS OCR branch. It reproduced `107/112` strict and `112/112` accepted under
+matching policy `2.0.0`: Contract `42/42`, CV `45/50`, IELTS `20/20`.
+The replay produced 12 documents (`3` Contract, `5` CV, `4` IELTS), no schema
+errors, no parser regressions, no sensitive false acceptance and no raw report
+artifact in Git. The report remains `HOLD` because promotion is intentionally
+disabled; this is a quality replay result, not a production promotion.
+
+## IELTS-OCR-001 — DONE / CLOSED (2026-08-14)
+
+Restored reproducible offline execution without modifying the private corpus:
+the broken EasyOCR venv is no longer used as the parent runtime, private
+site-packages are isolated to the EasyOCR child, local VietOCR `base.yml` and
+`vgg-seq2seq.yml` are loaded explicitly, and CV skill sections bypass noisy
+VietOCR line replacement while other narrative lines remain refined. The full
+replay completed without a crash or residual replay process. Generated
+prediction/report/marker files remain in local Temp only.
+
 ## PERF-001-STAGE-TIMING — DONE / LOCAL HOLD (2026-08-13)
 
 Safe stage timing and a resumable aggregate-only runner are implemented. One
 cold plus 30 warm DATA-29 runs completed for DOCX, PDF text, PDF scan and image.
-Native p95 is below `0.3 s`; image p95 is `28.5 s` and PDF scan p95 is `67.5 s`.
+Native p95 is below `0.3 s`; image p95 is `28.5 s` and the pre-PDF-001 PDF scan
+p95 was `67.5 s`.
 Camunda timing smoke passed, but its p50/p95 is `NOT_MEASURED` to avoid creating
 31 pending review cases. Quality remains DATA-29 `107/112` strict and `112/112`
-accepted. Next READY: ALG-002, then PDF-001; CCCD and Contract-image expansion
-remain closed.
+accepted. PDF-001 is now VERIFIED locally; the next implementation candidate is
+the blocked Contract E2E (`CAM-001`). CCCD and Contract-image expansion remain
+closed.
 
 
 ## M5-CAM-009-THREE-FAMILY-LOCAL-SHADOW-E2E — IN PROGRESS (2026-08-13)
@@ -128,8 +169,9 @@ promotion or evaluate-once change is allowed. Aggregate-only artifact:
 | ID | Trạng thái | Mục tiêu | Phụ thuộc | Ưu tiên |
 |---|---|---|---|---|
 | PERF-001-STAGE-TIMING | DONE / LOCAL HOLD | Đo cold/warm p50/p95 cho intake, OCR, template, persistence và instrument Camunda bằng aggregate-only evidence | ALG-001 | P0 |
-| ALG-002 | READY | Dùng một canonical parser path cho upload và DATA-29, giữ chất lượng 107/112 strict và 112/112 accepted | PERF-001-STAGE-TIMING | P0 |
-| PDF-001 | PLANNED | Tối ưu memory/latency PDF scan và chạy lại quality/performance gate | ALG-002 | P0 |
+| ALG-002 | DONE / VERIFIED | Canonical parser + full offline hybrid replay đạt 107/112 strict và 112/112 accepted; 12 documents, parser drift/schema/raw exposure đều 0 | PERF-001-STAGE-TIMING, IELTS-OCR-001 | P0 |
+| IELTS-OCR-001 | DONE / CLOSED | Isolated EasyOCR child, local VietOCR config, CV skill refinement guard và replay cleanup đã được xác minh | ALG-002 | P0 |
+| PDF-001 | DONE / VERIFIED / LOCAL HOLD | Tối ưu memory/latency PDF scan và chạy lại quality/performance gate | ALG-002 | P0 |
 | LONGRUN-MAINT-001 | DONE | Chốt checkpoint, archive evidence cũ và kiểm tra nhất quán state/handoff | Current branch state | P1 |
 | OCR-HO-V2-011 | REVIEW | Deterministic address ROI replay failed exact-improvement/DER gate; keep shadow-only and restore secondary recognizer runtime before next replay | OCR-HO-V2-009 | P0 |
 | OCR-HO-V2-012 | REVIEW | Restored full secondary recognizers; v11.9.1 passes development gate but remains shadow-only pending explicit promotion decision | OCR-HO-V2-011 | P0 |

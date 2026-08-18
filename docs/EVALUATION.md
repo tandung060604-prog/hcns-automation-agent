@@ -1,5 +1,55 @@
 # Evaluation
 
+## PDF-001 PDF scan quality/performance gate (2026-08-14)
+
+The authorized DATA-29 PDF gate used the canonical Template-first + EasyOCR
+runtime and did not modify Ground Truth or the sealed prediction artifact. The
+input classifier reported 2 native PDFs and 1 scan PDF in the authorized corpus;
+a PII-free regression fixture verified the mixed-page profile. Mixed PDFs route
+to the scan/manual-review parser so image pages are not omitted.
+
+The scan benchmark completed one cold plus 30 warm samples. Each warm batch used
+one private child process for at most five samples, loading EasyOCR once before
+measurement and resetting the process between batches. The report is aggregate-
+only (`promotionAllowed=false`, no raw field/OCR/path/ID data).
+
+| PDF scan metric | Result |
+|---|---:|
+| Warm total p50 / p95 | `9.378 s` / `12.532 s` |
+| Warm OCR p50 / p95 | `7.918 s` / `10.945 s` |
+| Warm peak RSS p50 / p95 | `1.516 GB` / `1.694 GB` |
+| Warm peak Python heap p50 / p95 | `52.8 MB` / `66.2 MB` |
+| Failures | `0/30` |
+| PDF_SCAN exact required fields | `9/10` (`90%`) |
+| PDF_SCAN accepted fields | `10/10` (`100%`) |
+| Applicable fields present | `9/9` (`100%`) |
+| Classification / manual review | `1/1` / `1/1` |
+
+The quality slice is one real authorized PDF_SCAN document, so this is a local
+gate result and not a production generalization claim. Private evidence:
+`C:\tmp\pdf001-template-scan-report-20260814-v6.json`.
+
+## ALG-002 canonical parser replay (2026-08-14)
+
+Template-first upload and the DATA-29 prediction adapter call the same
+Contract/CV/IELTS parser, `structured-hr/family-layout/2.1.0`. The full
+authorized DATA-29 replay completed offline with EasyOCR plus local VietOCR
+configuration and Paddle only for IELTS. It evaluated 12 documents and reached
+`107/112` strict and `112/112` accepted under matching policy `2.0.0`:
+Contract `42/42`, CV `45/50`, IELTS `20/20`.
+
+The replay is reproducible with the EasyOCR child isolated from the Paddle
+parent environment. VietOCR refinement is skipped only inside CV skill sections
+because that list layout is more stable with the promoted EasyOCR text; other
+narrative lines remain refined. The run completed without a native crash or
+residual replay process. It also recorded `29/30` exact OCR fields,
+`99/99` applicable fields present, zero sensitive false acceptance, zero schema
+errors and zero parser regressions.
+
+The aggregate report remains `HOLD` by policy because promotion is disabled.
+Ground Truth, sealed prediction/report and raw documents were not changed; the
+generated private prediction/report/marker remain outside Git in local Temp.
+
 ## PERF-001 Template-first stage timing (2026-08-13)
 
 The authorized DATA-29 performance run used one representative source for each
