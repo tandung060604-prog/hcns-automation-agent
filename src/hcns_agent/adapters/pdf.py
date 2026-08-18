@@ -38,7 +38,7 @@ from hcns_agent.ports.ocr import OcrEngine
 
 def _fitz() -> Any:
     try:
-        import fitz
+        import fitz  # type: ignore[import-untyped]
     except ImportError as error:
         raise RuntimeError("PyMuPDF is required for PDF inspection and parsing") from error
     return fitz
