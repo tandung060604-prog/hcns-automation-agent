@@ -183,7 +183,11 @@ def test_registry_lists_six_approved_templates() -> None:
         "leave-request/parser",
         "overtime-request/parser",
         "review-only/label-next-line",
+        "structured-hr/family-layout",
     }
+    assert parser_ids["cv-v2"] == "structured-hr/family-layout"
+    assert parser_ids["probation-contract-v2"] == "structured-hr/family-layout"
+    assert parser_ids["ielts-certificate-v2"] == "structured-hr/family-layout"
     parser_versions = {
         template["templateId"]: template["parserVersion"] for template in templates
     }
