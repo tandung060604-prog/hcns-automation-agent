@@ -112,6 +112,41 @@ hcns-agent-camunda-worker
 Launcher **không** tự khởi động Camunda hoặc worker; repository chưa có Docker
 Compose production để quản lý startup/health/shutdown của toàn stack.
 
+### Chạy local một lệnh (Linux)
+
+```bash
+python run_all_in_one.py --data-root "$HOME/private-data"
+```
+
+Khởi động API (kèm OCR), web dashboard, Camunda worker; `--with-camunda` tự bật
+Camunda engine qua Docker khi chưa chạy. Tắt toàn bộ bằng `Ctrl+C`.
+
+### Deploy công khai qua Cloudflare Tunnel (free, HTTPS)
+
+Không cần tài khoản, không phải mở port. Mỗi service nhận một URL
+`https://*.trycloudflare.com` ngẫu nhiên — mọi người ở đâu cũng truy cập được:
+
+```bash
+docker start camunda || docker run -d --name camunda -p 8080:8080 camunda/camunda-bpm-platform:run-latest
+python deploy_public.py
+```
+
+Đợi ~2 phút, mở link `VinHRIS Dashboard` in ra terminal. URL **đổi mỗi lần**
+chạy (bản chất quick tunnel); cần URL cố định thì dùng Cloudflare named tunnel
+với tài khoản + domain. Tắt bằng `Ctrl+C` (hoặc `pkill -f deploy_public.py`).
+
+#### Môi trường mới hỗ trợ deploy
+
+| Biến | Mặc định | Ý nghĩa |
+|---|---|---|
+| `VITE_API_BASE` | `http://127.0.0.1:8765` | API URL mà web gọi (frontend) |
+| `VITE_CAMUNDA_URL` | `http://127.0.0.1:8080` | Camunda base (frontend) |
+| `HCNS_API_ALLOWED_HOSTS` | *(rỗng)* | Allowlist Host header của API; hỗ trợ `*.trycloudflare.com`; mặc định chỉ loopback |
+| `HCNS_API_CORS_ORIGINS` | *(rỗng)* | Allowlist CORS origin; hỗ trợ wildcard `https://*.trycloudflare.com`; mặc định chỉ localhost |
+
+Các biến `HCNS_*` rỗng mặc định giữ nguyên hành vi an toàn cũ (loopback-only);
+`deploy_public.py` tự set chúng khi chạy.
+
 ### Demo nhanh MVP (7 tiêu chí)
 
 1. Mở `http://localhost:3000/workspace` — trang yêu cầu đăng nhập (auth gate).
