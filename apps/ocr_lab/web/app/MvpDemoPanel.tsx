@@ -1,7 +1,8 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 
-const API_BASE = "http://127.0.0.1:8765";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:8765";
+const CAMUNDA_URL = import.meta.env.VITE_CAMUNDA_URL ?? "http://127.0.0.1:8080";
 
 type Session = {
   token: string;
@@ -344,7 +345,7 @@ export default function MvpDemoPanel({
         camunda = false;
       }
       try {
-        const rest = await fetch(`http://127.0.0.1:8080/engine-rest/engine/`).catch(() => null);
+        const rest = await fetch(`${CAMUNDA_URL}/engine-rest/engine/`).catch(() => null);
         camunda = camunda || (rest?.ok ?? false);
       } catch {
         // ignore
@@ -396,7 +397,7 @@ export default function MvpDemoPanel({
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <StatusPill label="API demo (8765)" ok={serviceStatus.api} />
               <StatusPill label="Camunda (8080)" ok={serviceStatus.camunda} />
-              <a href="http://127.0.0.1:8080/camunda/app/tasklist/default/" target="_blank" rel="noreferrer">
+              <a href={`${CAMUNDA_URL}/camunda/app/tasklist/default/`} target="_blank" rel="noreferrer">
                 Mở Tasklist →
               </a>
             </div>

@@ -3,6 +3,23 @@
 from __future__ import annotations
 
 import ipaddress
+import os
+
+
+def _extra_allowed_hosts() -> set[str]:
+    raw = os.getenv("HCNS_API_ALLOWED_HOSTS", "").strip()
+    return {item.strip().lower() for item in raw.split(",") if item.strip()}
+
+
+def _host_allowed(host: str) -> bool:
+    for pattern in _extra_allowed_hosts():
+        if pattern.startswith("*."):
+            suffix = pattern[1:]
+            if host.endswith(suffix):
+                return True
+        elif host == pattern:
+            return True
+    return False
 
 
 def require_loopback_host(host: str) -> str:
@@ -19,7 +36,7 @@ def require_loopback_host(host: str) -> str:
 
 
 def require_local_host_header(host_header: str) -> str:
-    """Accept only loopback Host values, with an optional valid port."""
+    """Accept loopback Host values (plus an optional env allowlist)."""
 
     normalized = host_header.strip().lower()
     if not normalized:
@@ -43,5 +60,10 @@ def require_local_host_header(host_header: str) -> str:
             raise ValueError("OCR Lab API Host header port is invalid")
         if not 1 <= int(port[1:]) <= 65535:
             raise ValueError("OCR Lab API Host header port is invalid")
+
+    extra = _extra_allowed_hosts()
+    if extra and _host_allowed(host):
+        return normalized
+
     require_loopback_host(host)
     return normalized

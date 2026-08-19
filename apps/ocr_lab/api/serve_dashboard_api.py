@@ -1865,6 +1865,24 @@ class DashboardHandler(BaseHTTPRequestHandler):
             "http://localhost:4173",
             "http://127.0.0.1:4173",
         }
+        extra_origins = {
+            item.strip().rstrip("/")
+            for item in os.getenv("HCNS_API_CORS_ORIGINS", "").split(",")
+            if item.strip()
+        }
+        if origin:
+            if origin in allowed or origin in extra_origins:
+                allowed = {origin}
+            else:
+                for pattern in extra_origins:
+                    scheme, separator, rest = pattern.partition("://")
+                    if not separator or "*" not in rest:
+                        continue
+                    prefix, suffix = rest.split("*", 1)
+                    host = origin.partition("://")[2]
+                    if origin.startswith(scheme + "://" + prefix) and host.endswith(suffix):
+                        allowed = {origin}
+                        break
         if origin not in allowed:
             origin = "http://localhost:3000"
         self.send_header("Access-Control-Allow-Origin", origin)

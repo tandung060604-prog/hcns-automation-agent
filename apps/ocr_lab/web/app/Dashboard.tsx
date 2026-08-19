@@ -1027,7 +1027,7 @@ type Phase14Benchmark = {
   }>;
 };
 
-const API_BASE = "http://127.0.0.1:8765";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:8765";
 const TEMPLATE_RESULT_META_FIELDS = new Set([
   "documentId",
   "schemaVersion",
@@ -3027,7 +3027,9 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         taskId: null,
         taskName: null,
         incidentCount: 0,
-        tasklistUrl: payload.tasklistUrl ?? "http://localhost:8080/camunda/app/tasklist/default/",
+        tasklistUrl:
+          payload.tasklistUrl ??
+          `${import.meta.env.VITE_CAMUNDA_URL ?? "http://localhost:8080"}/camunda/app/tasklist/default/`,
       });
       setCamundaStatus("Đã tạo case. Mở Camunda Tasklist để xác nhận dữ liệu.");
       refreshCamundaQueue();
