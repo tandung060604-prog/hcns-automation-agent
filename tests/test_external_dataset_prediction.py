@@ -19,6 +19,7 @@ from apps.ocr_lab.api.external_dataset_prediction import (
     resolve_prediction_source,
 )
 from apps.ocr_lab.api.phase15_idp import classify_phase15_document, extract_phase15_document
+from hcns_agent.templates.structured_hr import extract_structured_hr_fields
 
 
 def _canonical(lines: list[str]) -> dict[str, Any]:
@@ -227,6 +228,43 @@ def test_data13_aggregate_excludes_non_ocr_scan_cases() -> None:
     assert report["policyExcludedDocumentCount"] == 1
     assert report["fieldCount"] == 0
     assert report["ocrPolicy"]["unsupportedNoOcrCount"] == 1
+
+
+def test_aggregate_report_applies_case_scoped_field_scope_without_schema_drift() -> None:
+    names = (
+        "full_name", "headline", "email", "phone_number", "address", "desired_role",
+        "years_experience", "experience", "skills", "education",
+    )
+    prediction = {
+        "datasetId": "synthetic-test",
+        "documents": [{
+            "caseId": "cv-001",
+            "category": "cv",
+            "predictedCategory": "cv",
+            "fields": {name: {"value": "same"} for name in names},
+            "processing": {"usesOcr": False, "recommendedAction": "USER_REVIEW"},
+        }],
+    }
+    ground_truth = {"cases": [{
+        "caseId": "cv-001",
+        "fields": [{"name": name, "value": "same"} for name in names],
+    }]}
+
+    report = build_aggregate_report(
+        prediction,
+        ground_truth,
+        field_scope={"cv-001": tuple(name for name in names if name != "address")},
+    )
+
+    assert report["fieldCount"] == 9
+    assert report["metrics"]["fieldExactMatchCount"] == 9
+    assert report["metrics"]["fieldAcceptedMatchCount"] == 9
+    assert report["schemaErrors"] == 0
+    assert report["scope"] == {
+        "fieldScopeApplied": True,
+        "activeFieldCount": 9,
+        "outOfScopeFieldCount": 1,
+    }
 
 
 def test_masked_ielts_identifier_is_treated_as_absent() -> None:
@@ -452,8 +490,133 @@ def test_family_mapping_keeps_multiline_cv_and_contract_evidence() -> None:
     assert contract_fields["contract_number"]["value"] == "HD-2026-001"
     assert contract_fields["contract_sign_date"]["normalizedValue"] == "01/02/2026"
     assert contract_fields["employee_name"]["value"] == "Trần Thị B"
+    assert contract_fields["professional_title"]["value"] == "Chuyên viên nhân sự"
+    assert contract_fields["role_title"]["value"] is None
     assert contract_fields["job_title"]["value"] == "Chuyên viên nhân sự"
     assert contract_fields["effective_date"]["normalizedValue"] == "05/02/2026"
+
+
+def test_contract_ocr_recovers_numbered_multiline_fields_without_auto_accepting() -> None:
+    contract = _ocr_canonical(
+        [
+            "HỢP ĐỒNG THỬ VIỆC",
+            "CÔNG TY KIỂM THỬ Độc lập Tự do Hạnh phúc",
+            "Đại diện cho: Công ty Kiểm thử",
+            "1. Thời hạn từ ngày 23/09/2099 đến hết",
+            "ngày 06/11/2099.",
+            "2. Địa điểm làm việc: Khu kiểm thử A và các địa",
+            "điểm phù hợp theo phân công.",
+            "3. Chức danh chuyên môn: Chuyên viên kiểm thử",
+            "CCCD sỗ: 000 000 001, cấp ngày 01/01/2099",
+            "1. Thời giờ làm việc: 44 giờltuần; ngày thường 08.00-17.00",
+            "Mức lương thử việc: 12.345.000 đồngtháng (tương đương 85% mức chính thức dự",
+            "kiến).",
+            "Phụ cẩp và hỗ ưrợ: Điện thoại 500.000 đồng[ Itháng; "
+            "ăn trưa 800.000 đồng tháng; thưởng hiệu",
+            "quả theo quy chế 'từng thời kỳ.",
+            "Hình thức trả lương: Chuyển khoản 01 lần vào ngày 10 của tháng kế tiếp",
+            "Thanh toán đầy đủ, đúng thời hạn tiền lương theo hợp đồng.",
+        ]
+    )
+
+    fields = _external_fields("contract", contract, {}, ocr=True)
+
+    assert fields["effective_date"]["normalizedValue"] == "23/09/2099"
+    assert fields["probation_end_date"]["normalizedValue"] == "06/11/2099"
+    assert fields["employee_id_number"]["normalizedValue"] == "000000001"
+    assert fields["professional_title"]["value"] == "Chuyên viên kiểm thử"
+    assert fields["role_title"]["value"] is None
+    assert fields["job_title"]["value"] == "Chuyên viên kiểm thử"
+    assert fields["workplace"]["value"] == (
+        "Khu kiểm thử A và các địa điểm phù hợp theo phân công"
+    )
+    assert fields["weekly_hours"]["normalizedValue"] == "44 giờ/tuần"
+    assert fields["employer_name"]["value"] == "Công ty Kiểm thử"
+    assert fields["probation_salary_monthly"]["normalizedValue"] == (
+        "12.345.000 đồng/tháng"
+    )
+    assert fields["allowances_summary"]["normalizedValue"] == (
+        "Điện thoại 500.000 đồng/tháng; ăn trưa 800.000 đồng/tháng; "
+        "thưởng hiệu quả theo quy chế từng thời kỳ."
+    )
+    assert fields["salary_payment_schedule"]["value"] == (
+        "Chuyển khoản 01 lần vào ngày 10 của tháng kế tiếp"
+    )
+    assert all(
+        fields[name]["status"] == "needs_review"
+        for name in (
+            "effective_date",
+            "probation_end_date",
+            "employee_id_number",
+            "professional_title",
+            "job_title",
+            "workplace",
+            "weekly_hours",
+        )
+    )
+
+
+def test_contract_ocr_repairs_repeated_name_and_employer_confusions() -> None:
+    contract = _ocr_canonical(
+        [
+            "HỢP ĐỒNG THỬ VIỆC",
+            "BÊN A NGƯỜI SỬ DỤNG LAO ĐỘNG",
+            "Đại diện: Nguyễn Quõc Mẫu",
+            "Đại diện cho: Công Ly TNHH Sản xuẩt Kiểm thử",
+            "BÊN B NGƯỜI LAO ĐỘNG",
+            "ÔngJBà: Nguyển Mẫu",
+            "Hai bên thỏa thuận ký kết Hợp đồng thử việc.",
+        ]
+    )
+
+    fields = extract_structured_hr_fields(contract, "contract", ocr=True)
+
+    assert fields["employer_name"]["value"] == "Công ty TNHH Sản xuất Kiểm thử"
+    assert fields["employer_representative"]["value"] == "Nguyễn Quốc Mẫu"
+    assert fields["employee_name"]["value"] == "Nguyễn Mẫu"
+
+
+def test_contract_ocr_boundary_recovery_keeps_ambiguous_job_labels_stable() -> None:
+    contract = _ocr_canonical(
+        [
+            "HỢP ĐỒNG THỬ VIỆC",
+            "BÊN A NGƯỜI SỬ DỤNG LAO ĐỘNG",
+            "Đại diện: PERSON SYNTHETIC",
+            "BÊN B NGƯỜI LAO ĐỘNG",
+            "ÔngJBà: EMPLOYEE SYNTHETIC",
+            "CCCD sõ: 000 000 001, cấp ngày 01/01/2099",
+            "4. Chức vụ/Vị trí: Nhân viên dữ liệu; quản lý trực tiếp: Trưởng nhóm.",
+            "3. Chức danh chuyên môn: Chuyên viên phân tích",
+            "Mức lương thử việc: 12. 345. 000 đồngtháng (tương đương 85% mức chính thức dự",
+        ]
+    )
+
+    fields = extract_structured_hr_fields(contract, "contract", ocr=True)
+
+    assert fields["employee_name"]["value"] == "EMPLOYEE SYNTHETIC"
+    assert fields["employee_id_number"]["normalizedValue"] == "000000001"
+    assert fields["professional_title"]["value"] == "Chuyên viên phân tích"
+    assert fields["role_title"]["value"] == "Nhân viên dữ liệu"
+    assert fields["job_title"]["value"] == "Nhân viên dữ liệu"
+    assert fields["probation_salary_monthly"]["normalizedValue"] == (
+        "12.345.000 đồng/tháng"
+    )
+
+
+def test_contract_job_title_policy_falls_back_to_role_when_professional_missing() -> None:
+    contract = _ocr_canonical(
+        [
+            "BÊN B NGƯỜI LAO ĐỘNG",
+            "ÔngJBà: EMPLOYEE SYNTHETIC",
+            "4. Chức vụ/Vị trí: Nhân viên dữ liệu",
+        ]
+    )
+
+    fields = extract_structured_hr_fields(contract, "contract", ocr=True)
+
+    assert fields["professional_title"]["value"] is None
+    assert fields["role_title"]["value"] == "Nhân viên dữ liệu"
+    assert fields["job_title"]["value"] == "Nhân viên dữ liệu"
 
 
 def test_cv_header_splits_glued_uppercase_name_from_title() -> None:
@@ -481,7 +644,7 @@ def test_cv_native_skills_stop_at_next_heading_and_remove_layout_labels() -> Non
 
     assert fields["skills"]["value"] == (
         "H\u1ea1ch to\u00e1n v\u00e0 l\u1eadp b\u00e1o c\u00e1o t\u00e0i ch\u00ednh "
-        "MISA, FAST Word, Excel"
+        "Ph\u1ea7n m\u1ec1m MISA, FAST Word, Excel"
     )
     assert "IELTS" not in fields["skills"]["value"]
 
@@ -565,7 +728,7 @@ def test_prediction_document_uses_matching_policy_pinned_by_report() -> None:
     assert detail["comparison"]["full_name"]["exact"] is True
 
 
-def test_cv_desired_role_normalizes_title_conjunction_without_touching_prose() -> None:
+def test_cv_desired_role_preserves_source_conjunction_without_touching_prose() -> None:
     canonical = _canonical(
         [
             "CURRICULUM VITAE",
@@ -579,7 +742,7 @@ def test_cv_desired_role_normalizes_title_conjunction_without_touching_prose() -
     extraction = extract_phase15_document(canonical, classification)
     fields = _external_fields("cv", canonical, extraction, ocr=False)
 
-    assert fields["desired_role"]["value"] == "Senior Data Analyst / Analytics Engineer"
+    assert fields["desired_role"]["value"] == "Senior Data Analyst và Analytics Engineer"
 
 
 def test_contract_party_normalization_does_not_cross_party_boundary() -> None:
@@ -743,10 +906,33 @@ def test_ielts_layout_parser_uses_form_geometry_and_keeps_manual_review() -> Non
     assert classification["documentFamily"] == "DEGREE_CERTIFICATE"
     assert fields["recipient_name"]["value"] == "NGUYEN THU PHUONG"
     assert fields["credential_id"]["value"] == "23VN500938NGUT028A"
-    assert fields["credential_type"]["value"] == "IELTS Academic"
+    assert fields["credential_type"]["value"] == "ACADEMIC"
     assert fields["overall_score"]["value"] == "6.0"
     assert fields["issue_date"]["normalizedValue"] == "2023-05-22"
     assert all(field["status"] == "needs_review" for field in fields.values())
+
+
+def test_ielts_form_number_prefers_trf_context_over_validation_text() -> None:
+    canonical = _ocr_canonical(
+        [
+            "IELTS",
+            "Test Report Form",
+            "ACADEMIC",
+            "Candidate Number",
+            "123456",
+            "Test Report",
+            "24VN123456NGUA001A",
+            "Form",
+            "Number",
+            "THEVALIDITYOFTHISIE1T5T",
+            "Cambridge Assessment",
+            "validty % Test Report Form can be verified online",
+        ]
+    )
+
+    fields = _external_fields("ielts", canonical, {}, ocr=True)
+
+    assert fields["credential_id"]["value"] == "24VN123456NGUA001A"
 
 
 def test_field_tolerates_missing_ocr_confidence() -> None:
@@ -841,6 +1027,39 @@ def test_contract_semantic_metric_is_symmetric_and_keeps_raw_strict_metric() -> 
     assert report["byCategory"]["contract"]["semanticExactRate"] == 1.0
 
 
+def test_contract_report_accepts_additive_title_fields_without_schema_error() -> None:
+    names = (
+        "contract_number", "contract_sign_date", "effective_date", "probation_end_date",
+        "employer_name", "employer_representative", "employee_name", "employee_id_number",
+        "job_title", "workplace", "weekly_hours", "probation_salary_monthly",
+        "allowances_summary", "salary_payment_schedule",
+    )
+    fields = {name: {"value": None} for name in names}
+    fields.update(
+        {
+            "professional_title": {"value": "Chuyên viên tổng hợp"},
+            "role_title": {"value": "Nhân viên tổng hợp"},
+        }
+    )
+
+    report = build_aggregate_report(
+        {
+            "datasetId": "synthetic-test",
+            "documents": [{
+                "caseId": "contract-004",
+                "category": "contract",
+                "predictedCategory": "contract",
+                "fields": fields,
+                "processing": {"usesOcr": False, "recommendedAction": "USER_REVIEW"},
+            }],
+        },
+        {"cases": [{"caseId": "contract-004", "fields": []}]},
+    )
+
+    assert report["schemaErrors"] == 0
+    assert report["fieldCount"] == len(names)
+
+
 def test_policy_v2_canonicalizes_case_layout_dates_duration_and_scores() -> None:
     cases = (
         ("cv", "full_name", "Vũ Tú Anh", "VŨ TÚ ANH", "CANONICAL_EXACT"),
@@ -848,10 +1067,11 @@ def test_policy_v2_canonicalizes_case_layout_dates_duration_and_scores() -> None
         ("cv", "years_experience", "2 năm", "2 năm kinh nghiệm", "CANONICAL_EXACT"),
         ("cv", "years_experience", "Hơn 6 năm", "hơn 6 năm", "CANONICAL_EXACT"),
         ("ielts", "issue_date", "06/06/2024", "2024-06-06", "CANONICAL_EXACT"),
+        ("contract", "contract_sign_date", "26 tháng 05 năm 2025", "26/05/2025", "CANONICAL_EXACT"),
         ("ielts", "overall_score", "6.5", "6.50", "CANONICAL_EXACT"),
     )
     for category, name, truth, guess, match_type in cases:
-        result = _field_match(category, name, truth, guess, policy_version="2.0.0")
+        result = _field_match(category, name, truth, guess, policy_version=MATCHING_POLICY_V2)
         assert result["exact"] is True
         assert result["match"] is True
         assert result["matchType"] == match_type
@@ -864,7 +1084,7 @@ def test_policy_v2_keeps_overextraction_partial_and_sensitive_values_strict() ->
         "desired_role",
         "Chuyên viên chính",
         "chuyên viên chính và đóng góp vào hiệu quả vận hành bền vững",
-        policy_version="2.0.0",
+        policy_version=MATCHING_POLICY_V2,
     )
     assert partial["exact"] is False
     assert partial["match"] is True
@@ -879,10 +1099,49 @@ def test_policy_v2_keeps_overextraction_partial_and_sensitive_values_strict() ->
         ("ielts", "issue_date", "06/06/2024", "06/07/2024"),
         ("cv", "years_experience", "Hơn 6 năm", "6 năm"),
     ):
-        result = _field_match(category, name, truth, guess, policy_version="2.0.0")
+        result = _field_match(category, name, truth, guess, policy_version=MATCHING_POLICY_V2)
         assert result["exact"] is False
         assert result["match"] is False
         assert result["matchType"] == "MISMATCH"
+
+
+def test_policy_r6_accepts_confirmed_semantic_and_layout_boundaries() -> None:
+    cases = (
+        (
+            "contract",
+            "employee_name",
+            "EMPLOYEE SYNTHETIC Giới tính: Nam",
+            "EMPLOYEE SYNTHETIC",
+        ),
+        (
+            "contract",
+            "workplace",
+            "2. Địa điểm làm việc: Số 1 Đường Kiểm thử",
+            "Số 1 Đường Kiểm thử",
+        ),
+        (
+            "contract",
+            "allowances_summary",
+            "Điện thoại 100.000 đồng/tháng; ăn trưa 200.000 đồng/tháng",
+            "Điện thoại 100.000 đồng/tháng; ăn trưa 200.000 đồng/tháng.",
+        ),
+        (
+            "cv",
+            "skills",
+            "• Ngôn ngữ: Python • Backend: FastAPI • Kỹ năng mềm: Giao tiếp và teamwork",
+            "Python FastAPI Giao tiếp và teamwork",
+        ),
+    )
+    for category, name, truth, guess in cases:
+        result = _field_match(
+            category,
+            name,
+            truth,
+            guess,
+            policy_version=MATCHING_POLICY_V2,
+        )
+        assert result["exact"] is True
+        assert result["matchType"] == "CANONICAL_EXACT"
 
 
 def test_policy_v2_report_separates_canonical_and_raw_exact_metrics() -> None:
@@ -917,9 +1176,9 @@ def test_policy_v2_report_separates_canonical_and_raw_exact_metrics() -> None:
             "caseId": "cv-002",
             "fields": [{"name": name, "value": value} for name, value in truth.items()],
         }]},
-        policy_version="2.0.0",
+        policy_version=MATCHING_POLICY_V2,
     )
-    assert report["matchingPolicy"]["version"] == "2.0.0"
+    assert report["matchingPolicy"]["version"] == MATCHING_POLICY_V2
     assert report["metrics"]["fieldExactMatchCount"] == 9
     assert report["metrics"]["fieldRawExactMatchCount"] == 7
     assert report["metrics"]["fieldAcceptedMatchCount"] == 10
