@@ -3579,7 +3579,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               <span className="document-index">03 / IELTS</span>
               <h3>Chứng chỉ IELTS</h3>
               <p>20 / 20 exact và accepted</p>
-              <small>4 tài liệu development</small>
+              <small>4 tài liệu DATA-31</small>
             </article>
           </div>
         </div>
@@ -3595,8 +3595,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           <a className="text-button" href="#explorer">Mở Evidence <span>→</span></a>
         </div>
         <dl className="quality-numbers">
-          <div><dt>Exact match</dt><dd>107<span>/112</span></dd></div>
-          <div><dt>Accepted</dt><dd>112<span>/112</span></dd></div>
+          <div><dt>Exact match</dt><dd>104<span>/109</span></dd></div>
+          <div><dt>Accepted</dt><dd>108<span>/109</span></dd></div>
           <div className="quality-gate"><dt>Promotion gate</dt><dd>HOLD</dd><small>Chưa phải bằng chứng production</small></div>
         </dl>
       </section>

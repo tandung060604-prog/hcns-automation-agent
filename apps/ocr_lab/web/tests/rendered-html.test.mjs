@@ -105,7 +105,7 @@ test("keeps the VinHRIS workspace information architecture and local boundaries 
   assert.match(dashboard, /Quy trình đi đúng nơi\./);
   assert.match(dashboard, /Intake/);
   assert.match(dashboard, /Human Review/);
-  assert.match(dashboard, /107<span>\/112<\/span>/);
+  assert.match(dashboard, /104<span>\/109<\/span>/);
   assert.match(dashboard, /Chưa phải bằng chứng production/);
   assert.match(dashboard, /http:\/\/localhost:8080\/camunda\/app\/tasklist\/default\//);
   assert.match(dashboard, /Nội dung file không đi vào process variables/);
