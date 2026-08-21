@@ -159,23 +159,20 @@ function notificationKindLabel(kind: string | undefined): string {
   return NOTIFICATION_KIND_LABELS[kind] ?? "Thông báo";
 }
 
-function notificationToastStyle(kind: string | undefined): {
-  border: string;
-  background: string;
-  color?: string;
-} {
-  switch (kind) {
-    case "REJECTED":
-      return { border: "1px solid #ef9a9a", background: "#ffebee", color: "#b71c1c" };
-    case "CONFIRMED":
-      return { border: "1px solid #a5d6a7", background: "#e8f5e9", color: "#1b5e20" };
-    case "REQUEST_REUPLOAD":
-      return { border: "1px solid #ffcc80", background: "#fff8e1", color: "#e65100" };
-    case "SUBMITTED":
-      return { border: "1px solid #90caf9", background: "#e3f2fd", color: "#0d47a1" };
-    default:
-      return { border: "1px solid #1565c0", background: "#eef6ff", color: "#1565c0" };
-  }
+function kindTone(kind?: string): string {
+  const key = (kind || "info").toLowerCase().replace(/_/g, "-");
+  if (key.includes("reject") || key.includes("unresolved")) return "danger";
+  if (key.includes("confirm")) return "ok";
+  if (key.includes("reupload") || key.includes("request")) return "warn";
+  if (key.includes("submit")) return "info";
+  return "info";
+}
+
+function decisionButtonClass(decision: string): string {
+  if (decision === "CONFIRMED") return "mvp-btn mvp-btn-ok";
+  if (decision === "REQUEST_REUPLOAD") return "mvp-btn mvp-btn-warn";
+  if (decision === "REJECTED") return "mvp-btn mvp-btn-danger";
+  return "mvp-btn";
 }
 
 const ARCHIVE_STATUS_LABELS: Record<string, string> = {
@@ -250,7 +247,14 @@ const FIELD_LABELS: Record<string, string> = {
   weekly_hours: "Giờ/tuần",
   probation_salary_monthly: "Lương thử việc",
   allowances_summary: "Phụ cấp",
-  salary_payment_schedule: "Kỳ trả lương",
+  // CCCD / identity card
+  idNumber: "Số CCCD",
+  fullName: "Họ và tên",
+  dateOfBirth: "Ngày sinh",
+  sex: "Giới tính",
+  nationality: "Quốc tịch",
+  placeOfOrigin: "Quê quán",
+  placeOfResidence: "Nơi thường trú",
 };
 
 const DEMO_TEMPLATE_DOWNLOADS = [
@@ -415,6 +419,13 @@ export default function MvpDemoPanel({
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailSubmission, setDetailSubmission] = useState<SubmissionDetail | null>(null);
+  const [originalPreview, setOriginalPreview] = useState<{
+    url: string;
+    contentType: string;
+    label: string;
+  } | null>(null);
+  const [originalLoading, setOriginalLoading] = useState(false);
+  const [originalError, setOriginalError] = useState("");
   const [archive, setArchive] = useState<ArchiveItem[]>([]);
   const [archiveStatus, setArchiveStatus] = useState("");
   const [historyDetailId, setHistoryDetailId] = useState<string | null>(null);
@@ -566,6 +577,7 @@ export default function MvpDemoPanel({
         documentTypeLabel?: string;
         processInstanceId?: string;
         hrNotified?: boolean;
+        hrQueueReady?: boolean;
         error?: string;
       };
       if (!response.ok) {
@@ -575,7 +587,9 @@ export default function MvpDemoPanel({
       setActiveApplicationId(payload.applicationId ?? "");
       setActiveDocumentId(payload.documentId ?? detection.documentId);
       setSubmitResult(
-        `${payload.documentTypeLabel ?? detection.documentTypeLabel} đã nộp sang HR realtime.`,
+        payload.hrQueueReady
+          ? `${payload.documentTypeLabel ?? detection.documentTypeLabel} đã vào hàng đợi HR.`
+          : `${payload.documentTypeLabel ?? detection.documentTypeLabel} đã nộp. HR có thể duyệt ngay (đồng bộ workflow nền).`,
       );
       setTab("notify");
       void refreshQueue();
@@ -687,11 +701,6 @@ export default function MvpDemoPanel({
   };
 
   const reviewTask = async (task: QueueTask, decision: string) => {
-    if (task.pending || task.taskDefinitionKey === "PENDING") {
-      setQueueStatus("Đơn đang đồng bộ workflow. Hệ thống sẽ tự cập nhật sau vài giây…");
-      await refreshQueue();
-      return;
-    }
     setQueueStatus("Đang gửi quyết định...");
     try {
       const response = await fetch(`${API_BASE}/api/camunda/review`, {
@@ -720,7 +729,7 @@ export default function MvpDemoPanel({
       setQueueStatus(statusMsg);
       setDetailTaskId(null);
       setDetailSubmission(null);
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await new Promise((resolve) => setTimeout(resolve, 800));
       await refreshQueue({ silent: false });
       await refreshNotifications();
       await refreshArchive();
@@ -734,11 +743,17 @@ export default function MvpDemoPanel({
     if (detailTaskId === task.taskId) {
       setDetailTaskId(null);
       setDetailSubmission(null);
+      if (originalPreview?.url) URL.revokeObjectURL(originalPreview.url);
+      setOriginalPreview(null);
+      setOriginalError("");
       return;
     }
     setDetailTaskId(task.taskId);
     setDetailLoading(true);
     setDetailSubmission(null);
+    if (originalPreview?.url) URL.revokeObjectURL(originalPreview.url);
+    setOriginalPreview(null);
+    setOriginalError("");
     try {
       const params = new URLSearchParams();
       if (task.applicationId) params.set("applicationId", task.applicationId);
@@ -774,6 +789,84 @@ export default function MvpDemoPanel({
       setDetailTaskId(null);
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const closeOriginalPreview = () => {
+    if (originalPreview?.url) URL.revokeObjectURL(originalPreview.url);
+    setOriginalPreview(null);
+    setOriginalError("");
+  };
+
+  const viewOriginalDocument = async (task: QueueTask) => {
+    const documentId = detailSubmission?.documentId || task.documentId;
+    const applicationId = detailSubmission?.applicationId || task.applicationId || "";
+    if (!documentId && !applicationId) {
+      setOriginalError("Thiếu mã tài liệu để mở file gốc");
+      return;
+    }
+    setOriginalLoading(true);
+    setOriginalError("");
+    try {
+      const params = new URLSearchParams();
+      if (documentId) params.set("id", documentId);
+      if (applicationId) params.set("applicationId", applicationId);
+      const auth = { Authorization: `Bearer ${session?.token ?? ""}` };
+      const labelGuess =
+        detailSubmission?.sourceFile ||
+        task.sourceFile ||
+        `tai-lieu-${(documentId || applicationId).slice(0, 12)}`;
+      const ext = (/\.([a-z0-9]+)$/i.exec(labelGuess)?.[1] || "").toLowerCase();
+      const isDocx = ext === "docx";
+
+      // DOCX: skip preview (browser cannot render); go straight to source download blob.
+      let response = isDocx
+        ? await fetch(`${API_BASE}/api/documents/source?${params.toString()}`, {
+            headers: auth,
+          })
+        : await fetch(`${API_BASE}/api/documents/preview?${params.toString()}`, {
+            headers: auth,
+          });
+      if (!response.ok && !isDocx) {
+        response = await fetch(`${API_BASE}/api/documents/source?${params.toString()}`, {
+          headers: auth,
+        });
+      }
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        setOriginalError(payload.error ?? "Không mở được tài liệu gốc");
+        return;
+      }
+      const headerType = (response.headers.get("Content-Type") || "")
+        .split(";")[0]
+        .trim()
+        .toLowerCase();
+      const blob = await response.blob();
+      let contentType = (blob.type || headerType || "").toLowerCase();
+      if (!contentType || contentType === "application/octet-stream") {
+        if (ext === "pdf") contentType = "application/pdf";
+        else if (ext === "png") contentType = "image/png";
+        else if (ext === "jpg" || ext === "jpeg") contentType = "image/jpeg";
+        else if (ext === "docx") {
+          contentType =
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        }
+      }
+      if (originalPreview?.url) URL.revokeObjectURL(originalPreview.url);
+      const url = URL.createObjectURL(
+        contentType && contentType !== blob.type
+          ? new Blob([blob], { type: contentType })
+          : blob,
+      );
+      setOriginalPreview({
+        url,
+        contentType: contentType || "application/octet-stream",
+        label: labelGuess,
+      });
+    } catch {
+      setOriginalError("Lỗi kết nối khi tải tài liệu gốc");
+    } finally {
+      setOriginalLoading(false);
     }
   };
 
@@ -971,71 +1064,68 @@ export default function MvpDemoPanel({
   ] as [string, string][];
 
   return (
-    <section className="section role-review-section" id="mvp-demo" style={{ marginTop: 0 }}>
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">MV</p>
-          <h2>MVP Demo: Nộp đơn và HR duyệt trực tiếp</h2>
-        </div>
-        <p>
-          Luồng làm việc đầy đủ trên máy nội bộ: nộp đơn → trích xuất dữ liệu → human review → duyệt → tải kết quả.
-        </p>
-      </div>
-
-      <div
-        className="role-review-card"
-        style={{ padding: "16px 20px", marginBottom: 16 }}
-      >
-        <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
-          <div style={{ display: "grid", gap: 4 }}>
-            <strong>Trạng thái hệ thống</strong>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <StatusPill label="API demo (8765)" ok={serviceStatus.api} />
-              <StatusPill label="Workflow nội bộ" ok={serviceStatus.camunda} />
-            </div>
+    <section className="section mvp-demo-panel" id="mvp-demo">
+      <div className="mvp-shell">
+        <header className="mvp-hero">
+          <div className="mvp-hero-copy">
+            <p className="mvp-kicker">VinHRIS · Workspace</p>
+            <h2>Hồ sơ vào nhẹ. Duyệt rõ ràng.</h2>
+            <p className="mvp-hero-lead">
+              Quét file, chỉnh vài trường nếu cần, gửi HR và xem lại bản gốc trước khi quyết định.
+            </p>
           </div>
-          <div style={{ flex: 1 }} />
-          <button type="button" onClick={() => void logout()} disabled={!session}>
-            {session ? `Đăng xuất (${session.username})` : "Đăng xuất"}
-          </button>
-        </div>
-      </div>
+          <div className="mvp-hero-meta" aria-label="Trạng thái dịch vụ">
+            <StatusPill label="API" ok={serviceStatus.api} />
+            <StatusPill label="Workflow" ok={serviceStatus.camunda} />
+            {session ? (
+              <button className="mvp-btn mvp-btn-ghost" type="button" onClick={() => void logout()}>
+                Đăng xuất
+              </button>
+            ) : null}
+          </div>
+        </header>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-          gap: 10,
-          marginBottom: 16,
-        }}
-      >
-        <StepCard n={1} title="Đăng nhập" text={session ? `${session.displayName} (${session.roleLabel})` : "admin / hr / user"} />
-        <StepCard n={2} title="Nộp đơn" text="User upload DOCX → extract thông tin → nộp cho HR" />
-        <StepCard n={3} title="Trích xuất" text="Hệ thống đọc tài liệu và tạo hàng đợi HR" />
-        <StepCard n={4} title="Xác nhận" text="HR duyệt, yêu cầu tải lại hoặc từ chối ngay tại đây" />
-        <StepCard n={5} title="Kết quả" text="Notification + tải DOCX/PDF" />
-      </div>
+        <ol className="mvp-flow" aria-label="Các bước xử lý">
+          <li>
+            <span>01</span>
+            <strong>Đăng nhập</strong>
+            <small>{session ? session.displayName : "admin · hr · user"}</small>
+          </li>
+          <li>
+            <span>02</span>
+            <strong>Quét & trích xuất</strong>
+            <small>DOCX native · PDF/ảnh OCR</small>
+          </li>
+          <li>
+            <span>03</span>
+            <strong>Nộp HR</strong>
+            <small>Hàng đợi kiểm tra</small>
+          </li>
+          <li>
+            <span>04</span>
+            <strong>Duyệt</strong>
+            <small>Đối chiếu bản gốc</small>
+          </li>
+        </ol>
 
       {authBootstrapping ? (
-        <div className="role-review-card" style={{ maxWidth: 480, padding: "16px 20px" }}>
-          <p style={{ margin: 0 }}>Đang khôi phục phiên đăng nhập…</p>
+        <div className="mvp-surface mvp-login">
+          <p className="mvp-muted">Đang khôi phục phiên đăng nhập…</p>
         </div>
       ) : !session ? (
-        <div className="role-review-card" style={{ maxWidth: 480 }}>
-          <header>
-            <span>ACCOUNT</span>
-            <div>
-              <h3>Đăng nhập demo</h3>
-              <p>admin/admin123 · hr/hr123 · user/user123</p>
-            </div>
+        <div className="mvp-surface mvp-login">
+          <header className="mvp-surface-head">
+            <p className="mvp-kicker">Tài khoản demo</p>
+            <h3>Đăng nhập workspace</h3>
+            <p className="mvp-muted">admin/admin123 · hr/hr123 · user/user123</p>
           </header>
-          <div style={{ display: "grid", gap: 12, padding: "16px 20px" }}>
+          <div className="mvp-login-form">
             <label>
               Username
               <input
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
-                style={inputStyle}
+                autoComplete="username"
               />
             </label>
             <label>
@@ -1044,60 +1134,46 @@ export default function MvpDemoPanel({
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                style={inputStyle}
+                autoComplete="current-password"
               />
             </label>
-            {loginError ? <small style={{ color: "#c62828" }}>{loginError}</small> : null}
-            <button className="primary-button" type="button" onClick={() => void login()} disabled={busy}>
-              {busy ? "Đang đăng nhập…" : "Đăng nhập"}
+            {loginError ? <p className="mvp-error">{loginError}</p> : null}
+            <button className="mvp-btn mvp-btn-primary" type="button" onClick={() => void login()} disabled={busy}>
+              {busy ? "Đang đăng nhập…" : "Vào workspace"}
             </button>
           </div>
         </div>
       ) : (
-        <div style={{ display: "grid", gap: 16 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              flexWrap: "wrap",
-              background: "#fff",
-              border: "1px solid var(--border, #dfe3e8)",
-              borderRadius: 12,
-              padding: "12px 16px",
-            }}
-          >
-            <strong>{session.displayName}</strong>
-            <span className="role-badge">{ROLE_LABELS[session.role] ?? session.role}</span>
-            <span style={{ color: "var(--muted, #6b7280)" }}>@{session.username}</span>
-            <span style={{ flex: 1 }} />
-            {activeDocumentId ? (
-              <>
-                <button type="button" onClick={() => void exportDocument(activeDocumentId, "docx")}>
-                  DOCX
-                </button>
-                <button type="button" onClick={() => void exportDocument(activeDocumentId, "pdf")}>
-                  PDF
-                </button>
-              </>
-            ) : null}
-            <button type="button" onClick={() => void logout()}>
-              Đăng xuất
-            </button>
+        <div className="mvp-workspace">
+          <div className="mvp-session">
+            <div className="mvp-session-identity">
+              <strong>{session.displayName}</strong>
+              <span className="mvp-role">{ROLE_LABELS[session.role] ?? session.role}</span>
+              <span className="mvp-muted">@{session.username}</span>
+            </div>
+            <div className="mvp-session-actions">
+              {activeDocumentId ? (
+                <>
+                  <button className="mvp-btn mvp-btn-ghost" type="button" onClick={() => void exportDocument(activeDocumentId, "docx")}>
+                    Tải DOCX
+                  </button>
+                  <button className="mvp-btn mvp-btn-ghost" type="button" onClick={() => void exportDocument(activeDocumentId, "pdf")}>
+                    Tải PDF
+                  </button>
+                </>
+              ) : null}
+              <button className="mvp-btn mvp-btn-ghost" type="button" onClick={() => void logout()}>
+                Đăng xuất
+              </button>
+            </div>
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-            }}
-          >
+          <nav className="mvp-tabs" aria-label="Khu vực làm việc">
             {([...tabs] as const).map(([key, label]) => (
               <button
                 key={key}
                 type="button"
-                className={tab === key ? "primary-button" : ""}
+                className={tab === key ? "mvp-tab is-active" : "mvp-tab"}
                 onClick={() => {
                   setTab(
                     key as "submit" | "queue" | "notify" | "history" | "archive" | "admin",
@@ -1111,52 +1187,37 @@ export default function MvpDemoPanel({
                 {label}
               </button>
             ))}
-          </div>
+          </nav>
 
-          {notice ? (
-            <p style={{ color: "#1565c0", margin: 0 }}>{notice}</p>
-          ) : null}
+          {notice ? <p className="mvp-notice">{notice}</p> : null}
           {toast ? (
-            <div
-              style={{
-                ...notificationToastStyle(toast.kind),
-                borderRadius: 10,
-                padding: "10px 12px",
-                display: "flex",
-                gap: 8,
-                alignItems: "center",
-              }}
-            >
+            <div className={`mvp-toast mvp-toast-${kindTone(toast.kind)}`}>
               <strong>{notificationKindLabel(toast.kind)}</strong>
               <span>{toast.message}</span>
-              <span style={{ flex: 1 }} />
-              <button type="button" onClick={() => setToast(null)}>
+              <button className="mvp-btn mvp-btn-ghost" type="button" onClick={() => setToast(null)}>
                 Đóng
               </button>
             </div>
           ) : null}
-          <small style={{ color: live ? "#2e7d32" : "var(--muted, #6b7280)" }}>
-            {live ? "Realtime đang bật (cập nhật ~3 giây)" : "Đang kết nối realtime…"}
-          </small>
+          <p className={live ? "mvp-live is-on" : "mvp-live"}>
+            {live ? "Realtime đang bật" : "Đang kết nối realtime…"}
+          </p>
 
           {tab === "submit" ? (
-            <div className="role-review-card">
-              <header>
-                <span>SCAN</span>
-                <div>
-                  <h3>Nộp đơn từ tài liệu đã quét</h3>
-                  <p>
-                    Upload DOCX/PDF/ảnh → tự nhận diện Leave / OT / CV / Hợp đồng / IELTS → điền
-                    form → nộp HR. IELTS dùng PDF hoặc ảnh scan.
-                  </p>
-                </div>
+            <div className="mvp-surface role-review-card">
+              <header className="mvp-surface-head">
+                <p className="mvp-kicker">Quét tài liệu</p>
+                <h3>Nộp đơn từ file đã có</h3>
+                <p className="mvp-muted">
+                  Upload DOCX/PDF/ảnh → nhận diện Leave / OT / CV / Hợp đồng / IELTS / CCCD → chỉnh form → nộp HR.
+                </p>
               </header>
-              <div style={{ display: "grid", gap: 14, padding: "16px 20px" }}>
-                <div style={{ display: "grid", gap: 8 }}>
-                  <small style={{ color: "var(--muted, #6b7280)" }}>
+              <div className="mvp-pad mvp-stack">
+                <div className="mvp-stack-tight">
+                  <small className="mvp-meta-label">
                     Tải mẫu blank (CV / Contract / Leave / OT) — điền rồi upload lại để quét:
                   </small>
-                  <div className="role-actions" style={{ flexWrap: "wrap" }}>
+                  <div className="role-actions mvp-row">
                     {DEMO_TEMPLATE_DOWNLOADS.map((item) => (
                       <a
                         key={item.href}
@@ -1169,14 +1230,7 @@ export default function MvpDemoPanel({
                     ))}
                   </div>
                 </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gap: 12,
-                    gridTemplateColumns: "minmax(220px, 1fr) auto",
-                    alignItems: "end",
-                  }}
-                >
+                <div className="mvp-upload-row">
                   <label>
                     Tài liệu đơn
                     <input
@@ -1192,7 +1246,7 @@ export default function MvpDemoPanel({
                     />
                   </label>
                   <button
-                    className="primary-button"
+                    className="mvp-btn mvp-btn-primary"
                     type="button"
                     onClick={() => void scanUpload()}
                     disabled={!uploadFile || detecting || busy}
@@ -1200,31 +1254,18 @@ export default function MvpDemoPanel({
                     {detecting ? "Đang quét…" : "Quét & điền form"}
                   </button>
                 </div>
-                {detectStatus ? <p style={{ margin: 0 }}>{detectStatus}</p> : null}
+                {detectStatus ? <p className="mvp-detect-status">{detectStatus}</p> : null}
                 {detection ? (
-                  <div style={{ display: "grid", gap: 12 }}>
-                    <div
-                      style={{
-                        border: "1px solid #dfe3e8",
-                        borderRadius: 12,
-                        padding: 12,
-                        background: "#f8fbff",
-                      }}
-                    >
+                  <div className="mvp-detect-result">
+                    <div className="mvp-detect-summary">
                       <strong>{detection.documentTypeLabel}</strong>
-                      <p style={{ margin: "4px 0 0", color: "var(--muted, #6b7280)" }}>
+                      <p>
                         Template {detection.templateId} · thiếu{" "}
                         {detection.quality.missingFields.length} trường · lỗi kiểm tra{" "}
                         {detection.quality.validationErrors.length}
                       </p>
                     </div>
-                    <div
-                      style={{
-                        display: "grid",
-                        gap: 12,
-                        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                      }}
-                    >
+                    <div className="mvp-field-grid">
                       {editableFieldEntries(detection.data).map(([field, value]) => (
                         <label key={field}>
                           {FIELD_LABELS[field] ?? field}
@@ -1239,12 +1280,12 @@ export default function MvpDemoPanel({
                       ))}
                     </div>
                     {!detection.camundaEligible ? (
-                      <p style={{ color: "#c62828", margin: 0 }}>
+                      <p className="mvp-error">
                         Loại tài liệu này đã quét được nhưng chưa bật luồng nộp HR.
                       </p>
                     ) : null}
                     <button
-                      className="primary-button"
+                      className="mvp-btn mvp-btn-primary"
                       type="button"
                       onClick={() => void submitDetectedDocument()}
                       disabled={busy || !detection.camundaEligible}
@@ -1253,7 +1294,7 @@ export default function MvpDemoPanel({
                     </button>
                   </div>
                 ) : null}
-                {submitResult ? <p style={{ margin: 0 }}>{submitResult}</p> : null}
+                {submitResult ? <p className="mvp-detect-status">{submitResult}</p> : null}
                 {activeApplicationId ? (
                   <div>
                     <strong>Timeline {activeApplicationId.slice(0, 12)}…</strong>
@@ -1263,7 +1304,7 @@ export default function MvpDemoPanel({
                           <div key={`${event.at}-${index}`} style={{ display: "flex", gap: 8 }}>
                             <code>{nowLabel(event.at)}</code>
                             <strong>{event.event}</strong>
-                            <span style={{ color: "var(--muted, #6b7280)" }}>{event.detail}</span>
+                            <span className="mvp-meta-label">{event.detail}</span>
                           </div>
                         ))
                       ) : (
@@ -1277,7 +1318,7 @@ export default function MvpDemoPanel({
           ) : null}
 
           {tab === "queue" ? (
-            <div style={{ display: "grid", gap: 12 }}>
+            <div className="mvp-stack">
               {queueStatus ? <p className="camunda-queue-status" style={{ margin: 0, padding: 0 }}>{queueStatus}</p> : null}
               {queue.length === 0 ? (
                 <p className="role-empty">Chưa có task ở bước này.</p>
@@ -1301,31 +1342,16 @@ export default function MvpDemoPanel({
                         </p>
                       </div>
                     </header>
-                    <div style={{ padding: "0 20px 20px", display: "grid", gap: 12 }}>
+                    <div className="mvp-pad-sm">
                       {Object.keys(task.extractedFields ?? {}).length ? (
-                        <div
-                          style={{
-                            border: "1px solid #dfe3e8",
-                            borderRadius: 12,
-                            padding: 12,
-                            background: "#f8fbff",
-                            display: "grid",
-                            gap: 8,
-                          }}
-                        >
+                        <div className="mvp-soft-box mvp-stack-tight">
                           <strong>Thông tin extract từ tài liệu</strong>
-                          <div
-                            style={{
-                              display: "grid",
-                              gap: 6,
-                              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                            }}
-                          >
+                          <div className="mvp-field-grid">
                             {editableFieldEntries(task.extractedFields ?? {})
                               .slice(0, 6)
                               .map(([field, value]) => (
-                                <div key={field} style={{ display: "grid", gap: 2 }}>
-                                  <small style={{ color: "var(--muted, #6b7280)" }}>
+                                <div key={field}>
+                                  <small className="mvp-meta-label">
                                     {FIELD_LABELS[field] ?? field}
                                   </small>
                                   <span>{fieldString(value) || "—"}</span>
@@ -1333,19 +1359,22 @@ export default function MvpDemoPanel({
                               ))}
                           </div>
                           {editableFieldEntries(task.extractedFields ?? {}).length > 6 ? (
-                            <small style={{ color: "var(--muted, #6b7280)" }}>
+                            <small className="mvp-meta-label">
                               +{editableFieldEntries(task.extractedFields ?? {}).length - 6} trường
                               khác — mở Xem chi tiết
                             </small>
                           ) : null}
                         </div>
                       ) : (
-                        <p style={{ margin: 0, color: "var(--muted, #6b7280)" }}>
+                        <p className="mvp-muted" style={{ margin: 0 }}>
                           Chưa có thông tin extract kèm theo đơn này.
                         </p>
                       )}
-                      {isHr && !task.pending && task.taskDefinitionKey !== "PENDING" ? (
-                        <div className="role-actions">
+                      {isHr &&
+                      (task.actionable === true ||
+                        task.taskDefinitionKey === "HRReview" ||
+                        task.taskDefinitionKey === "PENDING") ? (
+                        <div className="role-actions mvp-row">
                           {(
                             [
                               ["CONFIRMED", "Chấp nhận"],
@@ -1355,6 +1384,7 @@ export default function MvpDemoPanel({
                           ).map(([decision, label]) => (
                             <button
                               type="button"
+                              className={decisionButtonClass(decision)}
                               key={decision}
                               disabled={busy}
                               onClick={() =>
@@ -1366,18 +1396,24 @@ export default function MvpDemoPanel({
                           ))}
                           <button
                             type="button"
+                            className="mvp-btn mvp-btn-info"
                             disabled={busy || detailLoading}
                             onClick={() => void openSubmissionDetail(task)}
                           >
                             {detailTaskId === task.taskId ? "Đóng chi tiết" : "Xem chi tiết"}
                           </button>
+                          {task.pending || task.taskDefinitionKey === "PENDING" ? (
+                            <small className="mvp-meta-label">
+                              Duyệt local ngay (IELTS/scan chưa cần chờ Camunda)
+                            </small>
+                          ) : null}
                         </div>
                       ) : (
-                        <div style={{ display: "grid", gap: 8 }}>
-                          <p style={{ margin: 0, color: "var(--muted, #6b7280)" }}>
+                        <div className="mvp-stack-tight">
+                          <p className="mvp-muted" style={{ margin: 0 }}>
                             <strong>{task.statusLabel ?? "Đang xử lý"}</strong>
                             {task.pending ? (
-                              <span> · Hệ thống đang đồng bộ task HR, tự refresh ~3 giây</span>
+                              <span> · Đang đồng bộ workflow nền</span>
                             ) : null}
                             {task.applicationId ? (
                               <span>
@@ -1386,35 +1422,26 @@ export default function MvpDemoPanel({
                               </span>
                             ) : null}
                           </p>
-                          {task.inspectable || Object.keys(task.extractedFields ?? {}).length ? (
+                          <div className="role-actions mvp-row">
                             <button
                               type="button"
-                              disabled={detailLoading}
+                              className="mvp-btn mvp-btn-info"
+                              disabled={busy || detailLoading}
                               onClick={() => void openSubmissionDetail(task)}
-                              style={{ justifySelf: "start" }}
                             >
                               {detailTaskId === task.taskId ? "Đóng chi tiết" : "Xem chi tiết"}
                             </button>
-                          ) : null}
+                          </div>
                         </div>
                       )}
                       {detailTaskId === task.taskId ? (
-                        <div
-                          style={{
-                            border: "1px solid #90caf9",
-                            borderRadius: 12,
-                            padding: 14,
-                            background: "#fff",
-                            display: "grid",
-                            gap: 10,
-                          }}
-                        >
+                        <div className="mvp-soft-box-info mvp-stack-tight">
                           <strong>Chi tiết thông tin user đã nộp</strong>
                           {detailLoading ? (
-                            <p style={{ margin: 0 }}>Đang tải chi tiết…</p>
+                            <p className="mvp-muted" style={{ margin: 0 }}>Đang tải chi tiết…</p>
                           ) : detailSubmission ? (
                             <>
-                              <p style={{ margin: 0, color: "var(--muted, #6b7280)" }}>
+                              <p className="mvp-muted" style={{ margin: 0 }}>
                                 {detailSubmission.documentTypeLabel ??
                                   task.documentTypeLabel ??
                                   task.documentType}
@@ -1428,18 +1455,70 @@ export default function MvpDemoPanel({
                                   ? ` · ${nowLabel(detailSubmission.submittedAt)}`
                                   : ""}
                               </p>
+                              <div className="role-actions mvp-row">
+                                <button
+                                  type="button"
+                                  disabled={originalLoading || busy}
+                                  onClick={() => void viewOriginalDocument(task)}
+                                >
+                                  {originalLoading
+                                    ? "Đang mở file gốc…"
+                                    : originalPreview
+                                      ? "Tải lại tài liệu gốc"
+                                      : "Xem tài liệu gốc"}
+                                </button>
+                                {originalPreview ? (
+                                  <button type="button" onClick={closeOriginalPreview}>
+                                    Đóng bản gốc
+                                  </button>
+                                ) : null}
+                              </div>
+                              {originalError ? (
+                                <p className="mvp-error">{originalError}</p>
+                              ) : null}
+                              {originalPreview ? (
+                                <div className="mvp-preview-frame">
+                                  <small className="mvp-meta-label">
+                                    Bản gốc chưa qua OCR · {originalPreview.label} ·{" "}
+                                    {originalPreview.contentType}
+                                  </small>
+                                  <div className="mvp-row">
+                                    {(originalPreview.contentType.startsWith("image/") ||
+                                      originalPreview.contentType === "application/pdf") && (
+                                      <a href={originalPreview.url} target="_blank" rel="noreferrer">
+                                        Mở tab mới
+                                      </a>
+                                    )}
+                                    <a href={originalPreview.url} download={originalPreview.label}>
+                                      Tải file gốc
+                                    </a>
+                                  </div>
+                                  {originalPreview.contentType.startsWith("image/") ? (
+                                    <img
+                                      src={originalPreview.url}
+                                      alt={`Tài liệu gốc ${originalPreview.label}`}
+                                    />
+                                  ) : originalPreview.contentType === "application/pdf" ? (
+                                    <iframe
+                                      title={`PDF gốc ${originalPreview.label}`}
+                                      src={originalPreview.url}
+                                    />
+                                  ) : (
+                                    <p className="mvp-muted" style={{ margin: 0 }}>
+                                      File DOCX/Office không xem inline — dùng nút tải ở trên (Word
+                                      trên máy).
+                                    </p>
+                                  )}
+                                </div>
+                              ) : null}
                               <div
-                                style={{
-                                  display: "grid",
-                                  gap: 10,
-                                  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-                                }}
+                                className="mvp-field-grid"
                               >
                                 {editableFieldEntries(detailSubmission.extractedFields).length ? (
                                   editableFieldEntries(detailSubmission.extractedFields).map(
                                     ([field, value]) => (
-                                      <div key={field} style={{ display: "grid", gap: 2 }}>
-                                        <small style={{ color: "var(--muted, #6b7280)" }}>
+                                      <div key={field}>
+                                        <small className="mvp-meta-label">
                                           {FIELD_LABELS[field] ?? field}
                                         </small>
                                         <strong>{fieldString(value) || "—"}</strong>
@@ -1466,48 +1545,35 @@ export default function MvpDemoPanel({
           {tab === "notify" ? (
             <div className="role-review-card">
               <header>
-                <span>NOTIFICATION</span>
+                <span>Thông báo</span>
                 <div>
-                  <h3>Thông báo cho người nộp</h3>
-                  <p>Nhận cảnh báo khi hồ sơ được xử lý (ví dụ: “Đã duyệt”).</p>
+                  <h3>Cập nhật cho người nộp</h3>
+                  <p>Nhận tin khi hồ sơ được duyệt, yêu cầu nộp lại hoặc từ chối.</p>
                 </div>
               </header>
-              <div style={{ padding: "0 20px 20px", display: "grid", gap: 8 }}>
+              <div className="mvp-pad-sm">
                 {notifications.length ? (
                   notifications.map((notification) => (
                     <div
                       key={notification.id}
-                      style={{
-                        display: "grid",
-                        gap: 4,
-                        opacity: notification.read ? 0.6 : 1,
-                      }}
+                      className={`mvp-notify-item mvp-tone-${kindTone(notification.kind)}${
+                        notification.read ? " is-read" : ""
+                      }`}
                     >
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        {notification.read ? null : <span style={{ color: "#c62828" }}>●</span>}
+                      <div className="mvp-row">
+                        <span className={`mvp-kind-badge mvp-tone-${kindTone(notification.kind)}`}>
+                          {notificationKindLabel(notification.kind)}
+                        </span>
                         <strong>{notification.message}</strong>
-                        {notification.kind ? (
-                          <span
-                            style={{
-                              fontSize: 11,
-                              fontWeight: 700,
-                              color: notification.kind === "REJECTED" ? "#b71c1c" : "var(--muted, #6b7280)",
-                            }}
-                          >
-                            {notificationKindLabel(notification.kind)}
-                          </span>
-                        ) : null}
                       </div>
-                      <span style={{ color: "var(--muted, #6b7280)", paddingLeft: notification.read ? 0 : 16 }}>
-                        {nowLabel(notification.createdAt)}
-                      </span>
+                      <span className="mvp-meta-label">{nowLabel(notification.createdAt)}</span>
                     </div>
                   ))
                 ) : (
                   <p className="role-empty">Chưa có thông báo.</p>
                 )}
                 {notifications.some((n) => !n.read) ? (
-                  <button type="button" onClick={() => void readNotifications()}>
+                  <button type="button" className="mvp-btn mvp-btn-info" onClick={() => void readNotifications()}>
                     Đánh dấu đã đọc
                   </button>
                 ) : null}
@@ -1516,15 +1582,14 @@ export default function MvpDemoPanel({
           ) : null}
 
           {tab === "history" && isArchiveViewer ? (
-            <div style={{ display: "grid", gap: 12 }}>
+            <div className="mvp-stack">
               <div className="role-review-card">
                 <header>
-                  <span>HISTORY</span>
+                  <span>Lịch sử</span>
                   <div>
                     <h3>Lịch sử đơn</h3>
                     <p>
-                      Đơn của ai, nộp lúc nào — xếp mới nhất trước. Xem chi tiết field extract;
-                      tải file gốc (DOCX/PDF user gửi kèm) sau khi HR chấp nhận.
+                      Các đơn đã nộp, xếp mới nhất trước. Xem field đã extract; tải file gốc sau khi HR chấp nhận.
                     </p>
                   </div>
                 </header>
@@ -1539,7 +1604,9 @@ export default function MvpDemoPanel({
                   return (
                     <div className="role-review-card" key={`history-${item.applicationId}`}>
                       <header>
-                        <span>{ARCHIVE_STATUS_LABELS[item.status] ?? item.status}</span>
+                        <span className={`mvp-kind-badge mvp-tone-${kindTone(item.status)}`}>
+                          {ARCHIVE_STATUS_LABELS[item.status] ?? item.status}
+                        </span>
                         <div>
                           <h3>{item.documentTypeLabel ?? item.documentType}</h3>
                           <p>
@@ -1549,16 +1616,12 @@ export default function MvpDemoPanel({
                           </p>
                         </div>
                       </header>
-                      <div style={{ padding: "0 20px 20px", display: "grid", gap: 10 }}>
+                      <div className="mvp-pad-sm">
                         <div
-                          style={{
-                            display: "grid",
-                            gap: 8,
-                            gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-                          }}
+                          className="mvp-meta-grid"
                         >
                           <div>
-                            <small style={{ color: "var(--muted, #6b7280)" }}>Ngày giờ nộp</small>
+                            <small className="mvp-meta-label">Ngày giờ nộp</small>
                             <div>
                               <strong>
                                 {archiveDateTime(
@@ -1570,7 +1633,7 @@ export default function MvpDemoPanel({
                             </div>
                           </div>
                           <div>
-                            <small style={{ color: "var(--muted, #6b7280)" }}>Ngày giờ duyệt</small>
+                            <small className="mvp-meta-label">Ngày giờ duyệt</small>
                             <div>
                               <strong>
                                 {item.decision
@@ -1584,7 +1647,7 @@ export default function MvpDemoPanel({
                             </div>
                           </div>
                           <div>
-                            <small style={{ color: "var(--muted, #6b7280)" }}>HR chấp nhận</small>
+                            <small className="mvp-meta-label">HR chấp nhận</small>
                             <div>
                               <strong>
                                 {item.reviewedBy
@@ -1599,9 +1662,10 @@ export default function MvpDemoPanel({
                             </div>
                           </div>
                         </div>
-                        <div className="role-actions">
+                        <div className="role-actions mvp-row">
                           <button
                             type="button"
+                            className="mvp-btn mvp-btn-info"
                             onClick={() =>
                               setHistoryDetailId(open ? null : item.applicationId)
                             }
@@ -1611,6 +1675,7 @@ export default function MvpDemoPanel({
                           {item.canDownload ? (
                             <button
                               type="button"
+                              className="mvp-btn mvp-btn-ok"
                               onClick={() =>
                                 void downloadArchiveFile(
                                   item.applicationId,
@@ -1621,39 +1686,26 @@ export default function MvpDemoPanel({
                               Tải file gốc{formatLabel ? ` (${formatLabel})` : ""}
                             </button>
                           ) : (
-                            <small style={{ color: "var(--muted, #6b7280)", alignSelf: "center" }}>
+                            <small className="mvp-meta-label">
                               Tải DOCX/PDF gốc mở sau khi HR chấp nhận
                             </small>
                           )}
                         </div>
                         {open ? (
-                          <div
-                            style={{
-                              border: "1px solid #90caf9",
-                              borderRadius: 12,
-                              padding: 14,
-                              background: "#fff",
-                              display: "grid",
-                              gap: 10,
-                            }}
-                          >
+                          <div className="mvp-soft-box-info mvp-stack-tight">
                             <strong>Chi tiết thông tin đã nộp</strong>
-                            <p style={{ margin: 0, color: "var(--muted, #6b7280)" }}>
+                            <p className="mvp-muted" style={{ margin: 0 }}>
                               Mã đơn <code>{item.applicationId}</code>
                               {item.sourceFile ? ` · ${item.sourceFile}` : ""}
                             </p>
                             <div
-                              style={{
-                                display: "grid",
-                                gap: 10,
-                                gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-                              }}
+                              className="mvp-field-grid"
                             >
                               {editableFieldEntries(item.extractedFields).length ? (
                                 editableFieldEntries(item.extractedFields).map(
                                   ([field, value]) => (
-                                    <div key={field} style={{ display: "grid", gap: 2 }}>
-                                      <small style={{ color: "var(--muted, #6b7280)" }}>
+                                    <div key={field}>
+                                      <small className="mvp-meta-label">
                                         {FIELD_LABELS[field] ?? field}
                                       </small>
                                       <strong>{fieldString(value) || "—"}</strong>
@@ -1675,7 +1727,7 @@ export default function MvpDemoPanel({
           ) : null}
 
           {tab === "archive" && isArchiveViewer ? (
-            <div style={{ display: "grid", gap: 12 }}>
+            <div className="mvp-stack">
               <div className="role-review-card">
                 <header>
                   <span>EVIDENCE</span>
@@ -1695,7 +1747,9 @@ export default function MvpDemoPanel({
                 evidenceItems.map((item) => (
                   <div className="role-review-card" key={item.applicationId}>
                     <header>
-                      <span>{ARCHIVE_STATUS_LABELS[item.status] ?? item.status}</span>
+                      <span className={`mvp-kind-badge mvp-tone-${kindTone(item.status)}`}>
+                        {ARCHIVE_STATUS_LABELS[item.status] ?? item.status}
+                      </span>
                       <div>
                         <h3>{item.documentTypeLabel ?? item.documentType}</h3>
                         <p>
@@ -1712,22 +1766,18 @@ export default function MvpDemoPanel({
                         </p>
                       </div>
                     </header>
-                    <div style={{ padding: "0 20px 20px", display: "grid", gap: 10 }}>
+                    <div className="mvp-pad-sm">
                       <div
-                        style={{
-                          display: "grid",
-                          gap: 8,
-                          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-                        }}
+                        className="mvp-meta-grid"
                       >
                         <div>
-                          <small style={{ color: "var(--muted, #6b7280)" }}>Ngày nộp</small>
+                          <small className="mvp-meta-label">Ngày nộp</small>
                           <div>
                             <strong>{item.submittedDate || nowLabel(item.submittedAt).slice(0, 10)}</strong>
                           </div>
                         </div>
                         <div>
-                          <small style={{ color: "var(--muted, #6b7280)" }}>Giờ nộp</small>
+                          <small className="mvp-meta-label">Giờ nộp</small>
                           <div>
                             <strong>
                               {item.submittedTime ||
@@ -1737,7 +1787,7 @@ export default function MvpDemoPanel({
                           </div>
                         </div>
                         <div>
-                          <small style={{ color: "var(--muted, #6b7280)" }}>Ngày duyệt</small>
+                          <small className="mvp-meta-label">Ngày duyệt</small>
                           <div>
                             <strong>
                               {item.decidedAt
@@ -1749,7 +1799,7 @@ export default function MvpDemoPanel({
                           </div>
                         </div>
                         <div>
-                          <small style={{ color: "var(--muted, #6b7280)" }}>Giờ duyệt</small>
+                          <small className="mvp-meta-label">Giờ duyệt</small>
                           <div>
                             <strong>
                               {item.decidedAt
@@ -1761,7 +1811,7 @@ export default function MvpDemoPanel({
                           </div>
                         </div>
                         <div>
-                          <small style={{ color: "var(--muted, #6b7280)" }}>HR duyệt</small>
+                          <small className="mvp-meta-label">HR duyệt</small>
                           <div>
                             <strong>
                               {item.reviewedBy ? `@${item.reviewedBy}` : "—"}
@@ -1779,18 +1829,19 @@ export default function MvpDemoPanel({
                         {editableFieldEntries(item.extractedFields)
                           .slice(0, 8)
                           .map(([field, value]) => (
-                            <div key={field} style={{ display: "grid", gap: 2 }}>
-                              <small style={{ color: "var(--muted, #6b7280)" }}>
+                            <div key={field}>
+                              <small className="mvp-meta-label">
                                 {FIELD_LABELS[field] ?? field}
                               </small>
                               <span>{fieldString(value) || "—"}</span>
                             </div>
                           ))}
                       </div>
-                      <div className="role-actions">
+                      <div className="role-actions mvp-row">
                         {item.canDownload ? (
                           <button
                             type="button"
+                            className="mvp-btn mvp-btn-ok"
                             onClick={() =>
                               void downloadArchiveFile(item.applicationId, item.sourceFile)
                             }
@@ -1798,7 +1849,7 @@ export default function MvpDemoPanel({
                             Tải file gốc
                           </button>
                         ) : (
-                          <small style={{ color: "var(--muted, #6b7280)", alignSelf: "center" }}>
+                          <small className="mvp-meta-label">
                             {item.status === "CONFIRMED"
                               ? "File chưa sẵn sàng"
                               : "Tải file chỉ mở sau khi HR chấp nhận"}
@@ -1814,7 +1865,7 @@ export default function MvpDemoPanel({
           ) : null}
 
           {tab === "admin" && isAdmin ? (
-            <div style={{ display: "grid", gap: 16 }}>
+            <div className="mvp-stack-loose">
               <div className="role-review-card">
                 <header>
                   <span>ORG TREE</span>
@@ -1826,7 +1877,7 @@ export default function MvpDemoPanel({
                     </p>
                   </div>
                 </header>
-                <div style={{ padding: "0 20px 20px", display: "grid", gap: 10 }}>
+                <div className="mvp-pad-sm">
                   {orgTree ? (
                     <>
                       <div>
@@ -1836,12 +1887,7 @@ export default function MvpDemoPanel({
                       {orgTree.hrNodes.map((hrNode) => (
                         <div
                           key={hrNode.username}
-                          style={{
-                            borderLeft: "3px solid #1565c0",
-                            paddingLeft: 12,
-                            display: "grid",
-                            gap: 6,
-                          }}
+                          className="mvp-tree-branch mvp-stack-tight"
                         >
                           <div>
                             <strong>HR</strong> · {hrNode.displayName} (
@@ -1852,7 +1898,7 @@ export default function MvpDemoPanel({
                             hrNode.users.map((managed) => (
                               <div
                                 key={managed.username}
-                                style={{ paddingLeft: 16, color: "var(--muted, #6b7280)" }}
+                                className="mvp-tree-child"
                               >
                                 └ User · {managed.displayName} (
                                 <code>{managed.username}</code>)
@@ -1860,14 +1906,14 @@ export default function MvpDemoPanel({
                               </div>
                             ))
                           ) : (
-                            <div style={{ paddingLeft: 16, color: "var(--muted, #6b7280)" }}>
+                            <div className="mvp-tree-child">
                               └ (chưa gán user)
                             </div>
                           )}
                         </div>
                       ))}
                       {orgTree.unassignedUsers.length ? (
-                        <div style={{ borderLeft: "3px solid #9e9e9e", paddingLeft: 12 }}>
+                        <div className="mvp-tree-branch is-muted">
                           <strong>User chưa gán HR</strong>
                           {orgTree.unassignedUsers.map((managed) => (
                             <div key={managed.username} style={{ paddingLeft: 16 }}>
@@ -1884,38 +1930,38 @@ export default function MvpDemoPanel({
               </div>
               <div className="role-review-card">
                 <header>
-                  <span>USERS</span>
+                  <span>Người dùng</span>
                   <div>
                     <h3>Danh sách tài khoản</h3>
                     <p>Chỉ ADMIN mới xem được danh sách và audit.</p>
                   </div>
                 </header>
-                <div style={{ padding: "0 20px 20px", display: "grid", gap: 4 }}>
+                <div className="mvp-pad-sm">
                   {users.map((user) => (
                     <div key={user.username} style={{ display: "flex", gap: 8 }}>
                       <code>{user.username}</code>
                       <strong>{user.displayName}</strong>
                       <span>{ROLE_LABELS[user.role] ?? user.role}</span>
-                      <span style={{ color: "var(--muted, #6b7280)" }}>{user.active ? "active" : "disabled"}</span>
+                      <span className="mvp-meta-label">{user.active ? "active" : "disabled"}</span>
                     </div>
                   ))}
                 </div>
               </div>
               <div className="role-review-card">
                 <header>
-                  <span>AUDIT</span>
+                  <span>Nhật ký</span>
                   <div>
                     <h3>Nhật ký hành động</h3>
                     <p>Login, tạo tài khoản, nộp đơn, duyệt và gán HR↔User.</p>
                   </div>
                 </header>
-                <div style={{ padding: "0 20px 20px", display: "grid", gap: 4 }}>
+                <div className="mvp-pad-sm">
                   {audit.map((entry, index) => (
                     <div key={`${entry.at}-${index}`} style={{ display: "flex", gap: 8 }}>
                       <code>{nowLabel(entry.at)}</code>
                       <strong>{entry.action}</strong>
                       <span>{entry.actor}</span>
-                      <span style={{ color: "var(--muted, #6b7280)" }}>{entry.detail}</span>
+                      <span className="mvp-meta-label">{entry.detail}</span>
                     </div>
                   ))}
                 </div>
@@ -1924,80 +1970,32 @@ export default function MvpDemoPanel({
           ) : null}
         </div>
       )}
+      </div>
     </section>
   );
 }
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  padding: "8px 10px",
-  border: "1px solid #dfe3e8",
-  borderRadius: 8,
+  minWidth: 0,
+  minHeight: 46,
+  boxSizing: "border-box",
+  padding: "11px 14px",
+  border: "1px solid rgba(42, 48, 56, 0.08)",
+  borderRadius: 12,
   fontFamily: "inherit",
-  fontSize: 14,
+  fontSize: 15,
+  lineHeight: 1.5,
+  background: "rgba(255,255,255,0.95)",
 };
 
 function StatusPill({ label, ok }: { label: string; ok: boolean | null }) {
-  const color = ok === null ? "#9e9e9e" : ok ? "#2e7d32" : "#c62828";
+  const state = ok === null ? "pending" : ok ? "ok" : "down";
   const text = ok === null ? "đang kiểm tra" : ok ? "sẵn sàng" : "chưa kết nối";
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        fontSize: 12,
-        color: color,
-        border: `1px solid ${color}`,
-        borderRadius: 999,
-        padding: "2px 10px",
-      }}
-    >
-      <i
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          background: color,
-          display: "inline-block",
-        }}
-      />
+    <span className={`mvp-status mvp-status-${state}`}>
+      <i />
       {label} · {text}
     </span>
-  );
-}
-
-function StepCard({ n, title, text }: { n: number; title: string; text: string }) {
-  return (
-    <div
-      style={{
-        background: "#fff",
-        border: "1px solid var(--border, #dfe3e8)",
-        borderRadius: 12,
-        padding: "12px 14px",
-        display: "grid",
-        gap: 4,
-      }}
-    >
-      <strong style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: "50%",
-            background: "#1565c0",
-            color: "#fff",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 12,
-          }}
-        >
-          {n}
-        </span>
-        {title}
-      </strong>
-      <small style={{ color: "var(--muted, #6b7280)" }}>{text}</small>
-    </div>
   );
 }

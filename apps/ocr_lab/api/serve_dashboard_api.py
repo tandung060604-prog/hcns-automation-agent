@@ -179,6 +179,7 @@ from hcns_agent.templates.service import (
     TemplateTechnicalError,
     TemplateUnsupportedError,
     build_local_template_processing_service,
+    resolve_template_ocr_backend,
 )
 
 
@@ -246,8 +247,12 @@ def _claim_and_complete_camunda_task(
 
 
 def _demo_fast_forward_to_hr_review(engine_url: str, process_id: str) -> bool:
-    """Skip UserReview in the MVP demo because the submit form already confirmed data."""
-    deadline = time.monotonic() + 25.0
+    """Skip UserReview in the MVP demo because the submit form already confirmed data.
+
+    Keep this short: Camunda Parse may re-OCR and stall. MVP already has pending-HR
+    fallback so submit should return quickly to the browser/tunnel.
+    """
+    deadline = time.monotonic() + 3.0
     while time.monotonic() < deadline:
         tasks = _camunda_get(
             f"{engine_url}/task?processInstanceId={process_id}"
@@ -274,7 +279,7 @@ def _demo_fast_forward_to_hr_review(engine_url: str, process_id: str) -> bool:
                     variable_name="userReviewDecision",
                     decision="UNRESOLVED",
                 )
-        time.sleep(0.4)
+        time.sleep(0.35)
     tasks = _camunda_get(f"{engine_url}/task?processInstanceId={process_id}")
     return isinstance(tasks, list) and any(
         isinstance(task, dict) and task.get("taskDefinitionKey") == "HRReview"
@@ -636,6 +641,7 @@ CAMUNDA_UPLOAD_DOCUMENT_TYPES = frozenset(
         "CV",
         "CERTIFICATE",
         "EMPLOYMENT_CONTRACT",
+        "IDENTITY_CARD",
     }
 )
 DOCUMENT_TYPE_LABELS = {
@@ -2280,12 +2286,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
         body: bytes,
         content_type: str,
         download_name: str | None = None,
+        *,
+        inline: bool = False,
     ) -> None:
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         if download_name:
-            self.send_header("Content-Disposition", f'attachment; filename="{download_name}"')
+            disposition = "inline" if inline else "attachment"
+            self.send_header(
+                "Content-Disposition",
+                f'{disposition}; filename="{download_name}"',
+            )
         self.cors_headers()
         self.end_headers()
         self.wfile.write(body)
@@ -2457,6 +2469,65 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     reviewer = self._require_user({ROLE_HR, ROLE_ADMIN})
                 else:
                     reviewer = self._require_user()
+                # MVP fallback: HR can decide while Camunda Parse/OCR is still syncing.
+                if role == "hr" and task_id.startswith("pending-"):
+                    application_id = task_id[len("pending-") :]
+                    store = self._demo_store()
+                    pending = store.get_hr_pending(application_id)
+                    submission = store.get_submission(application_id)
+                    if pending is None and submission is None:
+                        raise ValueError("Pending HR task is unavailable")
+                    document_ref = str(
+                        (pending or submission or {}).get("documentId") or ""
+                    )
+                    owner = str((pending or submission or {}).get("owner") or "")
+                    if document_ref:
+                        self._require_document_access(reviewer, document_ref)
+                    _safe_record_event(
+                        store,
+                        application_id,
+                        "HR_REVIEWED",
+                        f"Quyết định: {decision}"
+                        + (f" · Ghi chú: {note}" if note else "")
+                        + " · (duyệt local trước khi Camunda sẵn sàng)",
+                        reviewer["username"],
+                    )
+                    source_path = None
+                    if decision == "CONFIRMED" and document_ref:
+                        source_path = self.user_ocr.template_source(document_ref)
+                    store.finalize_archive(
+                        application_id=application_id,
+                        decision=decision,
+                        reviewed_by=reviewer["username"],
+                        note=note,
+                        source_path=source_path,
+                    )
+                    store.resolve_hr_pending(application_id)
+                    if owner and decision in HR_DECISION_MESSAGES:
+                        store.notify(
+                            owner,
+                            HR_DECISION_MESSAGES[decision],
+                            application_id=application_id,
+                        )
+                    store.publish(
+                        EVENT_QUEUE_CHANGED,
+                        target_roles=[ROLE_HR, ROLE_ADMIN],
+                        target_users=[owner] if owner else None,
+                        payload={
+                            "applicationId": application_id,
+                            "decision": decision,
+                        },
+                    )
+                    self.send_json(
+                        {
+                            "status": "COMPLETED",
+                            "decision": decision,
+                            "effectiveDecision": decision,
+                            "pendingLocal": True,
+                            "notifiedOwner": bool(owner),
+                        }
+                    )
+                    return
                 engine_url = _local_camunda_url()
                 task = _camunda_get(f"{engine_url}/task/{task_id}")
                 if not isinstance(task, dict):
@@ -2725,6 +2796,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     "processInstanceId": process_id,
                     "hrQueueReady": hr_task_ready,
                     "hrNotified": True,
+                    "pendingVisible": not hr_task_ready,
                     "tasklistUrl": os.getenv("HCNS_CAMUNDA_PUBLIC_URL", "http://localhost:8080/camunda/app/tasklist/default/"),
                     "templateFields": extracted_fields,
                     "extractedFields": extracted_fields,
@@ -3879,16 +3951,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
                                 submission.get("extractedFields"), dict
                             ):
                                 extracted_fields = dict(submission["extractedFields"])
+                        else:
+                            submission = store.get_submission(application_id)
+                        source_file = ""
+                        if isinstance(submission, dict):
+                            source_file = str(submission.get("sourceFile") or "")
+                        if not source_file:
+                            archive_entry = store.get_archive(application_id)
+                            if isinstance(archive_entry, dict):
+                                source_file = str(archive_entry.get("sourceFile") or "")
                         queue.insert(
                             0,
                             {
                                 "taskId": f"pending-{application_id}",
                                 "role": "hr",
                                 "taskDefinitionKey": "PENDING",
-                                "actionable": False,
+                                "actionable": True,
                                 "pending": True,
-                                "statusLabel": "Đang đưa vào hàng đợi HR…",
-                                "taskName": "Đơn mới chờ đồng bộ workflow",
+                                "statusLabel": "Chờ HR duyệt (local)",
+                                "taskName": "Đơn mới — duyệt được ngay",
                                 "documentId": document_id,
                                 "documentType": document_type,
                                 "documentTypeLabel": DOCUMENT_TYPE_LABELS.get(
@@ -3901,7 +3982,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                                 or self.user_ocr.template_result(document_id)
                                 is not None,
                                 "extractedFields": extracted_fields,
-                                "sourceFile": "",
+                                "sourceFile": source_file,
                             },
                         )
                 queue.sort(
@@ -4405,13 +4486,36 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/documents/source":
             document_id = query.get("id", [""])[0]
+            application_id = query.get("applicationId", [""])[0]
             try:
                 user = self._require_user()
-                self._require_document_access(user, document_id)
-                source_path = self.user_ocr.template_source(document_id)
-                if source_path is None:
+                source_path = None
+                download_name = "document"
+                if document_id:
+                    try:
+                        self._require_document_access(user, document_id)
+                        source_path = self.user_ocr.template_source(document_id)
+                        if source_path is not None:
+                            download_name = source_path.name
+                    except MvpDemoError:
+                        source_path = None
+                # Fallback: archived original after submit (HR/user evidence copy).
+                if source_path is None and application_id:
+                    store = self._demo_store()
+                    if not store.can_access_archive(user, application_id):
+                        raise MvpDemoError(
+                            "Không có quyền xem tài liệu gốc", HTTPStatus.FORBIDDEN
+                        )
+                    entry = store.get_archive(application_id)
+                    source_path = store.archive_source_path(application_id)
+                    if entry is not None:
+                        download_name = str(entry.get("sourceFile") or "document")
+                        archived_doc = str(entry.get("documentId") or "")
+                        if archived_doc and not document_id:
+                            document_id = archived_doc
+                if source_path is None or not source_path.is_file():
                     self.send_json(
-                        {"error": "Template-first source not found"},
+                        {"error": "Không tìm thấy file gốc đã nộp"},
                         HTTPStatus.NOT_FOUND,
                     )
                     return
@@ -4419,29 +4523,133 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     mimetypes.guess_type(source_path.name)[0]
                     or "application/octet-stream"
                 )
-                self.send_file(source_path, content_type)
+                suffix = source_path.suffix.casefold()
+                viewable = suffix in {
+                    ".pdf",
+                    ".png",
+                    ".jpg",
+                    ".jpeg",
+                    ".webp",
+                    ".gif",
+                }
+                self.send_bytes(
+                    source_path.read_bytes(),
+                    content_type,
+                    download_name if Path(download_name).suffix else source_path.name,
+                    inline=viewable,
+                )
             except MvpDemoError as exc:
                 self._handle_mvp_error(exc)
             return
 
         if parsed.path == "/api/documents/preview":
             document_id = query.get("id", [""])[0]
+            application_id = query.get("applicationId", [""])[0]
             try:
-                preview = self.user_ocr.template_preview(document_id)
-            except (OSError, RuntimeError, ValueError):
+                user = self._require_user()
+                preview: tuple[bytes, str] | None = None
+                preview_name = "preview.png"
+                source_for_preview: Path | None = None
+
+                def _preview_from_path(path: Path) -> tuple[bytes, str] | None:
+                    suffix = path.suffix.casefold()
+                    if suffix in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+                        content_type = (
+                            mimetypes.guess_type(path.name)[0]
+                            or "application/octet-stream"
+                        )
+                        return path.read_bytes(), content_type
+                    if suffix == ".pdf" and pdfium is not None:
+                        document = pdfium.PdfDocument(str(path))
+                        try:
+                            if len(document) == 0:
+                                return None
+                            page = document[0]
+                            try:
+                                bitmap = page.render(scale=1.6)
+                                try:
+                                    image = bitmap.to_pil().convert("RGB")
+                                finally:
+                                    bitmap.close()
+                            finally:
+                                page.close()
+                        finally:
+                            document.close()
+                        output = BytesIO()
+                        image.save(output, format="PNG", optimize=True)
+                        return output.getvalue(), "image/png"
+                    if suffix == ".docx":
+                        # Browser cannot inline DOCX; force client to use /source download.
+                        return None
+                    return None
+
+                if document_id:
+                    try:
+                        self._require_document_access(user, document_id)
+                        source_for_preview = self.user_ocr.template_source(document_id)
+                        try:
+                            preview = self.user_ocr.template_preview(document_id)
+                        except (OSError, RuntimeError, ValueError):
+                            preview = None
+                        # DOCX: template_preview returns raw bytes — reject for inline view.
+                        if (
+                            preview is not None
+                            and source_for_preview is not None
+                            and source_for_preview.suffix.casefold() == ".docx"
+                        ):
+                            preview = None
+                    except MvpDemoError:
+                        # Fall through to archive for HR evidence after submit.
+                        preview = None
+                if preview is None and application_id:
+                    store = self._demo_store()
+                    if not store.can_access_archive(user, application_id):
+                        if document_id:
+                            raise MvpDemoError(
+                                "Không có quyền xem tài liệu gốc", HTTPStatus.FORBIDDEN
+                            )
+                        raise MvpDemoError(
+                            "Không có quyền xem tài liệu gốc", HTTPStatus.FORBIDDEN
+                        )
+                    source_path = store.archive_source_path(application_id)
+                    if source_path is not None and source_path.is_file():
+                        source_for_preview = source_path
+                        preview = _preview_from_path(source_path)
+                        preview_name = source_path.name
+                if preview is None:
+                    # Hint client: DOCX should download via /source.
+                    if (
+                        source_for_preview is not None
+                        and source_for_preview.suffix.casefold() == ".docx"
+                    ):
+                        self.send_json(
+                            {
+                                "error": "DOCX không xem trực tiếp trên trình duyệt — dùng tải file gốc",
+                                "errorCode": "PREVIEW_DOCX_DOWNLOAD",
+                                "downloadVia": "source",
+                            },
+                            HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+                        )
+                        return
+                    self.send_json(
+                        {"error": "Không tạo được bản xem trước file gốc"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                body, content_type = preview
+                self.send_bytes(
+                    body,
+                    content_type,
+                    preview_name if content_type.startswith("image/") else None,
+                    inline=True,
+                )
+            except MvpDemoError as exc:
+                self._handle_mvp_error(exc)
+            except (OSError, RuntimeError, ValueError) as exc:
                 self.send_json(
-                    {"error": "Template-first preview unavailable"},
+                    {"error": f"Template-first preview unavailable: {exc}"},
                     HTTPStatus.SERVICE_UNAVAILABLE,
                 )
-                return
-            if preview is None:
-                self.send_json(
-                    {"error": "Template-first preview not found"},
-                    HTTPStatus.NOT_FOUND,
-                )
-                return
-            body, content_type = preview
-            self.send_bytes(body, content_type)
             return
 
         if parsed.path == "/cccd-heldout/review/summary":
@@ -5087,6 +5295,38 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_json({"templates": list(self.template_processor.list_templates())})
             return
 
+        if parsed.path == "/api/ocr/warmup":
+            try:
+                self.template_processor.warm_up_ocr()
+                # Legacy user OCR path also used for some image uploads.
+                if PaddleOCR is not None:
+                    try:
+                        self.user_ocr.get_ocr()
+                    except RuntimeError:
+                        pass
+                self.send_json(
+                    {
+                        "status": "ready",
+                        "templateOcrBackend": self.template_processor.ocr_backend,
+                        "templateOcrProfile": self.template_processor.ocr_profile,
+                        "backendAvailable": self.template_processor.ocr_backend_available,
+                        "templateOcrModelLoaded": self.template_processor.ocr_model_loaded,
+                        "paddleOcrAvailable": PaddleOCR is not None,
+                        "userOcrModelLoaded": self.user_ocr.model_loaded,
+                    }
+                )
+            except Exception as exc:  # noqa: BLE001 - surface OCR boot failures
+                self.send_json(
+                    {
+                        "status": "error",
+                        "error": str(exc),
+                        "backendAvailable": self.template_processor.ocr_backend_available,
+                        "templateOcrBackend": self.template_processor.ocr_backend,
+                    },
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                )
+            return
+
         if parsed.path == "/health":
             template_pipelines = [
                 {
@@ -5720,6 +5960,32 @@ def main() -> int:
     DashboardHandler.user_ocr = UserOCRService(args.data_root)
     DashboardHandler.template_processor = build_local_template_processing_service()
     DashboardHandler.mvp_demo = MvpDemoStore(args.data_root)
+    resolved_ocr = resolve_template_ocr_backend()
+    print(
+        f"Template OCR backend resolved: {resolved_ocr} "
+        f"(available={DashboardHandler.template_processor.ocr_backend_available})",
+        flush=True,
+    )
+    if os.getenv("HCNS_TEMPLATE_OCR_WARMUP", "1").strip().casefold() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }:
+
+        def _warm_ocr() -> None:
+            try:
+                DashboardHandler.template_processor.warm_up_ocr()
+                print(
+                    "Template OCR warm-up complete: "
+                    f"backend={DashboardHandler.template_processor.ocr_backend} "
+                    f"loaded={DashboardHandler.template_processor.ocr_model_loaded}",
+                    flush=True,
+                )
+            except Exception as exc:  # noqa: BLE001
+                print(f"Template OCR warm-up failed: {exc}", flush=True)
+
+        threading.Thread(target=_warm_ocr, name="ocr-warmup", daemon=True).start()
     server = ThreadingHTTPServer((args.host, args.port), DashboardHandler)
     print(
         f"Local dashboard API ready: http://{args.host}:{args.port} "

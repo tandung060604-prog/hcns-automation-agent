@@ -3,6 +3,14 @@
 Tài liệu được giữ ở `docs/` với tên `UPPER_SNAKE_CASE.md` để dễ tìm kiếm và giữ
 liên kết ổn định. Không đổi tên tài liệu lịch sử nếu không có migration link.
 
+## MVP / vận hành (mới nhất)
+
+| Tài liệu | Vai trò | Khi cập nhật |
+|---|---|---|
+| [REPORT.md](REPORT.md) | Smoke 1 mẫu/định dạng trên dataset VinHRIS | Sau mỗi đợt smoke |
+| [LOCAL_OPS_AND_DEPLOY.md](LOCAL_OPS_AND_DEPLOY.md) | Website, chạy local, Camunda, tunnel, duy trì | Khi đổi cách start/deploy |
+| [MVP_DOC_PARITY_TASKS.md](MVP_DOC_PARITY_TASKS.md) | Checklist parity Leave/OT/CV/Contract/IELTS/CCCD | Khi đóng task parity |
+
 ## Điều hành dự án
 
 | Tài liệu | Vai trò | Khi cập nhật |

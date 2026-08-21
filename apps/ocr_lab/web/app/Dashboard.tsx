@@ -3536,62 +3536,54 @@ export default function Dashboard({ data }: { data: DashboardData }) {
 
   const signedIn = !authBootstrapping && demoSession !== null;
 
+  const workspaceChrome = (
+    <header className="topbar workspace-topbar">
+      <a className="brand" href="/" aria-label="VinHRIS">
+        <span className="brand-mark">V</span>
+        <span>VinHRIS</span>
+        <small>Workspace</small>
+      </a>
+      <nav aria-label="Điều hướng workspace">
+        <a href="#mvp-demo">Tiếp nhận</a>
+        {signedIn ? <a href="#mvp-demo">Hàng đợi</a> : null}
+        <a href="/">Trang chủ</a>
+      </nav>
+      <span className={`live ${apiOnline ? "online" : ""}`}>
+        <i />
+        {authBootstrapping
+          ? "Đang khôi phục phiên…"
+          : signedIn
+            ? apiOnline
+              ? "Hệ thống sẵn sàng"
+              : "API chưa kết nối"
+            : "Đăng nhập để làm việc"}
+      </span>
+    </header>
+  );
+
   if (authBootstrapping) {
     return (
-      <main className="operations-site">
-        <header className="topbar">
-          <a className="brand" href="#overview" aria-label="Về đầu trang">
-            <span className="brand-mark">V</span>
-            <span>VinHRIS</span><small>HCNS</small>
-          </a>
-        </header>
-        <section className="section" style={{ padding: 24 }}>
+      <main className="operations-site workspace-shell">
+        {workspaceChrome}
+        <section className="workspace-boot">
           <p>Đang khôi phục phiên đăng nhập…</p>
         </section>
       </main>
     );
   }
 
-  if (!signedIn) {
+  if (!signedIn || !SHOW_ADVANCED_DIAGNOSTICS) {
     return (
-      <main className="operations-site">
-        <header className="topbar">
-          <a className="brand" href="#overview" aria-label="Về đầu trang">
-            <span className="brand-mark">V</span>
-            <span>VinHRIS</span><small>HCNS</small>
-          </a>
-          <nav aria-label="Điều hướng chính">
-            <a href="#mvp-demo">Demo</a>
-          </nav>
-          <span className="live">
-            <i />
-            Đăng nhập để sử dụng workspace
-          </span>
-        </header>
+      <main className="operations-site workspace-shell">
+        {workspaceChrome}
         <MvpDemoPanel onSessionChange={setDemoSession} />
       </main>
     );
   }
 
   return (
-    <main className="operations-site">
-      <header className="topbar">
-        <a className="brand" href="#overview" aria-label="Về đầu trang">
-          <span className="brand-mark">V</span>
-          <span>VinHRIS</span><small>HCNS</small>
-        </a>
-        <nav aria-label="Điều hướng chính">
-          <a href="#mvp-demo">Tiếp nhận hồ sơ</a>
-          <a href="#roles">Hàng đợi kiểm tra</a>
-          <a href="#explorer">Kho hồ sơ</a>
-          <a href="#phases">Tiêu chí xử lý</a>
-          <a href="#next">Việc tiếp theo</a>
-        </nav>
-        <span className={`live ${apiOnline ? "online" : ""}`}>
-          <i />
-          {apiOnline ? "Hệ thống sẵn sàng" : "Chế độ xem dữ liệu"}
-        </span>
-      </header>
+    <main className="operations-site workspace-shell">
+      {workspaceChrome}
 
       <MvpDemoPanel onSessionChange={setDemoSession} />
 

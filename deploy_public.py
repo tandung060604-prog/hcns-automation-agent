@@ -11,6 +11,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -40,11 +41,74 @@ def log(message: str) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", type=Path, default=None)
-    parser.add_argument("--ocr-backend", choices=("easyocr", "paddle"), default="easyocr")
+    parser.add_argument(
+        "--ocr-backend",
+        choices=("easyocr", "paddle", "auto"),
+        default="auto",
+        help="Template OCR backend (auto = EasyOCR if installed, else Paddle).",
+    )
     parser.add_argument("--port-api", type=int, default=8765)
     parser.add_argument("--port-web", type=int, default=3000)
     parser.add_argument("--no-worker", action="store_true")
+    parser.add_argument(
+        "--no-ocr-warmup",
+        action="store_true",
+        help="Skip loading OCR models at deploy time (not recommended for public demo).",
+    )
     return parser.parse_args()
+
+
+def resolve_deploy_ocr_backend(requested: str) -> str:
+    """Mirror template auto-selection so deploy env matches the API process."""
+    selected = (requested or "auto").casefold().strip()
+    easyocr_ok = (
+        subprocess.run(
+            [str(VENV_PYTHON), "-c", "import importlib.util; raise SystemExit(0 if importlib.util.find_spec('easyocr') else 1)"],
+            capture_output=True,
+        ).returncode
+        == 0
+    )
+    paddle_ok = (
+        subprocess.run(
+            [str(VENV_PYTHON), "-c", "import importlib.util; raise SystemExit(0 if importlib.util.find_spec('paddleocr') else 1)"],
+            capture_output=True,
+        ).returncode
+        == 0
+    )
+    if selected in {"", "auto"}:
+        if easyocr_ok:
+            return "easyocr"
+        if paddle_ok:
+            return "paddle"
+        return "easyocr"
+    if selected == "easyocr" and not easyocr_ok and paddle_ok:
+        return "paddle"
+    if selected == "paddle" and not paddle_ok and easyocr_ok:
+        return "easyocr"
+    return selected
+
+
+def wait_for_ocr_ready(api_url: str, attempts: int = 90, interval: float = 2.0) -> bool:
+    """POST/GET OCR warmup until models are loaded or attempts exhausted."""
+    warmup_url = f"{api_url.rstrip('/')}/api/ocr/warmup"
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(warmup_url, timeout=120) as response:  # noqa: S310
+                payload = json.loads(response.read().decode("utf-8"))
+                if payload.get("backendAvailable") and payload.get("templateOcrModelLoaded"):
+                    log(
+                        f"OCR ready backend={payload.get('templateOcrBackend')} "
+                        f"profile={payload.get('templateOcrProfile')} (attempt {attempt})"
+                    )
+                    return True
+                log(
+                    f"OCR warming… available={payload.get('backendAvailable')} "
+                    f"loaded={payload.get('templateOcrModelLoaded')} (attempt {attempt}/{attempts})"
+                )
+        except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+            log(f"OCR warmup probe failed ({attempt}/{attempts}): {exc}")
+        time.sleep(interval)
+    return False
 
 
 def http_ready(url: str, timeout: float = 2.0) -> bool:
@@ -229,12 +293,22 @@ def main() -> int:
     signal.signal(signal.SIGINT, _on_signal)
     signal.signal(signal.SIGTERM, _on_signal)
 
+    ocr_backend = resolve_deploy_ocr_backend(args.ocr_backend)
+    if ocr_backend != args.ocr_backend and args.ocr_backend != "auto":
+        log(
+            f"Requested OCR backend '{args.ocr_backend}' is not installed; "
+            f"falling back to '{ocr_backend}'."
+        )
+    elif args.ocr_backend == "auto":
+        log(f"Auto-selected OCR backend: {ocr_backend}")
+
     base_env = dict(os.environ)
     base_env.update(
         {
             "HCNS_ENV": "development",
             "HCNS_LOG_LEVEL": "INFO",
-            "HCNS_TEMPLATE_OCR_BACKEND": args.ocr_backend,
+            "HCNS_TEMPLATE_OCR_BACKEND": ocr_backend,
+            "HCNS_TEMPLATE_OCR_WARMUP": "0" if args.no_ocr_warmup else "1",
             "HCNS_API_ALLOWED_HOSTS": "*.trycloudflare.com",
             "HCNS_API_CORS_ORIGINS": "https://*.trycloudflare.com",
             "PYTHONUNBUFFERED": "1",
@@ -286,6 +360,18 @@ def main() -> int:
         log("API failed to start; check tmp/api.log")
         shutdown(processes, tunnels)
         return 1
+
+    if not args.no_ocr_warmup:
+        log(f"Warming OCR models ({ocr_backend}) — first load can take 1–3 minutes…")
+        if not wait_for_ocr_ready(api_url):
+            log(
+                "OCR warm-up did not finish in time; dashboard vẫn chạy nhưng "
+                "scan ảnh/PDF có thể chậm hoặc lỗi. Xem tmp/api.log."
+            )
+        else:
+            log("OCR models loaded and ready for scan uploads.")
+    else:
+        log("Skipping OCR warm-up (--no-ocr-warmup).")
 
     camunda_local = "http://127.0.0.1:8080"
     camunda_tunnel_url: str | None = None
@@ -363,6 +449,7 @@ def main() -> int:
     log(f"  Local API         : {api_tunnel_url}")
     if camunda_tunnel_url:
         log(f"  Camunda Tasklist  : {camunda_tunnel_url}/camunda")
+    log(f"  OCR backend       : {ocr_backend} (warmed={'no' if args.no_ocr_warmup else 'yes'})")
     log(f"  Demo accounts     : admin/admin123, hr/hr123, user/user123")
     log("  Mọi URL đều HTTPS miễn phí qua Cloudflare.")
     log("  Nhấn Ctrl+C để tắt toàn bộ.")

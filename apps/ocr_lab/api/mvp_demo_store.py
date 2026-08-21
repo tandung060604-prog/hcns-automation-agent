@@ -926,6 +926,14 @@ class MvpDemoStore:
                 del pending[application_id]
                 self._save(self._pending_hr_path, pending)
 
+    def get_hr_pending(self, application_id: str) -> dict[str, Any] | None:
+        if APPLICATION_ID_RE.fullmatch(application_id) is None:
+            return None
+        with self._lock:
+            pending = self._load(self._pending_hr_path, {})
+            item = pending.get(application_id)
+            return dict(item) if isinstance(item, dict) else None
+
     def list_hr_pending(self) -> list[dict[str, Any]]:
         with self._lock:
             pending = self._load(self._pending_hr_path, {})
