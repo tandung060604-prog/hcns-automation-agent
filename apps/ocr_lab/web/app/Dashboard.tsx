@@ -616,6 +616,40 @@ type SupportedTemplate = {
   optionalFields: string[];
 };
 
+const FILLABLE_TEMPLATE_DOWNLOADS = [
+  {
+    label: "CV v2",
+    href: "/templates/cv-v2.docx",
+    detail: "CV tiếng Việt · DOCX",
+  },
+  {
+    label: "Hợp đồng thử việc v2",
+    href: "/templates/probation-contract-v2.docx",
+    detail: "Mẫu demo · DOCX",
+  },
+  {
+    label: "Đơn xin nghỉ phép v1",
+    href: "/templates/leave-request-v1.docx",
+    detail: "Điền thông tin rồi upload lại",
+  },
+  {
+    label: "Đơn xin tăng ca v1",
+    href: "/templates/overtime-request-v1.docx",
+    detail: "Điền thông tin rồi upload lại",
+  },
+] as const;
+
+const UPLOAD_GUIDANCE = [
+  {
+    label: "CCCD",
+    text: "Upload ảnh hoặc PDF mặt trước rõ nét; không dùng mẫu tự tạo.",
+  },
+  {
+    label: "IELTS",
+    text: "Upload ảnh hoặc PDF chứng chỉ đầy đủ; không dùng bản mô phỏng.",
+  },
+] as const;
+
 type RuntimePipeline = {
   documentType: string;
   templateId: string;
@@ -2248,6 +2282,10 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   >("IDENTITY_CARD");
   const [supportedTemplates, setSupportedTemplates] =
     useState<SupportedTemplate[]>([]);
+  const supportedDocumentTypeCount = useMemo(() => {
+    const count = new Set(supportedTemplates.map((template) => template.documentType)).size;
+    return count || 6;
+  }, [supportedTemplates]);
   const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealth | null>(null);
   const [templateResult, setTemplateResult] =
     useState<TemplateProcessingResult | null>(null);
@@ -4019,8 +4057,39 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                   Chọn tài liệu HCNS. Hệ thống tự nhận dạng định dạng, ưu tiên
                   native parser cho tài liệu có text và OCR local cho ảnh/PDF scan.
                 </p>
-                <small>{supportedTemplates.length || 2} biểu mẫu đang hỗ trợ</small>
+                <small>{supportedDocumentTypeCount} loại tài liệu đang hỗ trợ</small>
               </div>
+              <section className="template-downloads" aria-label="Tải mẫu tài liệu">
+                <div className="template-downloads-head">
+                  <div>
+                    <span>TEMPLATE STARTER PACK</span>
+                    <h4>Tải mẫu để điền</h4>
+                  </div>
+                  <p>Điền placeholder trong Word, lưu lại rồi upload để kiểm tra trích xuất.</p>
+                </div>
+                <div className="template-download-grid">
+                  {FILLABLE_TEMPLATE_DOWNLOADS.map((template) => (
+                    <a
+                      className="template-download-card"
+                      download
+                      href={template.href}
+                      key={template.href}
+                    >
+                      <strong>{template.label}</strong>
+                      <span>{template.detail}</span>
+                      <em>Tải DOCX ↗</em>
+                    </a>
+                  ))}
+                </div>
+                <div className="template-guidance-grid">
+                  {UPLOAD_GUIDANCE.map((guide) => (
+                    <div className="template-guidance-card" key={guide.label}>
+                      <strong>{guide.label}</strong>
+                      <span>{guide.text}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
               {processingMode === "legacy" ? (
                 <label className="upload-scope-select">
                   <span>LOẠI TÀI LIỆU SCAN</span>
@@ -4085,7 +4154,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                   {uploadFile
                     ? `${(uploadFile.size / 1024 / 1024).toFixed(2)} MB`
                     : processingMode === "template"
-                      ? "CV/Hợp đồng: DOCX, PDF · IELTS/CCCD: PDF, PNG, JPG/JPEG"
+                      ? "CV/Hợp đồng/Leave/OT: DOCX, PDF · IELTS/CCCD: PDF, PNG, JPG/JPEG"
                       : "Ảnh/PDF scan: chọn đúng loại tài liệu; DOCX/XLSX/PDF có text: native parser"}
                 </p>
               </label>
