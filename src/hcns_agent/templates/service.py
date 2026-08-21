@@ -66,9 +66,17 @@ def resolve_template_ocr_backend(requested: str | None = None) -> str:
         if find_spec("paddleocr") is not None:
             return "paddle"
         return "easyocr"
-    if selected == "easyocr" and find_spec("easyocr") is None and find_spec("paddleocr") is not None:
+    if (
+        selected == "easyocr"
+        and find_spec("easyocr") is None
+        and find_spec("paddleocr") is not None
+    ):
         return "paddle"
-    if selected == "paddle" and find_spec("paddleocr") is None and find_spec("easyocr") is not None:
+    if (
+        selected == "paddle"
+        and find_spec("paddleocr") is None
+        and find_spec("easyocr") is not None
+    ):
         return "easyocr"
     return selected
 

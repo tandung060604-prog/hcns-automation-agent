@@ -11,7 +11,10 @@ from hcns_agent.templates.model import ParsedTemplate, TemplateDetection
 
 _ID_RE = re.compile(r"\b(\d{9}|\d{12})\b")
 _DATE_RE = re.compile(r"\b(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\b")
-_NAME_RE = re.compile(r"^[A-ZÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ][A-ZÀ-ỴĐ\s'.-]{3,80}$")
+_NAME_RE = re.compile(
+    r"^[A-ZÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ]"
+    r"[A-ZÀ-ỴĐ\s'.-]{3,80}$"
+)
 
 
 def _fold(value: str) -> str:
@@ -66,7 +69,9 @@ def _looks_like_person_name(line: str) -> bool:
     return alpha_ratio >= 0.7 and not any(ch.isdigit() for ch in cleaned)
 
 
-def _value_after_labels(lines: list[str], labels: tuple[str, ...], *, max_lookahead: int = 8) -> str | None:
+def _value_after_labels(
+    lines: list[str], labels: tuple[str, ...], *, max_lookahead: int = 8
+) -> str | None:
     label_folds = tuple(_fold(label) for label in labels)
     for index, raw in enumerate(lines):
         folded = _fold(raw)
@@ -81,9 +86,16 @@ def _value_after_labels(lines: list[str], labels: tuple[str, ...], *, max_lookah
                     cut_at = _fold(right).find(_fold(cut))
                     if cut_at > 0:
                         right = _clean_line(right[:cut_at])
-                if right and not _is_noise(right) and not any(_fold(label) in _fold(right) for label in labels):
+                if (
+                    right
+                    and not _is_noise(right)
+                    and not any(_fold(label) in _fold(right) for label in labels)
+                ):
                     date = _DATE_RE.search(right)
-                    if date and any("sinh" in label or "birth" in label or "bith" in label for label in label_folds):
+                    if date and any(
+                        "sinh" in label or "birth" in label or "bith" in label
+                        for label in label_folds
+                    ):
                         return date.group(1)
                     if not any(label in _fold(right) for label in label_folds):
                         return right

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from hcns_agent.domain.canonical import CanonicalDocument
 from hcns_agent.domain.documents import DocumentType, SourceFormat
+from hcns_agent.templates.citizen_id_front import CitizenIdFrontParser
 from hcns_agent.templates.common import (
     document_text,
     fuzzy_ocr_contains,
@@ -15,7 +16,6 @@ from hcns_agent.templates.leave_request.validator import LeaveRequestValidator
 from hcns_agent.templates.model import TemplateDefinition, TemplateDetection, TemplateParser
 from hcns_agent.templates.overtime_request.parser import OvertimeRequestParser
 from hcns_agent.templates.overtime_request.validator import OvertimeRequestValidator
-from hcns_agent.templates.citizen_id_front import CitizenIdFrontParser
 from hcns_agent.templates.review_only import ReviewOnlyParser, ReviewOnlyValidator
 from hcns_agent.templates.structured_hr import (
     STRUCTURED_HR_PARSER_ID,
