@@ -135,7 +135,7 @@ class DocumentParserContractTests(TestCase):
         document = self.parse(
             "SYNTHETIC-TEXT",
             "cv.txt",
-            "CV\nKỹ năng: Python\n".encode(),
+            "CV\nK\u1ef9 n\u00eang: Python\n".encode(),
         )
 
         self.assertIs(SourceFormat.PLAIN_TEXT, document.source_format)

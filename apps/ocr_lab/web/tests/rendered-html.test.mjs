@@ -107,7 +107,10 @@ test("keeps the VinHRIS workspace information architecture and local boundaries 
   assert.match(dashboard, /Human Review/);
   assert.match(dashboard, /104<span>\/109<\/span>/);
   assert.match(dashboard, /Chưa phải bằng chứng production/);
-  assert.match(dashboard, /http:\/\/localhost:8080\/camunda\/app\/tasklist\/default\//);
+  assert.match(
+    dashboard,
+    /import\.meta\.env\.VITE_CAMUNDA_URL \?\? "http:\/\/localhost:8080"/,
+  );
   assert.match(dashboard, /Nội dung file không đi vào process variables/);
   assert.match(dashboard, /hr-document-intelligence-context\.webp/);
   assert.match(css, /--ops-navy: #061a28/);

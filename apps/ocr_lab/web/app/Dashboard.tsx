@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   pendingReviewCases,
   resumePendingReview,
@@ -7,6 +8,7 @@ import {
 import ExternalDatasetReview from "./ExternalDatasetReview";
 import ExternalDatasetPrediction from "./ExternalDatasetPrediction";
 import LocalEvidenceOverview from "./LocalEvidenceOverview";
+import MvpDemoPanel, { type MvpSession, restoreMvpDemoSession } from "./MvpDemoPanel";
 import OcrHoDiagnostic from "./OcrHoDiagnostic";
 
 const SHOW_ADVANCED_DIAGNOSTICS =
@@ -1063,7 +1065,7 @@ type Phase14Benchmark = {
   }>;
 };
 
-const API_BASE = "http://127.0.0.1:8765";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:8765";
 const TEMPLATE_RESULT_META_FIELDS = new Set([
   "documentId",
   "schemaVersion",
@@ -2129,7 +2131,7 @@ function TemplateResultPanel({
       <div className="result-actions template-result-actions">
         {["LEAVE_REQUEST", "OVERTIME_REQUEST", "CV", "CERTIFICATE", "EMPLOYMENT_CONTRACT"].includes(result.documentType) ? (
           <button type="button" onClick={onStartCamunda}>
-            Đưa vào Camunda
+            Nộp cho HR
           </button>
         ) : null}
         <button
@@ -2214,6 +2216,23 @@ function RoleReviewQueue({
 
 export default function Dashboard({ data }: { data: DashboardData }) {
   const showLegacyUpload = SHOW_LEGACY_UPLOAD;
+  const [demoSession, setDemoSession] = useState<MvpSession | null>(null);
+  const [authBootstrapping, setAuthBootstrapping] = useState(true);
+  const demoAuthHeaders = demoSession
+    ? { Authorization: `Bearer ${demoSession.token}` }
+    : undefined;
+  useEffect(() => {
+    let cancelled = false;
+    void restoreMvpDemoSession(API_BASE).then((session) => {
+      if (!cancelled) {
+        setDemoSession(session);
+        setAuthBootstrapping(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [query, setQuery] = useState("");
   const [type, setType] = useState("ALL");
   const [variant, setVariant] = useState("ALL");
@@ -2434,7 +2453,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   };
 
   const refreshCamundaQueue = () => {
-    fetch(`${API_BASE}/api/camunda/queue`)
+    fetch(`${API_BASE}/api/camunda/queue`, { headers: demoAuthHeaders })
       .then((response) => {
         if (!response.ok) throw new Error("Camunda queue unavailable");
         return response.json() as Promise<{ queue: CamundaReviewTask[] }>;
@@ -2983,6 +3002,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           : "/user/upload";
       const response = await fetch(`${API_BASE}${endpoint}`, {
         method: "POST",
+        headers: demoAuthHeaders,
         body: formData,
       });
       const payload = (await response.json()) as Record<string, unknown>;
@@ -3035,7 +3055,10 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     try {
       const response = await fetch(`${API_BASE}/api/camunda/start`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(demoAuthHeaders ?? {}),
+        },
         body: JSON.stringify({ documentId }),
       });
       const payload = (await response.json()) as {
@@ -3054,7 +3077,9 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         taskId: null,
         taskName: null,
         incidentCount: 0,
-        tasklistUrl: payload.tasklistUrl ?? "http://localhost:8080/camunda/app/tasklist/default/",
+        tasklistUrl:
+          payload.tasklistUrl ??
+          `${import.meta.env.VITE_CAMUNDA_URL ?? "http://localhost:8080"}/camunda/app/tasklist/default/`,
       });
       setCamundaStatus("Đã tạo case. Mở Camunda Tasklist để xác nhận dữ liệu.");
       refreshCamundaQueue();
@@ -3070,6 +3095,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     try {
       const response = await fetch(
         `${API_BASE}/api/camunda/case?id=${encodeURIComponent(camundaCase.processInstanceId)}`,
+        { headers: demoAuthHeaders },
       );
       const payload = (await response.json()) as CamundaCaseStatus & { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Không đọc được trạng thái Camunda");
@@ -3086,6 +3112,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     try {
       const response = await fetch(
         `${API_BASE}/api/documents/result?id=${encodeURIComponent(documentId)}`,
+        { headers: demoAuthHeaders },
       );
       if (!response.ok) throw new Error("Không tìm thấy session local của case này");
       setUploadFile(null);
@@ -3110,7 +3137,10 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     try {
       const response = await fetch(`${API_BASE}/api/camunda/review`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(demoAuthHeaders ?? {}),
+        },
         body: JSON.stringify({ taskId: task.taskId, role: task.role, decision }),
       });
       const payload = (await response.json()) as { error?: string };
@@ -3505,32 +3535,58 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       ? templateResult.data.sourceFile
       : "");
 
+  const signedIn = !authBootstrapping && demoSession !== null;
+
+  const workspaceChrome = (
+    <header className="topbar workspace-topbar">
+      <Link className="brand" href="/" aria-label="VinHRIS">
+        <span className="brand-mark">V</span>
+        <span>VinHRIS</span>
+        <small>Workspace</small>
+      </Link>
+      <nav aria-label="Điều hướng workspace">
+        <a href="#mvp-demo">Tiếp nhận</a>
+        {signedIn ? <a href="#mvp-demo">Hàng đợi</a> : null}
+        <Link href="/">Trang chủ</Link>
+      </nav>
+      <span className={`live ${apiOnline ? "online" : ""}`}>
+        <i />
+        {authBootstrapping
+          ? "Đang khôi phục phiên…"
+          : signedIn
+            ? apiOnline
+              ? "Hệ thống sẵn sàng"
+              : "API chưa kết nối"
+            : "Đăng nhập để làm việc"}
+      </span>
+    </header>
+  );
+
+  if (authBootstrapping) {
+    return (
+      <main className="operations-site workspace-shell">
+        {workspaceChrome}
+        <section className="workspace-boot">
+          <p>Đang khôi phục phiên đăng nhập…</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (!signedIn || !SHOW_ADVANCED_DIAGNOSTICS) {
+    return (
+      <main className="operations-site workspace-shell">
+        {workspaceChrome}
+        <MvpDemoPanel onSessionChange={setDemoSession} />
+      </main>
+    );
+  }
+
   return (
-    <main className="operations-site">
-      <header className="topbar">
-        <a className="brand" href="#overview" aria-label="Về đầu trang">
-          <span className="brand-mark">V</span>
-          <span>VinHRIS</span><small>HCNS</small>
-        </a>
-        <nav aria-label="Điều hướng chính">
-          <a href="#overview">Tổng quan</a>
-          <a href="#upload">Tiếp nhận</a>
-          <a href="#roles">Hàng đợi</a>
-          <a href="#explorer">Evidence</a>
-          <a
-            className="camunda-link"
-            href="http://localhost:8080/camunda/app/tasklist/default/"
-            rel="noreferrer"
-            target="_blank"
-          >
-            Camunda <span aria-hidden="true">↗</span>
-          </a>
-        </nav>
-        <span className={`live ${apiOnline ? "online" : ""}`}>
-          <i />
-          {apiOnline ? "Hệ thống sẵn sàng" : "Chế độ xem dữ liệu"}
-        </span>
-      </header>
+    <main className="operations-site workspace-shell">
+      {workspaceChrome}
+
+      <MvpDemoPanel onSessionChange={setDemoSession} />
 
       <section className="hero" id="overview">
         <div className="hero-copy">
@@ -3543,8 +3599,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             Tiếp nhận, trích xuất và chuyển hồ sơ đến đúng người kiểm tra trong một luồng local an toàn.
           </p>
           <div className="hero-actions">
-            <a className="primary-button" href="#upload">
-              Tiếp nhận hồ sơ
+            <a className="primary-button" href="#mvp-demo">
+              Tiếp nhận tài liệu
             </a>
             <a className="text-button" href="#workflow">
               Xem quy trình <span>→</span>
@@ -3578,6 +3634,23 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           <p>
             Mỗi bước dùng đúng parser, lưu đúng evidence và dừng lại cho con người xác nhận khi cần.
           </p>
+          <dl className="product-capabilities">
+            <div>
+              <dt>Tiếp nhận</dt>
+              <dd>Ảnh và PDF scan đi qua OCR. DOCX và XLSX ưu tiên dữ liệu gốc.</dd>
+            </div>
+            <div>
+              <dt>Đối chiếu</dt>
+              <dd>Mỗi kết quả gắn với trang, nội dung nhận diện và độ tin cậy.</dd>
+            </div>
+            <div>
+              <dt>Kiểm tra ngoại lệ</dt>
+              <dd>Trường chưa chắc chắn được chuyển cho người phụ trách xác nhận.</dd>
+            </div>
+          </dl>
+          <a className="primary-button product-cta" href="#mvp-demo">
+            Bắt đầu tiếp nhận
+          </a>
         </div>
         <ol className="platform-rail" aria-label="Năm lớp của nền tảng xử lý hồ sơ">
           <li><span>01</span><strong>Intake</strong><small>DOCX, PDF và ảnh</small></li>
@@ -3654,14 +3727,18 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         </ol>
       </section>
 
-      <RoleReviewQueue
-        tasks={camundaQueue}
-        onInspect={inspectCamundaDocument}
-        onReview={completeCamundaReview}
-      />
-      {camundaQueueStatus ? <p className="camunda-queue-status">{camundaQueueStatus}</p> : null}
+      {false ? (
+        <>
+          <RoleReviewQueue
+            tasks={camundaQueue}
+            onInspect={inspectCamundaDocument}
+            onReview={completeCamundaReview}
+          />
+          {camundaQueueStatus ? <p className="camunda-queue-status">{camundaQueueStatus}</p> : null}
+        </>
+      ) : null}
 
-      <section className="section upload-section" id="upload">
+      <section className="section upload-section" id="upload" style={{ display: "none" }}>
         <div className="section-heading">
           <div>
             <p className="eyebrow">TIẾP NHẬN HỒ SƠ</p>

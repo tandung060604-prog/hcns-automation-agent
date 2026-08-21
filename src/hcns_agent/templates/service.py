@@ -50,7 +50,37 @@ _SUPPORTED_TEMPLATE_FORMATS = frozenset(
     }
 )
 _OCR_TEMPLATE_FORMATS = frozenset({SourceFormat.PDF_SCAN, SourceFormat.IMAGE})
-DEFAULT_TEMPLATE_OCR_BACKEND = "easyocr"
+DEFAULT_TEMPLATE_OCR_BACKEND = "auto"
+
+
+def resolve_template_ocr_backend(requested: str | None = None) -> str:
+    """Pick an installed OCR backend. Prefer EasyOCR when present, else Paddle."""
+    selected = (
+        requested
+        or os.getenv("HCNS_TEMPLATE_OCR_BACKEND")
+        or DEFAULT_TEMPLATE_OCR_BACKEND
+    ).casefold().strip()
+    if selected in {"", "auto"}:
+        if find_spec("easyocr") is not None:
+            return "easyocr"
+        if find_spec("paddleocr") is not None:
+            return "paddle"
+        return "easyocr"
+    if (
+        selected == "easyocr"
+        and find_spec("easyocr") is None
+        and find_spec("paddleocr") is not None
+    ):
+        return "paddle"
+    if (
+        selected == "paddle"
+        and find_spec("paddleocr") is None
+        and find_spec("easyocr") is not None
+    ):
+        return "easyocr"
+    return selected
+
+
 LOCAL_TEMPLATE_RUNTIME_PROFILE = "template-first"
 STAGE_TIMING_SCHEMA_VERSION = "hcns-stage-timing/1.0.0"
 
@@ -449,11 +479,7 @@ def build_local_template_processing_service(
     easyocr_decoder: str = "greedy",
     easyocr_language_profile: str = "vi",
 ) -> TemplateProcessingService:
-    selected_backend = (
-        ocr_backend
-        or os.getenv("HCNS_TEMPLATE_OCR_BACKEND")
-        or DEFAULT_TEMPLATE_OCR_BACKEND
-    ).casefold()
+    selected_backend = resolve_template_ocr_backend(ocr_backend)
     if selected_backend == "paddle":
         ocr_engine: OcrEngine = _LazyTemplatePaddleOcrEngine(device=device)
     elif selected_backend == "easyocr":

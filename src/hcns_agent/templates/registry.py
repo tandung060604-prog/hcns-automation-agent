@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from hcns_agent.domain.canonical import CanonicalDocument
 from hcns_agent.domain.documents import DocumentType, SourceFormat
+from hcns_agent.templates.citizen_id_front import CitizenIdFrontParser
 from hcns_agent.templates.common import (
     document_text,
     fuzzy_ocr_contains,
@@ -342,16 +343,35 @@ def build_default_template_registry() -> TemplateRegistry:
                 "placeOfOrigin", "placeOfResidence",
             ),
             schema_ref="schemas/templates/vietnam_citizen_id_front_v1.schema.json",
-            anchors=("can cuoc cong dan", "date of birth", "nationality", "front"),
-            minimum_anchor_matches=3,
+            # Include OCR-noisy variants from latin recognizer (e.g. "CN CƯC CNG DN",
+            # "Date of bith", "Citzen Identy Card") so front CCCD still detects.
+            anchors=(
+                "can cuoc cong dan",
+                "cn cuc cng dn",
+                "citizen identity",
+                "citzen identy",
+                "date of birth",
+                "date of bith",
+                "place of origin",
+                "ho va ten",
+                "nationality",
+                "quoc tich",
+            ),
+            minimum_anchor_matches=2,
+            parser=CitizenIdFrontParser(),
             field_labels={
-                "idNumber": ("id number", "so cccd", "so dinh danh ca nhan"),
-                "fullName": ("full name", "ho va ten"),
-                "dateOfBirth": ("date of birth", "ngay sinh"),
-                "sex": ("sex", "gioi tinh"),
-                "nationality": ("nationality", "quoc tich"),
-                "placeOfOrigin": ("place of origin", "que quan"),
-                "placeOfResidence": ("place of residence", "noi thuong tru"),
+                "idNumber": ("id number", "so/no", "so cccd", "so dinh danh ca nhan", "no:"),
+                "fullName": ("full name", "ful name", "ho va ten", "ho và ten"),
+                "dateOfBirth": ("date of birth", "date of bith", "ngay sinh", "nay sinh"),
+                "sex": ("sex", "gioi tinh", "giới tính", "nam/nu"),
+                "nationality": ("nationality", "quoc tich", "quốc tịch"),
+                "placeOfOrigin": ("place of origin", "que quan", "quê quán"),
+                "placeOfResidence": (
+                    "place of residence",
+                    "noi thuong tru",
+                    "nơi thường trú",
+                    "pce rsidence",
+                ),
             },
         )
     )
