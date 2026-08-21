@@ -66,6 +66,7 @@ except ImportError:  # Direct script execution used by the local OCR runner.
 
 PREDICTION_SCHEMA_VERSION = "external-dataset-predictions/1.0.0"
 DATA13_PREDICTION_SCHEMA_VERSION = "external-dataset-predictions/data13/1.0.0"
+DATA31_PREDICTION_SCHEMA_VERSION = "external-dataset-predictions/data31-template-first/1.0.0"
 REPORT_SCHEMA_VERSION = "external-dataset-data12-aggregate/1.0.0"
 DATA13_REPORT_SCHEMA_VERSION = "external-dataset-data13-aggregate/1.0.0"
 MATCHING_POLICY_V1 = "1.0.0"
@@ -2572,6 +2573,7 @@ def load_prediction_summary(paths: tuple[Path, Path, Path]) -> dict[str, Any]:
     if artifact.get("schemaVersion") not in {
         PREDICTION_SCHEMA_VERSION,
         DATA13_PREDICTION_SCHEMA_VERSION,
+        DATA31_PREDICTION_SCHEMA_VERSION,
     }:
         raise PredictionArtifactError("Unsupported external prediction artifact")
     if not report.is_file() or not marker.is_file():

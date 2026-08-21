@@ -16,6 +16,7 @@ from apps.ocr_lab.api.external_dataset_prediction import (
     build_aggregate_report,
     build_gate_report,
     load_prediction_document,
+    load_prediction_summary,
     resolve_prediction_source,
 )
 from apps.ocr_lab.api.phase15_idp import classify_phase15_document, extract_phase15_document
@@ -873,6 +874,33 @@ def test_data13_all_active_families_are_scored_when_prediction_includes_visual_c
     assert report["policyExcludedDocumentCount"] == 0
     assert report["ocrPolicy"]["unsupportedNoOcrCount"] == 0
     assert report["metrics"]["fieldExactMatchRate"] == 1.0
+
+
+def test_data31_template_first_prediction_is_available_to_local_summary(tmp_path: Path) -> None:
+    prediction = tmp_path / "prediction.json"
+    report = tmp_path / "report.json"
+    marker = tmp_path / "marker.json"
+    prediction.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "external-dataset-predictions/data31-template-first/1.0.0",
+                "documentCount": 1,
+                "documents": [{"caseId": "contract-001", "category": "contract"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    report.write_text(json.dumps({"datasetId": "DATA-31"}), encoding="utf-8")
+    marker.write_text(
+        json.dumps({"evaluationKind": "development-aggregate-comparison"}),
+        encoding="utf-8",
+    )
+
+    summary = load_prediction_summary((prediction, report, marker))
+
+    assert summary["status"] == "DEVELOPMENT_EVALUATED"
+    assert summary["documentCount"] == 1
+    assert summary["documents"][0]["caseId"] == "contract-001"
 
 
 def test_ielts_layout_parser_uses_form_geometry_and_keeps_manual_review() -> None:
