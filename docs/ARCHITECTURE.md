@@ -32,9 +32,12 @@ DocumentSource
   → Camunda BPMN
 ```
 
-Native parser luôn được ưu tiên. OCR chỉ là dependency của parser ảnh và PDF
-scan, không phải trung tâm hệ thống. Tài liệu và canonical result lớn nằm trong
-storage được kiểm soát; Camunda chỉ nhận reference và biến routing nhỏ.
+Native parser luôn được ưu tiên. PDF được inspect theo profile `native`, `scan`
+hoặc `mixed`; chỉ `native` đi qua `PDF_TEXT`, còn `scan` và `mixed` đi qua
+`PDF_SCAN` để không bỏ sót các trang ảnh. OCR chỉ là dependency của parser ảnh
+và PDF scan, không phải trung tâm hệ thống. Tài liệu và canonical result lớn
+nằm trong storage được kiểm soát; Camunda chỉ nhận reference và biến routing
+nhỏ.
 
 ## Ba lớp phân loại độc lập
 

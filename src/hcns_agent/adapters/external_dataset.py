@@ -20,12 +20,16 @@ def count_source_format_and_pages(path: Path, content: bytes) -> tuple[SourceFor
                 if document.needs_pass:
                     raise ExternalDatasetError(f"Encrypted PDF is not accepted: {path.name}")
                 page_count = int(document.page_count)
-                has_text = any(page.get_text("text").strip() for page in document)
+                page_has_text = [
+                    sum(1 for character in page.get_text("text") if not character.isspace()) >= 8
+                    for page in document
+                ]
         except ExternalDatasetError:
             raise
         except Exception as error:
             raise ExternalDatasetError(f"Invalid PDF source: {path.name}") from error
-        return (SourceFormat.PDF_TEXT if has_text else SourceFormat.PDF_SCAN), page_count
+        is_native = bool(page_has_text) and all(page_has_text)
+        return (SourceFormat.PDF_TEXT if is_native else SourceFormat.PDF_SCAN), page_count
     if suffix in {".png", ".jpg", ".jpeg"}:
         try:
             from PIL import Image

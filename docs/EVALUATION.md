@@ -1,5 +1,321 @@
 # Evaluation
 
+## PDF-001C scan cohort baseline (2026-08-18)
+
+The private cohort contains 7 authorized PDF scans and 98 Contract fields.
+Ground Truth was supplied by the user, matched to source SHA-256, schema
+validated and kept outside Git. The baseline is Template-first + EasyOCR
+`vi-greedy`, parser `2.1.1`, 150 DPI, canvas 1280 and preprocess `none`.
+
+| Metric | Result |
+|---|---:|
+| Present | `96/98` (`98.0%`) |
+| Strict exact | `67/98` (`68.4%`) |
+| Accepted | `82/98` (`83.7%`) |
+| Missing | `2/98` |
+| Technical errors | `0/7` |
+| Manual review | `7/7` |
+
+The strict scan gate is not met, so no preprocessing/ROI candidate was tried.
+The 14 DOCX and 7 native PDF controls processed successfully with zero
+technical errors. Scan-cohort p95/RAM is `NOT MEASURED`: the long performance
+run was stopped before completion and partial numbers were discarded.
+
+## ALG-004 mismatch attribution (2026-08-18)
+
+The same private seven-scan replay was run with the frozen baseline and the
+confirmed, prediction-blind Ground Truth. It reproduced `31/31` strict
+mismatches without changing the OCR profile. The report is aggregate-only.
+
+| Category | Count | Evidence rule |
+|---|---:|---|
+| Normalization / policy-accepted | `15` | Matching policy accepted the value while strict exact remained false |
+| Parser boundary | `10` | Confirmed Ground Truth value was located in canonical OCR evidence |
+| OCR recognition | `6` | Confirmed Ground Truth value was not located in canonical OCR evidence |
+| Ground Truth review | `0` | All fields were confirmed from the source document |
+
+The 15 accepted partials contain 7 cases with full Ground Truth token coverage
+and 8 over-extractions. The parser-boundary fields are concentrated in employer,
+representative, employee, employee ID, job title and probation salary; the
+recognition group is concentrated in allowances and job title. The exact field
+names and parser-method counts are recorded only in the private aggregate
+artifact. This attribution identifies ALG-005 as the next parser task; it does
+not justify a new OCR profile or promotion.
+
+## ALG-005 parser recovery replay (2026-08-18)
+
+The shared parser moved to `structured-hr/family-layout/2.1.2` for safe OCR
+label and salary-boundary fixes. The private seven-scan cohort was replayed
+with the unchanged EasyOCR baseline: 150 DPI, canvas 1280, magnification 1.3
+and preprocess `none`.
+
+| Metric | PDF-001C | ALG-005 | Delta |
+|---|---:|---:|---:|
+| Present | `96/98` | `98/98` | `+2` |
+| Strict exact | `67/98` | `69/98` | `+2` |
+| Accepted | `82/98` | `84/98` | `+2` |
+| Technical errors | `0/7` | `0/7` | `0` |
+| Manual review | `7/7` | `7/7` | `0` |
+
+The strict gate remains below 80%, so no OCR profile was tried or promoted.
+Residual strict mismatch attribution is 15 normalization/policy-accepted, 10
+OCR recognition, 4 competing job-title labels and 0 Ground Truth review. The
+four conflicts contain both `Chức danh chuyên môn` and `Chức vụ/Vị trí`;
+choosing role precedence improves some new scans but regresses authorized
+Contract 23, so the existing stable precedence is retained and pinned by
+ALG-006.
+Scan-cohort p95/RAM is still `NOT MEASURED`.
+
+## ALG-006 job-title policy replay (2026-08-19)
+
+The canonical policy is now explicit: `Chức danh chuyên môn` has precedence
+when it yields a value; `Chức vụ/Vị trí` is a fallback only when the
+professional-title value is missing. The parser is pinned at
+`structured-hr/family-layout/2.1.3`, with synthetic coverage for both branches.
+
+The private PDF-001C replay used the unchanged EasyOCR baseline
+(`150/1280/none`) and produced `98/98` present, `69/98` strict, `84/98`
+accepted, 0 technical errors and 7/7 manual review. Strict is `70.4%`, so the
+scan gate remains HOLD; no OCR profile or product route was promoted. The
+aggregate-only evidence is outside Git at `PDF-001C/alg006-replay.json`.
+
+## PDF-001D scan OCR recovery (2026-08-19)
+
+The shared parser moved to `structured-hr/family-layout/2.1.4`. The change is
+limited to general OCR repairs observed in the authorized cohort: allowance
+labels and monthly units, employer token confusions and recurring person-name
+diacritics. No private value, document-specific rule or OCR engine was added.
+
+| Metric | ALG-006 baseline | PDF-001D | Delta |
+|---|---:|---:|---:|
+| Present | `98/98` | `98/98` | `0` |
+| Strict exact | `69/98` | `78/98` | `+9` |
+| Accepted | `84/98` | `93/98` | `+9` |
+| Technical errors | `0/7` | `0/7` | `0` |
+| Manual review | `7/7` | `7/7` | `0` |
+
+The aggregate-only report is private at
+`D:\document_ai_hr_dataset\.reviews\PDF-001C\pdf001d-final.json`.
+OCR-recognition mismatches fell from `10` to `0`; the remaining strict
+mismatches are normalization and job-title boundary cases under the locked
+professional-title policy and the cohort's role-title Ground Truth. Strict quality is `79.6%`, below the 80%
+scan gate, so the product profile remains EasyOCR `vi-greedy`, 150 DPI, canvas
+1280, preprocess `none`. Beamsearch, `vi-en` and ROI candidates were rejected
+after cohort replay; p95/RAM for PDF-001D candidates is `NOT MEASURED`.
+
+## PDF-001E job-title reconciliation (2026-08-19)
+
+The fixed seven-scan cohort was replayed with the current parser and a
+read-only role-first counterfactual. Both candidate labels were available in
+six documents; one had only a professional-title candidate. The aggregate-only
+report is private at
+`D:\document_ai_hr_dataset\.reviews\PDF-001C\pdf001e-job-title-policy.json`.
+
+| Policy | Strict exact | Accepted | Contract 23 strict exact |
+|---|---:|---:|---:|
+| Professional-first | `78/98` | `93/98` | `1/1` |
+| Role-first counterfactual | `77/98` | `98/98` | `0/1` |
+
+Role-first wins no strict-exact job-title case and regresses Contract 23,
+despite improving accepted coverage. Therefore no role-first, conditional
+heuristic or document-specific exception is promoted. The five role-title
+Ground Truth conflicts require independent business review; until then the
+canonical policy remains professional-title-first with role-title fallback.
+
+## PDF-001F independent business review (2026-08-19)
+
+The five remaining job-title conflicts were reviewed directly against the
+authorized PDF pages. Each source visibly contains both a professional title
+and a staffed role/position, with a management clause following the role. The
+role title aligns with Ground Truth in `5/5`; no field is missing and no visual
+OCR ambiguity was found. The aggregate-only review is private at
+`D:\document_ai_hr_dataset\.reviews\PDF-001F\pdf001f-independent-business-review.json`.
+
+Contract 23 is the non-regression anchor and its Ground Truth selects the
+professional title. Therefore the fixed cohort does not define one consistent
+meaning for a single `job_title` field. This is a schema/label-policy conflict,
+not an OCR recovery defect. The recommended resolution is separate
+`professional_title` and `role_title` fields, followed by an explicit product
+  decision for downstream `job_title`; no parser, Ground Truth or route change
+  is promoted in PDF-001F.
+
+  ## PDF-001G job-title schema decision and replay (2026-08-19)
+
+  Product/HR decision: preserve both `professional_title` and `role_title`.
+  The professional label is extracted from `Chức danh chuyên môn`; the role
+  label is extracted from `Chức vụ/Vị trí` with a trailing management clause
+  removed. Runtime `job_title` maps to `role_title` for HR/Camunda, while the
+  historical Contract 23 job-title meaning is preserved in
+  `professional_title`.
+
+  The Contract runtime moved to template `2.1`, schema `2.1.0` and parser
+  `structured-hr/family-layout/2.2.0`. The private seven-scan replay uses the
+  unchanged EasyOCR baseline (150 DPI, canvas 1280, `none`) and the frozen
+  14-field comparator. It is not directly comparable to the old single-field
+  policy because `job_title` now has an explicit downstream meaning.
+
+  | Metric | PDF-001G |
+  |---|---:|
+  | Present | `97/98` |
+  | Strict exact | `82/98` |
+  | Accepted | `96/98` |
+  | Technical errors | `0/7` |
+  | Manual review | `7/7` |
+
+  Aggregate-only evidence is private at
+  `D:\document_ai_hr_dataset\.reviews\PDF-001G\pdf001g-schema-replay.json`.
+  Contract 23 parity is private at
+  `D:\document_ai_hr_dataset\.reviews\PDF-001G\contract23-parity.json`;
+  all boolean checks pass, with no raw values, OCR text or source paths.
+  DATA-29/DATA-31 historical reports and Ground Truth remain unchanged. The
+  next gate is the DATA-31 schema-qualified replay; CAM-001 is still blocked.
+
+  ## PDF-001H DATA-31 schema replay (2026-08-19)
+
+  DATA-31 was replayed privately through the promoted Template-first + EasyOCR
+  service using parser `structured-hr/family-layout/2.2.0`, Contract template
+  `2.1`/schema `2.1.0`, and the additive `professional_title`/`role_title`
+  schema. The historical comparator remains frozen at 126 fields; Ground Truth
+  and the prior DATA-31 report were not rewritten.
+
+  | Metric | PDF-001H |
+  |---|---:|
+  | Documents | `13` (`4` Contract, `5` CV, `4` IELTS) |
+  | Present | `97/126` |
+  | Strict exact | `55/126` |
+  | Accepted | `60/126` |
+  | Schema errors | `0` |
+  | Quality decision | `HOLD` |
+
+  Title-schema checks are professional title present `4/4`, role title present
+  `1/4`, runtime `job_title` → `role_title` `4/4`, and Contract 23 historical
+  professional-title parity `PASS`. The required gate is `121/126` strict and
+  `126/126` accepted, so no promotion or Camunda process was allowed.
+
+  The aggregate-only summary is private at
+  `D:\document_ai_hr_dataset\.reviews\PDF-001H\template-first-v2\schema-replay-summary.json`.
+  Its safety flags report no raw field values, OCR text or source paths; the
+  private prediction/report remain outside Git. Next is
+  `PDF-001I-DATA31-QUALITY-RECOVERY`; CAM-001 remains blocked.
+
+  ## PDF-001I DATA-31 quality recovery (2026-08-19)
+
+  Parser `structured-hr/family-layout/2.2.1` adds only general IELTS recovery
+  for inline label/value OCR blocks, embedded form numbers, inline band scores
+  and OCR dates. Synthetic regression coverage passed; Contract/CV parsing and
+  the EasyOCR profile were not otherwise changed.
+
+  | Metric | PDF-001I |
+  |---|---:|
+  | Present | `111/126` |
+  | Strict exact | `58/126` |
+  | Accepted | `63/126` |
+  | Schema errors | `0` |
+  | Quality decision | `HOLD` |
+
+  Relative to PDF-001H, presence improved `97 → 111` and strict/accepted
+  improved `55 → 58` / `60 → 63`. The aggregate report diagnoses 38
+  prediction-for-absent-Ground-Truth fields, 17 recognized parser mismatches,
+  3 parser-missed, 2 OCR-not-recognized and 3 below-80% partials. Field-level
+  review identifies IELTS identifier/type semantics and sparse Contract/CV
+  Ground Truth as schema/coverage issues; no speculative mapping was promoted.
+
+  The final private summary is at
+  `D:\document_ai_hr_dataset\.reviews\PDF-001I\template-first-v4\schema-replay-summary.json`.
+  It reports parser `2.2.1`, no raw values/OCR/source paths, no Ground Truth
+  rewrite and promotion disabled. GT coverage is `78/126` populated and
+  `48/126` empty. The gate remains `121/126` strict plus
+  `126/126` accepted; next is `PDF-001J-DATA31-SCHEMA-COVERAGE-DECISION`, and
+  CAM-001 remains blocked.
+
+  ## PDF-001B bounded scan profile (2026-08-18)
+
+This is a review-only probe on the authorized Contract already included in the
+private DATA-31 corpus. The default `none` profile was compared with the
+bounded `content-roi-autocontrast-v1` profile, which crops detected blank page
+margins, applies grayscale/autocontrast and restores OCR box offsets. Both
+profiles used Template-first + EasyOCR and retained `MANUAL_REVIEW`.
+
+| Profile | Present | Strict | Accepted | Decision |
+|---|---:|---:|---:|---|
+| Default `none` | `14/14` | `13/14` | `14/14` | baseline |
+| `content-roi-autocontrast-v1` | `13/14` | `10/14` | `12/14` | `NOT_PROMOTED` |
+
+The candidate failed the quality non-regression gate, so it was not considered
+for product promotion. Candidate p95/RAM evidence is `NOT_MEASURED` for
+promotion because a duplicated isolated run was discarded; no numbers are
+inferred from that run. The product remains at 150 DPI / 1280 / `none`.
+
+## PDF-001A hi-res scan gate (2026-08-18)
+
+This is an aggregate-only comparison on one authorized DATA-29 PDF_SCAN document
+using Template-first, EasyOCR 1.7.2 `vi-greedy` and parser
+`structured-hr/family-layout/2.1.1`. Each profile used one cold and 30 warm
+isolated child-process samples; all scans remained `MANUAL_REVIEW`.
+
+| Profile | Strict / accepted | Warm total p95 | Warm OCR p95 | RSS p95 | Python heap p95 |
+|---|---:|---:|---:|---:|---:|
+| Baseline 150 DPI / 1280 | `9/10` / `10/10` | `12.500 s` | `10.907 s` | `1.266 GB` | `66.2 MB` |
+| Candidate 200 DPI / 2560 | `8/10` / `10/10` | `50.657 s` | `48.441 s` | `3.485 GB` | `199.0 MB` |
+
+Both profiles completed `30/30` warm samples without failure. The candidate
+regressed strict quality and increased latency/RSS/heap, so the decision is
+`NOT_PROMOTED`; the product remains at 150 DPI / 1280 canvas. A supporting
+single-document authorized Contract probe also stayed manual and measured
+baseline `13/14` strict versus candidate `10/14`; this probe is not a broader
+generalization claim. Raw documents, OCR output, Ground Truth and benchmark
+working files remain private; no localhost, DATA-31 or Camunda state changed.
+
+## PDF-001 PDF scan quality/performance gate (2026-08-14)
+
+The authorized DATA-29 PDF gate used the canonical Template-first + EasyOCR
+runtime and did not modify Ground Truth or the sealed prediction artifact. The
+input classifier reported 2 native PDFs and 1 scan PDF in the authorized corpus;
+a PII-free regression fixture verified the mixed-page profile. Mixed PDFs route
+to the scan/manual-review parser so image pages are not omitted.
+
+The scan benchmark completed one cold plus 30 warm samples. Each warm batch used
+one private child process for at most five samples, loading EasyOCR once before
+measurement and resetting the process between batches. The report is aggregate-
+only (`promotionAllowed=false`, no raw field/OCR/path/ID data).
+
+| PDF scan metric | Result |
+|---|---:|
+| Warm total p50 / p95 | `9.378 s` / `12.532 s` |
+| Warm OCR p50 / p95 | `7.918 s` / `10.945 s` |
+| Warm peak RSS p50 / p95 | `1.516 GB` / `1.694 GB` |
+| Warm peak Python heap p50 / p95 | `52.8 MB` / `66.2 MB` |
+| Failures | `0/30` |
+| PDF_SCAN exact required fields | `9/10` (`90%`) |
+| PDF_SCAN accepted fields | `10/10` (`100%`) |
+| Applicable fields present | `9/9` (`100%`) |
+| Classification / manual review | `1/1` / `1/1` |
+
+The quality slice is one real authorized PDF_SCAN document, so this is a local
+gate result and not a production generalization claim. Private evidence:
+`C:\tmp\pdf001-template-scan-report-20260814-v6.json`.
+
+## ALG-002 canonical parser replay (2026-08-14)
+
+Template-first upload and the DATA-29 prediction adapter call the same
+Contract/CV/IELTS parser, `structured-hr/family-layout/2.1.0`. The full
+authorized DATA-29 replay completed offline with EasyOCR plus local VietOCR
+configuration and Paddle only for IELTS. It evaluated 12 documents and reached
+`107/112` strict and `112/112` accepted under matching policy `2.0.0`:
+Contract `42/42`, CV `45/50`, IELTS `20/20`.
+
+The replay is reproducible with the EasyOCR child isolated from the Paddle
+parent environment. VietOCR refinement is skipped only inside CV skill sections
+because that list layout is more stable with the promoted EasyOCR text; other
+narrative lines remain refined. The run completed without a native crash or
+residual replay process. It also recorded `29/30` exact OCR fields,
+`99/99` applicable fields present, zero sensitive false acceptance, zero schema
+errors and zero parser regressions.
+
+The aggregate report remains `HOLD` by policy because promotion is disabled.
+Ground Truth, sealed prediction/report and raw documents were not changed; the
+generated private prediction/report/marker remain outside Git in local Temp.
+
 ## PERF-001 Template-first stage timing (2026-08-13)
 
 The authorized DATA-29 performance run used one representative source for each
@@ -707,3 +1023,45 @@ Phần benchmark 18 tài liệu bên dưới là báo cáo lịch sử của cor
 retire. Corpus, route dashboard và script Phase 16 không còn được local runtime
 sử dụng; không dùng các số liệu này để mô tả trạng thái hiện tại. Phạm vi hiện
 hành được xem riêng theo template-first, CCCD review và OCR-HO shadow.
+
+## PDF-001I-R1 — DATA-31 mismatch recovery (2026-08-20)
+
+R1 sửa một lỗi parser tổng quát của IELTS: `credential_id` chỉ lấy mã trong
+ngữ cảnh `Form Number`/TRF và không lấy chuỗi 18 ký tự từ vùng validation,
+thương hiệu hoặc URL. Parser được nâng từ `2.2.1` lên `2.2.2`; không thêm OCR
+engine, không hard-code giá trị tài liệu và không sửa Ground Truth.
+
+Một replay OCR riêng bằng EasyOCR tạo được 8 trang cho 13 tài liệu. Khi dùng
+artifact này để chẩn đoán, kết quả là `64/109` strict và `71/109` accepted,
+`schemaErrors=0`, thấp hơn baseline chính thức `72/109` và `80/109`; vì vậy
+artifact mới không được promote hay thay baseline. Probe semantic xác nhận
+4/4 IELTS có credential lấy từ ngữ cảnh TRF/Form Number và 0/4 lấy từ vùng
+validation/brand.
+
+Đường chạy Template-first dài hạn vẫn bị access violation native trong
+Torch/EasyOCR CRAFT sau khi xử lý một phần tài liệu; đây là blocker runtime,
+không phải bằng chứng chất lượng. Gate yêu cầu `105/109` strict và `109/109`
+accepted nên quyết định vẫn là `HOLD`; CAM-001 tiếp tục bị khóa.
+
+Validation: targeted parser/replay tests `66 passed`, full Python suite
+`576 passed`, Ruff, compileall và repository hygiene đều đạt. Không tạo
+Camunda process/session và không có real side effect.
+
+The PDF-001C mismatch analyzer now reads the canonical parser version instead
+of carrying a stale hard-coded version, preventing future diagnostic reports
+from silently referring to an older parser.
+
+## DATA-31 Quality Recovery R2 final — 2026-08-20
+
+The final canonical parser is `structured-hr/family-layout/2.2.4`. It adds only
+general rules for multi-word `First Name(s)` labels, Form Number decoys,
+employee-party title boundaries, printed IELTS type, grouped IELTS score rows
+and Vietnamese written dates. EasyOCR and the public schemas remain unchanged.
+
+The private coverage overlay contains 12 confirmed IELTS semantic values and
+does not rewrite the sealed Ground Truth or historical reports. A fresh replay
+of all 13 DATA-31 documents reached `86/109` strict, `94/109` accepted and
+`105/109` present, with `schemaErrors=0`, parser regressions `0` and sensitive
+false acceptance `0`. The required `105/109` strict and `109/109` accepted
+gate remains `HOLD`; 23 strict mismatches remain, including accepted partial
+text, OCR misses and locked title/GT semantics. CAM-001 remains blocked.

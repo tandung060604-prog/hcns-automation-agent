@@ -1,14 +1,333 @@
 # Backlog
 
+## ALG-003 / DATA-31 — IMPLEMENTED / QUALITY HOLD (2026-08-18)
+
+Canonical parser `structured-hr/family-layout/2.1.1` recovers numbered Contract
+labels, split dates, separated identity numbers, professional job-title labels,
+multiline workplace text and the observed weekly-hours OCR separator error. The
+authorized Contract reaches `14/14` fields present, `13/14` strict and `14/14`
+accepted under Template-first + EasyOCR `vi-greedy`; manual review remains
+mandatory. Private DATA-31 was sealed before prediction with 13 documents and
+126 fields, but its latest valid canonical replay (v2) reached only `59/126` strict and `64/126`
+accepted. It is not promoted, localhost remains on immutable DATA-29, and
+CAM-001 remains blocked.
+
+## PDF-001A-HIRES-SCAN-GATE — DONE / NOT PROMOTED (2026-08-18)
+
+On one authorized DATA-29 PDF_SCAN, EasyOCR 1.7.2 `vi-greedy` with parser
+`structured-hr/family-layout/2.1.1` was measured with one cold and 30 warm
+isolated samples per profile. Baseline 150 DPI / 1280 canvas scored `9/10`
+strict and `10/10` accepted; warm total p95 was `12.500 s` and RSS p95
+`1.266 GB`. Hires 200 DPI / 2560 canvas scored `8/10` strict and `10/10`
+accepted; warm total p95 was `50.657 s` and RSS p95 `3.485 GB`. Both completed
+without failure and retained manual review. Candidate quality regressed and
+resource cost increased, so the product profile remains 150/1280.
+
+## PDF-001B-SCAN-PROFILE-RECOVERY — DONE / NOT PROMOTED (2026-08-18)
+
+The bounded `content-roi-autocontrast-v1` profile was implemented for
+benchmark-only review. On the authorized Contract, the default profile scored
+`14/14` present, `13/14` strict and `14/14` accepted; the candidate scored
+`13/14` present, `10/14` strict and `12/14` accepted. Both remained
+`MANUAL_REVIEW`. The candidate is rejected for quality regression; the product
+remains at 150 DPI / 1280 / `none`. One duplicated isolated benchmark was
+discarded and is not evidence.
+
+## PDF-001C-SCAN-COHORT-EXPANSION — QUALITY HOLD (2026-08-18)
+
+The private cohort contains 7 authorized PDF scans and 98 fields. Baseline
+150/1280/`none` reached `96/98` present, `67/98` strict and `82/98` accepted;
+all 7 remained manual review. The 14 DOCX and 7 native PDF controls processed
+without technical errors. Scan p95/RAM was not measured because the long run
+was stopped before completion; no partial evidence is used.
+
+## ALG-004-CONTRACT-SCAN-ERROR-ANALYSIS — DONE / QUALITY HOLD (2026-08-18)
+
+Private replay reproduced all 31 strict mismatches and classified them as
+`15` normalization/policy-accepted, `10` parser boundary, `6` OCR recognition
+and `0` Ground Truth review. The accepted group contains 7 full-token-coverage
+cases and 8 over-extractions. The report is aggregate-only; no OCR profile or
+product route changed.
+
+## ALG-005-CONTRACT-SCAN-PARSER-RECOVERY — DONE / QUALITY HOLD (2026-08-18)
+
+Parser `2.1.2` fixes the confirmed OCR label and salary boundaries with
+synthetic regression coverage. The 7-scan replay reached `98/98` present,
+`69/98` strict and `84/98` accepted, with zero technical errors and mandatory
+manual review. Four competing job-title labels remain intentionally unresolved
+because role precedence regresses the authorized Contract 23; no OCR profile
+was changed.
+
+## ALG-006-CONTRACT-JOB-TITLE-POLICY — DONE / QUALITY HOLD (2026-08-19)
+
+Pinned one canonical mapping: prefer `Chức danh chuyên môn`; use
+`Chức vụ/Vị trí` only when the professional-title value is missing. Parser and
+manifest are `2.1.3`; synthetic policy regression passed. The private replay
+remained `98/98` present, `69/98` strict, `84/98` accepted, 0 technical errors
+and 7/7 manual review. No document-specific exception or OCR profile changed.
+CAM-001 remains blocked because the scan strict gate is below 80% and DATA-31
+is below its gate.
+
+## PDF-001D-SCAN-OCR-RECOVERY — DONE / QUALITY HOLD (2026-08-19)
+
+Parser `2.1.4` repairs the observed allowance-label/unit, employer-token and
+person-name OCR variants without private values or document-specific branches.
+The seven-scan replay improved `69/98` → `78/98` strict and `84/98` → `93/98`
+accepted; OCR-recognition mismatches fell `10` → `0`, with 0/7 technical errors
+and 7/7 manual review. EasyOCR `vi-greedy` 150/1280/`none` remains active;
+beamsearch, `vi-en` and ROI were not promoted. One job-title item remains a
+policy/role-title Ground Truth conflict, so CAM-001 stays blocked.
+
+## PDF-001E-CONTRACT-JOB-TITLE-RECONCILIATION — DONE / QUALITY HOLD (2026-08-19)
+
+Reconcile the locked professional-title precedence with the cohort's role-title
+Ground Truth using an independent review and non-regression gate. Do not add a
+document-specific exception or change the product route before evidence shows
+an improvement on the fixed cohort and no Contract 23 regression.
+
+The aggregate-only counterfactual report is private at
+`D:\document_ai_hr_dataset\.reviews\PDF-001C\pdf001e-job-title-policy.json`.
+Professional-first remains `78/98` strict and `93/98` accepted. Role-first
+reaches `77/98` strict and `98/98` accepted but loses Contract 23 strict exact;
+no role-first case wins strict exact. No parser, Ground Truth or product-route
+change is promoted.
+
+## PDF-001F-INDEPENDENT-ROLE-TITLE-GT-REVIEW — DONE / DECISION HOLD (2026-08-19)
+
+The five conflict PDFs were visually reviewed. All contain both legitimate
+title labels; Ground Truth selects the role title in `5/5`, while Contract 23
+selects the professional title. This is a schema/label-policy conflict, not an
+OCR or missing-data error. No parser, Ground Truth or route change is promoted.
+Aggregate-only evidence is private at
+`D:\document_ai_hr_dataset\.reviews\PDF-001F\pdf001f-independent-business-review.json`.
+
+## PDF-001G-JOB-TITLE-SCHEMA-DECISION — DONE / VALIDATION HOLD (2026-08-19)
+
+Accepted separate `professional_title` and `role_title` fields. Runtime
+`job_title` maps to `role_title` for HR/Camunda; Contract 23 keeps historical
+professional-title parity in the new field. Contract template `2.1`, schema
+`2.1.0`, parser `2.2.0`; private replay is `97/98` present, `82/98` strict,
+`96/98` accepted, 0 technical errors and 7/7 manual review. Historical
+DATA-29/DATA-31 reports are unchanged and CAM-001 remains blocked.
+
+## PDF-001H-DATA-31-SCHEMA-REPLAY — DONE / QUALITY HOLD (2026-08-19)
+
+DATA-31 was replayed privately through the promoted Template-first + EasyOCR
+service with the additive title schema and frozen 126-field comparator. The
+current result is `97/126` present, `55/126` strict and `60/126` accepted, with
+`schemaErrors=0`. Title checks are professional `4/4`, role `1/4`, runtime
+`job_title` → `role_title` `4/4`, and Contract 23 parity `PASS`.
+
+The required gate is `121/126` strict and `126/126` accepted, so the decision is
+`HOLD`. Ground Truth and historical DATA-29/DATA-31 reports were not rewritten;
+prediction/report/summary remain private outside Git. CAM-001 remains blocked.
+
+## PDF-001I-DATA31-QUALITY-RECOVERY — DONE / QUALITY HOLD (2026-08-19)
+
+Parser `structured-hr/family-layout/2.2.1` adds general IELTS recovery for
+inline labels, embedded form numbers, inline band scores and dates inside OCR
+blocks. Synthetic regression passed. Private DATA-31 replay reached `111/126`
+present, `58/126` strict and `63/126` accepted, with `schemaErrors=0`.
+
+Aggregate diagnoses are 38 prediction-for-absent-GT fields, 17 recognized
+parser mismatches, 3 parser-missed, 2 OCR-not-recognized and 3 below-80%
+partials. The remaining IELTS identifier/type semantics and sparse Contract/CV
+Ground Truth require a schema/coverage decision; no speculative parser mapping
+was promoted. GT coverage is `78/126` populated and `48/126` empty; CAM-001
+remains blocked.
+
+## PDF-001J-DATA31-SCHEMA-COVERAGE-DECISION — DONE / PRIVATE COMPLETE
+
+The localhost DATA-31 coverage tab is implemented against the authorized
+private corpus. It shows all 13 real documents, the 48 missing Ground Truth
+slots, the source preview, and a per-field choice between entering Ground Truth
+and `OUT_OF_SCOPE`. IELTS semantics are shown as a locked reference; all four
+IELTS cases currently have no missing Ground Truth.
+
+The UI writes only a private `coverage-decision.json` overlay and does not
+rewrite the SEALED Ground Truth or historical reports. The owner completed
+`48/48` decisions: `31` Ground Truth values and `17` `OUT_OF_SCOPE` fields.
+The fixed-126 replay remains available as historical evidence; the next gate
+uses the active scope only.
+
+## DATA-31-SCOPE-AWARE-REPLAY — DONE / QUALITY HOLD
+
+The replay runner now applies the private overlay in memory, validates case and
+source identity, preserves the complete prediction schema, and excludes
+`OUT_OF_SCOPE` fields from matching and denominators per case. The active scope
+is `109` fields; the preserved strict ratio requires `105/109` and accepted
+requires `109/109`. Scope-aware evaluation reached `72/109` strict and `80/109`
+accepted with `schemaErrors=0`, so the gate is `HOLD`. The existing private
+prediction uses Template-first + EasyOCR parser `2.2.1`; a fresh OCR rerun was
+`NOT MEASURED` because EasyOCR warm-up exited before writing a new artifact.
+CAM-001 remains blocked and no production side effect is enabled.
+
+## DATA-31-QUALITY-RECOVERY-R2 — DONE / QUALITY HOLD (2026-08-20)
+
+Aggregate-only analysis confirmed `37` strict mismatches across the active
+scope: Contract `13`, CV `7`, IELTS `17`. A fresh private replay of all `13`
+documents through Template-first + EasyOCR parser `2.2.2` completed with
+`72/109` strict, `80/109` accepted and `schemaErrors=0`. No document-specific
+parser rule was promoted; Ground Truth, historical reports and Camunda remain
+unchanged. CAM-001 stays blocked until the `105/109` and `109/109` gates pass.
+
+## DATA-31-QUALITY-RECOVERY-R2-FINAL — DONE / QUALITY HOLD (2026-08-20)
+
+Parser `structured-hr/family-layout/2.2.4` now has only general recovery rules
+for multi-word IELTS name labels, Form Number decoys, employee-party title
+boundaries, printed certificate type, grouped score rows and Vietnamese written
+dates. The private overlay records 12 confirmed IELTS semantic values without
+rewriting sealed Ground Truth. The final 13-document replay is `86/109` strict,
+`94/109` accepted, `105/109` present and `schemaErrors=0`; the required
+`105/109` + `109/109` gate is `HOLD`. CAM-001 remains blocked.
+
+## DATA-31-RESIDUAL-STRICT-AUDIT — DONE / QUALITY HOLD (2026-08-20)
+
+The 15 rejected strict residuals are classified without changing code or
+Ground Truth: Contract `6` (role-title policy, native label/GT boundaries and
+one scan OCR case), CV `3` (native presentation/field boundaries and one scan
+objective-versus-role schema case), IELTS `6` (TRF/Form Number OCR, recipient
+OCR and overall-score OCR). A private EasyOCR `canvas_size=2560` diagnostic
+raised the IELTS slice from `14/20` to `15/20` exact and `20/20` present, but it
+does not pass the full DATA-31 gate and is not promoted. CAM-001 stays blocked.
+
+Next READY task: `DATA-31-IELTS-OCR-CROP-GATE`, requiring private crop-level
+evidence, p95/RAM measurement and a full 13-document replay before any runtime
+profile promotion.
+
+## DATA-31-IELTS-OCR-RECOVERY-R3 — DONE / QUALITY HOLD (2026-08-20)
+
+Parser `structured-hr/family-layout/2.2.5` now recovers the labelled IELTS
+TRF/Form Number with conservative structural OCR repair, using the same-form
+Candidate Number only as evidence. Synthetic parser/version/OCR tests passed.
+The fresh private 13-document replay reached `90/109` strict, `98/109`
+accepted and `105/109` present, with zero schema errors and zero parser
+regressions. IELTS improved to `18/20` strict; one family name and one Overall
+Band remain unrecognized by the default 1280 EasyOCR pass. A 2560 direct probe
+recovered the Overall score once but is not promoted or used as gate evidence.
+CAM-001 remains blocked until `105/109 strict` and `109/109 accepted` both pass.
+
+## DATA-31-QUALITY-RECOVERY-R4 — DONE / QUALITY HOLD (2026-08-20)
+
+Parser `structured-hr/family-layout/2.2.6` and bounded `label-crop-v1` recovery
+in the existing EasyOCR adapter cleared the
+IELTS residuals without a full-document second pass. The fresh private replay
+reached `93/109` strict, `100/109` accepted and `106/109` present, with zero
+schema errors, parser regressions and sensitive false acceptances. Family totals
+are Contract `34/44`, CV `39/45` and IELTS `20/20`. The DATA-31 gate remains
+HOLD; CAM-001 remains blocked.
+
+Next READY task: `DATA-31-QUALITY-RECOVERY-R5`.
+
+## DATA-31-QUALITY-RECOVERY-R5 — DONE / QUALITY HOLD (2026-08-21)
+
+Parser `structured-hr/family-layout/2.2.7` keeps multi-line CV objective
+narratives intact when the text carries general career-intent markers. The
+change is general and synthetic-tested; no Contract title/field-boundary
+policy, Ground Truth, OCR engine or DATA-29 artifact was changed. The private
+13-document replay reached `93/109` strict, `101/109` accepted and `106/109`
+present, with zero schema errors, parser regressions and sensitive false
+acceptances. Contract remains `34/44`, CV `39/45` and IELTS `20/20` exact.
+The required `105/109` + `109/109` gate is still `HOLD`; CAM-001 remains
+blocked.
+
+Next READY task: `DATA-31-QUALITY-RECOVERY-R6`, requiring Product/HR decisions
+for the remaining Contract/CV semantic and Ground Truth boundary differences
+before another parser change.
+
+## DATA-31-QUALITY-RECOVERY-R7 — DONE / QUALITY HOLD (2026-08-21)
+
+Parser `structured-hr/family-layout/2.2.8` now uses a general
+`role_title`-first, `professional_title`-fallback rule and preserves an
+unlabelled `Phần mềm` CV skill prefix. Private replay reached `104/109`
+strict, `108/109` accepted and `109/109` present; Contract `42/44`, CV `42/45`
+and IELTS `20/20` exact. One dual-title Contract remains a Ground Truth
+boundary conflict; four long-field differences remain accepted manual-review
+partials. CAM-001 remains blocked.
+
+Evidence: private `D:\document_ai_hr_dataset\.reviews\DATA-31\` artifacts
+`prediction-r7-20260821.json`, `report-r7-20260821.json` and
+`summary-r7-20260821.json`. Targeted validation: `113 passed`; template
+version governance, compile, diff-check and LongRun state passed. No commit,
+push or PR.
+
+Next READY task: `DATA-31-QUALITY-RECOVERY-R8`, Product/HR decision for the
+remaining dual-title Ground Truth boundary.
+
+## DATA-31-QUALITY-RECOVERY-R6 — DONE / QUALITY HOLD (2026-08-21)
+
+Product/HR confirmed the R6 semantic and Ground Truth-boundary policy. Matching
+policy `2.1.0` now ignores approved presentation differences without changing
+the parser or sealed Ground Truth. One independently verified CV name correction
+was added only to the private overlay. Full replay reached `100/109` strict,
+`105/109` accepted and `106/109` present; Contract `39/44`, CV `41/45` and
+IELTS `20/20` exact. The gate remains `HOLD` because strict requires `105/109`
+and accepted requires `109/109`. CAM-001 remains blocked.
+
+Next READY task: `DATA-31-QUALITY-RECOVERY-R7`, requiring an explicit decision
+whether the role-only title ADR may be superseded; otherwise the four missing
+Contract `job_title` fields remain manual-review quality debt.
+
+## DATA-31-IELTS-OCR-CROP-GATE — DONE / NOT PROMOTED (2026-08-20)
+
+The fresh private IELTS baseline at EasyOCR `canvas=1280`, `mag=1.3`,
+`preprocess=none` reached `18/20` strict, `18/20` accepted and `19/20`
+present, with `30/30` warm runs completed. Warm p95 was `18.800 s` total,
+`17.994 s` OCR and `1.263 GB` RSS. The `canvas=2560` candidate produced no
+aggregate report after more than ten minutes and exceeded `2.2 GB` observed
+RSS, so it was stopped and not promoted. CAM-001 remains blocked.
+
+Next READY task: `DATA-31-QUALITY-RECOVERY-R4`.
+
+## PDF-001 — DONE / VERIFIED / LOCAL HOLD (2026-08-14)
+
+PDF scan intake now classifies page content as native, scan or mixed. Mixed PDFs
+are routed through the bounded scan/manual-review path so an image page is not
+silently lost. PyMuPDF rasterization is consumed page-by-page, and the canonical
+EasyOCR adapter uses `canvas_size=1280` and `mag_ratio=1.3`, the settings already
+verified by the ALG-002 replay.
+
+The authorized DATA-29 PDF gate completed one cold plus 30 warm isolated samples
+without failure. Warm total p50/p95 is `9.378/12.532 s`; OCR p50/p95 is
+`7.918/10.945 s`; peak RSS p95 is `1.694 GB`. The real PDF_SCAN case scored
+`9/10` exact required fields (`90%`), `10/10` accepted, `9/9` applicable fields
+present, and remained `MANUAL_REVIEW`. Native/scan/mixed classification is
+covered by parser tests; the authorized corpus contained 2 native and 1 scan
+PDF, while mixed was verified with a PII-free regression fixture. Aggregate
+artifacts remain outside Git; promotion is still disabled.
+
+## ALG-002 — DONE / VERIFIED (2026-08-14)
+
+Template-first upload and DATA-29 now call one Contract/CV/IELTS parser,
+`structured-hr/family-layout/2.1.0`. The full authorized DATA-29 replay uses
+EasyOCR offline with the local VietOCR configuration and Paddle only for the
+IELTS OCR branch. It reproduced `107/112` strict and `112/112` accepted under
+matching policy `2.0.0`: Contract `42/42`, CV `45/50`, IELTS `20/20`.
+The replay produced 12 documents (`3` Contract, `5` CV, `4` IELTS), no schema
+errors, no parser regressions, no sensitive false acceptance and no raw report
+artifact in Git. The report remains `HOLD` because promotion is intentionally
+disabled; this is a quality replay result, not a production promotion.
+
+## IELTS-OCR-001 — DONE / CLOSED (2026-08-14)
+
+Restored reproducible offline execution without modifying the private corpus:
+the broken EasyOCR venv is no longer used as the parent runtime, private
+site-packages are isolated to the EasyOCR child, local VietOCR `base.yml` and
+`vgg-seq2seq.yml` are loaded explicitly, and CV skill sections bypass noisy
+VietOCR line replacement while other narrative lines remain refined. The full
+replay completed without a crash or residual replay process. Generated
+prediction/report/marker files remain in local Temp only.
+
 ## PERF-001-STAGE-TIMING — DONE / LOCAL HOLD (2026-08-13)
 
 Safe stage timing and a resumable aggregate-only runner are implemented. One
 cold plus 30 warm DATA-29 runs completed for DOCX, PDF text, PDF scan and image.
-Native p95 is below `0.3 s`; image p95 is `28.5 s` and PDF scan p95 is `67.5 s`.
+Native p95 is below `0.3 s`; image p95 is `28.5 s` and the pre-PDF-001 PDF scan
+p95 was `67.5 s`.
 Camunda timing smoke passed, but its p50/p95 is `NOT_MEASURED` to avoid creating
 31 pending review cases. Quality remains DATA-29 `107/112` strict and `112/112`
-accepted. Next READY: ALG-002, then PDF-001; CCCD and Contract-image expansion
-remain closed.
+accepted. PDF-001A is complete and not promoted; PDF-001B is the next candidate.
+CCCD, Contract-image expansion and CAM-001 remain closed.
 
 
 ## M5-CAM-009-THREE-FAMILY-LOCAL-SHADOW-E2E — IN PROGRESS (2026-08-13)
@@ -127,9 +446,34 @@ promotion or evaluate-once change is allowed. Aggregate-only artifact:
 
 | ID | Trạng thái | Mục tiêu | Phụ thuộc | Ưu tiên |
 |---|---|---|---|---|
+| ALG-003 | IMPLEMENTED / QUALITY HOLD | Recover Contract scan parser failures; authorized case is 14/14 present, 13/14 strict and 14/14 accepted | ALG-002, PDF-001 | P0 |
+| DATA-31 | HOLD / NOT PROMOTED | Canonical 13-document replay is 59/126 strict and 64/126 accepted; keep DATA-29 immutable | ALG-003 | P0 |
+| PDF-001A-HIRES-SCAN-GATE | DONE / NOT PROMOTED | Hires 200/2560 regressed PDF_SCAN strict quality 9/10 → 8/10 and raised p95/RSS; keep baseline 150/1280 | ALG-003 | P0 |
+| PDF-001B-SCAN-PROFILE-RECOVERY | DONE / NOT PROMOTED | Bounded preprocessing/ROI experiment rejected after Contract quality regression; default unchanged | PDF-001A-HIRES-SCAN-GATE | P0 |
+| PDF-001C-SCAN-COHORT-EXPANSION | QUALITY HOLD | 7 PDF scans: 67/98 strict and 82/98 accepted; controls processed with zero technical errors; scan p95/RAM not measured | PDF-001B-SCAN-PROFILE-RECOVERY | P0 |
+| ALG-004-CONTRACT-SCAN-ERROR-ANALYSIS | DONE / QUALITY HOLD | 31 mismatches classified before field-scoped review; no OCR profile change | PDF-001C-SCAN-COHORT-EXPANSION | P0 |
+| ALG-005-CONTRACT-SCAN-PARSER-RECOVERY | DONE / QUALITY HOLD | Parser 2.1.2: 98/98 present, 69/98 strict, 84/98 accepted; four job-title label conflicts remain | ALG-004-CONTRACT-SCAN-ERROR-ANALYSIS | P0 |
+| ALG-006-CONTRACT-JOB-TITLE-POLICY | DONE / QUALITY HOLD | Prefer professional title, role title is fallback only; no document-specific exception | ALG-005-CONTRACT-SCAN-PARSER-RECOVERY | P0 |
+| PDF-001D-SCAN-OCR-RECOVERY | DONE / QUALITY HOLD | Parser 2.1.4: 78/98 strict, 93/98 accepted; OCR mismatches 10 → 0; product profile unchanged | ALG-006-CONTRACT-JOB-TITLE-POLICY | P0 |
+| PDF-001E-CONTRACT-JOB-TITLE-RECONCILIATION | DONE / QUALITY HOLD | Role-first improves accepted coverage but regresses strict exact and Contract 23; professional-first retained | PDF-001D-SCAN-OCR-RECOVERY | P0 |
+| PDF-001F-INDEPENDENT-ROLE-TITLE-GT-REVIEW | DONE / DECISION HOLD | Five PDF conflicts are valid dual-label documents; Ground Truth semantics are inconsistent with Contract 23 | PDF-001E-CONTRACT-JOB-TITLE-RECONCILIATION | P0 |
+| PDF-001G-JOB-TITLE-SCHEMA-DECISION | DONE / VALIDATION HOLD | Accepted two title fields; runtime job_title maps to role_title; private replay 82/98 strict and Contract 23 boolean parity passes | PDF-001F-INDEPENDENT-ROLE-TITLE-GT-REVIEW | P0 |
+| PDF-001H-DATA-31-SCHEMA-REPLAY | DONE / QUALITY HOLD | Template-first replay: 97/126 present, 55/126 strict, 60/126 accepted, schemaErrors 0; title schema and Contract 23 parity pass | PDF-001G-JOB-TITLE-SCHEMA-DECISION | P0 |
+| PDF-001I-DATA31-QUALITY-RECOVERY | DONE / QUALITY HOLD | Parser 2.2.1 IELTS inline-layout recovery; 111/126 present, 58/126 strict, 63/126 accepted, schemaErrors 0 | PDF-001H-DATA-31-SCHEMA-REPLAY | P0 |
+| PDF-001J-DATA31-SCHEMA-COVERAGE-DECISION | DONE / PRIVATE COMPLETE | Resolve authorized Ground Truth coverage and IELTS identifier/type semantics without opening Camunda | PDF-001I-DATA31-QUALITY-RECOVERY | P0 |
+| DATA-31-SCOPE-AWARE-REPLAY | DONE / QUALITY HOLD | Apply private coverage overlay per case; 109 active fields, 72 strict, 80 accepted, schemaErrors 0 | PDF-001J-DATA31-SCHEMA-COVERAGE-DECISION | P0 |
+| CAM-001 | BLOCKED | Resume existing Contract reupload E2E only after Contract 14/14 strict and DATA-31 gate pass | PDF-001B-SCAN-PROFILE-RECOVERY, DATA-31 | P0 |
 | PERF-001-STAGE-TIMING | DONE / LOCAL HOLD | Đo cold/warm p50/p95 cho intake, OCR, template, persistence và instrument Camunda bằng aggregate-only evidence | ALG-001 | P0 |
-| ALG-002 | READY | Dùng một canonical parser path cho upload và DATA-29, giữ chất lượng 107/112 strict và 112/112 accepted | PERF-001-STAGE-TIMING | P0 |
-| PDF-001 | PLANNED | Tối ưu memory/latency PDF scan và chạy lại quality/performance gate | ALG-002 | P0 |
+| ALG-002 | DONE / VERIFIED | Canonical parser + full offline hybrid replay đạt 107/112 strict và 112/112 accepted; 12 documents, parser drift/schema/raw exposure đều 0 | PERF-001-STAGE-TIMING, IELTS-OCR-001 | P0 |
+| IELTS-OCR-001 | DONE / CLOSED | Isolated EasyOCR child, local VietOCR config, CV skill refinement guard và replay cleanup đã được xác minh | ALG-002 | P0 |
+| PDF-001 | DONE / VERIFIED / LOCAL HOLD | Tối ưu memory/latency PDF scan và chạy lại quality/performance gate | ALG-002 | P0 |
+| DATA-31-RESIDUAL-STRICT-AUDIT | DONE / QUALITY HOLD | Classify 15 rejected strict residuals; no safe parser or Ground Truth change | DATA-31 | P0 |
+| DATA-31-IELTS-OCR-CROP-GATE | DONE / NOT PROMOTED | IELTS baseline 18/20 strict; 2560 candidate exceeded resource budget without a report | DATA-31-RESIDUAL-STRICT-AUDIT | P0 |
+| DATA-31-QUALITY-RECOVERY-R4 | DONE / QUALITY HOLD | Bounded IELTS label-crop recovery; replay 93/109 strict, 100/109 accepted, IELTS 20/20 | DATA-31-IELTS-OCR-CROP-GATE | P0 |
+| DATA-31-QUALITY-RECOVERY-R5 | DONE / QUALITY HOLD | General CV multi-line objective recovery; private replay 93/109 strict, 101/109 accepted, no regression | DATA-31-QUALITY-RECOVERY-R4 | P0 |
+| DATA-31-QUALITY-RECOVERY-R6 | DONE / QUALITY HOLD | Apply approved semantic/layout boundaries and one independently verified private GT correction; replay 100/109 strict, 105/109 accepted | DATA-31-QUALITY-RECOVERY-R5 | P0 |
+| DATA-31-QUALITY-RECOVERY-R7 | DONE / QUALITY HOLD | Add role-first/professional-title fallback and preserve unlabelled CV skill prefixes; replay 104/109 strict and 108/109 accepted | DATA-31-QUALITY-RECOVERY-R6 | P0 |
+| DATA-31-QUALITY-RECOVERY-R8 | READY | Resolve the remaining dual-title Contract Ground Truth boundary before CAM-001 | DATA-31-QUALITY-RECOVERY-R7 | P0 |
 | LONGRUN-MAINT-001 | DONE | Chốt checkpoint, archive evidence cũ và kiểm tra nhất quán state/handoff | Current branch state | P1 |
 | OCR-HO-V2-011 | REVIEW | Deterministic address ROI replay failed exact-improvement/DER gate; keep shadow-only and restore secondary recognizer runtime before next replay | OCR-HO-V2-009 | P0 |
 | OCR-HO-V2-012 | REVIEW | Restored full secondary recognizers; v11.9.1 passes development gate but remains shadow-only pending explicit promotion decision | OCR-HO-V2-011 | P0 |
@@ -847,3 +1191,18 @@ confirm every field, then SEALED. Benchmark remains intentionally unrun.
   DATA-22 remains blocked pending approved corpus rights/retention and minimum counts.
 
 | LOCAL-PRIVATE-DATA-AUTHORIZED-REPLAY | DONE / HOLD | 2026-08-10 | Existing DATA-22 private development corpus replayed locally with PaddleOCR CPU; 68 predictions, 2 unsupported formats retained as MANUAL_REVIEW, 27/27 scans MANUAL_REVIEW. Aggregate-only report is private; no GroundTruth/evaluate-once opened. | No promotion or held-out claim; strict/accepted/completeness not computed without independent GroundTruth. |
+
+### PDF-001I-R1-DATA31-MISMATCH-RECOVERY — DONE / QUALITY HOLD (2026-08-20)
+
+- Fixed the general IELTS credential parser rule: select TRF/Form Number
+  context, exclude validation/brand/URL text, and preserve identifier
+  characters. Parser version is `2.2.2`; no document-specific value was added.
+- The official scope-aware DATA-31 baseline remains `72/109` strict and
+  `80/109` accepted. A separate 8-page EasyOCR diagnostic replay reached
+  `64/109` and `71/109`, so it was not promoted or wired into localhost.
+- Direct mixed Template-first replay hit a native Torch/EasyOCR access
+  violation after partial processing and remains `NOT MEASURED`.
+- Gate remains `105/109` strict plus `109/109` accepted. CAM-001 is still
+  blocked pending the Product/HR semantics decision and a stable full replay.
+- Validation: targeted `66 passed`, full Python `576 passed`, Ruff,
+  compileall and repository hygiene passed. No commit/push/PR was made.

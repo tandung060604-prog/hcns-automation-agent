@@ -38,6 +38,7 @@ class ParseContext:
     source_descriptor: SourceDescriptor
     source_format: SourceFormat
     media_type: str | None
+    pdf_content_profile: str | None = None
 
 
 class DocumentParser(Protocol):

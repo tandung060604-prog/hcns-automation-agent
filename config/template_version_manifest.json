@@ -47,11 +47,11 @@
     {
       "templateId": "probation-contract-v2",
       "documentType": "EMPLOYMENT_CONTRACT",
-      "version": "2.0",
-      "schemaVersion": "2.0.0",
+      "version": "2.1",
+      "schemaVersion": "2.1.0",
       "schemaRef": "schemas/templates/probation_contract_v2.schema.json",
-      "parserId": "review-only/label-next-line",
-      "parserVersion": "2.0.0",
+      "parserId": "structured-hr/family-layout",
+      "parserVersion": "2.2.8",
       "lifecycle": "FROZEN",
       "supportedFileTypes": ["docx", "pdf"],
       "requiredFields": [
@@ -60,7 +60,8 @@
         "employee_name", "employee_id_number", "job_title", "workplace",
         "weekly_hours", "probation_salary_monthly", "allowances_summary",
         "salary_payment_schedule"
-      ]
+      ],
+      "optionalFields": ["professional_title", "role_title"]
     },
     {
       "templateId": "cv-v2",
@@ -68,8 +69,8 @@
       "version": "2.0",
       "schemaVersion": "2.0.0",
       "schemaRef": "schemas/templates/cv_v2.schema.json",
-      "parserId": "review-only/label-next-line",
-      "parserVersion": "2.0.0",
+      "parserId": "structured-hr/family-layout",
+      "parserVersion": "2.2.8",
       "lifecycle": "FROZEN",
       "supportedFileTypes": ["docx", "pdf"],
       "requiredFields": [
@@ -83,8 +84,8 @@
       "version": "2.0",
       "schemaVersion": "2.0.0",
       "schemaRef": "schemas/templates/ielts_certificate_v2.schema.json",
-      "parserId": "review-only/label-next-line",
-      "parserVersion": "2.0.0",
+      "parserId": "structured-hr/family-layout",
+      "parserVersion": "2.2.8",
       "lifecycle": "FROZEN",
       "supportedFileTypes": ["pdf", "png", "jpg", "jpeg"],
       "requiredFields": [

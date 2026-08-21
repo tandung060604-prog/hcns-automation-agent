@@ -232,7 +232,7 @@ def test_current_file_comparison_is_private_and_reopenable(tmp_path: Path) -> No
         comparison = json.loads(response.read().decode("utf-8"))
         assert response.status == 200
         assert comparison["scope"] == "CURRENT_FILE"
-        assert comparison["matchingPolicyVersion"] == "2.0.0"
+        assert comparison["matchingPolicyVersion"] == "2.1.0"
         assert comparison["summary"]["decision"] == "PASS"
         assert comparison["summary"]["wrongFields"] == 0
         assert comparison["workflow"]["promotionAllowed"] is False

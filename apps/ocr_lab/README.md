@@ -38,6 +38,20 @@ Script chỉ bind API vào loopback. Upload được kiểm tra theo nội dung:
 kích thước/trang, format mismatch, PDF mã hóa, Office macro, archive path và
 archive expansion đều bị chặn trước parser/OCR.
 
+## Mẫu tải về và dataset private
+
+Frontend build đã đóng gói bốn mẫu DOCX tại `web/public/templates/`: CV v2,
+hợp đồng thử việc v2, đơn nghỉ phép v1 và đơn tăng ca v1. Người dùng điền các
+placeholder `[Nhập…]`, lưu file rồi upload lại qua Template-first. CCCD và
+IELTS không có mẫu tự tạo; chỉ upload ảnh/PDF thật, rõ nét và đầy đủ.
+
+Dataset thật nằm ở repo private `tandung060604-prog/vinhris-document-ai-dataset`.
+Mentor clone repo đó riêng cạnh repo app, chọn file trong sáu thư mục `data/`
+rồi upload thủ công. Không clone dataset trong Docker build, không copy vào
+`web/public`, không đưa vào frontend bundle và không mở cờ review private khi
+demo mentor. Sau khi đổi mẫu hoặc asset, chạy lại frontend build để kiểm tra
+đường dẫn `/templates/*.docx` còn tồn tại.
+
 ## Profile localhost mentor-safe
 
 Mặc định giao diện chỉ hiển thị upload/template đang active và không gọi các

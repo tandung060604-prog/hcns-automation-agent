@@ -95,6 +95,28 @@ test("shows Phase 11.5 Unicode, ASCII and crop evidence controls", async () => {
   assert.match(source, /Prediction không dấu/);
 });
 
+test("keeps the VinHRIS workspace information architecture and local boundaries visible", async () => {
+  const [dashboard, css] = await Promise.all([
+    readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(dashboard, /Hồ sơ vào một chỗ\./);
+  assert.match(dashboard, /Quy trình đi đúng nơi\./);
+  assert.match(dashboard, /Intake/);
+  assert.match(dashboard, /Human Review/);
+  assert.match(dashboard, /104<span>\/109<\/span>/);
+  assert.match(dashboard, /Chưa phải bằng chứng production/);
+  assert.match(dashboard, /http:\/\/localhost:8080\/camunda\/app\/tasklist\/default\//);
+  assert.match(dashboard, /Nội dung file không đi vào process variables/);
+  assert.match(dashboard, /hr-document-intelligence-context\.webp/);
+  assert.match(css, /--ops-navy: #061a28/);
+  assert.match(css, /--ops-cyan: #25c6c8/);
+  assert.match(css, /\.operations-site \.topbar nav::-webkit-scrollbar/);
+  assert.match(css, /scroll-margin-top: 108px/);
+  assert.match(css, /prefers-reduced-motion: reduce/);
+});
+
 test("exposes the Phase 15 multi-format IDP and field review flow", async () => {
   const [dashboard, css] = await Promise.all([
     readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
@@ -102,7 +124,7 @@ test("exposes the Phase 15 multi-format IDP and field review flow", async () => 
   ]);
 
   assert.match(dashboard, /\.docx,\.pdf/);
-  assert.match(dashboard, /CV\/Hợp đồng: DOCX, PDF · IELTS\/CCCD: PDF, PNG, JPG\/JPEG/);
+  assert.match(dashboard, /CV\/Hợp đồng\/Leave\/OT: DOCX, PDF · IELTS\/CCCD: PDF, PNG, JPG\/JPEG/);
   assert.match(dashboard, /CV \/ hồ sơ ứng viên/);
   assert.match(dashboard, /Hợp đồng lao động/);
   assert.match(dashboard, /phase12\?:/);
@@ -222,9 +244,9 @@ test("exposes the DATA-08 independent contract review panel behind a private fla
   assert.match(envExample, /^VITE_SHOW_EXTERNAL_DATASET_REVIEW=false$/m);
   assert.match(envExample, /^VITE_SHOW_LEGACY_EXPLORER_TABS=false$/m);
   assert.match(dashboard, /<ExternalDatasetReview \/>/);
-  assert.match(component, /\/external-dataset\/review\/summary/);
-  assert.match(component, /\/external-dataset\/review\/save\?id=/);
-  assert.match(component, /\/external-dataset\/review\/lock/);
+  assert.match(component, /\/external-dataset\/review/);
+  assert.match(component, /reviewBase/);
+  assert.match(component, /\/lock/);
   assert.match(component, /predictionsHiddenDuringReview/);
   assert.match(component, /EXTERNAL DATASET · INDEPENDENT REVIEW/);
   assert.match(component, /function categoryScopeLabel\(/);
@@ -241,6 +263,28 @@ test("exposes the DATA-08 independent contract review panel behind a private fla
   assert.match(component, /DRAFT_STORAGE_PREFIX/);
   assert.match(component, /Bạn còn dữ liệu chưa lưu/);
   assert.match(css, /external-review-primary-save:disabled/);
+});
+
+test("exposes the private DATA-31 coverage decision panel", async () => {
+  const [dashboard, component, envExample, api, starter] = await Promise.all([
+    readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/ExternalDatasetReview.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+    readFile(new URL("../../api/serve_dashboard_api.py", import.meta.url), "utf8"),
+    readFile(new URL("../../api/start_dashboard.ps1", import.meta.url), "utf8"),
+  ]);
+  assert.match(dashboard, /VITE_SHOW_DATA31_COVERAGE_REVIEW === "true"/);
+  assert.match(dashboard, /<ExternalDatasetReview data31 \/>/);
+  assert.match(component, /\/data31\/coverage/);
+  assert.match(component, /DATA-31 · GROUND TRUTH COVERAGE DECISION/);
+  assert.match(component, /OUT_OF_SCOPE/);
+  assert.match(component, /ielts-semantics/);
+  assert.match(component, /Mã TRF\/credential/);
+  assert.match(api, /\/data31\/coverage\/summary/);
+  assert.match(api, /\/data31\/coverage\/save/);
+  assert.match(api, /--external-dataset-coverage-decision/);
+  assert.match(starter, /VITE_SHOW_DATA31_COVERAGE_REVIEW/);
+  assert.match(envExample, /^VITE_SHOW_DATA31_COVERAGE_REVIEW=false$/m);
 });
 
 test("exposes one Template-first upload with source preview and structured results", async () => {
@@ -266,7 +310,19 @@ test("exposes one Template-first upload with source preview and structured resul
   assert.match(dashboard, /SHOW_LEGACY_UPLOAD/);
   assert.match(dashboard, /Tải tài liệu HCNS/);
   assert.match(dashboard, /Trích xuất tài liệu/);
-  assert.match(dashboard, /CV\/Hợp đồng: DOCX, PDF · IELTS\/CCCD: PDF, PNG, JPG\/JPEG/);
+  assert.match(dashboard, /CV\/Hợp đồng\/Leave\/OT: DOCX, PDF · IELTS\/CCCD: PDF, PNG, JPG\/JPEG/);
+  assert.match(dashboard, /Tải mẫu để điền/);
+  for (const href of [
+    "/templates/cv-v2.docx",
+    "/templates/probation-contract-v2.docx",
+    "/templates/leave-request-v1.docx",
+    "/templates/overtime-request-v1.docx",
+  ]) {
+    assert.match(dashboard, new RegExp(href.replaceAll(".", "\\.")));
+  }
+  assert.match(dashboard, /CCCD/);
+  assert.match(dashboard, /IELTS/);
+  assert.doesNotMatch(dashboard, /vinhris-document-ai-dataset/);
   assert.match(dashboard, /\.docx,\.pdf,\.png,\.jpg,\.jpeg/);
   assert.match(dashboard, /Xem JSON đầy đủ/);
   assert.match(dashboard, /Không có trong tài liệu/);
@@ -280,8 +336,9 @@ test("exposes one Template-first upload with source preview and structured resul
   assert.match(dashboard, /\/api\/documents\/comparison\?id=/);
   assert.match(dashboard, /Prediction và Ground Truth theo từng field/);
   assert.match(dashboard, /data-testid="compare-current-file-button"/);
-  assert.match(dashboard, /DATA-29 · 12 tài liệu metric · 3 Contract · 5 CV · 4 IELTS/);
-  assert.match(dashboard, /ExternalDatasetPrediction version="data29"/);
+  assert.match(dashboard, /DATA-31 R7 · 13 tài liệu metric · 4 Contract · 5 CV · 4 IELTS/);
+  assert.match(dashboard, /<ExternalDatasetPrediction version="data31"/);
+  assert.match(dashboard, /ExternalDatasetPrediction version="data31"/);
   assert.match(data29, /DATA29_CATEGORIES/);
   assert.match(data29, /Contract/);
   assert.match(data29, /IELTS/);
@@ -298,7 +355,7 @@ test("exposes one Template-first upload with source preview and structured resul
   assert.match(dashboard, /data-testid="local-document-input"/);
   assert.match(dashboard, /data-testid="template-document-preview"/);
   assert.match(dashboard, /data-testid="template-result-panel"/);
-  assert.match(dashboard, /\/assets\/template-first-local-workflow\.png/);
+  assert.match(dashboard, /\/assets\/hr-document-intelligence-context\.webp/);
   assert.match(css, /\.upload-mode-switch/);
   assert.match(css, /\.upload-workspace/);
   assert.match(css, /\.template-document-preview/);
