@@ -31,6 +31,7 @@ from hcns_agent.templates.service import (
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "apps" / "ocr_lab" / "api"))
 
+from mvp_demo_store import MvpDemoStore  # noqa: E402
 from template_result_comparison import compare_template_result  # noqa: E402
 
 import apps.ocr_lab.api.serve_dashboard_api as dashboard_api  # noqa: E402
@@ -38,6 +39,37 @@ from apps.ocr_lab.api.serve_dashboard_api import (  # noqa: E402
     DashboardHandler,
     UserOCRService,
 )
+
+_RawHTTPConnection = http.client.HTTPConnection
+
+
+class _AuthenticatedHTTPConnection(_RawHTTPConnection):
+    def request(
+        self,
+        method: str,
+        url: str,
+        body: object = None,
+        headers: dict[str, str] | None = None,
+        *,
+        encode_chunked: bool = False,
+    ) -> None:
+        store = DashboardHandler.mvp_demo
+        assert store is not None
+        token = store.login("admin", "admin123")["token"]
+        request_headers = dict(headers or {})
+        request_headers.setdefault("Authorization", f"Bearer {token}")
+        super().request(
+            method,
+            url,
+            body=body,
+            headers=request_headers,
+            encode_chunked=encode_chunked,
+        )
+
+
+@pytest.fixture(autouse=True)
+def _authenticate_legacy_endpoint_tests(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(http.client, "HTTPConnection", _AuthenticatedHTTPConnection)
 
 
 def configure_handler(
@@ -48,9 +80,29 @@ def configure_handler(
     DashboardHandler.cccd_heldout_root = None
     DashboardHandler.native_indexes = {}
     DashboardHandler.user_ocr = UserOCRService(data_root)
+    DashboardHandler.mvp_demo = MvpDemoStore(data_root)
     DashboardHandler.template_processor = (
         processor or build_default_template_processing_service()
     )
+
+
+def test_protected_document_result_requires_auth(tmp_path: Path) -> None:
+    configure_handler(tmp_path)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    connection = _RawHTTPConnection("127.0.0.1", server.server_port, timeout=10)
+    try:
+        connection.request("GET", f"/api/documents/result?id={uuid.uuid4()}")
+        response = connection.getresponse()
+        payload = json.loads(response.read().decode("utf-8"))
+        assert response.status == 401
+        assert payload["errorCode"] == "MVP_DEMO_ERROR"
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 def test_template_endpoints_process_docx_without_ocr(tmp_path: Path) -> None:
@@ -413,6 +465,8 @@ def test_camunda_start_accepts_contract_cv_and_ielts_with_opaque_variables(
     def fake_get(url: str) -> object:
         if "task?processInstanceId=" in url and url.endswith("&taskDefinitionKey=Submit"):
             return [{"id": f"submit-{len(posted)}"}]
+        if "task?processInstanceId=" in url:
+            return [{"id": f"hr-{len(posted)}", "taskDefinitionKey": "HRReview"}]
         raise AssertionError(url)
 
     monkeypatch.setattr(dashboard_api, "_camunda_post", fake_post)
@@ -640,9 +694,13 @@ def test_local_camunda_queue_and_employee_review_use_opaque_reference(
         assert response.status == 200
         assert json.loads(response.read().decode("utf-8")) == {
             "queue": [{
-                "taskId": "task-1", "role": "employee", "taskName": "Confirm",
+                "taskId": "task-1", "role": "employee",
+                "taskDefinitionKey": "UserReview", "actionable": False,
+                "statusLabel": "Chờ người nộp xác nhận", "taskName": "Confirm",
                 "documentId": "00000000-0000-0000-0000-000000000001",
-                "documentType": "LEAVE_REQUEST", "created": "", "inspectable": False,
+                "documentType": "LEAVE_REQUEST", "documentTypeLabel": "Đơn xin nghỉ phép",
+                "applicationId": "", "submittedBy": "", "created": "",
+                "inspectable": False, "extractedFields": {}, "sourceFile": "",
             }]
         }
         body = json.dumps({"taskId": "task-1", "role": "employee", "decision": "UNRESOLVED"})
@@ -657,6 +715,8 @@ def test_local_camunda_queue_and_employee_review_use_opaque_reference(
         assert json.loads(response.read().decode("utf-8")) == {
             "status": "COMPLETED",
             "decision": "UNRESOLVED",
+            "effectiveDecision": "UNRESOLVED",
+            "notifiedOwner": False,
         }
         assert posted == [
             ("http://127.0.0.1:8080/engine-rest/task/task-1/claim", {"userId": "local-employee"}),

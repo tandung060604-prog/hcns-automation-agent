@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   pendingReviewCases,
   resumePendingReview,
@@ -3538,15 +3539,15 @@ export default function Dashboard({ data }: { data: DashboardData }) {
 
   const workspaceChrome = (
     <header className="topbar workspace-topbar">
-      <a className="brand" href="/" aria-label="VinHRIS">
+      <Link className="brand" href="/" aria-label="VinHRIS">
         <span className="brand-mark">V</span>
         <span>VinHRIS</span>
         <small>Workspace</small>
-      </a>
+      </Link>
       <nav aria-label="Điều hướng workspace">
         <a href="#mvp-demo">Tiếp nhận</a>
         {signedIn ? <a href="#mvp-demo">Hàng đợi</a> : null}
-        <a href="/">Trang chủ</a>
+        <Link href="/">Trang chủ</Link>
       </nav>
       <span className={`live ${apiOnline ? "online" : ""}`}>
         <i />

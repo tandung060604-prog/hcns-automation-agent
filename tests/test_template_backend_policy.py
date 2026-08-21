@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import hcns_agent.templates.service as template_service
 from hcns_agent.templates.service import build_local_template_processing_service
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_local_ocr_policy_prefers_easyocr_and_allows_paddle_rollback(monkeypatch) -> None:
+    monkeypatch.setattr(template_service, "find_spec", lambda _name: object())
     monkeypatch.delenv("HCNS_TEMPLATE_OCR_BACKEND", raising=False)
     optimized = build_local_template_processing_service()
     assert optimized._ocr_engine.name == "easyocr/vi-greedy"

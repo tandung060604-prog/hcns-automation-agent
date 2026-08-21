@@ -2176,12 +2176,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             application_id, "SUBMITTED", "USER nộp đơn nghỉ phép", actor["username"]
         )
         engine_url = _local_camunda_url()
-        fields_json = json.dumps(extracted_fields, ensure_ascii=False)
         variables = {
             "applicationId": {"value": application_id, "type": "String"},
             "documentReference": {"value": document_id, "type": "String"},
             "declaredDocumentType": {"value": "LEAVE_REQUEST", "type": "String"},
-            "templateFieldsJson": {"value": fields_json, "type": "String"},
         }
         instance = _camunda_post(
             f"{engine_url}/process-definition/key/hr_document_agent_mvp_v2/start",
@@ -2731,12 +2729,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 store.record_event(
                     application_id, "SUBMITTED", "USER nộp hồ sơ", user["username"]
                 )
-                fields_json = json.dumps(extracted_fields, ensure_ascii=False)
                 variables = {
                     "applicationId": {"value": application_id, "type": "String"},
                     "documentReference": {"value": document_id, "type": "String"},
                     "declaredDocumentType": {"value": document_type, "type": "String"},
-                    "templateFieldsJson": {"value": fields_json, "type": "String"},
                 }
                 engine_url = _local_camunda_url()
                 camunda_started = time.perf_counter()

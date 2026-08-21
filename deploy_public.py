@@ -11,13 +11,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
 import shutil
 import signal
 import subprocess
-import sys
 import time
 import urllib.error
 import urllib.request
@@ -63,14 +63,24 @@ def resolve_deploy_ocr_backend(requested: str) -> str:
     selected = (requested or "auto").casefold().strip()
     easyocr_ok = (
         subprocess.run(
-            [str(VENV_PYTHON), "-c", "import importlib.util; raise SystemExit(0 if importlib.util.find_spec('easyocr') else 1)"],
+            [
+                str(VENV_PYTHON),
+                "-c",
+                "import importlib.util; raise SystemExit(0 if "
+                "importlib.util.find_spec('easyocr') else 1)",
+            ],
             capture_output=True,
         ).returncode
         == 0
     )
     paddle_ok = (
         subprocess.run(
-            [str(VENV_PYTHON), "-c", "import importlib.util; raise SystemExit(0 if importlib.util.find_spec('paddleocr') else 1)"],
+            [
+                str(VENV_PYTHON),
+                "-c",
+                "import importlib.util; raise SystemExit(0 if "
+                "importlib.util.find_spec('paddleocr') else 1)",
+            ],
             capture_output=True,
         ).returncode
         == 0
@@ -247,10 +257,8 @@ def shutdown(
 ) -> None:
     log("Shutting down tunnels and processes...")
     for handle in [*tunnels, *processes]:
-        try:
+        with contextlib.suppress(OSError):
             handle.terminate()
-        except OSError:
-            pass
     time.sleep(2)
     for handle in [*tunnels, *processes]:
         try:
@@ -261,7 +269,9 @@ def shutdown(
 
 def main() -> int:
     args = parse_args()
-    data_root = args.data_root or Path(os.environ.get("HCNS_DATA_ROOT") or Path.home() / "private-data")
+    data_root = args.data_root or Path(
+        os.environ.get("HCNS_DATA_ROOT") or Path.home() / "private-data"
+    )
     data_root = data_root.expanduser().resolve()
     data_root.mkdir(parents=True, exist_ok=True)
 
@@ -321,8 +331,6 @@ def main() -> int:
     free_port(args.port_web)
     kill_stale_web_dev_servers()
     free_port(args.port_web)
-    camunda_already_running = http_ready("http://127.0.0.1:8080/camunda")
-
     log("Starting API tunnel (get public URL first)...")
     tunnels.append(start_tunnel("api", api_url))
     api_tunnel_url = wait_for_tunnel_url("api")
@@ -374,17 +382,11 @@ def main() -> int:
         log("Skipping OCR warm-up (--no-ocr-warmup).")
 
     camunda_local = "http://127.0.0.1:8080"
-    camunda_tunnel_url: str | None = None
     if http_ready(f"{camunda_local}/camunda"):
-        log("Camunda detected; opening tunnel for it...")
-        tunnels.append(start_tunnel("camunda", camunda_local))
-        camunda_tunnel_url = wait_for_tunnel_url("camunda")
-        log(f"Camunda public URL: {camunda_tunnel_url or 'not detected'}")
+        log("Camunda detected locally; keeping its engine and webapps private.")
 
     web_env = dict(base_env)
     web_env["VITE_API_BASE"] = api_tunnel_url
-    if camunda_tunnel_url:
-        web_env["VITE_CAMUNDA_URL"] = camunda_tunnel_url
     processes.append(start_process(["npm", "run", "dev"], "web.log", web_env, cwd=WEB_ROOT))
     web_url = f"http://localhost:{args.port_web}"
     deadline = time.time() + 90
@@ -440,17 +442,20 @@ def main() -> int:
             }
         )
         optional.append(
-            start_process([str(VENV_PYTHON), "-u", "-m", "hcns_agent.camunda_worker_cli"], "worker.log", worker_env)
+            start_process(
+                [str(VENV_PYTHON), "-u", "-m", "hcns_agent.camunda_worker_cli"],
+                "worker.log",
+                worker_env,
+            )
         )
 
     log("=" * 64)
     log("Deploy sẵn sàng — mở từ máy khác:")
     log(f"  VinHRIS Dashboard : {web_tunnel_url}/workspace")
     log(f"  Local API         : {api_tunnel_url}")
-    if camunda_tunnel_url:
-        log(f"  Camunda Tasklist  : {camunda_tunnel_url}/camunda")
+    log("  Camunda Tasklist  : local/private only (http://127.0.0.1:8080/camunda)")
     log(f"  OCR backend       : {ocr_backend} (warmed={'no' if args.no_ocr_warmup else 'yes'})")
-    log(f"  Demo accounts     : admin/admin123, hr/hr123, user/user123")
+    log("  Demo accounts     : admin/admin123, hr/hr123, user/user123")
     log("  Mọi URL đều HTTPS miễn phí qua Cloudflare.")
     log("  Nhấn Ctrl+C để tắt toàn bộ.")
 
@@ -473,7 +478,10 @@ def main() -> int:
             for idx, handle in enumerate(optional):
                 code = handle.poll()
                 if code is not None:
-                    log(f"Optional worker[{idx}] exited (code={code}); dashboard vẫn chạy. Xem tmp/worker.log")
+                    log(
+                        f"Optional worker[{idx}] exited (code={code}); dashboard vẫn chạy. "
+                        "Xem tmp/worker.log"
+                    )
                     worker_warned = True
                     break
         time.sleep(2)

@@ -1,84 +1,73 @@
-# VinHRIS — Cổng tác nghiệp tài liệu HCNS
+# VinHRIS — cổng tác nghiệp tài liệu HCNS
 
-Document AI chạy **local / self-hosted**: tiếp nhận hồ sơ, nhận diện biểu mẫu, trích xuất có cấu trúc, HR duyệt kèm tài liệu gốc. Camunda 7 điều phối workflow; file và field chi tiết không đẩy vào engine.
+VinHRIS là MVP Document AI chạy local/self-hosted: nhận hồ sơ, phân loại, trích xuất dữ liệu có bằng chứng và đưa kết quả cho con người duyệt. Camunda 7 là thành phần điều phối tùy chọn; file gốc và dữ liệu nhạy cảm không được đưa vào process variables.
 
-**Trạng thái (2026-08-21):** MVP workspace dùng được cho Leave · OT · CV · Contract · IELTS · CCCD. OCR template mặc định trên máy này: **Paddle** (`HCNS_TEMPLATE_OCR_BACKEND=paddle` hoặc `auto`). Báo cáo smoke mới nhất: [`docs/REPORT.md`](docs/REPORT.md).
+Trạng thái nhánh `feat/deploy-cloudflare` ngày 2026-08-21:
 
-## Tài khoản demo
+- hỗ trợ Đơn nghỉ phép, Đơn tăng ca, CV, Hợp đồng thử việc, IELTS và CCCD mặt trước;
+- website có luồng `USER → HR_REVIEWER → USER`, thông báo trong ứng dụng và lịch sử xử lý;
+- OCR chọn bằng `--ocr-backend auto|easyocr|paddle`; chế độ `auto` ưu tiên engine đang được cài đặt;
+- Cloudflare Quick Tunnel chỉ dành cho demo ngắn hạn với dữ liệu giả hoặc dữ liệu đã được phép sử dụng.
 
-| User | Pass | Role |
-|------|------|------|
-| `admin` | `admin123` | ADMIN |
-| `hr` | `hr123` | HR_REVIEWER |
-| `user` | `user123` | USER |
+## Khởi động nhanh
 
-## URL local
-
-| Dịch vụ | URL |
-|---------|-----|
-| Landing | http://localhost:3000 |
-| Workspace (MVP) | http://localhost:3000/workspace |
-| API | http://127.0.0.1:8765 |
-| Camunda Tasklist | http://localhost:8080/camunda |
-
-## Biểu mẫu hỗ trợ
-
-| Loại | File | Cách đọc |
-|------|------|----------|
-| Đơn nghỉ phép | DOCX / PDF | Native extract |
-| Đơn tăng ca | DOCX / PDF | Native extract |
-| CV | DOCX / PDF | Structured-hr (+ OCR nếu PDF scan) |
-| Hợp đồng thử việc | DOCX / PDF | Structured-hr |
-| IELTS / chứng chỉ | PDF / JPG / PNG | OCR |
-| CCCD mặt trước | JPG / PNG / PDF | OCR |
-
-Mẫu blank (trừ IELTS/CCCD): `apps/ocr_lab/web/public/templates/`.
-
-## Chạy nhanh (Linux)
+Launcher hiện hỗ trợ Linux hoặc WSL2. Cần Python 3.10+, Node.js 22.13+ và Docker nếu muốn chạy Camunda.
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev,paddle]"   # hoặc .[easyocr] nếu dùng EasyOCR
+.venv/bin/pip install -e ".[api,dev,easyocr]"
+npm --prefix apps/ocr_lab/web ci
+mkdir -p "$HOME/private-data"
 
-cd apps/ocr_lab/web && npm ci && cd -
-
-# Terminal 1 — API + web
-bash scripts/start_dashboard_linux.sh "$HOME/private-data"
-
-# Terminal 2 — Camunda worker (Camunda :8080 đã chạy + BPMN đã deploy)
-export CAMUNDA_REST_URL=http://127.0.0.1:8080/engine-rest
-export CAMUNDA_WORKER_ID=hcns-local-shadow
-export HCNS_CAMUNDA_PRIVATE_ROOT="$HOME/private-data"
-export HCNS_TEMPLATE_OCR_BACKEND=paddle
-.venv/bin/hcns-agent-camunda-worker
+# Chỉ chạy website + API
+python run_all_in_one.py --data-root "$HOME/private-data" --ocr-backend auto --no-worker
 ```
 
-Hướng dẫn đầy đủ (website, Camunda, deploy public, duy trì):  
-→ **[`docs/LOCAL_OPS_AND_DEPLOY.md`](docs/LOCAL_OPS_AND_DEPLOY.md)**
+Mở `http://localhost:3000/workspace`. Muốn chạy cả Camunda và worker:
 
-## Luồng MVP
+```bash
+python run_all_in_one.py --data-root "$HOME/private-data" --ocr-backend auto --with-camunda
+```
 
-1. `user` upload DOCX/PDF/ảnh → quét → chỉnh form → nộp HR  
-2. `hr` hàng đợi → xem chi tiết / tài liệu gốc → Chấp nhận / Nộp lại / Từ chối  
-3. `user` nhận thông báo; lịch sử + bằng chứng sau khi chấp nhận  
+Nhấn `Ctrl+C` tại terminal chạy launcher để dừng các tiến trình do launcher tạo.
 
-DOCX không xem inline trên trình duyệt (tải file). PDF/ảnh xem preview.
+## Tài khoản demo
 
-## Tài liệu quan trọng
+| Tài khoản | Mật khẩu | Vai trò | Việc chính |
+|---|---|---|---|
+| `user` | `user123` | `USER` | Tải/chọn mẫu, kiểm tra dữ liệu, nộp sang HR, xem kết quả |
+| `hr` | `hr123` | `HR_REVIEWER` | Đối chiếu tài liệu, duyệt, yêu cầu sửa hoặc từ chối |
+| `admin` | `admin123` | `ADMIN` | Quản lý tài khoản, phân công HR và xem audit log |
 
-| File | Nội dung |
-|------|----------|
-| [`docs/REPORT.md`](docs/REPORT.md) | Smoke dataset 2026-08-21 |
-| [`docs/LOCAL_OPS_AND_DEPLOY.md`](docs/LOCAL_OPS_AND_DEPLOY.md) | Vận hành & deploy |
-| [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) | Trạng thái kỹ thuật |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Kiến trúc |
-| [`docs/HUMAN_IN_THE_LOOP.md`](docs/HUMAN_IN_THE_LOOP.md) | HITL |
+Đây là tài khoản cố định cho demo. Không đưa hệ thống chứa dữ liệu thật ra Internet với các mật khẩu này.
 
-## An toàn dữ liệu
+## Cách website vận hành
 
-Dữ liệu demo nằm trong `HCNS` data root (mặc định `~/private-data`): sessions, submissions, archive. Không gửi file gốc sang Camunda — chỉ metadata / reference.
+1. `USER` mở **Nộp đơn**, tải DOCX/PDF/ảnh hoặc chọn mẫu, kiểm tra các trường được parser/OCR trích xuất rồi nộp sang HR.
+2. `HR_REVIEWER` mở **Hàng đợi HR**, đối chiếu dữ liệu với tài liệu gốc và chọn duyệt, yêu cầu sửa hoặc từ chối.
+3. `USER` nhận cập nhật gần thời gian thực trong ứng dụng, sau đó xem trạng thái và bằng chứng tại phần lịch sử.
+4. `ADMIN` quản lý người dùng, quan hệ phụ trách và nhật ký. Quyền xem/tải hồ sơ vẫn do API kiểm tra theo vai trò và quan hệ được gán.
 
-## License / scope
+Các địa chỉ local mặc định:
 
-MVP nội bộ / nghiên cứu. Chưa phải production multi-tenant hay tích hợp HRIS thật.
+| Thành phần | Địa chỉ |
+|---|---|
+| Landing page | `http://localhost:3000` |
+| Workspace | `http://localhost:3000/workspace` |
+| API/health | `http://127.0.0.1:8765/health` |
+| Camunda Tasklist (tùy chọn, chỉ local/private) | `http://127.0.0.1:8080/camunda` |
+
+## Ranh giới triển khai
+
+`python deploy_public.py` tạo URL HTTPS ngẫu nhiên cho Web và API để demo nhanh. Script không công khai Camunda. Quick Tunnel không có lớp kiểm soát truy cập phù hợp cho production, URL thay đổi sau mỗi lần chạy và không được dùng với PII thật. Demo dài hạn phải dùng named Cloudflare Tunnel kèm Cloudflare Access hoặc một hạ tầng có xác thực tương đương.
+
+Cloudflare Workers/Pages chỉ phù hợp cho frontend tĩnh/edge; chúng không thay thế máy chạy OCR worker và Camunda.
+
+## Tài liệu
+
+- [Hướng dẫn sử dụng và vận hành](docs/LOCAL_OPS_AND_DEPLOY.md)
+- [Trạng thái dự án](docs/PROJECT_STATE.md)
+- [Báo cáo smoke test](docs/REPORT.md)
+- [Kiến trúc](docs/ARCHITECTURE.md)
+- [An toàn dữ liệu](docs/DATA_SECURITY.md)
+- [Human-in-the-loop](docs/HUMAN_IN_THE_LOOP.md)
