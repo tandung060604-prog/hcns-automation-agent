@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.0.0",
+  "environment": "local",
+  "groups": [
+    {
+      "id": "employees",
+      "name": "Employees",
+      "type": "WORKFLOW"
+    },
+    {
+      "id": "newHires",
+      "name": "New hires",
+      "type": "WORKFLOW"
+    },
+    {
+      "id": "hrReviewers",
+      "name": "HCNS Reviewers",
+      "type": "WORKFLOW"
+    }
+  ],
+  "memberships": [
+    {
+      "userId": "demo",
+      "groupId": "employees"
+    },
+    {
+      "userId": "demo",
+      "groupId": "newHires"
+    },
+    {
+      "userId": "demo",
+      "groupId": "hrReviewers"
+    }
+  ]
+}
