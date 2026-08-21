@@ -192,6 +192,23 @@ $env:HCNS_CAMUNDA_PRIVATE_ROOT = "C:\duong-dan\private-data"
 hcns-agent-camunda-worker
 ```
 
+### Khởi tạo quyền Tasklist local
+
+BPMN chỉ khai báo candidate group; Camunda không tự tạo group và membership khi
+deploy process. Sau khi container Camunda đã healthy, chạy bootstrap idempotent
+sau đây một lần trong mỗi môi trường local:
+
+```powershell
+$env:CAMUNDA_USERNAME = "demo"
+$env:CAMUNDA_PASSWORD = "demo"
+.\camunda\seed_local_identity.ps1
+```
+
+Script chờ REST API sẵn sàng rồi tạo hoặc giữ nguyên ba group `employees`,
+`newHires`, `hrReviewers`, đồng thời thêm user `demo` vào cả ba group. Có thể
+chạy lại an toàn; password chỉ đọc từ biến môi trường và không nằm trong Git.
+Đây là cấu hình local cho Tasklist, không phải phân quyền production.
+
 ### Demo nhanh cho user hoặc mentor
 
 1. Mở `http://localhost:3000/workspace#explorer`.
