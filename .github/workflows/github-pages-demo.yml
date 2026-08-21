@@ -39,11 +39,12 @@ jobs:
 
       - name: Assemble read-only Pages artifact
         run: |
-          mkdir -p pages/assets
+          mkdir -p pages/assets pages/templates
           cp github-pages/index.html pages/index.html
           cp public/favicon.svg pages/favicon.svg
           cp public/assets/template-first-local-workflow.png pages/assets/template-first-local-workflow.png
           cp public/assets/hr-document-intelligence-context.webp pages/assets/hr-document-intelligence-context.webp
+          cp public/templates/*.docx pages/templates/
           touch pages/.nojekyll
 
       - name: Configure GitHub Pages

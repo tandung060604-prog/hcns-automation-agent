@@ -6,11 +6,22 @@ Next READY task: `DATA-31-QUALITY-RECOVERY-R8`
 Archive: docs/archive/PROJECT_STATE_HISTORY_2026-08-20.md
 
 Repository:
-- Branch: `codex/alg-003-contract-scan-recovery`
-- HEAD: `c34b695`
-- Base: `origin/main` remains at `88473de899518a4660ed7b3dc0c13dc66978eb6b`
-- Three commits contain the runtime, DATA-31 replay and documentation updates;
-  no PR or deploy was performed.
+- Reference branch at repository-governance review: `main` / `3c48ac2`.
+- Active maintenance branch: `codex/repository-governance`.
+- Scope is repository hygiene and documentation only; parser, OCR policy, schema,
+  Camunda behavior and private data are unchanged.
+
+## Repository governance checkpoint — 2026-08-21
+
+- Removed two frontend panels with no route/import, their orphan CSS, and one
+  unreferenced legacy policy file under `configs/`.
+- Moved the four retained DOCX v1 masters from the root into
+  `docs/archive/templates-v1/`; current downloadable templates remain under
+  `apps/ocr_lab/web/public/templates/`.
+- Rewrote the root README as a concise operational entrypoint and updated the
+  Pages artifact to publish the four approved blank DOCX templates.
+- Validation: repository hygiene, focused M5 API/architecture tests, frontend
+  build/rendered tests and lint completed without errors.
 
 ## Verified current result
 

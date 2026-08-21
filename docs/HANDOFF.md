@@ -2,15 +2,19 @@
 
 ## Current checkpoint (2026-08-21)
 
-- Branch: `codex/alg-003-contract-scan-recovery`
-- HEAD: `c34b695`
-- Base: `origin/main` remains at `88473de899518a4660ed7b3dc0c13dc66978eb6b`; three
-  commits now contain the runtime, DATA-31 replay and documentation updates.
-- Task: `DATA-31-QUALITY-RECOVERY-R7`; owner accepted local shadow, while the
-  private DATA-31 promotion gate remains HOLD.
-- Next READY task: `DATA-31-QUALITY-RECOVERY-R8`.
-- Next step: publish this branch and open the DATA-31 R7 localhost comparison;
-  CAM-001 remains blocked by the formal promotion gate.
+- Reference branch: `main` / `3c48ac2`; active maintenance branch:
+  `codex/repository-governance`.
+- Task: repository hygiene and documentation refresh; no parser, OCR policy,
+  schema, Camunda behavior or private corpus was changed.
+- Removed two unreferenced frontend panels and one unreferenced legacy policy;
+  moved v1 DOCX masters to `docs/archive/templates-v1/`.
+- Root README now routes users to local startup, private dataset boundaries,
+  tests and the canonical documentation map. GitHub Pages now packages the four
+  current blank DOCX downloads with its static artifact.
+- Validation: `python scripts/check_repository.py`, focused pytest `9 passed`,
+  frontend `npm test` `16/16`, and lint `0` errors (`22` existing warnings).
+
+## Previous DATA-31 recovery notes
 
 ### DATA-31 Quality Recovery R4 — 2026-08-20
 
