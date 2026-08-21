@@ -856,8 +856,8 @@ def _cv_desired_role(canonical: Mapping[str, Any], *, review: bool) -> dict[str,
                 review=review,
             )
 
-    for block in objective_blocks:
-        text = str(block.get("text") or "").strip()
+    for objective_block in objective_blocks:
+        text = str(objective_block.get("text") or "").strip()
         for pattern in (
             r"\b(?:vị trí|trở thành|theo hướng)\s+"
             r"(.+?)(?=\s+(?:cho|trong|với|có)\b|[.;]|$)",
@@ -869,7 +869,7 @@ def _cv_desired_role(canonical: Mapping[str, Any], *, review: bool) -> dict[str,
                 return _field(
                     value,
                     method="cv_objective_role_layout",
-                    block=block,
+                    block=objective_block,
                     review=review,
                 )
     return _missing("cv_objective_role_layout", review=review)
