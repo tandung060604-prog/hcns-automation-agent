@@ -83,13 +83,43 @@ def free_port(port: int) -> None:
     if result.returncode == 0:
         log(f"Freed stale process on port {port}")
     time.sleep(2)
+    # Confirm the port is actually free; vinext/workerd orphans can survive a
+    # soft kill and keep serving an old VITE_API_BASE (broken public API).
+    still = subprocess.run(
+        ["fuser", f"{port}/tcp"],
+        capture_output=True,
+        text=True,
+    )
+    if still.returncode == 0 and still.stdout.strip():
+        log(f"Port {port} still busy after fuser -k; force-killing PIDs {still.stdout.strip()}")
+        for pid in still.stdout.split():
+            if pid.isdigit():
+                subprocess.run(["kill", "-9", pid], capture_output=True)
+        time.sleep(1)
+
+
+def kill_stale_web_dev_servers() -> None:
+    """Kill orphaned vinext/vite processes for this repo (reparented to systemd)."""
+    marker = str(WEB_ROOT)
+    result = subprocess.run(["pgrep", "-af", "vinext|vite"], capture_output=True, text=True)
+    for line in result.stdout.splitlines():
+        if marker not in line and "hcns-ocr-lab-web" not in line:
+            continue
+        pid = line.split(None, 1)[0]
+        if not pid.isdigit():
+            continue
+        log(f"Killing stale web dev server pid={pid}")
+        subprocess.run(["kill", "-9", pid], capture_output=True)
+    time.sleep(1)
 
 
 def start_tunnel(name: str, local_url: str) -> ProcessHandle:
     log_path = LOG_ROOT / f"tunnel_{name}.log"
     stream = log_path.open("wb")
     subprocess.run(["docker", "rm", "-f", f"hcns-tunnel-{name}"], capture_output=True)
-    log(f"Starting Cloudflare tunnel '{name}' -> {local_url}")
+    # Prefer HTTP/2 over TCP: many office/ISP networks block QUIC/UDP :7844,
+    # which leaves a trycloudflare.com hostname with Error 1033 (no connector).
+    log(f"Starting Cloudflare tunnel '{name}' -> {local_url} (protocol=http2)")
     return subprocess.Popen(
         [
             "docker",
@@ -102,6 +132,8 @@ def start_tunnel(name: str, local_url: str) -> ProcessHandle:
             TUNNEL_IMAGE,
             "tunnel",
             "--no-autoupdate",
+            "--protocol",
+            "http2",
             "--url",
             local_url,
         ],
@@ -111,18 +143,35 @@ def start_tunnel(name: str, local_url: str) -> ProcessHandle:
     )
 
 
-def wait_for_tunnel_url(name: str, attempts: int = 60, interval: float = 1.0) -> str | None:
+def wait_for_tunnel_url(name: str, attempts: int = 90, interval: float = 1.0) -> str | None:
+    """Wait until Cloudflare assigns a URL *and* a connector registers.
+
+    Quick tunnels print the public URL before the edge connection succeeds.
+    Without a registered connector, visitors get Cloudflare Error 1033.
+    """
     log_path = LOG_ROOT / f"tunnel_{name}.log"
+    url: str | None = None
     for _ in range(attempts):
         if log_path.is_file():
             try:
                 content = log_path.read_text(encoding="utf-8", errors="replace")
-                match = URL_RE.search(content)
-                if match:
-                    return match.group(0).rstrip("/")
+                if url is None:
+                    match = URL_RE.search(content)
+                    if match:
+                        url = match.group(0).rstrip("/")
+                if url and "Registered tunnel connection" in content:
+                    return url
+                if "Failed to dial" in content and "http2" not in content.lower():
+                    # Keep waiting; http2 retries are expected under flaky nets.
+                    pass
             except OSError:
                 pass
         time.sleep(interval)
+    if url is not None:
+        log(
+            f"Tunnel '{name}' got URL {url} but never registered a connection; "
+            f"see {log_path} (likely blocked QUIC/UDP or TCP :7844)"
+        )
     return None
 
 
@@ -170,9 +219,15 @@ def main() -> int:
             return 1
 
     processes: list[ProcessHandle] = []
+    optional: list[ProcessHandle] = []
     tunnels: list[ProcessHandle] = []
-    signal.signal(signal.SIGINT, lambda s, f: shutdown(processes, tunnels, s, f))
-    signal.signal(signal.SIGTERM, lambda s, f: shutdown(processes, tunnels, s, f))
+
+    def _on_signal(signum: int, frame: object) -> None:
+        shutdown([*processes, *optional], tunnels, signum, frame)
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGINT, _on_signal)
+    signal.signal(signal.SIGTERM, _on_signal)
 
     base_env = dict(os.environ)
     base_env.update(
@@ -189,6 +244,8 @@ def main() -> int:
     api_url = f"http://127.0.0.1:{args.port_api}"
 
     free_port(args.port_api)
+    free_port(args.port_web)
+    kill_stale_web_dev_servers()
     free_port(args.port_web)
     camunda_already_running = http_ready("http://127.0.0.1:8080/camunda")
 
@@ -247,7 +304,37 @@ def main() -> int:
     deadline = time.time() + 90
     while time.time() < deadline and not http_ready(web_url):
         time.sleep(1)
-    log(f"Web ready: {http_ready(web_url)}")
+    if not http_ready(web_url):
+        log("Web failed to start; check tmp/web.log")
+        shutdown([*processes, *optional], tunnels)
+        return 1
+    # Ensure the listener is our new server with the current API tunnel URL,
+    # not an orphan still holding :3000 with a stale VITE_API_BASE.
+    probe = subprocess.run(
+        ["fuser", f"{args.port_web}/tcp"],
+        capture_output=True,
+        text=True,
+    )
+    listener_pids = [p for p in probe.stdout.split() if p.isdigit()]
+    for pid in listener_pids:
+        try:
+            environ = Path(f"/proc/{pid}/environ").read_bytes().split(b"\0")
+            env_map = {}
+            for item in environ:
+                if b"=" in item:
+                    key, _, value = item.partition(b"=")
+                    env_map[key.decode("utf-8", "replace")] = value.decode("utf-8", "replace")
+            baked = env_map.get("VITE_API_BASE", "")
+            if baked and baked.rstrip("/") != api_tunnel_url.rstrip("/"):
+                log(
+                    f"Port {args.port_web} listener pid={pid} has stale VITE_API_BASE={baked!r}; "
+                    f"expected {api_tunnel_url!r}"
+                )
+                shutdown([*processes, *optional], tunnels)
+                return 1
+        except OSError:
+            pass
+    log(f"Web ready: True (VITE_API_BASE={api_tunnel_url})")
 
     tunnels.append(start_tunnel("web", web_url))
     web_tunnel_url = wait_for_tunnel_url("web", attempts=90)
@@ -266,8 +353,8 @@ def main() -> int:
                 "HCNS_CAMUNDA_PRIVATE_ROOT": str(data_root),
             }
         )
-        processes.append(
-            start_process([str(VENV_PYTHON), "-m", "hcns_agent.camunda_worker_cli"], "worker.log", worker_env)
+        optional.append(
+            start_process([str(VENV_PYTHON), "-u", "-m", "hcns_agent.camunda_worker_cli"], "worker.log", worker_env)
         )
 
     log("=" * 64)
@@ -280,14 +367,28 @@ def main() -> int:
     log("  Mọi URL đều HTTPS miễn phí qua Cloudflare.")
     log("  Nhấn Ctrl+C để tắt toàn bộ.")
 
+    worker_warned = False
     while True:
-        live = [handle.poll() is None for handle in processes] + [
-            handle.poll() is None for handle in tunnels
+        dead_core = [
+            f"process[{idx}] exit={handle.returncode}"
+            for idx, handle in enumerate(processes)
+            if handle.poll() is not None
+        ] + [
+            f"tunnel[{idx}] exit={handle.returncode}"
+            for idx, handle in enumerate(tunnels)
+            if handle.poll() is not None
         ]
-        if not all(live):
-            log("Một tiến trình đã thoát; dừng toàn bộ.")
-            shutdown(processes, tunnels)
+        if dead_core:
+            log(f"Core process exited ({', '.join(dead_core)}); dừng toàn bộ.")
+            shutdown([*processes, *optional], tunnels)
             return 2
+        if not worker_warned:
+            for idx, handle in enumerate(optional):
+                code = handle.poll()
+                if code is not None:
+                    log(f"Optional worker[{idx}] exited (code={code}); dashboard vẫn chạy. Xem tmp/worker.log")
+                    worker_warned = True
+                    break
         time.sleep(2)
 
 

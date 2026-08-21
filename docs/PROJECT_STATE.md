@@ -40,6 +40,9 @@ Repository:
 - CV and IELTS live Camunda shadow E2E passed with Human Review and zero incident;
   Contract live acceptance still needs an independent authorized user upload.
 - `autoContinueEnabled=false`; HRIS and notification remain simulated.
+- MVP demo now supports upload-first submission: Template-first auto-detects the
+  document type, fills an editable submit form, notifies HR immediately, and
+  streams HR decisions back to the submitter over local SSE with polling fallback.
 - CCCD held-out/WIP and Contract-image expansion remain closed.
 
 Next action: Implement ALG-002 so upload and DATA-29 share one canonical parser path,

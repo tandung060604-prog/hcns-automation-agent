@@ -21,6 +21,8 @@ Tóm tắt thay đổi so với `main`. Chi tiết vận hành cũ giữ nguyên
 - `API_BASE` không còn hard-code, đọc từ biến môi trường:
   `const API_BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:8765";`
 - Thêm `VITE_CAMUNDA_URL` (mặc định `http://127.0.0.1:8080`) cho link/health-check Camunda trong `MvpDemoPanel.tsx` và `Dashboard.tsx` (thay hard-code `127.0.0.1:8080`).
+- MVP panel giờ nộp đơn theo một luồng thống nhất: user upload DOCX/PDF/ảnh, Template-first tự nhận diện loại tài liệu, dữ liệu trích xuất được điền thẳng vào form để user sửa rồi nộp sang HR.
+- HR nhận notification realtime khi có đơn mới; khi HR duyệt/yêu cầu tải lại/từ chối thì user nhận notification realtime qua SSE, có polling fallback.
 
 ## 4. API security (`apps/ocr_lab/api/local_server_security.py`)
 

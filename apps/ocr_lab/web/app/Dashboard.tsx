@@ -7,7 +7,7 @@ import {
 import ExternalDatasetReview from "./ExternalDatasetReview";
 import ExternalDatasetPrediction from "./ExternalDatasetPrediction";
 import LocalEvidenceOverview from "./LocalEvidenceOverview";
-import MvpDemoPanel, { type MvpSession } from "./MvpDemoPanel";
+import MvpDemoPanel, { type MvpSession, restoreMvpDemoSession } from "./MvpDemoPanel";
 import OcrHoDiagnostic from "./OcrHoDiagnostic";
 
 const SHOW_ADVANCED_DIAGNOSTICS =
@@ -2093,7 +2093,7 @@ function TemplateResultPanel({
       <div className="result-actions template-result-actions">
         {["LEAVE_REQUEST", "OVERTIME_REQUEST", "CV", "CERTIFICATE", "EMPLOYMENT_CONTRACT"].includes(result.documentType) ? (
           <button type="button" onClick={onStartCamunda}>
-            Đưa vào Camunda
+            Nộp cho HR
           </button>
         ) : null}
         <button
@@ -2179,17 +2179,21 @@ function RoleReviewQueue({
 export default function Dashboard({ data }: { data: DashboardData }) {
   const showLegacyUpload = SHOW_LEGACY_UPLOAD;
   const [demoSession, setDemoSession] = useState<MvpSession | null>(null);
-  const [demoSessionLoaded, setDemoSessionLoaded] = useState(false);
+  const [authBootstrapping, setAuthBootstrapping] = useState(true);
+  const demoAuthHeaders = demoSession
+    ? { Authorization: `Bearer ${demoSession.token}` }
+    : undefined;
   useEffect(() => {
-    let stored: MvpSession | null = null;
-    try {
-      const raw = window.localStorage.getItem("mvp-demo-session");
-      stored = raw ? (JSON.parse(raw) as MvpSession) : null;
-    } catch {
-      stored = null;
-    }
-    setDemoSession(stored);
-    setDemoSessionLoaded(true);
+    let cancelled = false;
+    void restoreMvpDemoSession(API_BASE).then((session) => {
+      if (!cancelled) {
+        setDemoSession(session);
+        setAuthBootstrapping(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
   const [query, setQuery] = useState("");
   const [type, setType] = useState("ALL");
@@ -2407,7 +2411,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   };
 
   const refreshCamundaQueue = () => {
-    fetch(`${API_BASE}/api/camunda/queue`)
+    fetch(`${API_BASE}/api/camunda/queue`, { headers: demoAuthHeaders })
       .then((response) => {
         if (!response.ok) throw new Error("Camunda queue unavailable");
         return response.json() as Promise<{ queue: CamundaReviewTask[] }>;
@@ -2956,6 +2960,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           : "/user/upload";
       const response = await fetch(`${API_BASE}${endpoint}`, {
         method: "POST",
+        headers: demoAuthHeaders,
         body: formData,
       });
       const payload = (await response.json()) as Record<string, unknown>;
@@ -3008,7 +3013,10 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     try {
       const response = await fetch(`${API_BASE}/api/camunda/start`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(demoAuthHeaders ?? {}),
+        },
         body: JSON.stringify({ documentId }),
       });
       const payload = (await response.json()) as {
@@ -3045,6 +3053,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     try {
       const response = await fetch(
         `${API_BASE}/api/camunda/case?id=${encodeURIComponent(camundaCase.processInstanceId)}`,
+        { headers: demoAuthHeaders },
       );
       const payload = (await response.json()) as CamundaCaseStatus & { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Không đọc được trạng thái Camunda");
@@ -3061,6 +3070,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     try {
       const response = await fetch(
         `${API_BASE}/api/documents/result?id=${encodeURIComponent(documentId)}`,
+        { headers: demoAuthHeaders },
       );
       if (!response.ok) throw new Error("Không tìm thấy session local của case này");
       setUploadFile(null);
@@ -3085,7 +3095,10 @@ export default function Dashboard({ data }: { data: DashboardData }) {
     try {
       const response = await fetch(`${API_BASE}/api/camunda/review`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(demoAuthHeaders ?? {}),
+        },
         body: JSON.stringify({ taskId: task.taskId, role: task.role, decision }),
       });
       const payload = (await response.json()) as { error?: string };
@@ -3480,7 +3493,23 @@ export default function Dashboard({ data }: { data: DashboardData }) {
       ? templateResult.data.sourceFile
       : "");
 
-  const signedIn = demoSessionLoaded && demoSession !== null;
+  const signedIn = !authBootstrapping && demoSession !== null;
+
+  if (authBootstrapping) {
+    return (
+      <main className="operations-site">
+        <header className="topbar">
+          <a className="brand" href="#overview" aria-label="Về đầu trang">
+            <span className="brand-mark">V</span>
+            <span>VinHRIS</span><small>HCNS</small>
+          </a>
+        </header>
+        <section className="section" style={{ padding: 24 }}>
+          <p>Đang khôi phục phiên đăng nhập…</p>
+        </section>
+      </main>
+    );
+  }
 
   if (!signedIn) {
     return (
@@ -3511,7 +3540,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           <span>VinHRIS</span><small>HCNS</small>
         </a>
         <nav aria-label="Điều hướng chính">
-          <a href="#upload">Tiếp nhận hồ sơ</a>
+          <a href="#mvp-demo">Tiếp nhận hồ sơ</a>
           <a href="#roles">Hàng đợi kiểm tra</a>
           <a href="#explorer">Kho hồ sơ</a>
           <a href="#phases">Tiêu chí xử lý</a>
@@ -3541,7 +3570,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             <span>Camunda điều phối bước kiểm tra</span>
           </div>
           <div className="hero-actions">
-            <a className="primary-button" href="#upload">
+            <a className="primary-button" href="#mvp-demo">
               Tiếp nhận tài liệu
             </a>
             <a className="text-button" href="#product">
@@ -3592,20 +3621,24 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               <dd>Trường chưa chắc chắn được chuyển cho người phụ trách xác nhận.</dd>
             </div>
           </dl>
-          <a className="primary-button product-cta" href="#upload">
+          <a className="primary-button product-cta" href="#mvp-demo">
             Bắt đầu tiếp nhận
           </a>
         </div>
       </section>
 
-      <RoleReviewQueue
-        tasks={camundaQueue}
-        onInspect={inspectCamundaDocument}
-        onReview={completeCamundaReview}
-      />
-      {camundaQueueStatus ? <p className="camunda-queue-status">{camundaQueueStatus}</p> : null}
+      {false ? (
+        <>
+          <RoleReviewQueue
+            tasks={camundaQueue}
+            onInspect={inspectCamundaDocument}
+            onReview={completeCamundaReview}
+          />
+          {camundaQueueStatus ? <p className="camunda-queue-status">{camundaQueueStatus}</p> : null}
+        </>
+      ) : null}
 
-      <section className="section upload-section" id="upload">
+      <section className="section upload-section" id="upload" style={{ display: "none" }}>
         <div className="section-heading">
           <div>
             <p className="eyebrow">TIẾP NHẬN HỒ SƠ</p>

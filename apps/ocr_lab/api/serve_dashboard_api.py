@@ -90,6 +90,7 @@ from local_server_security import require_local_host_header, require_loopback_ho
 from mvp_demo_docs import render_leave_docx, render_leave_pdf
 from mvp_demo_store import (
     APPLICATION_ID_RE,
+    EVENT_QUEUE_CHANGED,
     ROLE_ADMIN,
     ROLE_HR,
     ROLE_USER,
@@ -198,6 +199,138 @@ def _camunda_value(variables: object, name: str) -> str | None:
     return value["value"]
 
 
+def _queue_status_label(definition_key: str, *, viewer_is_hr: bool) -> str:
+    if definition_key == "HRReview":
+        return "Chờ HR duyệt" if viewer_is_hr else "HR đang xử lý"
+    if definition_key == "UserReview":
+        return "Chờ người nộp xác nhận" if viewer_is_hr else "Đang chờ xử lý"
+    return "Đang xử lý"
+
+
+def _claim_and_complete_camunda_task(
+    engine_url: str,
+    task_id: str,
+    *,
+    assignee: str,
+    variable_name: str,
+    decision: str,
+) -> None:
+    task = _camunda_get(f"{engine_url}/task/{task_id}")
+    if not isinstance(task, dict):
+        raise ValueError("Task is unavailable for this local demo role")
+    current_assignee = task.get("assignee")
+    if current_assignee != assignee:
+        if current_assignee not in {None, ""}:
+            _camunda_post(f"{engine_url}/task/{task_id}/unclaim", {})
+        _camunda_post(
+            f"{engine_url}/task/{task_id}/claim",
+            {"userId": assignee},
+        )
+    _camunda_post(
+        f"{engine_url}/task/{task_id}/complete",
+        {
+            "variables": {
+                variable_name: {"value": decision, "type": "String"},
+            }
+        },
+    )
+
+
+def _demo_fast_forward_to_hr_review(engine_url: str, process_id: str) -> bool:
+    """Skip UserReview in the MVP demo because the submit form already confirmed data."""
+    deadline = time.monotonic() + 25.0
+    while time.monotonic() < deadline:
+        tasks = _camunda_get(
+            f"{engine_url}/task?processInstanceId={process_id}"
+        )
+        if not isinstance(tasks, list):
+            return False
+        if any(
+            isinstance(task, dict) and task.get("taskDefinitionKey") == "HRReview"
+            for task in tasks
+        ):
+            return True
+        user_tasks = [
+            task
+            for task in tasks
+            if isinstance(task, dict) and task.get("taskDefinitionKey") == "UserReview"
+        ]
+        if user_tasks:
+            task_id = user_tasks[0].get("id")
+            if isinstance(task_id, str):
+                _claim_and_complete_camunda_task(
+                    engine_url,
+                    task_id,
+                    assignee="local-employee",
+                    variable_name="userReviewDecision",
+                    decision="UNRESOLVED",
+                )
+        time.sleep(0.4)
+    tasks = _camunda_get(f"{engine_url}/task?processInstanceId={process_id}")
+    return isinstance(tasks, list) and any(
+        isinstance(task, dict) and task.get("taskDefinitionKey") == "HRReview"
+        for task in tasks
+    )
+
+
+def _wait_for_camunda_task(
+    engine_url: str,
+    process_id: str,
+    task_definition_key: str,
+    *,
+    timeout: float = 20.0,
+) -> dict[str, Any] | None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        tasks = _camunda_get(f"{engine_url}/task?processInstanceId={process_id}")
+        if isinstance(tasks, list):
+            for task in tasks:
+                if (
+                    isinstance(task, dict)
+                    and task.get("taskDefinitionKey") == task_definition_key
+                ):
+                    return task
+        time.sleep(0.4)
+    return None
+
+
+def _safe_record_event(
+    store: MvpDemoStore,
+    application_id: str,
+    event: str,
+    detail: str,
+    actor: str,
+) -> None:
+    if APPLICATION_ID_RE.fullmatch(application_id) is None:
+        return
+    try:
+        store.record_event(application_id, event, detail, actor)
+    except MvpDemoError:
+        return
+
+
+def _notify_hr_decision(
+    store: MvpDemoStore,
+    *,
+    owner: str,
+    decision: str,
+    application_id: str,
+    document_ref: str,
+    note: str,
+) -> None:
+    summary = HR_DECISION_MESSAGES.get(decision, decision)
+    message = f"{summary}{f' - {note}' if note else ''}"
+    store.notify(
+        owner,
+        message,
+        kind=decision,
+        application_id=(
+            application_id if APPLICATION_ID_RE.fullmatch(application_id) else ""
+        ),
+        document_id=document_ref,
+    )
+
+
 def _camunda_history_value(variables: object, name: str) -> str | None:
     if not isinstance(variables, list):
         return None
@@ -213,6 +346,13 @@ def _camunda_history_value(variables: object, name: str) -> str | None:
 
 def _local_camunda_url() -> str:
     return os.getenv("CAMUNDA_REST_URL", "http://127.0.0.1:8080/engine-rest").rstrip("/")
+
+
+def _parse_cursor(raw: str) -> int:
+    try:
+        return max(0, int(raw))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _read_optional_json(path: Path | None) -> dict[str, Any] | None:
@@ -489,6 +629,37 @@ CAMUNDA_UPLOAD_DOCUMENT_TYPES = frozenset(
         "EMPLOYMENT_CONTRACT",
     }
 )
+DOCUMENT_TYPE_LABELS = {
+    "LEAVE_REQUEST": "Đơn xin nghỉ phép",
+    "OVERTIME_REQUEST": "Đơn xin tăng ca",
+    "CV": "Hồ sơ ứng viên CV",
+    "CERTIFICATE": "Chứng chỉ",
+    "EMPLOYMENT_CONTRACT": "Hợp đồng lao động",
+    "IDENTITY_CARD": "Căn cước công dân",
+}
+SSE_HEARTBEAT_SECONDS = 15.0
+SSE_MAX_STREAM_SECONDS = 600.0
+SSE_RETRY_MS = 3000
+HR_DECISION_MESSAGES = {
+    "CONFIRMED": "HR đã duyệt đơn của bạn",
+    "REQUEST_REUPLOAD": "HR yêu cầu nộp lại tài liệu",
+    "REJECTED": "HR đã từ chối đơn của bạn",
+}
+TEMPLATE_RESULT_HIDDEN_FIELDS = frozenset(
+    {
+        "missingFields",
+        "validationErrors",
+        "confidence",
+        "recommendedAction",
+        "documentId",
+        "documentType",
+        "templateId",
+        "templateVersion",
+        "documentTitle",
+        "sourceFile",
+        "schemaVersion",
+    }
+)
 CAMUNDA_PROCESS_ID_PATTERN = re.compile(r"[A-Za-z0-9-]{1,128}\Z")
 TEMPLATE_ALLOWED_EXTENSIONS = {
     ".docx",
@@ -572,6 +743,24 @@ def deduplicate(values: list[str]) -> list[str]:
             seen.add(normalized.casefold())
             output.append(normalized)
     return output
+
+
+def extracted_fields_from_template_result(result: dict[str, Any]) -> dict[str, Any]:
+    """Return scalar business fields extracted/corrected from a template session."""
+    raw = result.get("data")
+    if not isinstance(raw, dict):
+        raw = result.get("structuredFields")
+    if not isinstance(raw, dict):
+        return {}
+    cleaned: dict[str, Any] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or key in TEMPLATE_RESULT_HIDDEN_FIELDS:
+            continue
+        if isinstance(value, bool) or value is None:
+            cleaned[key] = value
+        elif isinstance(value, (str, int, float)):
+            cleaned[key] = value
+    return cleaned
 
 
 def extract_candidates(text: str) -> dict[str, list[str]]:
@@ -1729,6 +1918,132 @@ class DashboardHandler(BaseHTTPRequestHandler):
         status = exc.status if isinstance(exc.status, HTTPStatus) else HTTPStatus(exc.status)
         self.send_json({"error": str(exc), "errorCode": "MVP_DEMO_ERROR"}, status)
 
+    def _apply_submission_corrections(
+        self,
+        document_id: str,
+        stored: dict[str, Any],
+        corrections: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Persist the fields the submitter fixed on the extracted document."""
+        template_id = str(stored.get("templateId") or "")
+        allowed_fields: frozenset[str] = frozenset()
+        for item in self.template_processor.list_templates():
+            if item.get("templateId") != template_id:
+                continue
+            required = item.get("requiredFields")
+            optional = item.get("optionalFields")
+            allowed_fields = frozenset(
+                [
+                    *(required if isinstance(required, list) else []),
+                    *(optional if isinstance(optional, list) else []),
+                ]
+            )
+            break
+        scalar_corrections = {
+            key: value
+            for key, value in corrections.items()
+            if key in allowed_fields
+            and (isinstance(value, (str, int, float, bool)) or value is None)
+        }
+        if not scalar_corrections:
+            return stored
+        try:
+            corrected = self.template_processor.apply_corrections(
+                stored, scalar_corrections
+            )
+        except (TemplateUnsupportedError, TemplateTechnicalError) as exc:
+            raise ValueError(f"Correction is not accepted: {exc}") from exc
+        payload = corrected.public_dict()
+        payload["processing"] = dict(stored.get("processing", {}))
+        payload["processing"]["correctedAt"] = utc_now()
+        result_path = (
+            self.user_ocr.sessions_root / document_id / "template_first" / "result.json"
+        )
+        result_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return payload
+
+    def _stream_events(self, query: dict[str, list[str]]) -> None:
+        """Stream MVP demo events as SSE so the UI updates without polling.
+
+        EventSource cannot set an Authorization header, so the session token is
+        accepted from the query string; request logging is disabled for this
+        server, so the token never reaches a log file.
+        """
+        token = query.get("token", [""])[0] or self._auth_token()
+        try:
+            store = self._demo_store()
+        except MvpDemoError as exc:
+            self._handle_mvp_error(exc)
+            return
+        user = store.user_by_token(token)
+        if user is None:
+            self.send_json(
+                {"error": "Chưa đăng nhập", "errorCode": "MVP_DEMO_ERROR"},
+                HTTPStatus.UNAUTHORIZED,
+            )
+            return
+        cursor = _parse_cursor(query.get("cursor", ["0"])[0])
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache, no-store")
+        self.send_header("X-Accel-Buffering", "no")
+        self.cors_headers()
+        self.end_headers()
+        deadline = time.monotonic() + SSE_MAX_STREAM_SECONDS
+        try:
+            self.wfile.write(f"retry: {SSE_RETRY_MS}\n".encode())
+            self._write_sse("ready", {"cursor": cursor})
+            while time.monotonic() < deadline:
+                events, cursor = store.wait_for_events(
+                    user, cursor, SSE_HEARTBEAT_SECONDS
+                )
+                if events:
+                    for event in events:
+                        self._write_sse("event", event)
+                else:
+                    self.wfile.write(b": keep-alive\n\n")
+                    self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            return
+
+    def _write_sse(self, name: str, payload: dict[str, Any]) -> None:
+        body = json.dumps(payload, ensure_ascii=False)
+        self.wfile.write(f"event: {name}\ndata: {body}\n\n".encode())
+        self.wfile.flush()
+
+    def _announce_submission_to_hr(
+        self,
+        submitter: dict[str, Any],
+        *,
+        application_id: str,
+        document_id: str,
+        document_type: str,
+    ) -> None:
+        """Push the new case to every HR reviewer as soon as it is submitted."""
+        store = self._demo_store()
+        label = DOCUMENT_TYPE_LABELS.get(document_type, document_type)
+        store.notify_roles(
+            {ROLE_HR, ROLE_ADMIN},
+            f"Đơn mới chờ duyệt: {label} - {submitter['displayName']}",
+            kind="SUBMITTED",
+            application_id=application_id,
+            document_id=document_id,
+        )
+        store.publish(
+            EVENT_QUEUE_CHANGED,
+            target_roles=[ROLE_HR, ROLE_ADMIN],
+            payload={"applicationId": application_id, "documentType": document_type},
+        )
+        store.record_event(
+            application_id,
+            "HR_NOTIFIED",
+            f"HR nhan thong bao ho so {document_type}",
+            "system",
+        )
+
     def _submit_leave_application(
         self, actor: dict[str, Any], payload: dict[str, Any]
     ) -> dict[str, Any]:
@@ -1813,15 +2128,44 @@ class DashboardHandler(BaseHTTPRequestHandler):
             encoding="utf-8",
         )
         application_id = f"LOCAL-{uuid.uuid4()}"
-        self._demo_store().bind_document(actor, document_id, application_id)
-        self._demo_store().record_event(
+        extracted_fields = extracted_fields_from_template_result(result_payload)
+        store = self._demo_store()
+        store.bind_document(actor, document_id, application_id)
+        store.save_submission(
+            application_id=application_id,
+            document_id=document_id,
+            owner=actor["username"],
+            document_type="LEAVE_REQUEST",
+            extracted_fields=extracted_fields,
+            source_file="leave-request.docx",
+        )
+        store.open_archive(
+            application_id=application_id,
+            document_id=document_id,
+            owner=actor["username"],
+            document_type="LEAVE_REQUEST",
+            extracted_fields=extracted_fields,
+            source_file="leave-request.docx",
+            source_path=input_dir / "document.docx",
+            submitted_by_display=str(actor.get("displayName") or actor["username"]),
+        )
+        store.register_hr_pending(
+            application_id=application_id,
+            document_id=document_id,
+            owner=actor["username"],
+            document_type="LEAVE_REQUEST",
+            extracted_fields=extracted_fields,
+        )
+        store.record_event(
             application_id, "SUBMITTED", "USER nộp đơn nghỉ phép", actor["username"]
         )
         engine_url = _local_camunda_url()
+        fields_json = json.dumps(extracted_fields, ensure_ascii=False)
         variables = {
             "applicationId": {"value": application_id, "type": "String"},
             "documentReference": {"value": document_id, "type": "String"},
             "declaredDocumentType": {"value": "LEAVE_REQUEST", "type": "String"},
+            "templateFieldsJson": {"value": fields_json, "type": "String"},
         }
         instance = _camunda_post(
             f"{engine_url}/process-definition/key/hr_document_agent_mvp_v2/start",
@@ -1845,12 +2189,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
             f"Camunda đã tạo process {process_id}",
             "system",
         )
+        self._announce_submission_to_hr(
+            actor,
+            application_id=application_id,
+            document_id=document_id,
+            document_type="LEAVE_REQUEST",
+        )
         return {
             "status": "SUBMITTED",
             "documentId": document_id,
             "applicationId": application_id,
+            "documentType": "LEAVE_REQUEST",
+            "documentTypeLabel": DOCUMENT_TYPE_LABELS["LEAVE_REQUEST"],
             "processInstanceId": process_id,
-            "tasklistUrl": "http://localhost:8080/camunda/app/tasklist/default/",
+            "hrNotified": True,
+            "extractedFields": extracted_fields,
+            "tasklistUrl": os.getenv(
+                "HCNS_CAMUNDA_PUBLIC_URL",
+                "http://localhost:8080/camunda/app/tasklist/default/",
+            ),
         }
 
     def log_message(self, format: str, *args: object) -> None:
@@ -1982,8 +2339,28 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         str(payload.get("password", "")),
                         str(payload.get("role", "")),
                         str(payload.get("displayName", "")),
+                        managed_by=str(payload.get("managedBy", "")).strip() or None,
                     )
                 self.send_json({"status": "OK", "user": result})
+            except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                if isinstance(exc, MvpDemoError):
+                    self._handle_mvp_error(exc)
+                else:
+                    self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if parsed.path == "/api/admin/assign":
+            try:
+                actor = self._require_user({ROLE_ADMIN})
+                content_length = int(self.headers.get("Content-Length", "0"))
+                if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                    raise ValueError("Assign body is empty or exceeds 2 MB")
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                result = self._demo_store().assign_user_to_hr(
+                    actor,
+                    str(payload.get("username", "")).strip(),
+                    str(payload.get("hrUsername", "")).strip(),
+                )
+                self.send_json({"status": "OK", "assignment": result})
             except (ValueError, TypeError, json.JSONDecodeError) as exc:
                 if isinstance(exc, MvpDemoError):
                     self._handle_mvp_error(exc)
@@ -2057,6 +2434,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 task_id = str(payload.get("taskId", ""))
                 role = str(payload.get("role", ""))
                 decision = str(payload.get("decision", ""))
+                note = str(payload.get("note", "")).strip()[:120]
                 if not task_id:
                     raise ValueError("Camunda task is required")
                 review_policy = {
@@ -2071,45 +2449,129 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     reviewer = self._require_user()
                 engine_url = _local_camunda_url()
                 task = _camunda_get(f"{engine_url}/task/{task_id}")
-                if not isinstance(task, dict) or task.get("taskDefinitionKey") != review_policy[0]:
+                if not isinstance(task, dict):
+                    raise ValueError("Task is unavailable for this role")
+                task_key = task.get("taskDefinitionKey")
+                process_instance_id = str(task.get("processInstanceId", ""))
+                decision_to_complete = decision
+                notify_decision: str | None = None
+                if role == "hr" and task_key == "UserReview":
+                    review_policy = (
+                        "UserReview",
+                        "local-employee",
+                        "userReviewDecision",
+                        {"CONFIRMED", "REQUEST_REUPLOAD", "REJECTED"},
+                    )
+                    if decision == "REJECTED":
+                        decision_to_complete = "UNRESOLVED"
+                if task_key != review_policy[0]:
                     raise ValueError("Task is unavailable for this role")
                 variables = _camunda_get(f"{engine_url}/task/{task_id}/variables")
                 document_ref = _camunda_value(variables, "documentReference")
                 if role == "employee" and document_ref is not None:
                     self._require_document_access(reviewer, document_ref)
-                assignee = task.get("assignee")
-                if assignee != review_policy[1]:
-                    if assignee not in {None, ""}:
-                        _camunda_post(f"{engine_url}/task/{task_id}/unclaim", {})
-                    _camunda_post(
-                        f"{engine_url}/task/{task_id}/claim",
-                        {"userId": review_policy[1]},
-                    )
-                _camunda_post(
-                    f"{engine_url}/task/{task_id}/complete",
-                    {
-                        "variables": {
-                            review_policy[2]: {"value": decision, "type": "String"}
-                        }
-                    },
+                _claim_and_complete_camunda_task(
+                    engine_url,
+                    task_id,
+                    assignee=review_policy[1],
+                    variable_name=review_policy[2],
+                    decision=decision_to_complete,
                 )
+                if (
+                    role == "hr"
+                    and task_key == "UserReview"
+                    and decision == "REJECTED"
+                    and process_instance_id
+                ):
+                    hr_task = _wait_for_camunda_task(
+                        engine_url, process_instance_id, "HRReview"
+                    )
+                    if hr_task is not None:
+                        hr_task_id = hr_task.get("id")
+                        if isinstance(hr_task_id, str):
+                            _claim_and_complete_camunda_task(
+                                engine_url,
+                                hr_task_id,
+                                assignee="local-hr",
+                                variable_name="hrReviewDecision",
+                                decision="REJECTED",
+                            )
+                            notify_decision = "REJECTED"
+                            task_key = "HRReview"
+                elif role == "hr" and task_key == "HRReview":
+                    notify_decision = decision
+                elif role == "hr" and task_key == "UserReview" and decision in {
+                    "REQUEST_REUPLOAD",
+                }:
+                    notify_decision = decision
                 application_id = (
                     _camunda_value(variables, "applicationId") or "LOCAL-demo"
                 )
-                self._demo_store().record_event(
+                store = self._demo_store()
+                _safe_record_event(
+                    store,
                     application_id,
                     "HR_REVIEWED" if role == "hr" else "USER_REVIEWED",
-                    f"Quyết định: {decision}",
+                    f"Quyết định: {decision}" + (f" · Ghi chú: {note}" if note else ""),
                     reviewer["username"],
                 )
-                if role == "hr" and decision == "CONFIRMED" and document_ref is not None:
-                    owner = self._demo_store().owner_of(document_ref)
+                notified_owner = None
+                if (
+                    notify_decision in HR_DECISION_MESSAGES
+                    and document_ref is not None
+                ):
+                    owner = store.owner_of(document_ref)
                     if owner:
-                        self._demo_store().notify(owner, "Đã duyệt")
-                        self._demo_store().record_event(
-                            application_id, "NOTIFIED", "USER nhận notification Đã duyệt", "system"
+                        _notify_hr_decision(
+                            store,
+                            owner=owner,
+                            decision=notify_decision,
+                            application_id=application_id,
+                            document_ref=document_ref,
+                            note=note,
                         )
-                self.send_json({"status": "COMPLETED", "decision": decision})
+                        _safe_record_event(
+                            store,
+                            application_id,
+                            "NOTIFIED",
+                            f"USER nhan notification: {HR_DECISION_MESSAGES[notify_decision]}",
+                            "system",
+                        )
+                        notified_owner = owner
+                store.publish(
+                    EVENT_QUEUE_CHANGED,
+                    target_roles=[ROLE_HR, ROLE_ADMIN],
+                    target_users=[notified_owner] if notified_owner else None,
+                    payload={
+                        "applicationId": application_id,
+                        "decision": notify_decision or decision,
+                    },
+                )
+                if role == "hr":
+                    store.resolve_hr_pending(application_id)
+                    if notify_decision in HR_DECISION_MESSAGES:
+                        source_path = None
+                        if (
+                            notify_decision == "CONFIRMED"
+                            and isinstance(document_ref, str)
+                            and document_ref
+                        ):
+                            source_path = self.user_ocr.template_source(document_ref)
+                        store.finalize_archive(
+                            application_id=application_id,
+                            decision=notify_decision,
+                            reviewed_by=reviewer["username"],
+                            note=note,
+                            source_path=source_path,
+                        )
+                self.send_json(
+                    {
+                        "status": "COMPLETED",
+                        "decision": decision,
+                        "effectiveDecision": notify_decision or decision,
+                        "notifiedOwner": notified_owner is not None,
+                    }
+                )
             except MvpDemoError as exc:
                 self._handle_mvp_error(exc)
             except (ValueError, TypeError, json.JSONDecodeError) as exc:
@@ -2134,6 +2596,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 result = self.user_ocr.template_result(document_id)
                 if result is None:
                     raise ValueError("Template session not found")
+                corrections = payload.get("corrections")
+                if isinstance(corrections, dict) and corrections:
+                    result = self._apply_submission_corrections(
+                        document_id, result, corrections
+                    )
                 document_type = result.get("documentType")
                 if document_type not in CAMUNDA_UPLOAD_DOCUMENT_TYPES:
                     raise ValueError("Document type is not available for Camunda local shadow")
@@ -2148,14 +2615,47 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         "HCNS_CAMUNDA_PRIVATE_ROOT must match the dashboard data root"
                     )
                 application_id = f"LOCAL-{uuid.uuid4()}"
-                self._demo_store().bind_document(user, document_id, application_id)
-                self._demo_store().record_event(
+                store = self._demo_store()
+                extracted_fields = extracted_fields_from_template_result(result)
+                source_name = ""
+                processing = result.get("processing")
+                if isinstance(processing, dict):
+                    source_name = str(processing.get("originalFileName") or "")
+                store.bind_document(user, document_id, application_id)
+                store.save_submission(
+                    application_id=application_id,
+                    document_id=document_id,
+                    owner=user["username"],
+                    document_type=str(document_type),
+                    extracted_fields=extracted_fields,
+                    source_file=source_name,
+                )
+                store.open_archive(
+                    application_id=application_id,
+                    document_id=document_id,
+                    owner=user["username"],
+                    document_type=str(document_type),
+                    extracted_fields=extracted_fields,
+                    source_file=source_name or source.name,
+                    source_path=source,
+                    submitted_by_display=str(user.get("displayName") or user["username"]),
+                )
+                store.register_hr_pending(
+                    application_id=application_id,
+                    document_id=document_id,
+                    owner=user["username"],
+                    document_type=document_type,
+                    extracted_fields=extracted_fields,
+                )
+                store.record_event(
                     application_id, "SUBMITTED", "USER nộp hồ sơ", user["username"]
                 )
+                fields_json = json.dumps(extracted_fields, ensure_ascii=False)
                 variables = {
                     "applicationId": {"value": application_id, "type": "String"},
                     "documentReference": {"value": document_id, "type": "String"},
                     "declaredDocumentType": {"value": document_type, "type": "String"},
+                    "templateFieldsJson": {"value": fields_json, "type": "String"},
                 }
                 engine_url = _local_camunda_url()
                 camunda_started = time.perf_counter()
@@ -2175,22 +2675,49 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 if not isinstance(task_id, str):
                     raise RuntimeError("Camunda submission task is invalid")
                 _camunda_post(f"{engine_url}/task/{task_id}/complete", {"variables": variables})
+                hr_task_ready = _demo_fast_forward_to_hr_review(engine_url, process_id)
                 camunda_duration_ms = round(
                     (time.perf_counter() - camunda_started) * 1000,
                     3,
                 )
-                self._demo_store().record_event(
+                store.record_event(
                     application_id,
                     "CAMUNDA_STARTED",
                     f"Camunda đã tạo process {process_id}",
                     "system",
                 )
+                if hr_task_ready:
+                    store.resolve_hr_pending(application_id)
+                    store.record_event(
+                        application_id,
+                        "HR_QUEUE_READY",
+                        "Đơn đã vào hàng đợi HR duyệt",
+                        "system",
+                    )
+                self._announce_submission_to_hr(
+                    user,
+                    application_id=application_id,
+                    document_id=document_id,
+                    document_type=document_type,
+                )
+                if hr_task_ready:
+                    store.publish(
+                        EVENT_QUEUE_CHANGED,
+                        target_roles=[ROLE_HR, ROLE_ADMIN],
+                        payload={"applicationId": application_id, "ready": True},
+                    )
                 self.send_json({
                     "status": "SUBMITTED",
                     "documentId": document_id,
                     "applicationId": application_id,
+                    "documentType": document_type,
+                    "documentTypeLabel": DOCUMENT_TYPE_LABELS.get(document_type, document_type),
                     "processInstanceId": process_id,
-                    "tasklistUrl": "http://localhost:8080/camunda/app/tasklist/default/",
+                    "hrQueueReady": hr_task_ready,
+                    "hrNotified": True,
+                    "tasklistUrl": os.getenv("HCNS_CAMUNDA_PUBLIC_URL", "http://localhost:8080/camunda/app/tasklist/default/"),
+                    "templateFields": extracted_fields,
+                    "extractedFields": extracted_fields,
                     "performance": {
                         "schemaVersion": STAGE_TIMING_SCHEMA_VERSION,
                         "timingsMs": {"camunda": camunda_duration_ms},
@@ -2235,6 +2762,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         "Template does not support this file type"
                     )
                 payload = result.public_dict()
+                payload["documentId"] = document_id
+                payload["documentTypeLabel"] = DOCUMENT_TYPE_LABELS.get(
+                    str(payload.get("documentType", "")),
+                    str(payload.get("documentType", "")),
+                )
+                payload["camundaEligible"] = (
+                    payload.get("documentType") in CAMUNDA_UPLOAD_DOCUMENT_TYPES
+                )
                 payload["processing"].update(
                     {
                         "processedAt": utc_now(),
@@ -2279,6 +2814,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         ),
                         encoding="utf-8",
                     )
+                if self.mvp_demo is not None:
+                    uploader = self.mvp_demo.user_by_token(self._auth_token())
+                    if uploader is not None:
+                        self.mvp_demo.claim_document(uploader, document_id)
                 self.send_json(payload)
             except TemplateUnsupportedError as exc:
                 self.send_json(
@@ -3174,14 +3713,20 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/camunda/queue":
             try:
+                store = self._demo_store()
                 user = self._require_user()
                 engine_url = _local_camunda_url()
                 tasks = _camunda_get(
                     f"{engine_url}/task?processDefinitionKey=hr_document_agent_mvp_v2"
                 )
                 queue: list[dict[str, Any]] = []
-                owned_documents = self._demo_store().owner_of_all()
+                owned_documents = store.owner_of_all()
                 is_hr_or_admin = user["role"] in {ROLE_HR, ROLE_ADMIN}
+                managed_users: set[str] | None = None
+                if user["role"] == ROLE_HR:
+                    managed = store.managed_usernames(user["username"])
+                    managed_users = set(managed) if managed else None
+                camunda_application_ids: set[str] = set()
                 for task in tasks if isinstance(tasks, list) else []:
                     if not isinstance(task, dict):
                         continue
@@ -3195,29 +3740,210 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     document_id = _camunda_value(variables, "documentReference")
                     if document_id is None:
                         continue
-                    if not is_hr_or_admin:
-                        if document_id not in owned_documents or owned_documents[document_id] != user["username"]:
-                            continue
-                    elif definition_key == "UserReview" and user["role"] == ROLE_HR:
+                    if not is_hr_or_admin and (
+                        document_id not in owned_documents
+                        or owned_documents[document_id] != user["username"]
+                    ):
                         continue
+                    submitted_by = owned_documents.get(document_id, "")
+                    if (
+                        managed_users is not None
+                        and submitted_by
+                        and submitted_by not in managed_users
+                    ):
+                        continue
+                    application_id = _camunda_value(variables, "applicationId") or ""
+                    if application_id:
+                        camunda_application_ids.add(application_id)
+                        if is_hr_or_admin and definition_key == "HRReview":
+                            store.resolve_hr_pending(application_id)
+                    document_type = (
+                        _camunda_value(variables, "documentType")
+                        or _camunda_value(variables, "declaredDocumentType")
+                        or "HR_DOCUMENT"
+                    )
+                    submission = (
+                        store.get_submission(application_id)
+                        if application_id
+                        else None
+                    )
+                    if submission is None:
+                        submission = store.get_submission_by_document(document_id)
+                    extracted_fields: dict[str, Any] = {}
+                    template_result = None
+                    if isinstance(submission, dict) and isinstance(
+                        submission.get("extractedFields"), dict
+                    ):
+                        extracted_fields = dict(submission["extractedFields"])
+                    else:
+                        template_result = self.user_ocr.template_result(document_id)
+                        if template_result is not None:
+                            extracted_fields = extracted_fields_from_template_result(
+                                template_result
+                            )
                     queue.append(
                         {
                             "taskId": task_id,
                             "role": "employee" if definition_key == "UserReview" else "hr",
+                            "taskDefinitionKey": definition_key,
+                            "actionable": definition_key == "HRReview" and is_hr_or_admin,
+                            "statusLabel": _queue_status_label(
+                                definition_key, viewer_is_hr=is_hr_or_admin
+                            ),
                             "taskName": str(task.get("name", "Human review")),
                             "documentId": document_id,
-                            "documentType": _camunda_value(variables, "documentType")
-                            or _camunda_value(variables, "declaredDocumentType")
-                            or "HR_DOCUMENT",
+                            "documentType": document_type,
+                            "documentTypeLabel": DOCUMENT_TYPE_LABELS.get(
+                                document_type, document_type
+                            ),
+                            "applicationId": application_id,
+                            "submittedBy": owned_documents.get(document_id, ""),
                             "created": str(task.get("created", "")),
-                            "inspectable": self.user_ocr.template_result(document_id) is not None,
+                            "inspectable": bool(extracted_fields) or template_result is not None,
+                            "extractedFields": extracted_fields,
+                            "sourceFile": (
+                                str(submission.get("sourceFile", ""))
+                                if isinstance(submission, dict)
+                                else ""
+                            ),
                         }
                     )
+                if is_hr_or_admin:
+                    for pending in store.list_hr_pending():
+                        application_id = str(pending.get("applicationId", ""))
+                        if not application_id or application_id in camunda_application_ids:
+                            continue
+                        document_id = str(pending.get("documentId", ""))
+                        document_type = str(pending.get("documentType", "HR_DOCUMENT"))
+                        pending_owner = str(pending.get("owner", ""))
+                        if (
+                            managed_users is not None
+                            and pending_owner
+                            and pending_owner not in managed_users
+                        ):
+                            continue
+                        pending_fields = pending.get("extractedFields")
+                        extracted_fields = (
+                            dict(pending_fields)
+                            if isinstance(pending_fields, dict)
+                            else {}
+                        )
+                        if not extracted_fields:
+                            submission = store.get_submission(application_id)
+                            if isinstance(submission, dict) and isinstance(
+                                submission.get("extractedFields"), dict
+                            ):
+                                extracted_fields = dict(submission["extractedFields"])
+                        queue.insert(
+                            0,
+                            {
+                                "taskId": f"pending-{application_id}",
+                                "role": "hr",
+                                "taskDefinitionKey": "PENDING",
+                                "actionable": False,
+                                "pending": True,
+                                "statusLabel": "Đang đưa vào hàng đợi HR…",
+                                "taskName": "Đơn mới chờ đồng bộ workflow",
+                                "documentId": document_id,
+                                "documentType": document_type,
+                                "documentTypeLabel": DOCUMENT_TYPE_LABELS.get(
+                                    document_type, document_type
+                                ),
+                                "applicationId": application_id,
+                                "submittedBy": pending_owner,
+                                "created": str(pending.get("submittedAt", "")),
+                                "inspectable": bool(extracted_fields)
+                                or self.user_ocr.template_result(document_id)
+                                is not None,
+                                "extractedFields": extracted_fields,
+                                "sourceFile": "",
+                            },
+                        )
+                queue.sort(
+                    key=lambda item: (
+                        0
+                        if item.get("taskDefinitionKey") == "HRReview"
+                        else 1
+                        if item.get("taskDefinitionKey") == "PENDING"
+                        else 2,
+                        str(item.get("created", "")),
+                    ),
+                )
                 self.send_json({"queue": queue})
             except MvpDemoError as exc:
                 self._handle_mvp_error(exc)
             except (HTTPError, URLError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
                 self.send_json({"error": f"Camunda local is unavailable: {exc}"}, HTTPStatus.SERVICE_UNAVAILABLE)
+            return
+
+        if parsed.path == "/api/camunda/submission":
+            try:
+                user = self._require_user()
+                application_id = query.get("applicationId", [""])[0]
+                document_id = query.get("documentId", [""])[0]
+                store = self._demo_store()
+                submission = None
+                if application_id:
+                    submission = store.get_submission(application_id)
+                if submission is None and document_id:
+                    submission = store.get_submission_by_document(document_id)
+                if submission is None and document_id:
+                    self._require_document_access(user, document_id)
+                    result = self.user_ocr.template_result(document_id)
+                    if result is None:
+                        self.send_json(
+                            {"error": "Không tìm thấy thông tin nộp đơn"},
+                            HTTPStatus.NOT_FOUND,
+                        )
+                        return
+                    extracted = extracted_fields_from_template_result(result)
+                    processing = result.get("processing")
+                    source_file = (
+                        str(processing.get("originalFileName", ""))
+                        if isinstance(processing, dict)
+                        else ""
+                    )
+                    self.send_json(
+                        {
+                            "applicationId": store.application_of(document_id),
+                            "documentId": document_id,
+                            "documentType": result.get("documentType"),
+                            "documentTypeLabel": DOCUMENT_TYPE_LABELS.get(
+                                str(result.get("documentType", "")),
+                                str(result.get("documentType", "")),
+                            ),
+                            "owner": store.owner_of(document_id) or "",
+                            "extractedFields": extracted,
+                            "sourceFile": source_file,
+                            "submittedAt": (
+                                str(processing.get("correctedAt") or processing.get("processedAt") or "")
+                                if isinstance(processing, dict)
+                                else ""
+                            ),
+                        }
+                    )
+                    return
+                if submission is None:
+                    self.send_json(
+                        {"error": "Không tìm thấy thông tin nộp đơn"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                document_ref = str(submission.get("documentId", ""))
+                self._require_document_access(user, document_ref)
+                document_type = str(submission.get("documentType", ""))
+                self.send_json(
+                    {
+                        **submission,
+                        "documentTypeLabel": DOCUMENT_TYPE_LABELS.get(
+                            document_type, document_type
+                        ),
+                    }
+                )
+            except MvpDemoError as exc:
+                self._handle_mvp_error(exc)
+            except (ValueError, TypeError) as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
 
         if parsed.path == "/api/camunda/case":
@@ -3309,7 +4035,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/auth/me":
             try:
                 user = self._require_user()
-                self.send_json({"user": build_public_user(user)})
+                session = build_public_user(user)
+                session["token"] = self._auth_token()
+                self.send_json({"user": session, "session": session})
             except MvpDemoError as exc:
                 self._handle_mvp_error(exc)
             return
@@ -3330,14 +4058,126 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._handle_mvp_error(exc)
             return
 
+        if parsed.path == "/api/admin/org-tree":
+            try:
+                actor = self._require_user({ROLE_ADMIN})
+                self.send_json({"tree": self._demo_store().org_tree(actor)})
+            except MvpDemoError as exc:
+                self._handle_mvp_error(exc)
+            return
+
+        if parsed.path == "/api/archive":
+            try:
+                user = self._require_user({ROLE_USER, ROLE_HR})
+                items = self._demo_store().list_archive_for(user)
+                enriched = []
+                for item in items:
+                    document_type = str(item.get("documentType", ""))
+                    download_ready = bool(item.get("downloadReady")) and str(
+                        item.get("decision") or item.get("status") or ""
+                    ) == "CONFIRMED"
+                    source_format = str(item.get("sourceFormat") or "")
+                    if not source_format and item.get("sourceFile"):
+                        source_format = Path(str(item.get("sourceFile"))).suffix.lstrip(
+                            "."
+                        )
+                    enriched.append(
+                        {
+                            **item,
+                            "documentTypeLabel": DOCUMENT_TYPE_LABELS.get(
+                                document_type, document_type
+                            ),
+                            "sourceFormat": source_format,
+                            "canDownload": download_ready,
+                        }
+                    )
+                self.send_json({"archive": enriched, "viewerRole": user["role"]})
+            except MvpDemoError as exc:
+                self._handle_mvp_error(exc)
+            return
+
+        if parsed.path == "/api/archive/download":
+            try:
+                user = self._require_user({ROLE_USER, ROLE_HR, ROLE_ADMIN})
+                application_id = query.get("applicationId", [""])[0]
+                store = self._demo_store()
+                if not store.can_access_archive(user, application_id):
+                    raise MvpDemoError(
+                        "Không có quyền tải bằng chứng này", HTTPStatus.FORBIDDEN
+                    )
+                entry = store.get_archive(application_id)
+                if entry is None:
+                    self.send_json(
+                        {"error": "Không tìm thấy hồ sơ lưu"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                if str(entry.get("decision") or entry.get("status") or "") != "CONFIRMED":
+                    self.send_json(
+                        {
+                            "error": "Chỉ tải được file sau khi HR chấp nhận đơn",
+                            "errorCode": "DOWNLOAD_AFTER_ACCEPT_ONLY",
+                        },
+                        HTTPStatus.FORBIDDEN,
+                    )
+                    return
+                if not entry.get("downloadReady"):
+                    self.send_json(
+                        {
+                            "error": "File bằng chứng chưa sẵn sàng. HR cần chấp nhận lại đơn.",
+                            "errorCode": "DOWNLOAD_NOT_READY",
+                        },
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                source_path = store.archive_source_path(application_id)
+                if source_path is None or not source_path.is_file():
+                    self.send_json(
+                        {
+                            "error": "File gốc chưa được lưu local sau khi chấp nhận",
+                            "errorCode": "ARCHIVE_FILE_MISSING",
+                        },
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                download_name = str(entry.get("sourceFile") or source_path.name)
+                content_type = (
+                    mimetypes.guess_type(source_path.name)[0]
+                    or "application/octet-stream"
+                )
+                self.send_file(source_path, content_type, download_name=download_name)
+            except MvpDemoError as exc:
+                self._handle_mvp_error(exc)
+            return
+
         if parsed.path == "/api/notifications":
             try:
                 user = self._require_user()
+                store = self._demo_store()
+                _, cursor = store.events_since(user, 0)
                 self.send_json(
-                    {"notifications": self._demo_store().notifications_for(user["username"])}
+                    {
+                        "notifications": store.notifications_for(user["username"]),
+                        "cursor": cursor,
+                    }
                 )
             except MvpDemoError as exc:
                 self._handle_mvp_error(exc)
+            return
+
+        if parsed.path == "/api/events":
+            try:
+                user = self._require_user()
+                events, cursor = self._demo_store().events_since(
+                    user, _parse_cursor(query.get("cursor", ["0"])[0])
+                )
+                self.send_json({"events": events, "cursor": cursor})
+            except MvpDemoError as exc:
+                self._handle_mvp_error(exc)
+            return
+
+        if parsed.path == "/api/events/stream":
+            self._stream_events(query)
             return
 
         if parsed.path == "/api/documents/timeline":
