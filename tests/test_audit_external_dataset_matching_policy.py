@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from apps.ocr_lab.api.external_dataset_prediction import MATCHING_POLICY_V2
 from scripts.audit_external_dataset_matching_policy import PolicyAuditError, audit_policy
 
 
@@ -66,7 +67,7 @@ def test_policy_audit_is_create_only_and_non_promotional(tmp_path) -> None:
     )
 
     assert report["evaluationKind"] == "posthoc-policy-audit"
-    assert report["matchingPolicy"]["version"] == "2.0.0"
+    assert report["matchingPolicy"]["version"] == MATCHING_POLICY_V2
     assert report["promotionAllowed"] is False
     assert report["heldoutConsumed"] is True
     assert report["evaluateOnceArtifactTouched"] is False

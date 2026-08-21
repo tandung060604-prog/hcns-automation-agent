@@ -11,10 +11,11 @@ dung, nhận diện biểu mẫu, trích xuất dữ liệu có cấu trúc và 
 chắc chắn cho người dùng kiểm tra. Camunda 7 điều phối trạng thái quy trình; file
 gốc, OCR text và dữ liệu chi tiết vẫn được giữ trong môi trường nội bộ.
 
-> **Trạng thái ngày 14/08/2026:** MVP local/shadow chạy được end-to-end trên một
-> máy phát triển. Đây chưa phải website nhiều người dùng và chưa được phép public
-> production: chưa có đăng nhập, RBAC, account management, notification thật hoặc
-> production API. HRIS và notification hiện chỉ trả trạng thái `SIMULATED`.
+> **Trạng thái ngày 21/08/2026:** local shadow đã có pipeline Template-first +
+> EasyOCR, dashboard đối chiếu DATA-31 và replay R7. Product/HR owner đã chấp
+> nhận gate này cho mục đích review/demo local; formal promotion gate trong report
+> vẫn là `HOLD` (`104/109 strict`, `108/109 accepted`, `109/109 present`). Đây chưa
+> phải production: chưa có đăng nhập, RBAC, notification thật hoặc HRIS side effect.
 
 ## Giá trị chính
 
@@ -59,13 +60,27 @@ URL. Không đổi host sang `0.0.0.0` hoặc mở port trực tiếp vì hệ t
 authentication/RBAC. Demo cho partner sau này phải đặt sau HTTPS và access
 allowlist có thời hạn; xem [Plan.md](Plan.md).
 
-## Cập nhật mới nhất — 14/08/2026
+## Cập nhật mới nhất — 21/08/2026
 
-Review trực tiếp API, Template-first service, result store, Camunda worker/BPMN và
-UI cho thấy lõi kỹ thuật đã có kỷ luật tốt: native-first, versioned contract,
-idempotency, atomic persistence, lock extension/retry, opaque-only Camunda
-variables và fail-closed về Human Review. Tuy nhiên quy trình mới đạt mức local
-shadow, chưa đạt production multi-user vì các khoảng trống sau:
+Review R7 đã chốt phần đối chiếu Contract/CV/IELTS trên DATA-31. Runtime hiện tại
+là `Template-first + EasyOCR`, parser `structured-hr/family-layout/2.2.8` và
+matching policy `2.1.0`. Corpus DATA-31 gồm 13 tài liệu (4 Contract, 5 CV, 4
+IELTS), với 109 field được đo và 17 field `OUT_OF_SCOPE`; source, Ground Truth,
+Prediction và report chỉ nằm trong private storage.
+
+Các thay đổi R7 quan trọng:
+
+- `job_title` dùng role title trước, professional title làm fallback khi role
+  title không có; parser không hard-code theo từng tài liệu.
+- CV native giữ đúng phần mềm khi dòng `Phần mềm` không có label riêng.
+- Replay private giữ `104/109 strict`, `108/109 accepted`, `109/109 present`;
+  không có schema error, parser regression hoặc sensitive false acceptance.
+- Owner đã chấp nhận kết quả này cho local shadow/demo. Report vẫn giữ `HOLD` để
+  không biến quyết định nghiệp vụ thành tuyên bố production quality.
+- CAM-001 chưa mở lại; Camunda vẫn chỉ được dùng sau quality gate chính thức và
+  một lần kiểm tra E2E riêng có human review.
+
+Các khoảng trống production vẫn còn:
 
 1. **Identity và authorization:** thêm login/logout, session, owner scoping và
    RBAC `USER | HR_REVIEWER | ADMIN`. Role gửi từ trình duyệt không phải bằng chứng quyền.
@@ -79,8 +94,8 @@ shadow, chưa đạt production multi-user vì các khoảng trống sau:
    HRIS và notification thật vẫn phải giữ đóng.
 
 - **Một parser chuẩn cho ba họ tài liệu:** upload Template-first và bộ đối chiếu
-  DATA-29 hiện cùng gọi `structured-hr/family-layout/2.1.0` cho Contract, CV và
-  IELTS; test delegation sẽ báo lỗi nếu hai luồng tách thành thuật toán khác nhau.
+  DATA-31 cùng gọi `structured-hr/family-layout/2.2.8` cho Contract, CV và IELTS;
+  test delegation báo lỗi nếu hai luồng tách thành thuật toán khác nhau.
 - **Workspace dễ đọc hơn:** giao diện dùng một hệ navy/trắng với accent cyan,
   tách rõ tổng quan nền tảng, ba nhóm tài liệu, quality evidence, quy trình local
   shadow, hàng đợi review và vùng tiếp nhận; API, private storage và Camunda policy
@@ -91,17 +106,18 @@ shadow, chưa đạt production multi-user vì các khoảng trống sau:
 - **Kết luận rõ ràng:** mỗi lần đối chiếu có tổng số field đúng/sai và quyết định
   `HOLD`/`PASS`. `PASS` chỉ nói về phép so khớp file hiện tại; không tự phê duyệt
   nghiệp vụ và không mở promotion.
-- **Metric mở được toàn bộ tài liệu nguồn:** DATA-29 hiển thị đủ 12 tài liệu của
-  aggregate đã khóa `107/112`, chia thành Contract `3`, CV `5`, IELTS `4`. Đây là
-  baseline dùng hybrid OCR, không phải kết quả EasyOCR-only mới.
-- **Replay IELTS của ALG-002:** bốn tài liệu đã được chạy cô lập bằng Paddle và
-  parser chuẩn đạt `20/20 exact`, `20/20 accepted`; full offline hybrid replay
-  đạt `107/112 exact`, `112/112 accepted` trên đủ 12 tài liệu.
+- **Metric mở được toàn bộ tài liệu nguồn:** DATA-31 hiển thị đủ 13 tài liệu của
+  replay R7, chia thành Contract `4`, CV `5`, IELTS `4`. DATA-29 vẫn được giữ như
+  historical baseline và không bị ghi đè.
+- **Replay R7:** DATA-31 đạt `104/109 strict`, `108/109 accepted`, `109/109
+  present`; bốn accepted partial còn lại được owner chấp nhận cho local shadow,
+  nhưng chưa được nâng thành promotion gate chính thức.
 - **Metadata thuật toán có thể kiểm tra:** template/parser version, intake parser,
   OCR backend/version/model/device/profile, matching policy và thời gian xử lý
   được hiển thị cùng kết quả.
-- **Đối chiếu đúng policy:** chi tiết từng tài liệu đọc matching policy `2.0.0`
-  được pin trong chính report, nên số exact/accepted tái tạo cùng cách chấm DATA-29.
+- **Đối chiếu đúng policy:** chi tiết từng tài liệu đọc matching policy `2.1.0`
+  được pin trong report R7, nên Prediction ↔ Ground Truth tái tạo được cùng cách
+  chấm DATA-31.
 - **Explorer không trộn session upload:** khu vực evidence chỉ hiển thị source
   thuộc DATA-29; session upload vẫn được giữ private cho màn kết quả và Camunda.
 - **Camunda cho ba họ tài liệu mới:** CV, hợp đồng thử việc và IELTS có thể đi từ
@@ -193,11 +209,12 @@ lượng production. Trạng thái promotion hiện vẫn là `HOLD` và
 |---|---:|---|
 | Leave + Overtime native | 30/30 chọn đúng template | 15 Leave Request và 15 Overtime Request |
 | Leave + Overtime native | 0/30 lỗi validation | Đủ điều kiện chuyển đến bước Human review |
-| Contract + CV · parser chuẩn hiện tại | 87/92 exact; 92/92 accepted | Replay đủ 3 Contract và 5 CV; cùng parser với luồng upload |
+| DATA-31 · R7 Template-first + EasyOCR | 104/109 strict; 108/109 accepted; 109/109 present | 4 Contract, 5 CV, 4 IELTS; owner accepted local shadow, formal promotion `HOLD` |
+| Contract + CV · parser chuẩn hiện tại | 87/92 exact; 92/92 accepted | Historical subset trước DATA-31; không dùng làm gate mới |
 | DATA-29 · full offline hybrid replay | 107/112 exact; 112/112 accepted | Contract 42/42, CV 45/50, IELTS 20/20; matching policy 2.0.0 |
-| IELTS · replay ALG-002 | 20/20 exact; 20/20 accepted | Paddle chỉ dùng cho IELTS branch; parser `structured-hr/family-layout/2.1.0` |
+| IELTS · DATA-31 R7 | 20/20 exact; 20/20 accepted | Template-first + EasyOCR; parser `structured-hr/family-layout/2.2.8` |
 | ALG-002 safety/quality checks | OCR 29/30; applicable 99/99 | Schema errors, parser regressions, sensitive false acceptance và residual replay process đều 0 |
-| 12 tài liệu đang show | 107/112 exact; 112/112 accepted | Dashboard hiển thị đúng 3 Contract, 5 CV và 4 IELTS từ baseline đã khóa |
+| 13 tài liệu DATA-31 đang show | 104/109 strict; 108/109 accepted | Dashboard hiển thị đúng 4 Contract, 5 CV và 4 IELTS từ private R7 artifacts |
 | Latency native warm p95 | DOCX 285 ms; PDF text 158 ms | 30 run/input class, local CPU 8 GB |
 | Latency visual warm p95 | Ảnh 28,5 s; PDF scan mới 12,532 s | PDF-001 đã giảm scan p95; ảnh và production gate vẫn HOLD |
 | JSON Schema | 0 lỗi | Kiểm tra cấu trúc trước khi chuyển workflow |
@@ -206,7 +223,7 @@ Dashboard chỉ hiển thị metric từ aggregate evidence đã seal; không đ
 baseline hybrid thành kết quả EasyOCR hiện tại. Inventory chỉ dùng để đếm tài
 liệu local, không được dùng để tự tạo điểm số. Kết quả template v1 cũ vẫn đọc
 được qua compatibility projection; kết quả mới phát ra theo contract v2 và parser
-`structured-hr/family-layout/2.1.0`.
+`structured-hr/family-layout/2.2.8`.
 
 Co-resident benchmark API + scan từng thất bại khi EasyOCR cần thêm khoảng 1,20 GB
 RAM. PDF-001 dùng child process riêng theo batch tối đa năm mẫu để giới hạn
@@ -284,15 +301,16 @@ Docker Compose production để quản lý startup/health/shutdown của toàn s
 
 ### Demo nhanh cho user hoặc mentor
 
-1. Mở `http://localhost:3000/workspace#explorer`.
-2. Chọn **DATA-29 · 12 tài liệu metric · 3 Contract · 5 CV · 4 IELTS**.
+1. Mở `http://localhost:3000/workspace?qa=real-only#upload`.
+2. Mở vùng **DATA-31 · R7 · 13 tài liệu · 4 Contract · 5 CV · 4 IELTS**.
 3. Chọn bộ lọc Contract, CV hoặc IELTS rồi mở một tài liệu trong nhóm.
 4. Kiểm tra source ở giữa và Prediction ↔ Ground Truth theo từng field bên phải.
-5. Đối chiếu điểm riêng của file với aggregate toàn corpus phía trên.
+5. Đối chiếu điểm riêng của file với aggregate R7 phía trên; `OUT_OF_SCOPE` nằm
+   ngoài mẫu số và không được tính là Ground Truth giả.
 
-DATA-29 source, Ground Truth, Prediction và report đều ở private local, không
-commit vào Git. Đây là development corpus; tài liệu upload mới được đánh giá ở
-màn kết quả upload và không làm thay đổi metric DATA-29.
+DATA-31 source, Ground Truth, Prediction và report đều ở private local, không
+commit vào Git. DATA-29 vẫn là historical development corpus; hai bộ không được
+trộn vào cùng aggregate.
 
 ## Kiểm thử
 
@@ -375,8 +393,8 @@ Các hạng mục sau chưa được xem là tính năng production:
 - Tự động đưa ra quyết định nhân sự hoặc ghi trực tiếp vào HRIS.
 - Tối ưu scan phức tạp: deskew, denoise, rotation và layout nhiều cột/bảng biểu.
 - Promotion OCR cho các family đang ở trạng thái `HOLD`.
-- DATA-29 là development corpus; `107/112` không chứng minh chất lượng
-  trên tài liệu HCNS thật và không được dùng làm tuyên bố production-ready.
+- DATA-31 là development corpus local shadow; `104/109 strict` không chứng minh
+  chất lượng production và không tự mở CAM-001 hay side effect HRIS.
 
 Mốc sản phẩm tiếp theo ưu tiên một vertical slice `leave-request-v1`: đăng nhập →
 User điền biểu mẫu có cấu trúc → submit idempotent → Camunda → HR review →

@@ -15,7 +15,12 @@ type ReviewDocument = {
   sourceFormat: string;
   sourceFile: string;
   pageCount: number;
-  fields: Record<string, { value: string | null; reviewStatus: string; sensitive: boolean }>;
+  fields: Record<string, {
+    value: string | null;
+    reviewStatus: string;
+    sensitive: boolean;
+    disposition?: string | null;
+  }>;
   reviewStatus: string;
   reviewable: boolean;
   scopeStatus: string;
@@ -32,6 +37,12 @@ type ReviewSummary = {
   predictionsHiddenDuringReview: boolean;
   localOnly: boolean;
   canLock: boolean;
+  decisionStatus?: string;
+  missingFieldCount?: number;
+  decidedFieldCount?: number;
+  outOfScopeCount?: number;
+  groundTruthIsImmutable?: boolean;
+  ieltsSemantics?: Record<string, string>;
   documents: Array<{
     caseId: string;
     category: string;
@@ -89,6 +100,14 @@ const FIELD_LABELS: Record<string, string> = {
 const FIELD_HINTS: Record<string, string> = {
   recipient_name:
     "Ghi nguyên chuỗi Family name + First name đúng thứ tự trên chứng chỉ; không tự đảo hoặc tách thành field khác.",
+  credential_id:
+    "Mã TRF/credential in trên chứng chỉ; giữ nguyên chữ, số và dấu; không dùng số CCCD.",
+  credential_type:
+    "Loại giấy tờ được in trên tài liệu, ví dụ IELTS Test Report Form; không phải điểm tổng.",
+  overall_score:
+    "Overall band score được in trên chứng chỉ, ví dụ 6.5; không thay bằng điểm từng kỹ năng.",
+  issue_date:
+    "Ngày cấp/ngày phát hành được in trên chứng chỉ; không tự dùng ngày thi nếu không có.",
 };
 
 function categoryLabel(category: string): string {
@@ -105,13 +124,13 @@ function categoryScopeLabel(
   return `${categoryLabel(category)} · ${documents.length} case / ${fields} field`;
 }
 
-function draftStorageKey(caseId: string): string {
-  return `${DRAFT_STORAGE_PREFIX}:${caseId}`;
+function draftStorageKey(caseId: string, data31: boolean): string {
+  return `${data31 ? "vinhris:data31-coverage" : DRAFT_STORAGE_PREFIX}:${caseId}`;
 }
 
-function readLocalDraft(caseId: string): LocalReviewDraft | null {
+function readLocalDraft(caseId: string, data31: boolean): LocalReviewDraft | null {
   try {
-    const raw = window.localStorage.getItem(draftStorageKey(caseId));
+    const raw = window.localStorage.getItem(draftStorageKey(caseId, data31));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<LocalReviewDraft>;
     if (!parsed.values || typeof parsed.values !== "object") return null;
@@ -130,7 +149,8 @@ function readLocalDraft(caseId: string): LocalReviewDraft | null {
   }
 }
 
-export default function ExternalDatasetReview() {
+export default function ExternalDatasetReview({ data31 = false }: { data31?: boolean } = {}) {
+  const reviewBase = data31 ? "/data31/coverage" : "/external-dataset/review";
   const suppressDraftPersistence = useRef(false);
   const [summary, setSummary] = useState<ReviewSummary | null>(null);
   const [reviewCategory, setReviewCategory] = useState<ReviewCategory>("contract");
@@ -181,13 +201,13 @@ export default function ExternalDatasetReview() {
       summary?.groundTruthStatus !== "SEALED",
   );
   const previewUrl = activeCaseId
-    ? `${API_BASE}/external-dataset/review/document?id=${encodeURIComponent(
+    ? `${API_BASE}${reviewBase}/document?id=${encodeURIComponent(
         activeCaseId,
       )}&mode=preview`
     : "";
 
   async function refreshSummary(selectFirst = false) {
-    const response = await fetch(`${API_BASE}/external-dataset/review/summary`);
+    const response = await fetch(`${API_BASE}${reviewBase}/summary`);
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error ?? "Không đọc được queue review");
     setSummary(payload);
@@ -228,12 +248,12 @@ export default function ExternalDatasetReview() {
     setError("");
     Promise.all([
       fetch(
-        `${API_BASE}/external-dataset/review/document?id=${encodeURIComponent(
+        `${API_BASE}${reviewBase}/document?id=${encodeURIComponent(
           activeCaseId,
         )}&mode=detail`,
       ),
       fetch(
-        `${API_BASE}/external-dataset/review/document?id=${encodeURIComponent(
+        `${API_BASE}${reviewBase}/document?id=${encodeURIComponent(
           activeCaseId,
         )}&mode=preview`,
       ),
@@ -255,7 +275,7 @@ export default function ExternalDatasetReview() {
               (field as { value: string | null; reviewStatus: string }).reviewStatus === "CONFIRMED",
           )
           .map(([name]) => name);
-        const localDraft = readLocalDraft(activeCaseId);
+        const localDraft = readLocalDraft(activeCaseId, data31);
         const restoredValues = localDraft
           ? {
               ...serverValues,
@@ -285,7 +305,7 @@ export default function ExternalDatasetReview() {
         setError(reason instanceof Error ? reason.message : "Không tải được tài liệu"),
       )
       .finally(() => setLoading(false));
-  }, [activeCaseId]);
+  }, [activeCaseId, data31, reviewBase]);
 
   useEffect(() => {
     if (suppressDraftPersistence.current) {
@@ -294,7 +314,7 @@ export default function ExternalDatasetReview() {
     }
     if (!dirty || !document) return;
     window.localStorage.setItem(
-      draftStorageKey(document.caseId),
+      draftStorageKey(document.caseId, data31),
       JSON.stringify({ values, absentFields } satisfies LocalReviewDraft),
     );
   }, [dirty, values, absentFields, document]);
@@ -369,7 +389,7 @@ export default function ExternalDatasetReview() {
         .filter(([, field]) => field.value === null && field.reviewStatus === "CONFIRMED")
         .map(([name]) => name),
     );
-    window.localStorage.removeItem(draftStorageKey(document.caseId));
+    window.localStorage.removeItem(draftStorageKey(document.caseId, data31));
     setDirty(false);
     setConfirmedForSave(false);
     setError("");
@@ -392,12 +412,19 @@ export default function ExternalDatasetReview() {
     const fields = Object.fromEntries(
       fieldNames.map((name) => [
         name,
-        { value: absentFields.includes(name) ? null : values[name]?.trim() ?? "" },
+        {
+          value: absentFields.includes(name) ? null : values[name]?.trim() ?? "",
+          ...(data31
+            ? {
+                disposition: absentFields.includes(name) ? "OUT_OF_SCOPE" : "GROUND_TRUTH",
+              }
+            : {}),
+        },
       ]),
     );
     try {
       const response = await fetch(
-        `${API_BASE}/external-dataset/review/save?id=${encodeURIComponent(document.caseId)}`,
+        `${API_BASE}${reviewBase}/save?id=${encodeURIComponent(document.caseId)}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -428,7 +455,7 @@ export default function ExternalDatasetReview() {
           : current,
       );
       suppressDraftPersistence.current = true;
-      window.localStorage.removeItem(draftStorageKey(document.caseId));
+      window.localStorage.removeItem(draftStorageKey(document.caseId, data31));
       setDirty(false);
       setConfirmedForSave(false);
       await refreshSummary();
@@ -449,7 +476,7 @@ export default function ExternalDatasetReview() {
     setLocking(true);
     setError("");
     try {
-      const response = await fetch(`${API_BASE}/external-dataset/review/lock`, {
+      const response = await fetch(`${API_BASE}${reviewBase}/lock`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ confirm: true }),
@@ -466,21 +493,36 @@ export default function ExternalDatasetReview() {
   }
 
   return (
-    <section className="external-review-panel" data-testid="external-dataset-review">
+    <section
+      className="external-review-panel"
+      data-testid={data31 ? "data31-coverage-review" : "external-dataset-review"}
+    >
       <div className="external-review-header">
         <div>
-          <span className="eyebrow">EXTERNAL DATASET · INDEPENDENT REVIEW</span>
-          <h3>Review CV, hợp đồng và IELTS</h3>
+          <span className="eyebrow">
+            {data31 ? "DATA-31 · GROUND TRUTH COVERAGE DECISION" : "EXTERNAL DATASET · INDEPENDENT REVIEW"}
+          </span>
+          <h3>
+            {data31
+              ? "Bổ sung GT còn thiếu hoặc loại field khỏi phạm vi đo"
+              : "Review CV, hợp đồng và IELTS"}
+          </h3>
           <p>
-            Chọn từng phạm vi, mở nguồn và xác nhận field trực tiếp từ tài liệu. CV dạng text/PPTX
-            đang nằm ngoài active review; OCR/prediction bị ẩn trong suốt review.
+            {data31
+              ? "Baseline DATA-31 đã SEALED và không bị sửa. Chọn từng tài liệu, mở file thật, điền các ô còn thiếu hoặc đánh dấu OUT_OF_SCOPE; quyết định chỉ lưu trong private storage."
+              : "Chọn từng phạm vi, mở nguồn và xác nhận field trực tiếp từ tài liệu. CV dạng text/PPTX đang nằm ngoài active review; OCR/prediction bị ẩn trong suốt review."}
           </p>
         </div>
         <div className="external-review-status">
-          <strong>{summary?.groundTruthStatus ?? "CHƯA KẾT NỐI"}</strong>
+          <strong>
+            {data31
+              ? summary?.decisionStatus ?? "CHƯA KẾT NỐI"
+              : summary?.groundTruthStatus ?? "CHƯA KẾT NỐI"}
+          </strong>
           <span>
-            {scopedDocuments.length} tài liệu · {scopedReviewedFieldCount}/{scopedFieldCount} field ·
-            local-only
+            {data31
+              ? `${summary?.decidedFieldCount ?? scopedReviewedFieldCount}/${summary?.missingFieldCount ?? scopedFieldCount} ô đã quyết định · ${summary?.outOfScopeCount ?? 0} OUT_OF_SCOPE · private-only`
+              : `${scopedDocuments.length} tài liệu · ${scopedReviewedFieldCount}/${scopedFieldCount} field · local-only`}
           </span>
         </div>
       </div>
@@ -497,6 +539,23 @@ export default function ExternalDatasetReview() {
           </select>
         </label>
       </div>
+      {data31 && reviewCategory === "ielts" ? (
+        <div className="external-review-message" data-testid="ielts-semantics">
+          <strong>Semantics IELTS đã khóa</strong>
+          <div className="external-review-semantics">
+            {Object.entries(summary?.ieltsSemantics ?? FIELD_HINTS).map(([name, meaning]) => (
+              <div key={name}>
+                <strong>{FIELD_LABELS[name] ?? name}</strong>
+                <span>{meaning}</span>
+              </div>
+            ))}
+          </div>
+          <span>
+            IELTS hiện không có field thiếu GT trong DATA-31; không cần điền lại và không tự suy diễn
+            ngày thi thành ngày cấp.
+          </span>
+        </div>
+      ) : null}
       {error ? <div className="ground-truth-review-error">{error}</div> : null}
       {message ? <div className="external-review-message">{message}</div> : null}
       <div className="external-review-grid">
@@ -545,7 +604,7 @@ export default function ExternalDatasetReview() {
                 <span>{activeItem.documentType} · {activeItem.pageCount} trang</span>
               </div>
               <a
-                href={`${API_BASE}/external-dataset/review/document?id=${encodeURIComponent(
+                href={`${API_BASE}${reviewBase}/document?id=${encodeURIComponent(
                   activeItem.caseId,
                 )}&mode=source`}
               >
@@ -620,11 +679,17 @@ export default function ExternalDatasetReview() {
                     onChange={(event) => updateAbsentField(name, event.target.checked)}
                     disabled={summary?.groundTruthStatus === "SEALED"}
                   />
-                  Không có / không đọc được
+                  {data31 ? "Loại khỏi phạm vi đo (OUT_OF_SCOPE)" : "Không có / không đọc được"}
                 </small>
               </label>
             );
           })}
+          {data31 && document && fieldNames.length === 0 ? (
+            <div className="external-review-message">
+              Case này không còn field thiếu Ground Truth. Chỉ cần kiểm tra file nguồn và semantics
+              IELTS (nếu đang ở phạm vi IELTS).
+            </div>
+          ) : null}
           <div className="external-review-actions">
             <button
               className="external-review-primary-save"
@@ -639,9 +704,11 @@ export default function ExternalDatasetReview() {
                 Bỏ bản nháp
               </button>
             ) : null}
-            <button type="button" onClick={lock} disabled={!summary?.canLock || locking}>
-              {locking ? "Đang SEALED…" : `SEALED đủ ${summary?.fieldCount ?? 0} field`}
-            </button>
+            {!data31 ? (
+              <button type="button" onClick={lock} disabled={!summary?.canLock || locking}>
+                {locking ? "Đang SEALED…" : `SEALED đủ ${summary?.fieldCount ?? 0} field`}
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

@@ -65,6 +65,7 @@ class TemplateDefinition:
     minimum_anchor_matches: int
     parser: TemplateParser
     validator: TemplateValidator
+    schema_version: str = "2.0.0"
 
     def __post_init__(self) -> None:
         if not self.template_id or not self.version:
@@ -90,7 +91,7 @@ class TemplateDefinition:
             "optionalFields": list(self.optional_fields),
         }
         if self.version.startswith("2."):
-            payload["schemaVersion"] = "2.0.0"
+            payload["schemaVersion"] = self.schema_version
         return payload
 
 
@@ -142,5 +143,5 @@ class TemplateProcessingResult:
             "camundaVariables": self.camunda_variables,
         }
         if self.detection.definition.version.startswith("2."):
-            payload["schemaVersion"] = "2.0.0"
+            payload["schemaVersion"] = self.detection.definition.schema_version
         return payload

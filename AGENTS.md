@@ -26,6 +26,7 @@ Chỉ đọc các file cần cho tác vụ:
 | Website/RBAC/deploy | `Plan.md`, `docs/ARCHITECTURE.md`, `docs/WORKFLOWS.md`, `docs/DATA_SECURITY.md` |
 | Kiến trúc | `docs/ARCHITECTURE.md`, ADR liên quan |
 | Schema | `schemas/`, `docs/DATA_SECURITY.md` |
+| Job-title schema/ADR | `docs/adr/0007-job-title-schema-decision.md`, `schemas/`, `docs/EVALUATION.md` |
 | Test/benchmark | `docs/EVALUATION.md`, `docs/adr/0006-ocr-acc-001-dataset-split.md`, `tests/AGENTS.md` |
 | Tài liệu | `docs/AGENTS.md` |
 | Trạng thái và handoff | `docs/README.md`, `docs/PROJECT_STATE.md`, `docs/BACKLOG.md`, `docs/HANDOFF.md` |

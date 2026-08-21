@@ -43,6 +43,8 @@
             "employer_representative": {"type": ["string", "null"]},
             "employee_name": {"type": ["string", "null"]},
             "employee_id_number": {"type": ["string", "null"]},
+            "professional_title": {"type": ["string", "null"]},
+            "role_title": {"type": ["string", "null"]},
             "job_title": {"type": ["string", "null"]},
             "workplace": {"type": ["string", "null"]},
             "weekly_hours": {"type": ["number", "string", "null"]},

@@ -105,7 +105,7 @@ test("keeps the VinHRIS workspace information architecture and local boundaries 
   assert.match(dashboard, /Quy trình đi đúng nơi\./);
   assert.match(dashboard, /Intake/);
   assert.match(dashboard, /Human Review/);
-  assert.match(dashboard, /107<span>\/112<\/span>/);
+  assert.match(dashboard, /104<span>\/109<\/span>/);
   assert.match(dashboard, /Chưa phải bằng chứng production/);
   assert.match(dashboard, /http:\/\/localhost:8080\/camunda\/app\/tasklist\/default\//);
   assert.match(dashboard, /Nội dung file không đi vào process variables/);
@@ -244,9 +244,9 @@ test("exposes the DATA-08 independent contract review panel behind a private fla
   assert.match(envExample, /^VITE_SHOW_EXTERNAL_DATASET_REVIEW=false$/m);
   assert.match(envExample, /^VITE_SHOW_LEGACY_EXPLORER_TABS=false$/m);
   assert.match(dashboard, /<ExternalDatasetReview \/>/);
-  assert.match(component, /\/external-dataset\/review\/summary/);
-  assert.match(component, /\/external-dataset\/review\/save\?id=/);
-  assert.match(component, /\/external-dataset\/review\/lock/);
+  assert.match(component, /\/external-dataset\/review/);
+  assert.match(component, /reviewBase/);
+  assert.match(component, /\/lock/);
   assert.match(component, /predictionsHiddenDuringReview/);
   assert.match(component, /EXTERNAL DATASET · INDEPENDENT REVIEW/);
   assert.match(component, /function categoryScopeLabel\(/);
@@ -263,6 +263,28 @@ test("exposes the DATA-08 independent contract review panel behind a private fla
   assert.match(component, /DRAFT_STORAGE_PREFIX/);
   assert.match(component, /Bạn còn dữ liệu chưa lưu/);
   assert.match(css, /external-review-primary-save:disabled/);
+});
+
+test("exposes the private DATA-31 coverage decision panel", async () => {
+  const [dashboard, component, envExample, api, starter] = await Promise.all([
+    readFile(new URL("../app/Dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/ExternalDatasetReview.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+    readFile(new URL("../../api/serve_dashboard_api.py", import.meta.url), "utf8"),
+    readFile(new URL("../../api/start_dashboard.ps1", import.meta.url), "utf8"),
+  ]);
+  assert.match(dashboard, /VITE_SHOW_DATA31_COVERAGE_REVIEW === "true"/);
+  assert.match(dashboard, /<ExternalDatasetReview data31 \/>/);
+  assert.match(component, /\/data31\/coverage/);
+  assert.match(component, /DATA-31 · GROUND TRUTH COVERAGE DECISION/);
+  assert.match(component, /OUT_OF_SCOPE/);
+  assert.match(component, /ielts-semantics/);
+  assert.match(component, /Mã TRF\/credential/);
+  assert.match(api, /\/data31\/coverage\/summary/);
+  assert.match(api, /\/data31\/coverage\/save/);
+  assert.match(api, /--external-dataset-coverage-decision/);
+  assert.match(starter, /VITE_SHOW_DATA31_COVERAGE_REVIEW/);
+  assert.match(envExample, /^VITE_SHOW_DATA31_COVERAGE_REVIEW=false$/m);
 });
 
 test("exposes one Template-first upload with source preview and structured results", async () => {
@@ -302,8 +324,9 @@ test("exposes one Template-first upload with source preview and structured resul
   assert.match(dashboard, /\/api\/documents\/comparison\?id=/);
   assert.match(dashboard, /Prediction và Ground Truth theo từng field/);
   assert.match(dashboard, /data-testid="compare-current-file-button"/);
-  assert.match(dashboard, /DATA-29 · 12 tài liệu metric · 3 Contract · 5 CV · 4 IELTS/);
-  assert.match(dashboard, /ExternalDatasetPrediction version="data29"/);
+  assert.match(dashboard, /DATA-31 R7 · 13 tài liệu metric · 4 Contract · 5 CV · 4 IELTS/);
+  assert.match(dashboard, /<ExternalDatasetPrediction version="data31"/);
+  assert.match(dashboard, /ExternalDatasetPrediction version="data31"/);
   assert.match(data29, /DATA29_CATEGORIES/);
   assert.match(data29, /Contract/);
   assert.match(data29, /IELTS/);

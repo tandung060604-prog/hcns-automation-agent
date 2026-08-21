@@ -16,6 +16,9 @@ const SHOW_GROUND_TRUTH_REVIEW = SHOW_ADVANCED_DIAGNOSTICS &&
 const SHOW_EXTERNAL_DATASET_REVIEW =
   SHOW_ADVANCED_DIAGNOSTICS &&
   import.meta.env.VITE_SHOW_EXTERNAL_DATASET_REVIEW === "true";
+const SHOW_DATA31_COVERAGE_REVIEW =
+  SHOW_ADVANCED_DIAGNOSTICS &&
+  import.meta.env.VITE_SHOW_DATA31_COVERAGE_REVIEW === "true";
 const SHOW_LEGACY_EXPLORER_TABS =
   SHOW_ADVANCED_DIAGNOSTICS &&
   import.meta.env.VITE_SHOW_LEGACY_EXPLORER_TABS === "true";
@@ -1928,7 +1931,7 @@ function TemplateComparisonPanel({ result }: { result: TemplateProcessingResult 
           <span>Device {result.processing.ocrDevice}</span>
         ) : null}
         <span>Profile {result.processing.ocrProfile ?? "native-text"}</span>
-        <span>Matching {comparison?.matchingPolicyVersion ?? "2.0.0"}</span>
+        <span>Matching {comparison?.matchingPolicyVersion ?? "2.1.0"}</span>
       </div>
 
       <form onSubmit={compare}>
@@ -2220,7 +2223,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const groundTruthDocumentExcluded =
     groundTruthReviewDocument?.disposition === "OUT_OF_SCOPE_BACK";
   const [evidenceMode, setEvidenceMode] =
-    useState<"overview" | "data29" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "ocr-ho-v2-shadow" | "ocr-ho-v2-diagnostic">(
+    useState<"overview" | "data29" | "data31-coverage" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "ocr-ho-v2-shadow" | "ocr-ho-v2-diagnostic">(
       "data29",
     );
   const [evidenceInspectorView, setEvidenceInspectorView] =
@@ -3553,7 +3556,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             <p className="section-eyebrow">Ba nhóm tài liệu hiện có</p>
             <h2>Ưu tiên độ tin cậy trước khi mở rộng.</h2>
           </div>
-          <p>Chỉ số dưới đây thuộc DATA-29 development corpus và không đại diện cho chất lượng production.</p>
+          <p>Chỉ số dưới đây thuộc DATA-31 R7 development corpus và không đại diện cho chất lượng production.</p>
         </div>
         <div className="document-family-layout">
           <article className="document-family-primary">
@@ -3562,21 +3565,21 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               <h3>Hợp đồng lao động</h3>
               <p>Template extraction đã được đối chiếu. Camunda local shadow đang chờ hoàn tất case Contract đầu tiên.</p>
             </div>
-            <strong>42 / 42 exact</strong>
-            <small>3 tài liệu development</small>
+            <strong>42 / 44 exact</strong>
+            <small>4 tài liệu DATA-31</small>
           </article>
           <div className="document-family-list">
             <article>
               <span className="document-index">02 / CV</span>
               <h3>Hồ sơ ứng viên</h3>
-              <p>45 / 50 exact, 50 / 50 accepted</p>
-              <small>5 tài liệu development</small>
+              <p>42 / 45 exact, 45 / 45 accepted</p>
+              <small>5 tài liệu DATA-31</small>
             </article>
             <article>
               <span className="document-index">03 / IELTS</span>
               <h3>Chứng chỉ IELTS</h3>
               <p>20 / 20 exact và accepted</p>
-              <small>4 tài liệu development</small>
+              <small>4 tài liệu DATA-31</small>
             </article>
           </div>
         </div>
@@ -3587,13 +3590,13 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           <p className="section-eyebrow">Quality evidence</p>
           <h2>Con số có nguồn. Giới hạn được nói rõ.</h2>
           <p>
-            DATA-29 khóa đúng 12 tài liệu development: 3 Contract, 5 CV và 4 IELTS. Ground Truth không được sửa trong lần thiết kế này.
+            DATA-31 R7 gồm 13 tài liệu: 4 Contract, 5 CV và 4 IELTS. Owner đã chấp nhận local shadow; formal promotion gate vẫn là HOLD.
           </p>
           <a className="text-button" href="#explorer">Mở Evidence <span>→</span></a>
         </div>
         <dl className="quality-numbers">
-          <div><dt>Exact match</dt><dd>107<span>/112</span></dd></div>
-          <div><dt>Accepted</dt><dd>112<span>/112</span></dd></div>
+          <div><dt>Exact match</dt><dd>104<span>/109</span></dd></div>
+          <div><dt>Accepted</dt><dd>108<span>/109</span></dd></div>
           <div className="quality-gate"><dt>Promotion gate</dt><dd>HOLD</dd><small>Chưa phải bằng chứng production</small></div>
         </dl>
       </section>
@@ -5533,8 +5536,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             <h2>Tài liệu gắn trực tiếp với metric</h2>
           </div>
           <p>
-            DATA-29 mở đúng 12 source đã tạo metric development và giữ nguyên
-            Prediction, Ground Truth cùng report đã khóa.
+            DATA-31 R7 mở đúng 13 source đã tạo metric và giữ nguyên Prediction,
+            Ground Truth cùng report private đã khóa.
           </p>
         </div>
         <div className="evidence-switch" role="tablist">
@@ -5544,8 +5547,18 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             role="tab"
             aria-selected={evidenceMode === "data29"}
           >
-            DATA-29 · 12 tài liệu metric · 3 Contract · 5 CV · 4 IELTS
+            DATA-31 R7 · 13 tài liệu metric · 4 Contract · 5 CV · 4 IELTS
           </button>
+          {SHOW_DATA31_COVERAGE_REVIEW ? (
+            <button
+              className={evidenceMode === "data31-coverage" ? "active" : ""}
+              onClick={() => setEvidenceMode("data31-coverage")}
+              role="tab"
+              aria-selected={evidenceMode === "data31-coverage"}
+            >
+              DATA-31 · Bổ sung GT còn thiếu / semantics IELTS
+            </button>
+          ) : null}
           {SHOW_OCR_HO_DIAGNOSTIC_GT ? (
             <button
               className={evidenceMode === "ocr-ho-v2-diagnostic" ? "active" : ""}
@@ -5608,7 +5621,9 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             ) : null}
         </div>
         {evidenceMode === "data29" ? (
-          <ExternalDatasetPrediction version="data29" />
+          <ExternalDatasetPrediction version="data31" />
+        ) : SHOW_DATA31_COVERAGE_REVIEW && evidenceMode === "data31-coverage" ? (
+          <ExternalDatasetReview data31 />
         ) : evidenceMode === "overview" ? (
           <LocalEvidenceOverview
             onOpen={(mode) => setEvidenceMode(mode)}

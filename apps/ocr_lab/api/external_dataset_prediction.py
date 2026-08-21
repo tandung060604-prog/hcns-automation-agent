@@ -13,6 +13,7 @@ import re
 import unicodedata
 import zipfile
 from collections import Counter
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -65,11 +66,15 @@ except ImportError:  # Direct script execution used by the local OCR runner.
 
 PREDICTION_SCHEMA_VERSION = "external-dataset-predictions/1.0.0"
 DATA13_PREDICTION_SCHEMA_VERSION = "external-dataset-predictions/data13/1.0.0"
+DATA31_PREDICTION_SCHEMA_VERSION = "external-dataset-predictions/data31-template-first/1.0.0"
 REPORT_SCHEMA_VERSION = "external-dataset-data12-aggregate/1.0.0"
 DATA13_REPORT_SCHEMA_VERSION = "external-dataset-data13-aggregate/1.0.0"
 MATCHING_POLICY_V1 = "1.0.0"
-MATCHING_POLICY_V2 = "2.0.0"
+MATCHING_POLICY_V2 = "2.1.0"
 ACTIVE_CATEGORIES = frozenset(FIELD_SPECS)
+OPTIONAL_PREDICTION_FIELDS: dict[str, frozenset[str]] = {
+    "contract": frozenset({"professional_title", "role_title"}),
+}
 # Long free-text sections may be abbreviated by OCR/layout parsing. Structured
 # identifiers, dates, money and names remain strict to avoid false acceptance.
 SOFT_TEXT_FIELDS = frozenset(
@@ -105,6 +110,7 @@ CANONICAL_TOKEN_FIELDS = frozenset(
         ("contract", "employer_name"),
         ("contract", "job_title"),
         ("contract", "workplace"),
+        ("contract", "allowances_summary"),
         ("ielts", "recipient_name"),
         ("ielts", "credential_type"),
     }
@@ -1830,8 +1836,42 @@ def _semantic_key(category: str, name: str, value: Any) -> str:
         normalized,
         flags=re.IGNORECASE,
     )
+    normalized = re.sub(
+        r"\s+(?:giới tính|gender)\b(?:\s*[:\-–—]?\s*.*)?$",
+        "",
+        normalized,
+        flags=re.IGNORECASE,
+    )
     normalized = re.sub(r"\s+[\-–—]\s+.+$", "", normalized)
     return " ".join(normalized.casefold().split())
+
+
+def _layout_key(category: str, name: str, value: Any) -> str:
+    """Remove approved labels and presentation-only layout from field values."""
+
+    text = _norm(value)
+    if (category, name) == ("contract", "workplace"):
+        text = re.sub(
+            r"^\s*(?:\d+[.)]\s*)?(?:địa điểm|nơi)\s+làm việc\s*[:\-–—]?\s*",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+    elif (category, name) == ("cv", "skills"):
+        parts = re.split(r"\s*[•·▪◦●]\s*", text)
+        cleaned: list[str] = []
+        for part in parts:
+            part = part.strip(" ;")
+            if not part:
+                continue
+            if ":" in part and len(part.split(":", 1)[0].split()) <= 5:
+                part = part.split(":", 1)[1].strip(" ;")
+            if re.search(r"[À-ỹĐđ]", part):
+                part = re.sub(r"(?<!\w)&(?!\w)", "và", part)
+            if part:
+                cleaned.append(part)
+        text = " ".join(cleaned)
+    return " ".join(text.rstrip(" .;。\t").split())
 
 
 def _field_match_v1(
@@ -1939,6 +1979,7 @@ def _date_key(value: Any) -> str | None:
         "%d.%m.%Y",
         "%d/%b/%Y",
         "%d %B %Y",
+        "%d tháng %m năm %Y",
     )
     for fmt in formats:
         try:
@@ -1986,7 +2027,7 @@ def _canonical_key(category: str, name: str, value: Any) -> tuple[Any, str] | No
         key = _decimal_key(value)
         return (key, "DECIMAL_FORMAT_ONLY") if key is not None else None
     if field in CANONICAL_TOKEN_FIELDS:
-        normalized = _semantic_key(category, name, value)
+        normalized = _semantic_key(category, name, _layout_key(category, name, value))
         tokens = _token_sequence(normalized)
         return (tuple(tokens), "CASE_PUNCTUATION_LAYOUT_ONLY") if tokens else None
     return None
@@ -2122,6 +2163,7 @@ def _parser_regression_summary(
     ground_truth: dict[str, Any],
     *,
     policy_version: str = MATCHING_POLICY_V1,
+    field_scope: Mapping[str, tuple[str, ...]] | None = None,
 ) -> tuple[int, int, dict[str, Any]]:
     if baseline_prediction is None:
         return 0, 0, {
@@ -2166,9 +2208,14 @@ def _parser_regression_summary(
             str(item.get("name")): item for item in gt_by_id.get(case_id, {}).get("fields", [])
         }
         expected = FIELD_SPECS.get(category, ())
+        evaluated = tuple(
+            name
+            for name in expected
+            if field_scope is None or name in field_scope.get(case_id, expected)
+        )
         candidate_fields = candidate.get("fields", {})
         baseline_fields = baseline.get("fields", {})
-        for name in expected:
+        for name in evaluated:
             truth = gt_fields.get(name, {}).get("value")
             candidate_value = (
                 candidate_fields.get(name, {}).get("value")
@@ -2209,6 +2256,7 @@ def build_aggregate_report(
     evaluated_at: str | None = None,
     baseline_prediction: dict[str, Any] | None = None,
     policy_version: str = MATCHING_POLICY_V1,
+    field_scope: Mapping[str, tuple[str, ...]] | None = None,
 ) -> dict[str, Any]:
     data13_scope = prediction.get("ocrScopePolicy") in {
         "cccd-and-certificate-only",
@@ -2235,6 +2283,7 @@ def build_aggregate_report(
     evaluated_documents = 0
     by_category: dict[str, dict[str, int]] = {}
     diagnoses: dict[str, int] = {}
+    total_expected_fields = 0
     for document in prediction.get("documents", []):
         case_id = str(document.get("caseId"))
         category = str(document.get("category"))
@@ -2245,8 +2294,17 @@ def build_aggregate_report(
         case = gt_by_id.get(case_id, {})
         gt_fields = {str(item.get("name")): item for item in case.get("fields", [])}
         expected = FIELD_SPECS.get(category, ())
+        evaluated = tuple(
+            name
+            for name in expected
+            if field_scope is None or name in field_scope.get(case_id, expected)
+        )
+        total_expected_fields += len(expected)
         predicted_fields = document.get("fields", {})
-        if tuple(predicted_fields) != expected:
+        optional = OPTIONAL_PREDICTION_FIELDS.get(category, frozenset())
+        core_predicted = tuple(name for name in predicted_fields if name not in optional)
+        unexpected = set(predicted_fields).difference(expected).difference(optional)
+        if core_predicted != expected or unexpected:
             schema_errors += 1
         classification_matches += int(document.get("predictedCategory") == category)
         processing = document.get("processing", {})
@@ -2266,7 +2324,7 @@ def build_aggregate_report(
                 "present": 0,
             },
         )
-        for name in expected:
+        for name in evaluated:
             field_count += 1
             stats["fields"] += 1
             truth = gt_fields.get(name, {}).get("value")
@@ -2307,6 +2365,7 @@ def build_aggregate_report(
         baseline_prediction,
         ground_truth,
         policy_version=policy_version,
+        field_scope=field_scope,
     )
     return {
         "schemaVersion": report_schema,
@@ -2317,6 +2376,11 @@ def build_aggregate_report(
         "evaluatedDocumentCount": evaluated_documents,
         "policyExcludedDocumentCount": excluded_documents,
         "fieldCount": field_count,
+        "scope": {
+            "fieldScopeApplied": field_scope is not None,
+            "activeFieldCount": field_count,
+            "outOfScopeFieldCount": max(0, total_expected_fields - field_count),
+        },
         "classification": {
             "exactDocumentCount": classification_matches,
             "documentCount": len(prediction.get("documents", [])),
@@ -2509,6 +2573,7 @@ def load_prediction_summary(paths: tuple[Path, Path, Path]) -> dict[str, Any]:
     if artifact.get("schemaVersion") not in {
         PREDICTION_SCHEMA_VERSION,
         DATA13_PREDICTION_SCHEMA_VERSION,
+        DATA31_PREDICTION_SCHEMA_VERSION,
     }:
         raise PredictionArtifactError("Unsupported external prediction artifact")
     if not report.is_file() or not marker.is_file():

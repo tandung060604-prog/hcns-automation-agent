@@ -67,6 +67,8 @@ def test_legacy_probation_contract_result_is_projected_to_v2_fields() -> None:
     )
 
     assert payload["templateId"] == "probation-contract-v2"
+    assert payload["templateVersion"] == "2.1"
+    assert payload["schemaVersion"] == "2.1.0"
     assert payload["data"]["employee_name"] == "Synthetic Employee"
     assert payload["data"]["employee_id_number"] == "EMP-000"
     assert payload["data"]["probation_salary_monthly"] == "1000000"
@@ -75,6 +77,8 @@ def test_legacy_probation_contract_result_is_projected_to_v2_fields() -> None:
     assert payload["data"]["contract_sign_date"] == "2025-12-01"
     assert payload["data"]["employer_representative"] == "Synthetic Director"
     assert payload["data"]["weekly_hours"] == "40"
+    assert payload["data"]["professional_title"] is None
+    assert payload["data"]["role_title"] is None
 
 
 def test_legacy_ielts_result_and_corrections_use_v2_fields() -> None:

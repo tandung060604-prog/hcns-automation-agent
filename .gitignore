@@ -17,6 +17,7 @@ apps/ocr_lab/web/dist/
 .worktrees/
 output/
 tmp/
+.agy-review/
 
 .env
 .env.*

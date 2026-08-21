@@ -8,6 +8,7 @@ param(
     [string]$ExternalDatasetRoot = "",
     [string]$ExternalDatasetInventory = "",
     [string]$ExternalDatasetGroundTruth = "",
+    [string]$ExternalDatasetCoverageDecision = "",
     [string]$ExternalDatasetTypedProjection = "",
     [string]$ExternalDatasetTypedApproval = "",
     [string]$ExternalDatasetTypedReport = "",
@@ -49,6 +50,9 @@ if ($ExternalDatasetInventory -and -not (Test-Path -LiteralPath $ExternalDataset
 if ($ExternalDatasetGroundTruth -and -not (Test-Path -LiteralPath $ExternalDatasetGroundTruth)) {
     throw "External dataset Ground Truth draft not found: $ExternalDatasetGroundTruth"
 }
+if ($ExternalDatasetCoverageDecision -and -not (Test-Path -LiteralPath (Split-Path -Parent $ExternalDatasetCoverageDecision))) {
+    throw "External dataset coverage decision parent not found: $ExternalDatasetCoverageDecision"
+}
 if ($ExternalDatasetTypedProjection -and -not (Test-Path -LiteralPath $ExternalDatasetTypedProjection)) {
     throw "External dataset typed projection not found: $ExternalDatasetTypedProjection"
 }
@@ -71,6 +75,10 @@ if ($ExternalDatasetPredictionMarker -and -not (Test-Path -LiteralPath $External
 $env:PYTHONPATH = Join-Path $repoRoot "src"
 $env:HCNS_TEMPLATE_OCR_BACKEND = $TemplateOcrBackend
 $env:HCNS_CAMUNDA_PRIVATE_ROOT = (Resolve-Path -LiteralPath $DataRoot).Path
+$env:VITE_SHOW_DATA31_COVERAGE_REVIEW = if ($ExternalDatasetCoverageDecision) { "true" } else { "false" }
+if ($ExternalDatasetCoverageDecision) {
+    $env:VITE_ADVANCED_DIAGNOSTICS = "true"
+}
 
 function Get-ApiListener {
     $connection = Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -154,6 +162,14 @@ if ($apiRunning -and $ExternalDatasetPredictions) {
         $apiRunning = $false
     }
 }
+if ($apiRunning -and $ExternalDatasetCoverageDecision) {
+    $expectedCoverageDecision = [System.IO.Path]::GetFullPath($ExternalDatasetCoverageDecision)
+    if ([string]$apiProcess.CommandLine -notlike "*$expectedCoverageDecision*") {
+        Stop-Process -Id $apiProcess.ProcessId -Force
+        Start-Sleep -Milliseconds 500
+        $apiRunning = $false
+    }
+}
 
 if (-not $apiRunning) {
     $apiArguments = "-u `"$apiScript`" --data-root `"$DataRoot`" --host 127.0.0.1 --port 8765"
@@ -177,6 +193,9 @@ if (-not $apiRunning) {
     }
     if ($ExternalDatasetGroundTruth) {
         $apiArguments += " --external-dataset-ground-truth `"$ExternalDatasetGroundTruth`""
+    }
+    if ($ExternalDatasetCoverageDecision) {
+        $apiArguments += " --external-dataset-coverage-decision `"$ExternalDatasetCoverageDecision`""
     }
     if ($ExternalDatasetTypedProjection) {
         $apiArguments += " --external-dataset-typed-projection `"$ExternalDatasetTypedProjection`""

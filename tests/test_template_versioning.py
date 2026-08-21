@@ -100,6 +100,11 @@ def test_v2_business_fields_match_the_benchmark_contract() -> None:
         "job_title", "workplace", "weekly_hours", "probation_salary_monthly",
         "allowances_summary", "salary_payment_schedule",
     ]
+    assert registry["probation-contract-v2"]["optionalFields"] == [
+        "professional_title", "role_title",
+    ]
+    assert registry["probation-contract-v2"]["version"] == "2.1"
+    assert registry["probation-contract-v2"]["schemaVersion"] == "2.1.0"
     assert registry["ielts-certificate-v2"]["requiredFields"] == [
         "recipient_name", "credential_id", "credential_type", "overall_score", "issue_date",
     ]
