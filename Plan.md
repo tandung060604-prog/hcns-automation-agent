@@ -54,7 +54,7 @@ synthetic documents:
 
 Bug/feature để đạt output này được ghim vào M1-M4 bên dưới. Submission record là
 output mặc định của MVP. Phần render DOCX/PDF chỉ mở sau khi owner trả lời §14.6;
-nếu mở thì dùng đúng template `hcns format/01_don_xin_nghi_phep_v1.docx` đã có,
+nếu mở thì dùng đúng template archive `docs/archive/templates-v1/01_don_xin_nghi_phep_v1.docx`,
 không tạo văn bản mới rồi OCR lại.
 
 ## 2. Cơ sở của kế hoạch
@@ -439,7 +439,7 @@ không có HR role; khóa account revoke session.
 - Start Camunda bằng reference-only variables, idempotency và status timeline.
 - Không OCR structured form.
 - Nếu owner chốt cần output hành chính: sinh DOCX/PDF từ
-  `hcns format/01_don_xin_nghi_phep_v1.docx` + field đã submit, lưu dưới dạng output
+  `docs/archive/templates-v1/01_don_xin_nghi_phep_v1.docx` + field đã submit, lưu dưới dạng output
   artifact và authorize download. Không chặn submission flow khi quyết định này chưa có.
 
 Gate: retry không tạo duplicate document/process; template version được pin; Camunda
