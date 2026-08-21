@@ -124,7 +124,7 @@ test("exposes the Phase 15 multi-format IDP and field review flow", async () => 
   ]);
 
   assert.match(dashboard, /\.docx,\.pdf/);
-  assert.match(dashboard, /CV\/Hợp đồng: DOCX, PDF · IELTS\/CCCD: PDF, PNG, JPG\/JPEG/);
+  assert.match(dashboard, /CV\/Hợp đồng\/Leave\/OT: DOCX, PDF · IELTS\/CCCD: PDF, PNG, JPG\/JPEG/);
   assert.match(dashboard, /CV \/ hồ sơ ứng viên/);
   assert.match(dashboard, /Hợp đồng lao động/);
   assert.match(dashboard, /phase12\?:/);
@@ -288,7 +288,19 @@ test("exposes one Template-first upload with source preview and structured resul
   assert.match(dashboard, /SHOW_LEGACY_UPLOAD/);
   assert.match(dashboard, /Tải tài liệu HCNS/);
   assert.match(dashboard, /Trích xuất tài liệu/);
-  assert.match(dashboard, /CV\/Hợp đồng: DOCX, PDF · IELTS\/CCCD: PDF, PNG, JPG\/JPEG/);
+  assert.match(dashboard, /CV\/Hợp đồng\/Leave\/OT: DOCX, PDF · IELTS\/CCCD: PDF, PNG, JPG\/JPEG/);
+  assert.match(dashboard, /Tải mẫu để điền/);
+  for (const href of [
+    "/templates/cv-v2.docx",
+    "/templates/probation-contract-v2.docx",
+    "/templates/leave-request-v1.docx",
+    "/templates/overtime-request-v1.docx",
+  ]) {
+    assert.match(dashboard, new RegExp(href.replaceAll(".", "\\.")));
+  }
+  assert.match(dashboard, /CCCD/);
+  assert.match(dashboard, /IELTS/);
+  assert.doesNotMatch(dashboard, /vinhris-document-ai-dataset/);
   assert.match(dashboard, /\.docx,\.pdf,\.png,\.jpg,\.jpeg/);
   assert.match(dashboard, /Xem JSON đầy đủ/);
   assert.match(dashboard, /Không có trong tài liệu/);
