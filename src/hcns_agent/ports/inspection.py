@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol, TypeAlias
 
 from hcns_agent.ports.document_parser import DocumentSource
+
+PdfContentProfile: TypeAlias = Literal["native", "scan", "mixed"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -14,6 +16,7 @@ class PdfInspection:
     has_usable_text: bool
     encrypted: bool = False
     corrupted: bool = False
+    content_profile: PdfContentProfile = "scan"
 
 
 @dataclass(frozen=True, slots=True)

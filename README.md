@@ -40,6 +40,16 @@ Ví dụ thực tế đã chạy: đơn nghỉ phép nộp → User Review `UNRE
 tạo đúng → HR `CONFIRMED` → process COMPLETED → user nhận notification "Đã duyệt";
 người lạ nhận `401`, user khác truy cập hồ sơ nhận `403`.
 
+## Biểu mẫu hỗ trợ (từ `main`)
+
+Template-first đã unify Contract / CV / IELTS. File mẫu tải được trong dashboard:
+
+- `apps/ocr_lab/web/public/templates/cv-v2.docx`
+- `apps/ocr_lab/web/public/templates/probation-contract-v2.docx`
+- `apps/ocr_lab/web/public/templates/leave-request-v1.docx`
+- `apps/ocr_lab/web/public/templates/overtime-request-v1.docx`
+- IELTS: PDF/ảnh scan qua OCR (không có blank DOCX; dùng bộ DATA-31 / upload thật)
+
 ## Cài đặt và chạy local
 
 ### Yêu cầu

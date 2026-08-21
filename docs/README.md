@@ -11,6 +11,7 @@ liên kết ổn định. Không đổi tên tài liệu lịch sử nếu khôn
 | [BACKLOG.md](BACKLOG.md) | Task có trạng thái, phụ thuộc và acceptance criteria | Khi bắt đầu/kết thúc task |
 | [HANDOFF.md](HANDOFF.md) | Checkpoint để session/agent khác tiếp tục | Trước khi kết thúc workstream |
 | [archive/PROJECT_STATE_HISTORY_2026-08-06.md](archive/PROJECT_STATE_HISTORY_2026-08-06.md) | Evidence lịch sử theo milestone | Khi rút gọn state hiện tại |
+| [archive/templates-v1/](archive/templates-v1/) | DOCX master v1 đã archive; mẫu tải về hiện hành nằm ở frontend | Không dùng cho luồng mới nếu chưa có quyết định versioning |
 | [ROADMAP.md](ROADMAP.md) | Định hướng milestone dài hạn | Khi thay đổi ưu tiên |
 
 ## OCR và đánh giá

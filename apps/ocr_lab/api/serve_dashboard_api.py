@@ -62,6 +62,12 @@ from external_dataset_prediction import (
     resolve_prediction_paths,
 )
 from external_dataset_review import (
+    load_coverage_document as load_data31_coverage_document,
+)
+from external_dataset_review import (
+    load_coverage_summary as load_data31_coverage_summary,
+)
+from external_dataset_review import (
     load_review_document as load_external_review_document,
 )
 from external_dataset_review import (
@@ -75,6 +81,9 @@ from external_dataset_review import (
 )
 from external_dataset_review import (
     resolve_review_source as resolve_external_review_source,
+)
+from external_dataset_review import (
+    save_coverage_decision as save_data31_coverage_decision,
 )
 from external_dataset_review import (
     save_review as save_external_review,
@@ -1875,6 +1884,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
     external_dataset_root: Path | None
     external_dataset_inventory: Path | None
     external_dataset_ground_truth: Path | None
+    external_dataset_coverage_decision: Path | None
     external_dataset_typed_projection: Path | None
     external_dataset_typed_approval: Path | None
     external_dataset_typed_report: Path | None
@@ -2953,6 +2963,41 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         self.cccd_heldout_root,
                         document_id,
                         payload,
+                    )
+                )
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if parsed.path == "/data31/coverage/save":
+            if self.external_dataset_root is None:
+                self.send_json(
+                    {"error": "DATA-31 Ground Truth coverage is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            case_id = parse_qs(parsed.query).get("id", [""])[0]
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                content_length = 0
+            if content_length <= 0 or content_length > MAX_REVIEW_BYTES:
+                self.send_json(
+                    {"error": "Request body is too large"},
+                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                )
+                return
+            try:
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                self.send_json(
+                    save_data31_coverage_decision(
+                        self.external_dataset_root,
+                        case_id,
+                        payload,
+                        inventory_path=self.external_dataset_inventory,
+                        ground_truth_path=self.external_dataset_ground_truth,
+                        decision_path=self.external_dataset_coverage_decision,
                     )
                 )
             except PermissionError as exc:
@@ -4417,6 +4462,31 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
             return
 
+        if parsed.path == "/data31/coverage/summary":
+            if self.external_dataset_root is None:
+                self.send_json(
+                    {"error": "DATA-31 Ground Truth coverage is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            try:
+                self.send_json(
+                    load_data31_coverage_summary(
+                        self.external_dataset_root,
+                        inventory_path=self.external_dataset_inventory,
+                        ground_truth_path=self.external_dataset_ground_truth,
+                        decision_path=self.external_dataset_coverage_decision,
+                    )
+                )
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+                self.send_json(
+                    {"error": f"DATA-31 coverage unavailable: {exc}"},
+                    HTTPStatus.NOT_FOUND,
+                )
+            return
+
         if parsed.path == "/external-dataset/review/summary":
             if self.external_dataset_root is None:
                 self.send_json(
@@ -4599,6 +4669,68 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self.send_json(
                     {"error": f"Typed canonical export unavailable: {exc}"},
                     status,
+                )
+            return
+
+        if parsed.path == "/data31/coverage/document":
+            if self.external_dataset_root is None:
+                self.send_json(
+                    {"error": "DATA-31 Ground Truth coverage is not configured"},
+                    HTTPStatus.NOT_FOUND,
+                )
+                return
+            case_id = query.get("id", [""])[0]
+            mode = query.get("mode", ["detail"])[0]
+            try:
+                source = resolve_external_review_source(
+                    self.external_dataset_root,
+                    case_id,
+                    inventory_path=self.external_dataset_inventory,
+                    ground_truth_path=self.external_dataset_ground_truth,
+                )
+                if mode == "detail":
+                    self.send_json(
+                        load_data31_coverage_document(
+                            self.external_dataset_root,
+                            case_id,
+                            inventory_path=self.external_dataset_inventory,
+                            ground_truth_path=self.external_dataset_ground_truth,
+                            decision_path=self.external_dataset_coverage_decision,
+                        )
+                    )
+                elif mode == "source":
+                    self.send_file(
+                        source,
+                        mimetypes.guess_type(source.name)[0] or "application/octet-stream",
+                        f"{case_id}{source.suffix.lower()}",
+                    )
+                elif mode == "preview":
+                    if source.suffix.casefold() in {".txt", ".docx", ".pptx"}:
+                        self.send_json(
+                            {
+                                "kind": "text",
+                                "sourceFile": source.name,
+                                "text": load_external_text_preview(source),
+                            }
+                        )
+                    else:
+                        self.send_file(
+                            source,
+                            mimetypes.guess_type(source.name)[0] or "application/octet-stream",
+                        )
+                else:
+                    self.send_json(
+                        {"error": "Invalid DATA-31 coverage document mode"},
+                        HTTPStatus.BAD_REQUEST,
+                    )
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            except (OSError, FileNotFoundError, KeyError, json.JSONDecodeError):
+                self.send_json(
+                    {"error": "DATA-31 coverage document is unavailable"},
+                    HTTPStatus.NOT_FOUND,
                 )
             return
 
@@ -5424,7 +5556,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--external-dataset-root",
         type=Path,
-        help="Local staging root for the synthetic external dataset review UI.",
+        help="Private local staging root for an authorized dataset review UI.",
     )
     parser.add_argument(
         "--external-dataset-inventory",
@@ -5435,6 +5567,11 @@ def parse_args() -> argparse.Namespace:
         "--external-dataset-ground-truth",
         type=Path,
         help="Private local Ground Truth draft JSON for the external dataset.",
+    )
+    parser.add_argument(
+        "--external-dataset-coverage-decision",
+        type=Path,
+        help="Private DATA-31 missing-field coverage decision JSON.",
     )
     parser.add_argument(
         "--external-dataset-typed-projection",
@@ -5527,6 +5664,11 @@ def main() -> int:
     DashboardHandler.external_dataset_ground_truth = (
         args.external_dataset_ground_truth.expanduser().resolve()
         if args.external_dataset_ground_truth is not None
+        else None
+    )
+    DashboardHandler.external_dataset_coverage_decision = (
+        args.external_dataset_coverage_decision.expanduser().resolve()
+        if args.external_dataset_coverage_decision is not None
         else None
     )
     DashboardHandler.external_dataset_typed_projection = (

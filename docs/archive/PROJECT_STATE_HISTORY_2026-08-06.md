@@ -9,7 +9,7 @@ Completed:
 - Camunda 7 worker/assets and process-variable whitelist
 - Registered `leave-request-v1` and `overtime-request-v1`
 - Employee-fillable DOCX masters (leave, overtime, CV and employment contract) are in
-  `hcns format/`; they contain no PII and are intended as the approved source for a later
+  `docs/archive/templates-v1/`; they contain no PII and are intended as the approved source for a later
   synthetic-image benchmark phase.
 - Content detection is normalized, filename-independent and closed-set
 - DOCX/native PDF parse without OCR; image/PDF scan use a local, explicitly selected OCR backend

@@ -32,7 +32,7 @@ class ReviewOnlyParser:
             "sourceFile": document.source.filename,
         }
         if detection.definition.version.startswith("2."):
-            data["schemaVersion"] = "2.0.0"
+            data["schemaVersion"] = detection.definition.schema_version
         for field_name, labels in self._field_labels.items():
             data[field_name] = _line_value(lines, labels)
         return ParsedTemplate(data=data)

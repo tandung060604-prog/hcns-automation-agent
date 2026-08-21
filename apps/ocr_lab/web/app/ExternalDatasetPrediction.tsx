@@ -11,7 +11,7 @@ type Summary = {
   documents: Array<{ caseId: string; category: string; sourceFormat: string; sourceFile: string; evaluationIncluded?: boolean; ocrScope?: string; recommendedAction?: string }>;
   report?: RecordValue;
 };
-type Props = { version?: "data12" | "data13" | "data29" | "policy-v2" };
+type Props = { version?: "data12" | "data13" | "data29" | "data31" | "policy-v2" };
 type Data29Category = "contract" | "cv" | "ielts";
 
 const DATA29_CATEGORIES: Array<{ id: Data29Category; label: string }> = [
@@ -38,7 +38,7 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
   const visibleDocuments = useMemo(
     () =>
       summary?.documents.filter(
-        (item) => version !== "data29" || item.category === activeCategory,
+        (item) => !["data29", "data31"].includes(version) || item.category === activeCategory,
       ) ?? [],
     [activeCategory, summary, version],
   );
@@ -53,7 +53,7 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
       .then((payload) => {
         setSummary(payload);
         setActiveCase(payload.documents.find(
-          (item) => version !== "data29" || item.category === "contract",
+          (item) => !["data29", "data31"].includes(version) || item.category === "contract",
         )?.caseId ?? "");
       })
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Không đọc được DATA-12"));
@@ -86,7 +86,7 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
     <section className="external-review-panel data12-prediction" data-testid="external-dataset-prediction">
       {version === "policy-v2" ? <div className="external-review-message">DATA-25 Policy v2 post-hoc audit · DATA-24 official evaluate-once remains immutable</div> : null}
       <div className="external-review-heading">
-        <div><span>{version === "data29" ? "DATA-29 · DEVELOPMENT CORPUS" : version === "data13" ? "DATA-13 · OCR SCOPE" : "DATA-12 · LOCAL-ONLY"}</span><h2>Prediction ↔ Ground Truth</h2></div>
+        <div><span>{version === "data31" ? "DATA-31 R7 · LOCAL SHADOW" : version === "data29" ? "DATA-29 · HISTORICAL BASELINE" : version === "data13" ? "DATA-13 · OCR SCOPE" : "DATA-12 · LOCAL-ONLY"}</span><h2>Prediction ↔ Ground Truth</h2></div>
         <strong>{summary?.status ?? "LOADING"}</strong>
       </div>
       {summary && !hasComparison ? <div className="external-review-message">Prediction-only: Ground Truth not supplied; Field exact not evaluated.</div> : null}
@@ -96,14 +96,14 @@ export default function ExternalDatasetPrediction({ version = "data12" }: Props)
           <div className="local-evidence-metrics">
             {version === "policy-v2" ? <span className="local-evidence-metric"><small>Canonical exact</small><strong>{metrics.fieldExactMatchRate !== undefined ? `${(Number(metrics.fieldExactMatchRate) * 100).toFixed(1)}%` : "—"}</strong></span> : null}
             {version === "policy-v2" ? <span className="local-evidence-metric"><small>Raw exact</small><strong>{metrics.fieldRawExactMatchRate !== undefined ? `${(Number(metrics.fieldRawExactMatchRate) * 100).toFixed(1)}%` : "—"}</strong></span> : null}
-            <span className="local-evidence-metric"><small>Tài liệu đang show</small><strong>{version === "data29" ? `${visibleDocuments.length}/${summary.documentCount}` : summary.documentCount}</strong></span>
+            <span className="local-evidence-metric"><small>Tài liệu đang show</small><strong>{["data29", "data31"].includes(version) ? `${visibleDocuments.length}/${summary.documentCount}` : summary.documentCount}</strong></span>
             <span className="local-evidence-metric"><small>Field exact (toàn corpus)</small><strong>{metrics.fieldExactMatchCount !== undefined ? `${String(metrics.fieldExactMatchCount)}/${String(report.fieldCount ?? "—")}` : "—"}</strong></span>
             <span className="local-evidence-metric"><small>Field accepted (toàn corpus)</small><strong>{metrics.fieldAcceptedMatchCount !== undefined ? `${String(metrics.fieldAcceptedMatchCount)}/${String(report.fieldCount ?? "—")}` : "—"}</strong></span>
             <span className="local-evidence-metric"><small>Schema errors</small><strong>{metrics ? String(report.schemaErrors ?? "—") : "—"}</strong></span>
             <span className="local-evidence-metric"><small>Decision</small><strong>{String(report.decision ?? "HOLD")}</strong></span>
           </div>
-          {version === "data29" ? (
-            <div className="data29-category-switch" role="tablist" aria-label="Loại tài liệu DATA-29">
+          {["data29", "data31"].includes(version) ? (
+            <div className="data29-category-switch" role="tablist" aria-label={`Loại tài liệu ${version === "data31" ? "DATA-31" : "DATA-29"}`}>
               {DATA29_CATEGORIES.map((category) => {
                 const documents = summary.documents.filter((item) => item.category === category.id);
                 return (

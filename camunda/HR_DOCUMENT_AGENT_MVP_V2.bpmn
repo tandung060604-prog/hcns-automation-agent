@@ -17,7 +17,7 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
       </bpmn:extensionElements>
       <bpmn:outgoing>F_StartSubmit</bpmn:outgoing>
     </bpmn:startEvent>
-    <bpmn:userTask camunda:candidateGroups="employees,new-hires" id="Submit" name="Cung cấp tài liệu HCNS">
+    <bpmn:userTask camunda:candidateGroups="employees,newHires" id="Submit" name="Cung cấp tài liệu HCNS">
       <bpmn:documentation>Người nộp chỉ cung cấp applicationId, opaque documentReference và loại tài liệu. Không upload raw image vào process variables.</bpmn:documentation>
       <bpmn:extensionElements>
         <camunda:executionListener event="end">
@@ -72,7 +72,7 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
       <bpmn:outgoing>F_ClassNeedsConfirm</bpmn:outgoing>
       <bpmn:outgoing>F_ClassInvalid</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:userTask camunda:candidateGroups="employees,new-hires" id="ConfirmType" name="Xác nhận loại tài liệu">
+    <bpmn:userTask camunda:candidateGroups="employees,newHires" id="ConfirmType" name="Xác nhận loại tài liệu">
       <bpmn:extensionElements>
         <camunda:executionListener event="end">
           <camunda:script scriptFormat="javascript">if (execution.getVariable('documentTypeDecision') == 'CONFIRMED') { execution.setVariable('workflowDocumentType', execution.getVariable('confirmedDocumentType')); }</camunda:script>
@@ -136,7 +136,7 @@ execution.setVariable('autoContinueEnabled', false);</camunda:script>
       <bpmn:outgoing>F_QReupload</bpmn:outgoing>
       <bpmn:outgoing>F_QDefaultHR</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:userTask camunda:candidateGroups="employees,new-hires" id="UserReview" name="Người nộp xác nhận dữ liệu">
+    <bpmn:userTask camunda:candidateGroups="employees,newHires" id="UserReview" name="Người nộp xác nhận dữ liệu">
       <bpmn:extensionElements>
         <camunda:taskListener event="complete">
           <camunda:script scriptFormat="javascript">var assignee = task.getAssignee();
@@ -194,7 +194,7 @@ task.setVariable('reviewStage', 'USER');</camunda:script>
       <bpmn:outgoing>F_UserReupload</bpmn:outgoing>
       <bpmn:outgoing>F_UserUnresolved</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:userTask camunda:candidateGroups="hr-reviewers" id="HRReview" name="HCNS kiểm tra dữ liệu">
+    <bpmn:userTask camunda:candidateGroups="hrReviewers" id="HRReview" name="HCNS kiểm tra dữ liệu">
       <bpmn:extensionElements>
         <camunda:taskListener event="complete">
           <camunda:script scriptFormat="javascript">var assignee = task.getAssignee();
@@ -280,7 +280,7 @@ task.setVariable('reviewStage', 'HR');</camunda:script>
       <bpmn:outgoing>F_ReuploadAllowed</bpmn:outgoing>
       <bpmn:outgoing>F_ReuploadLimit</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:userTask camunda:candidateGroups="employees,new-hires" id="UploadAgain" name="Tải lại tài liệu">
+    <bpmn:userTask camunda:candidateGroups="employees,newHires" id="UploadAgain" name="Tải lại tài liệu">
       <bpmn:extensionElements>
         <camunda:executionListener event="end">
           <camunda:script scriptFormat="javascript">execution.setVariable('idempotencyKey', String(execution.getVariable('applicationId')) + ':' + String(execution.getVariable('documentReference')));</camunda:script>
@@ -307,7 +307,7 @@ task.setVariable('reviewStage', 'HR');</camunda:script>
       <bpmn:incoming>F_ReuploadAllowed</bpmn:incoming>
       <bpmn:outgoing>F_UploadValidate</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:userTask camunda:candidateGroups="hr-reviewers" id="FinalHR" name="HCNS xử lý khi hết lượt">
+    <bpmn:userTask camunda:candidateGroups="hrReviewers" id="FinalHR" name="HCNS xử lý khi hết lượt">
       <bpmn:extensionElements>
         <camunda:formData>
           <camunda:formField id="finalHrDecision" label="Quyết định cuối" type="enum">

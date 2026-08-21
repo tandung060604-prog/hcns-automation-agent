@@ -3,6 +3,7 @@ from unittest import TestCase
 
 from synthetic_fixtures import (
     administrative_image_bytes,
+    mixed_pdf_bytes,
     scanned_pdf_bytes,
     synthetic_contract_docx_bytes,
     synthetic_cv_pdf_bytes,
@@ -99,6 +100,21 @@ class DocumentParserContractTests(TestCase):
         self.assertEqual(0, document.content.pages[0].page_index)
         self.assertEqual("NOI DUNG OCR SYNTHETIC", document.content.pages[0].blocks[0].text)
         self.assertEqual(1, len(self.ocr.calls))
+
+    def test_mixed_pdf_ocr_routes_all_pages_without_retaining_raster_pages(self) -> None:
+        document = self.parse(
+            "SYNTHETIC-MIXED-SCAN",
+            "mixed.pdf",
+            mixed_pdf_bytes(),
+        )
+
+        self.assertIs(SourceFormat.PDF_SCAN, document.source_format)
+        self.assertEqual(2, len(document.content.pages))
+        self.assertEqual(2, len(self.ocr.calls))
+        self.assertEqual(
+            "mixed",
+            document.provenance[0].metadata["pdfContentProfile"],
+        )
 
     def test_docx_preserves_heading_paragraph_list_and_table(self) -> None:
         document = self.parse(

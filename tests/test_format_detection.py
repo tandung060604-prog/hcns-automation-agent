@@ -3,6 +3,7 @@ from unittest import TestCase
 from synthetic_fixtures import (
     administrative_image_bytes,
     make_ooxml_zip,
+    mixed_pdf_bytes,
     scanned_pdf_bytes,
     synthetic_contract_docx_bytes,
     synthetic_cv_pdf_bytes,
@@ -47,6 +48,20 @@ class FormatDetectorTests(TestCase):
             SourceFormat.PDF_SCAN,
             self.detect("scan.bin", scanned_pdf_bytes()),
         )
+
+    def test_routes_mixed_pdf_to_scan_path_and_preserves_profile(self) -> None:
+        result = self.detector.detect(
+            DocumentSource(
+                document_id="SYNTHETIC-MIXED-PDF",
+                filename="mixed.pdf",
+                content=mixed_pdf_bytes(),
+            )
+        )
+
+        self.assertIs(SourceFormat.PDF_SCAN, result.source_format)
+        self.assertIsNotNone(result.pdf_inspection)
+        self.assertEqual("mixed", result.pdf_inspection.content_profile)
+        self.assertEqual(2, result.pdf_inspection.page_count)
 
     def test_detects_ooxml_by_container_content(self) -> None:
         self.assertIs(

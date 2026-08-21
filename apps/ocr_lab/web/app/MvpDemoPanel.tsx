@@ -193,6 +193,7 @@ const UPLOAD_ERROR_LABELS: Record<string, string> = {
 };
 
 const FIELD_LABELS: Record<string, string> = {
+  // Leave / overtime (camelCase)
   employeeName: "Họ và tên",
   employeeId: "Mã nhân viên",
   jobTitle: "Chức vụ",
@@ -208,7 +209,72 @@ const FIELD_LABELS: Record<string, string> = {
   handoverTasks: "Nội dung bàn giao",
   phone: "Điện thoại",
   address: "Địa chỉ",
+  laborContractNumber: "Số HĐLĐ",
+  laborContractDate: "Ngày ký HĐLĐ",
+  standardWorkSchedule: "Giờ làm chuẩn",
+  overtimeHoursPerDay: "Giờ OT/ngày",
+  overtimeStartTime: "Bắt đầu OT",
+  overtimeEndTime: "Kết thúc OT",
+  totalOvertimeHours: "Tổng giờ OT",
+  workContent: "Nội dung công việc",
+  formNumber: "Số phiếu",
+  // CV v2 (snake_case từ main)
+  full_name: "Họ và tên",
+  headline: "Tiêu đề / headline",
+  email: "Email",
+  phone_number: "Điện thoại",
+  desired_role: "Vị trí mong muốn",
+  years_experience: "Số năm kinh nghiệm",
+  experience: "Kinh nghiệm",
+  skills: "Kỹ năng",
+  education: "Học vấn",
+  // IELTS / chứng chỉ
+  recipient_name: "Họ tên thí sinh",
+  credential_id: "Mã chứng chỉ",
+  credential_type: "Loại chứng chỉ",
+  overall_score: "Điểm tổng",
+  issue_date: "Ngày cấp",
+  // Hợp đồng thử việc / lao động
+  contract_number: "Số hợp đồng",
+  contract_sign_date: "Ngày ký HĐ",
+  effective_date: "Ngày hiệu lực",
+  probation_end_date: "Hết thử việc",
+  employer_name: "Bên A (công ty)",
+  employer_representative: "Người đại diện",
+  employee_name: "Bên B (nhân viên)",
+  employee_id_number: "CMND/CCCD",
+  professional_title: "Chức danh chuyên môn",
+  role_title: "Chức danh vai trò",
+  job_title: "Chức danh công việc",
+  workplace: "Nơi làm việc",
+  weekly_hours: "Giờ/tuần",
+  probation_salary_monthly: "Lương thử việc",
+  allowances_summary: "Phụ cấp",
+  salary_payment_schedule: "Kỳ trả lương",
 };
+
+const DEMO_TEMPLATE_DOWNLOADS = [
+  {
+    label: "Đơn nghỉ phép",
+    href: "/templates/leave-request-v1.docx",
+    detail: "LEAVE",
+  },
+  {
+    label: "Đơn tăng ca",
+    href: "/templates/overtime-request-v1.docx",
+    detail: "OT",
+  },
+  {
+    label: "CV ứng viên",
+    href: "/templates/cv-v2.docx",
+    detail: "CV",
+  },
+  {
+    label: "Hợp đồng thử việc",
+    href: "/templates/probation-contract-v2.docx",
+    detail: "CONTRACT",
+  },
+] as const;
 
 const HIDDEN_FIELDS = new Set([
   "missingFields",
@@ -306,8 +372,14 @@ function fieldString(value: unknown): string {
 function editableFieldEntries(data: Record<string, unknown>) {
   return Object.entries(data).filter(([key, value]) => {
     if (HIDDEN_FIELDS.has(key)) return false;
-    // Prefer known business labels; still allow other scalar business fields.
-    if (!(key in FIELD_LABELS) && !/^[a-z][A-Za-z0-9]*$/.test(key)) return false;
+    // Prefer known labels; allow camelCase and snake_case business fields (CV/IELTS/contract).
+    if (
+      !(key in FIELD_LABELS) &&
+      !/^[a-z][A-Za-z0-9]*$/.test(key) &&
+      !/^[a-z][a-z0-9_]*$/.test(key)
+    ) {
+      return false;
+    }
     return ["string", "number", "boolean"].includes(typeof value) || value === null;
   });
 }
@@ -1073,10 +1145,30 @@ export default function MvpDemoPanel({
                 <span>SCAN</span>
                 <div>
                   <h3>Nộp đơn từ tài liệu đã quét</h3>
-                  <p>Upload DOCX/PDF/ảnh → tự nhận diện loại đơn → điền form → nộp ngay cho HR.</p>
+                  <p>
+                    Upload DOCX/PDF/ảnh → tự nhận diện Leave / OT / CV / Hợp đồng / IELTS → điền
+                    form → nộp HR. IELTS dùng PDF hoặc ảnh scan.
+                  </p>
                 </div>
               </header>
               <div style={{ display: "grid", gap: 14, padding: "16px 20px" }}>
+                <div style={{ display: "grid", gap: 8 }}>
+                  <small style={{ color: "var(--muted, #6b7280)" }}>
+                    Tải mẫu blank (CV / Contract / Leave / OT) — điền rồi upload lại để quét:
+                  </small>
+                  <div className="role-actions" style={{ flexWrap: "wrap" }}>
+                    {DEMO_TEMPLATE_DOWNLOADS.map((item) => (
+                      <a
+                        key={item.href}
+                        className="text-button"
+                        href={item.href}
+                        download
+                      >
+                        {item.label} ({item.detail})
+                      </a>
+                    ))}
+                  </div>
+                </div>
                 <div
                   style={{
                     display: "grid",
