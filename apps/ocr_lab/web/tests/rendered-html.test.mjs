@@ -324,8 +324,9 @@ test("exposes one Template-first upload with source preview and structured resul
   assert.match(dashboard, /\/api\/documents\/comparison\?id=/);
   assert.match(dashboard, /Prediction và Ground Truth theo từng field/);
   assert.match(dashboard, /data-testid="compare-current-file-button"/);
-  assert.match(dashboard, /DATA-29 · 12 tài liệu metric · 3 Contract · 5 CV · 4 IELTS/);
-  assert.match(dashboard, /ExternalDatasetPrediction version="data29"/);
+  assert.match(dashboard, /DATA-31 R7 · 13 tài liệu metric · 4 Contract · 5 CV · 4 IELTS/);
+  assert.match(dashboard, /<ExternalDatasetPrediction version="data31"/);
+  assert.match(dashboard, /ExternalDatasetPrediction version="data31"/);
   assert.match(data29, /DATA29_CATEGORIES/);
   assert.match(data29, /Contract/);
   assert.match(data29, /IELTS/);

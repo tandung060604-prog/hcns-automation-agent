@@ -3556,7 +3556,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             <p className="section-eyebrow">Ba nhóm tài liệu hiện có</p>
             <h2>Ưu tiên độ tin cậy trước khi mở rộng.</h2>
           </div>
-          <p>Chỉ số dưới đây thuộc DATA-29 development corpus và không đại diện cho chất lượng production.</p>
+          <p>Chỉ số dưới đây thuộc DATA-31 R7 development corpus và không đại diện cho chất lượng production.</p>
         </div>
         <div className="document-family-layout">
           <article className="document-family-primary">
@@ -3565,15 +3565,15 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               <h3>Hợp đồng lao động</h3>
               <p>Template extraction đã được đối chiếu. Camunda local shadow đang chờ hoàn tất case Contract đầu tiên.</p>
             </div>
-            <strong>42 / 42 exact</strong>
-            <small>3 tài liệu development</small>
+            <strong>42 / 44 exact</strong>
+            <small>4 tài liệu DATA-31</small>
           </article>
           <div className="document-family-list">
             <article>
               <span className="document-index">02 / CV</span>
               <h3>Hồ sơ ứng viên</h3>
-              <p>45 / 50 exact, 50 / 50 accepted</p>
-              <small>5 tài liệu development</small>
+              <p>42 / 45 exact, 45 / 45 accepted</p>
+              <small>5 tài liệu DATA-31</small>
             </article>
             <article>
               <span className="document-index">03 / IELTS</span>
@@ -3590,7 +3590,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           <p className="section-eyebrow">Quality evidence</p>
           <h2>Con số có nguồn. Giới hạn được nói rõ.</h2>
           <p>
-            DATA-29 khóa đúng 12 tài liệu development: 3 Contract, 5 CV và 4 IELTS. Ground Truth không được sửa trong lần thiết kế này.
+            DATA-31 R7 gồm 13 tài liệu: 4 Contract, 5 CV và 4 IELTS. Owner đã chấp nhận local shadow; formal promotion gate vẫn là HOLD.
           </p>
           <a className="text-button" href="#explorer">Mở Evidence <span>→</span></a>
         </div>
@@ -5536,8 +5536,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             <h2>Tài liệu gắn trực tiếp với metric</h2>
           </div>
           <p>
-            DATA-29 mở đúng 12 source đã tạo metric development và giữ nguyên
-            Prediction, Ground Truth cùng report đã khóa.
+            DATA-31 R7 mở đúng 13 source đã tạo metric và giữ nguyên Prediction,
+            Ground Truth cùng report private đã khóa.
           </p>
         </div>
         <div className="evidence-switch" role="tablist">
@@ -5547,7 +5547,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             role="tab"
             aria-selected={evidenceMode === "data29"}
           >
-            DATA-29 · 12 tài liệu metric · 3 Contract · 5 CV · 4 IELTS
+            DATA-31 R7 · 13 tài liệu metric · 4 Contract · 5 CV · 4 IELTS
           </button>
           {SHOW_DATA31_COVERAGE_REVIEW ? (
             <button
@@ -5621,7 +5621,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             ) : null}
         </div>
         {evidenceMode === "data29" ? (
-          <ExternalDatasetPrediction version="data29" />
+          <ExternalDatasetPrediction version="data31" />
         ) : SHOW_DATA31_COVERAGE_REVIEW && evidenceMode === "data31-coverage" ? (
           <ExternalDatasetReview data31 />
         ) : evidenceMode === "overview" ? (
