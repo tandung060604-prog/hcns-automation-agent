@@ -7,9 +7,10 @@ Archive: docs/archive/PROJECT_STATE_HISTORY_2026-08-20.md
 
 Repository:
 - Branch: `codex/alg-003-contract-scan-recovery`
-- HEAD: `88473de899518a4660ed7b3dc0c13dc66978eb6b`
-- Base: `origin/main` at the same commit
-- Existing WIP is preserved; no commit, push, PR or deploy was performed.
+- HEAD: `c34b695`
+- Base: `origin/main` remains at `88473de899518a4660ed7b3dc0c13dc66978eb6b`
+- Three commits contain the runtime, DATA-31 replay and documentation updates;
+  no PR or deploy was performed.
 
 ## Verified current result
 
@@ -59,7 +60,7 @@ Repository:
 
 ## Validation
 
-- Targeted parser/version/OCR/evaluation tests: `113 passed`; template version
+- Targeted parser/version/OCR/evaluation tests: `118 passed`; template version
   governance and compile passed; full Python suite: NOT MEASURED in this
   checkpoint. DATA-31 R7 replay completed with `schemaErrors=0`, parser
   regression `0` and sensitive false acceptance `0`.
@@ -69,6 +70,7 @@ Repository:
 
 ## Next gate
 
-The 1280 default remains active. DATA-31 remains HOLD at `104/109` strict and
-`108/109` accepted; CAM-001 must not be reopened until `105/109` and `109/109`
-both pass.
+The 1280 default remains active. Owner acceptance permits local shadow/demo at
+`104/109` strict, `108/109` accepted and `109/109` present; the formal report
+remains HOLD. CAM-001 must not be reopened until the formal gate is explicitly
+resolved and its Contract E2E acceptance is run.

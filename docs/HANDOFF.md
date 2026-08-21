@@ -3,12 +3,14 @@
 ## Current checkpoint (2026-08-21)
 
 - Branch: `codex/alg-003-contract-scan-recovery`
-- HEAD: `88473de899518a4660ed7b3dc0c13dc66978eb6b`
-- Base: `origin/main` at the same commit; changes are not committed or pushed.
-- Task: `DATA-31-QUALITY-RECOVERY-R7`; the private DATA-31 quality gate is HOLD.
+- HEAD: `c34b695`
+- Base: `origin/main` remains at `88473de899518a4660ed7b3dc0c13dc66978eb6b`; three
+  commits now contain the runtime, DATA-31 replay and documentation updates.
+- Task: `DATA-31-QUALITY-RECOVERY-R7`; owner accepted local shadow, while the
+  private DATA-31 promotion gate remains HOLD.
 - Next READY task: `DATA-31-QUALITY-RECOVERY-R8`.
-- Next step: resolve the remaining dual-title Contract Ground Truth boundary;
-  CAM-001 remains blocked.
+- Next step: publish this branch and open the DATA-31 R7 localhost comparison;
+  CAM-001 remains blocked by the formal promotion gate.
 
 ### DATA-31 Quality Recovery R4 — 2026-08-20
 
@@ -335,7 +337,7 @@
   manual-review only; no OCR/diacritic broadening was added.
 - Evidence: `D:\document_ai_hr_dataset\.reviews\DATA-31\prediction-r7-20260821.json`,
   `report-r7-20260821.json` and `summary-r7-20260821.json`; all remain private.
-- Validation: targeted suite `113 passed`; template version governance,
+- Validation: targeted suite `118 passed`; template version governance,
   compile, `git diff --check` and LongRun state passed. Full Python suite,
   frontend suite and live Camunda E2E remain NOT MEASURED. CAM-001 stays
   blocked; no commit, push, PR, process or side effect was created.
