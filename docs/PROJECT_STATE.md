@@ -1,95 +1,74 @@
 # Project State
-
-Current milestone: UX-001 WORKSPACE REFRESH / VERIFIED LOCAL
-Checkpoint task: `UX-001`
-Next READY task: `CAM-001` is BLOCKED pending an authorized Contract upload
+Current milestone: DATA-31 QUALITY RECOVERY R7 / QUALITY HOLD
+Checkpoint task: `DATA-31-QUALITY-RECOVERY-R7`
+Next action: resolve the remaining Contract-004 dual-title Ground Truth boundary
+Next READY task: `DATA-31-QUALITY-RECOVERY-R8`
+Archive: docs/archive/PROJECT_STATE_HISTORY_2026-08-20.md
 
 Repository:
-- Branch: `codex/alg-002-canonical-parser`
-- Base at task start: `cfbdd78`; `origin/main` is now `b07c879` with a
-  Plan.md-only delta. Implementation is not committed or pushed.
-- ALG-001 PR #35 and corrective PERF-001 PR #37 are merged into `main` with CI green.
+- Branch: `codex/alg-003-contract-scan-recovery`
+- HEAD: `88473de899518a4660ed7b3dc0c13dc66978eb6b`
+- Base: `origin/main` at the same commit
+- Existing WIP is preserved; no commit, push, PR or deploy was performed.
 
-## UX-001 workspace refresh (2026-08-14)
+## Verified current result
 
-- `/workspace` now uses a product-first navy/white interface with one cyan
-  accent. Navigation exposes Overview, Intake, Review Queue, Evidence and the
-  local Camunda Tasklist without changing any API or process contract.
-- The page explains the five runtime layers, the Contract/CV/IELTS scope,
-  DATA-29 development-only metrics and the local-shadow workflow before the
-  existing operational panels. The upload workspace remains the same local,
-  private flow and is visually wider and easier to scan.
-- The hero uses the existing local no-PII context asset. It does not render a
-  Contract, CV or IELTS source document and does not introduce external asset
-  requests.
-- Responsive navigation remains available as a horizontal mobile rail;
-  reduced-motion behavior is preserved. Browser inspection at 1280px found no
-  horizontal overflow.
+- DATA-31 private R7 replay: 13/13 documents, Template-first + EasyOCR,
+  parser `structured-hr/family-layout/2.2.8`, matching policy `2.1.0`.
+- Scope: 109 active fields; 17 OUT_OF_SCOPE; 12 private IELTS semantic
+  overrides; sealed Ground Truth and DATA-29 remain unchanged.
+- Metrics: `104/109` strict, `108/109` accepted, `109/109` present,
+  `schemaErrors=0`, parser regression `0`, sensitive false acceptance `0`.
+- Gate: HOLD against `105/109` strict and `109/109` accepted.
+- CAM-001 remains BLOCKED; no process, session or real side effect was created.
 
-## PDF-001 PDF scan gate (2026-08-14)
+## Residual audit
 
-- PDF page inspection now distinguishes native, scan and mixed profiles. Mixed
-  documents route to the scan/manual-review path; the authorized corpus had 2
-  native and 1 scan PDF, with mixed covered by a PII-free regression fixture.
-- Scan rasterization is consumed page-by-page, and canonical EasyOCR uses the
-  bounded `canvas_size=1280`, `mag_ratio=1.3` configuration.
-- One cold plus 30 warm isolated samples completed with zero failures. Warm total
-  p50/p95: `9.378/12.532 s`; OCR p50/p95: `7.918/10.945 s`; peak RSS p95:
-  `1.694 GB`; peak Python heap p95: `66.2 MB`.
-- The authorized PDF_SCAN quality slice reached `9/10` exact required fields,
-  `10/10` accepted, `9/9` applicable present, classification `1/1`, and manual
-  review `1/1`. Promotion remains disabled.
-- Private aggregate report:
-  `C:\tmp\pdf001-template-scan-report-20260814-v6.json`.
+- Rejected strict residual: 1 field; 4 other differences are accepted partial
+  text.
+- Contract 2: one dual-title policy conflict and one accepted workplace
+  boundary difference.
+- CV 3: accepted skills, desired-role and experience long-field differences.
+- IELTS now reaches `20/20` strict, `20/20` accepted and `20/20` present after
+  bounded label-crop recovery for short names and the score row.
+- Contract is `42/44` exact and CV `42/45` exact. Three Contract title fields
+  now use the general professional-title fallback when no role title exists;
+  the fourth is a dual-title Ground Truth conflict. Four accepted residuals
+  remain long-field OCR/layout differences. The private overlay corrects one
+  independently verified malformed CV name without changing sealed Ground Truth.
+- Fresh crop-gate baseline at `canvas=1280, mag=1.3, preprocess=none` reached
+  `18/20` strict, `18/20` accepted and `19/20` present; 30/30 warm runs had
+  no failures. Warm p95 was `18.800 s` total, `17.994 s` OCR and `1.263 GB`
+  RSS.
+- Hi-res `canvas=2560` produced no aggregate report after more than ten
+  minutes; observed RSS peaked above `2.2 GB` and the run was stopped safely.
+  It has no accuracy result and is `NOT PROMOTED`.
+- R4 uses the existing EasyOCR backend with a bounded `label-crop-v1` fallback;
+  it does not run a second full-document OCR pass or change the default canvas.
+- R5 adds only a general CV rule: when the objective is a multi-line narrative,
+  retain the complete objective instead of reducing it to a role fragment.
+  This raised accepted coverage by one field but did not change strict exact.
+- R6 applies Product/HR-approved semantic boundaries in matching policy `2.1.0`
+  for gender suffixes, labels, bullets, ampersands and terminal punctuation.
+- R7 adds parser `2.2.8`: `job_title` prefers `role_title` and falls back to
+  `professional_title` only when the role title is absent; CV skills preserve
+  an unlabelled `Phần mềm` value instead of dropping it as layout.
+- Parser recovery is general and synthetic-tested; no document-specific value
+  or Ground Truth was added. Private semantic IELTS overrides remain the source
+  of truth for TRF/Form Number and certificate issue date.
 
-## ALG-002 canonical parser (2026-08-14)
+## Validation
 
-- Contract, CV and IELTS now share parser ID `structured-hr/family-layout`,
-  version `2.1.0`, through the existing `TemplateRegistry`.
-- User upload and the DATA-29 adapter call one promoted field parser. A delegation
-  test fails if the evidence adapter drifts back to a separate implementation.
-- Native PDF lines, CV multi-column geometry, Contract party boundaries and IELTS
-  review-only layout rules are preserved. English Contract labels remain backward
-  compatible with the Camunda acceptance fixtures.
-- Health/manifest/prediction metadata expose the same parser identity. No raw
-  field, private path or content was added to public metadata.
+- Targeted parser/version/OCR/evaluation tests: `113 passed`; template version
+  governance and compile passed; full Python suite: NOT MEASURED in this
+  checkpoint. DATA-31 R7 replay completed with `schemaErrors=0`, parser
+  regression `0` and sensitive false acceptance `0`.
+- Repository hygiene and `git diff --check`: passed.
+- Focused Ruff: passed. Full-file Ruff remains not clean because of 14 existing
+  findings in the WIP external-prediction file.
 
-## Quality and provenance
+## Next gate
 
-- Authorized Contract + CV replay is verified on all `8` documents: `87/92`
-  strict and `92/92` accepted; Contract `42/42`, CV `45/50` and `50/50` accepted.
-- Isolated Paddle replay is verified on all `4` IELTS documents: `20/20` strict
-  and `20/20` accepted with parser `structured-hr/family-layout/2.1.0`.
-- The full offline hybrid replay completed on 12 documents at `107/112` strict
-  and `112/112` accepted under matching policy `2.0.0`: Contract `42/42`, CV
-  `45/50`, IELTS `20/20`.
-- OCR exact was `29/30`, applicable presence was `99/99`, and schema errors,
-  parser regressions and sensitive false acceptance were all zero.
-- The EasyOCR child is isolated from the Paddle parent; local VietOCR config is
-  loaded explicitly. CV skill sections keep EasyOCR text to avoid line-refine
-  list noise; other narrative lines retain refinement.
-- Ground Truth, sealed prediction and sealed report were not changed.
-
-## Verification
-
-- Python `550 passed`; ALG-002 targeted tests `30 passed`; targeted Ruff and
-  parser mypy checks pass; compileall, repository hygiene and diff checks pass.
-- Web build and rendered tests `15/15`; ESLint `0` errors with `22` warnings;
-  production dependency audit reports `0` vulnerabilities.
-- Full-repository Ruff/mypy retain legacy findings outside ALG-002 (105 Ruff
-  findings and 6 unused-ignore findings); no unrelated cleanup was mixed in.
-
-## Active product/runtime state
-
-- Default runtime remains Template-first + EasyOCR; Paddle is explicit rollback.
-- `autoContinueEnabled=false`; HRIS and notifications remain simulated.
-- The original dirty worktree and unrelated CORS/VITE/CCCD files are untouched;
-  PDF-001 changes are limited to the canonical PDF intake, EasyOCR adapter and
-  aggregate benchmark runner.
-- CCCD held-out, Contract images and production pilot remain closed.
-
-Next action: resolve the blocked authorized Contract E2E (`CAM-001`). Production
-pilot, CCCD held-out and Contract-image expansion remain closed until their
-independent data/quality gates pass.
-
-Archive: prior state is in `docs/archive/PROJECT_STATE_HISTORY_2026-08-13.md`.
+The 1280 default remains active. DATA-31 remains HOLD at `104/109` strict and
+`108/109` accepted; CAM-001 must not be reopened until `105/109` and `109/109`
+both pass.
