@@ -40,6 +40,7 @@ from hcns_agent.templates.service import (
     _LazyTemplatePaddleOcrEngine,
     build_default_template_processing_service,
 )
+from hcns_agent.templates.structured_hr import extract_structured_hr_fields
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -142,6 +143,257 @@ def ielts_lines() -> list[str]:
         "Overall band score: 7.5",
         "Date of test: 01/08/2026",
     ]
+
+
+def test_ielts_layout_parser_recovers_inline_ocr_labels() -> None:
+    fields = extract_structured_hr_fields(
+        {
+            "pages": [
+                {
+                    "pageIndex": 0,
+                    "blocks": [
+                        {"text": "IELTS Academic"},
+                        {"text": "Family Name: TEST"},
+                        {"text": "First Name(s): MINH CHAU"},
+                        {"text": "Form Number: AC12DE3456FG789012"},
+                        {"text": "Overall Band Score: 7.5"},
+                        {"text": "Test Date: 06/JUN/2026"},
+                    ],
+                }
+            ]
+        },
+        "ielts",
+        ocr=True,
+    )
+
+    assert fields["recipient_name"]["value"] == "TEST MINH CHAU"
+    assert fields["credential_id"]["value"] == "AC12DE3456FG789012"
+    assert fields["credential_type"]["value"] == "ACADEMIC"
+    assert fields["overall_score"]["value"] == "7.5"
+    assert fields["issue_date"]["normalizedValue"] == "2026-06-06"
+
+
+def test_ielts_layout_parser_accepts_short_inline_family_name() -> None:
+    fields = extract_structured_hr_fields(
+        {
+            "pages": [
+                {
+                    "pageIndex": 0,
+                    "blocks": [
+                        {"text": "IELTS Test Report Form ACADEMIC"},
+                        {"text": "Family Name LE"},
+                        {"text": "First Name(s) GIA BAO"},
+                        {"text": "Overall Band Score 7.0"},
+                    ],
+                }
+            ]
+        },
+        "ielts",
+        ocr=True,
+    )
+
+    assert fields["recipient_name"]["value"] == "LE GIA BAO"
+    assert fields["overall_score"]["value"] == "7.0"
+
+
+def test_cv_ocr_preserves_source_conjunction_in_desired_role() -> None:
+    fields = extract_structured_hr_fields(
+        {
+            "pages": [
+                {
+                    "pageIndex": 0,
+                    "blocks": [
+                        {"text": "Mục tiêu nghề nghiệp"},
+                        {"text": "Vị trí Senior Data Analyst và Analytics Engineer"},
+                        {"text": "Kinh nghiệm"},
+                    ],
+                }
+            ]
+        },
+        "cv",
+        ocr=True,
+    )
+
+    assert fields["desired_role"]["value"] == "Senior Data Analyst và Analytics Engineer"
+
+
+def test_cv_ocr_keeps_multiline_objective_as_long_field() -> None:
+    fields = extract_structured_hr_fields(
+        {
+            "pages": [
+                {
+                    "pageIndex": 0,
+                    "blocks": [
+                        {"text": "Mục tiêu nghề nghiệp"},
+                        {"text": "Lập trình viên Backend có 5 năm kinh nghiệm phát triển API."},
+                        {"text": "Định hướng trở thành Technical Lead cho sản phẩm lớn."},
+                        {"text": "Kinh nghiệm"},
+                    ],
+                }
+            ]
+        },
+        "cv",
+        ocr=True,
+    )
+
+    assert fields["desired_role"]["value"] == (
+        "Lập trình viên Backend có 5 năm kinh nghiệm phát triển API. "
+        "Định hướng trở thành Technical Lead cho sản phẩm lớn."
+    )
+
+
+def test_ielts_layout_parser_reads_grouped_results_and_printed_type() -> None:
+    fields = extract_structured_hr_fields(
+        {
+            "pages": [
+                {
+                    "pageIndex": 0,
+                    "blocks": [
+                        {"text": "Test Report Form ACADEMIC"},
+                        {"text": "Family Name: TEST"},
+                        {"text": "First Name(s): USER"},
+                        {"text": "Candidate Number: AC12DE3456FG789012"},
+                        {"text": "Form Number AC12DE3456FG789012"},
+                        {"text": "Date 06/JUN/2026 Test Report"},
+                        {"text": "Validation stamp AC12DE3456FG789012"},
+                        {
+                            "text": (
+                                "Listening 7.5 Reading 6.5 Writing 6.0 "
+                                "Speaking 6.5 Overall Band 6.5 CEFR B2"
+                            )
+                        },
+                        {"text": "Date: 06/JUN/2026"},
+                    ],
+                }
+            ]
+        },
+        "ielts",
+        ocr=True,
+    )
+
+    assert fields["credential_type"]["value"] == "ACADEMIC"
+    assert fields["credential_id"]["value"] == "AC12DE3456FG789012"
+    assert fields["overall_score"]["value"] == "6.5"
+
+
+def test_ielts_layout_parser_recovers_merged_footer_form_number() -> None:
+    fields = extract_structured_hr_fields(
+        {
+            "pages": [
+                {
+                    "pageIndex": 0,
+                    "blocks": [
+                        {"text": "IELTS ACADEMIC"},
+                        {"text": "Family Name: NGUYEN"},
+                        {"text": "First Name(s): AN"},
+                        {"text": "Candidate Number: 123456"},
+                        {
+                            "text": (
+                                "The validity of this IELTS Test Report Form can be "
+                                "verified online. "
+                                "Form Number: 24VN123456NGUA001A"
+                            )
+                        },
+                        {"text": "Overall Band Score: 7.0"},
+                        {"text": "Date: 15/JAN/2026"},
+                    ],
+                }
+            ]
+        },
+        "ielts",
+        ocr=True,
+    )
+
+    assert fields["recipient_name"]["value"] == "NGUYEN AN"
+    assert fields["credential_id"]["value"] == "24VN123456NGUA001A"
+    assert fields["credential_type"]["value"] == "ACADEMIC"
+    assert fields["overall_score"]["value"] == "7.0"
+    assert fields["issue_date"]["normalizedValue"] == "2026-01-15"
+
+
+def test_ielts_layout_parser_repairs_digit_confusion_with_structural_evidence() -> None:
+    fields = extract_structured_hr_fields(
+        {
+            "pages": [
+                {
+                    "pageIndex": 0,
+                    "blocks": [
+                        {"text": "IELTS Academic"},
+                        {"text": "Family Name: TRAN"},
+                        {"text": "First Name(s): BINH"},
+                        {"text": "Candidate Number: 103156"},
+                        {"text": "Form Number Z4VN1O3I56NGUAO01A"},
+                        {"text": "Overall Band Score 8.0"},
+                        {"text": "Date: 20/FEB/2026"},
+                    ],
+                }
+            ]
+        },
+        "ielts",
+        ocr=True,
+    )
+
+    assert fields["recipient_name"]["value"] == "TRAN BINH"
+    assert fields["credential_id"]["value"] == "24VN103156NGUA001A"
+    assert fields["overall_score"]["value"] == "8.0"
+
+
+def test_ielts_layout_parser_rejects_digit_confusion_without_matching_evidence() -> None:
+    fields = extract_structured_hr_fields(
+        {
+            "pages": [
+                {
+                    "pageIndex": 0,
+                    "blocks": [
+                        {"text": "IELTS Academic"},
+                        {"text": "Family Name: TRAN"},
+                        {"text": "First Name(s): BINH"},
+                        {"text": "Candidate Number: 999999"},
+                        {"text": "Form Number Z4VN1O3I56NGUAO01A"},
+                        {"text": "Overall Band Score 8.0"},
+                        {"text": "Date: 20/FEB/2026"},
+                    ],
+                }
+            ]
+        },
+        "ielts",
+        ocr=True,
+    )
+
+    assert fields["credential_id"]["value"] is None
+
+
+def test_ielts_layout_parser_rejects_arbitrary_score_row_and_prose_candidates() -> None:
+    fields = extract_structured_hr_fields(
+        {
+            "pages": [
+                {
+                    "pageIndex": 0,
+                    "blocks": [
+                        {"text": "Test Report Form ACADEMIC"},
+                        {"text": "Family Name: LE"},
+                        {"text": "First Name(s): HOA"},
+                        {"text": "Candidate Number: 654321"},
+                        {
+                            "text": (
+                                "Listening 8.0 Reading 7.5 Writing 7.0 Speaking 8.0 "
+                                "Overall Band Score 7.5"
+                            )
+                        },
+                        {
+                            "text": "The validity of this Test Report Form can be verified online"
+                        },
+                        {"text": "Date: 10/MAR/2026"},
+                    ],
+                }
+            ]
+        },
+        "ielts",
+        ocr=True,
+    )
+
+    assert fields["credential_id"]["value"] is None
+    assert fields["overall_score"]["value"] == "7.5"
 
 
 def process(lines: list[str], filename: str = "opaque-upload.docx") -> dict[str, object]:
@@ -264,6 +516,43 @@ def test_probation_contract_detection_ignores_vietnamese_diacritics() -> None:
     assert response["quality"]["recommendedAction"] == "MANUAL_REVIEW"
 
 
+def test_probation_contract_title_schema_preserves_both_titles() -> None:
+    response = process(
+        [
+            "HỢP ĐỒNG THỬ VIỆC",
+            "THỜI GIAN THỬ VIỆC: 60 ngày",
+            "Chức danh chuyên môn: Chuyên viên kỹ thuật",
+            "Chức vụ/Vị trí: Trưởng nhóm kỹ thuật; quản lý theo phân công",
+        ],
+        filename="contract.docx",
+    )
+
+    assert response["data"]["schemaVersion"] == "2.1.0"
+    assert response["data"]["professional_title"] == "Chuyên viên kỹ thuật"
+    assert response["data"]["role_title"] == "Trưởng nhóm kỹ thuật"
+    assert response["data"]["job_title"] == "Trưởng nhóm kỹ thuật"
+
+
+def test_probation_contract_role_title_prefers_employee_party() -> None:
+    fields = extract_structured_hr_fields(
+        {
+            "pages": [{
+                "blocks": [
+                    {"text": "Bên A"},
+                    {"text": "Chức vụ: Tổng Giám đốc"},
+                    {"text": "Bên B"},
+                    {"text": "Chức vụ: Nhân viên Hành chính"},
+                    {"text": "Hai bên thỏa thuận"},
+                ]
+            }]
+        },
+        "contract",
+        ocr=False,
+    )
+
+    assert fields["job_title"]["value"] == "Nhân viên Hành chính"
+
+
 def test_id_front_template_rejects_back_side() -> None:
     service = build_default_template_processing_service()
     with pytest.raises(TemplateUnsupportedError):
@@ -307,7 +596,9 @@ def test_lazy_ocr_engine_initializes_once_under_concurrency(
         monkeypatch.setattr(
             EasyOcrEngine,
             "from_default",
-            classmethod(lambda cls, *, device: build_delegate(device=device)),
+            classmethod(
+                lambda cls, *, device, **_profile: build_delegate(device=device)
+            ),
         )
         engine = _LazyTemplateEasyOcrEngine()
     else:

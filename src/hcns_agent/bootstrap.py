@@ -38,12 +38,13 @@ def build_default_intake(
     ocr_engine: OcrEngine,
     *,
     safety_policy: FileSafetyPolicy | None = None,
+    pdf_dpi: int = 150,
 ) -> UniversalDocumentIntake:
     pdf_inspector = PyMuPdfInspector()
     registry = DocumentParserRegistry()
     registry.register(ImageDocumentParser(ocr_engine))
     registry.register(NativePdfDocumentParser())
-    registry.register(ScannedPdfDocumentParser(PyMuPdfRasterizer(), ocr_engine))
+    registry.register(ScannedPdfDocumentParser(PyMuPdfRasterizer(dpi=pdf_dpi), ocr_engine))
     registry.register(DocxDocumentParser())
     registry.register(XlsxDocumentParser())
     registry.register(PptxDocumentParser())

@@ -136,14 +136,28 @@ class _LazyTemplateEasyOcrEngine:
 
     backend = "easyocr"
 
-    def __init__(self, *, device: str = "cpu") -> None:
+    def __init__(
+        self,
+        *,
+        device: str = "cpu",
+        canvas_size: int = 1280,
+        mag_ratio: float = 1.3,
+        preprocess_profile: str = "none",
+        decoder: str = "greedy",
+        language_profile: str = "vi",
+    ) -> None:
         self._device = device
+        self._canvas_size = canvas_size
+        self._mag_ratio = mag_ratio
+        self._preprocess_profile = preprocess_profile
+        self._decoder = decoder
+        self._language_profile = language_profile
         self._delegate: OcrEngine | None = None
         self._lock = threading.Lock()
 
     @property
     def name(self) -> str:
-        return "easyocr/vi-greedy"
+        return f"easyocr/{self._language_profile}-{self._decoder}"
 
     @property
     def model_loaded(self) -> bool:
@@ -175,7 +189,14 @@ class _LazyTemplateEasyOcrEngine:
                     try:
                         from hcns_agent.adapters.easyocr import EasyOcrEngine
 
-                        self._delegate = EasyOcrEngine.from_default(device=self._device)
+                        self._delegate = EasyOcrEngine.from_default(
+                            device=self._device,
+                            canvas_size=self._canvas_size,
+                            mag_ratio=self._mag_ratio,
+                            preprocess_profile=self._preprocess_profile,
+                            decoder=self._decoder,
+                            language_profile=self._language_profile,
+                        )
                     except (ImportError, RuntimeError) as error:
                         raise TemplateTechnicalError("OCR_RUNTIME_UNAVAILABLE") from error
 
@@ -421,6 +442,12 @@ def build_local_template_processing_service(
     *,
     device: str = "cpu",
     ocr_backend: str | None = None,
+    pdf_dpi: int = 150,
+    easyocr_canvas_size: int = 1280,
+    easyocr_mag_ratio: float = 1.3,
+    easyocr_preprocess_profile: str = "none",
+    easyocr_decoder: str = "greedy",
+    easyocr_language_profile: str = "vi",
 ) -> TemplateProcessingService:
     selected_backend = (
         ocr_backend
@@ -430,11 +457,18 @@ def build_local_template_processing_service(
     if selected_backend == "paddle":
         ocr_engine: OcrEngine = _LazyTemplatePaddleOcrEngine(device=device)
     elif selected_backend == "easyocr":
-        ocr_engine = _LazyTemplateEasyOcrEngine(device=device)
+        ocr_engine = _LazyTemplateEasyOcrEngine(
+            device=device,
+            canvas_size=easyocr_canvas_size,
+            mag_ratio=easyocr_mag_ratio,
+            preprocess_profile=easyocr_preprocess_profile,
+            decoder=easyocr_decoder,
+            language_profile=easyocr_language_profile,
+        )
     else:
         raise ValueError(f"Unsupported local OCR backend: {selected_backend}")
     return TemplateProcessingService(
-        intake=build_default_intake(ocr_engine),
+        intake=build_default_intake(ocr_engine, pdf_dpi=pdf_dpi),
         registry=build_default_template_registry(),
         ocr_engine=ocr_engine,
     )

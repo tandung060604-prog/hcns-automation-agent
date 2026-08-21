@@ -16,6 +16,9 @@ const SHOW_GROUND_TRUTH_REVIEW = SHOW_ADVANCED_DIAGNOSTICS &&
 const SHOW_EXTERNAL_DATASET_REVIEW =
   SHOW_ADVANCED_DIAGNOSTICS &&
   import.meta.env.VITE_SHOW_EXTERNAL_DATASET_REVIEW === "true";
+const SHOW_DATA31_COVERAGE_REVIEW =
+  SHOW_ADVANCED_DIAGNOSTICS &&
+  import.meta.env.VITE_SHOW_DATA31_COVERAGE_REVIEW === "true";
 const SHOW_LEGACY_EXPLORER_TABS =
   SHOW_ADVANCED_DIAGNOSTICS &&
   import.meta.env.VITE_SHOW_LEGACY_EXPLORER_TABS === "true";
@@ -1928,7 +1931,7 @@ function TemplateComparisonPanel({ result }: { result: TemplateProcessingResult 
           <span>Device {result.processing.ocrDevice}</span>
         ) : null}
         <span>Profile {result.processing.ocrProfile ?? "native-text"}</span>
-        <span>Matching {comparison?.matchingPolicyVersion ?? "2.0.0"}</span>
+        <span>Matching {comparison?.matchingPolicyVersion ?? "2.1.0"}</span>
       </div>
 
       <form onSubmit={compare}>
@@ -2220,7 +2223,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const groundTruthDocumentExcluded =
     groundTruthReviewDocument?.disposition === "OUT_OF_SCOPE_BACK";
   const [evidenceMode, setEvidenceMode] =
-    useState<"overview" | "data29" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "ocr-ho-v2-shadow" | "ocr-ho-v2-diagnostic">(
+    useState<"overview" | "data29" | "data31-coverage" | "cccd" | "external-dataset" | "external-dataset-prediction" | "external-dataset-prediction-v13" | "ocr-ho-v2-shadow" | "ocr-ho-v2-diagnostic">(
       "data29",
     );
   const [evidenceInspectorView, setEvidenceInspectorView] =
@@ -5546,6 +5549,16 @@ export default function Dashboard({ data }: { data: DashboardData }) {
           >
             DATA-29 · 12 tài liệu metric · 3 Contract · 5 CV · 4 IELTS
           </button>
+          {SHOW_DATA31_COVERAGE_REVIEW ? (
+            <button
+              className={evidenceMode === "data31-coverage" ? "active" : ""}
+              onClick={() => setEvidenceMode("data31-coverage")}
+              role="tab"
+              aria-selected={evidenceMode === "data31-coverage"}
+            >
+              DATA-31 · Bổ sung GT còn thiếu / semantics IELTS
+            </button>
+          ) : null}
           {SHOW_OCR_HO_DIAGNOSTIC_GT ? (
             <button
               className={evidenceMode === "ocr-ho-v2-diagnostic" ? "active" : ""}
@@ -5609,6 +5622,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         </div>
         {evidenceMode === "data29" ? (
           <ExternalDatasetPrediction version="data29" />
+        ) : SHOW_DATA31_COVERAGE_REVIEW && evidenceMode === "data31-coverage" ? (
+          <ExternalDatasetReview data31 />
         ) : evidenceMode === "overview" ? (
           <LocalEvidenceOverview
             onOpen={(mode) => setEvidenceMode(mode)}

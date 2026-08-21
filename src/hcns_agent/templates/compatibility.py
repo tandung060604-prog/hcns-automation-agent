@@ -19,8 +19,14 @@ CANONICAL_TEMPLATE_IDS = {
 
 CANONICAL_TEMPLATE_VERSIONS = {
     "cv-v2": "2.0",
-    "probation-contract-v2": "2.0",
+    "probation-contract-v2": "2.1",
     "ielts-certificate-v2": "2.0",
+}
+
+CANONICAL_SCHEMA_VERSIONS = {
+    "cv-v2": "2.0.0",
+    "probation-contract-v2": "2.1.0",
+    "ielts-certificate-v2": "2.0.0",
 }
 
 CANONICAL_FIELDS = {
@@ -31,7 +37,8 @@ CANONICAL_FIELDS = {
     "probation-contract-v2": (
         "contract_number", "contract_sign_date", "effective_date", "probation_end_date",
         "employer_name", "employer_representative", "employee_name", "employee_id_number",
-        "job_title", "workplace", "weekly_hours", "probation_salary_monthly",
+        "professional_title", "role_title", "job_title", "workplace", "weekly_hours",
+        "probation_salary_monthly",
         "allowances_summary", "salary_payment_schedule",
     ),
     "ielts-certificate-v2": (
@@ -100,7 +107,7 @@ def canonicalize_template_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
 
     result["templateId"] = target_id
     result["templateVersion"] = CANONICAL_TEMPLATE_VERSIONS[target_id]
-    result["schemaVersion"] = "2.0.0"
+    result["schemaVersion"] = CANONICAL_SCHEMA_VERSIONS[target_id]
     result["data"] = _canonicalize_data(result.get("data"), legacy_id)
     result["quality"] = _canonicalize_quality(result.get("quality"), legacy_id)
     result["detection"] = _canonicalize_detection(result.get("detection"), target_id)

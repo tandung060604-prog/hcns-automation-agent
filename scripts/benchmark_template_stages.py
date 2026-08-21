@@ -59,6 +59,14 @@ def parse_args() -> argparse.Namespace:
         dest="input_classes",
     )
     parser.add_argument("--ocr-backend", choices=("easyocr", "paddle"), default="easyocr")
+    parser.add_argument("--pdf-dpi", type=int, default=150)
+    parser.add_argument("--easyocr-canvas-size", type=int, default=1280)
+    parser.add_argument("--easyocr-mag-ratio", type=float, default=1.3)
+    parser.add_argument(
+        "--easyocr-preprocess-profile",
+        choices=("none", "content-roi-autocontrast-v1"),
+        default="none",
+    )
     parser.add_argument("--authorization-confirmed", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--resume", action="store_true")
@@ -120,7 +128,13 @@ def main() -> int:
                 failures[code] = failures.get(code, 0) + count
             continue
         content = source_path.read_bytes()
-        service = build_local_template_processing_service(ocr_backend=args.ocr_backend)
+        service = build_local_template_processing_service(
+            ocr_backend=args.ocr_backend,
+            pdf_dpi=args.pdf_dpi,
+            easyocr_canvas_size=args.easyocr_canvas_size,
+            easyocr_mag_ratio=args.easyocr_mag_ratio,
+            easyocr_preprocess_profile=args.easyocr_preprocess_profile,
+        )
         cold_root = work_root / source_format.value / "cold"
         cold = _load_record(cold_root) if args.resume else None
         cold_memory = _load_memory_record(cold_root) if args.resume else None
@@ -208,6 +222,10 @@ def main() -> int:
         "runtime": {
             "profile": "template-first",
             "ocrBackend": args.ocr_backend,
+            "pdfDpi": args.pdf_dpi,
+            "easyocrCanvasSize": args.easyocr_canvas_size,
+            "easyocrMagRatio": args.easyocr_mag_ratio,
+            "easyocrPreprocessProfile": args.easyocr_preprocess_profile,
             "python": platform.python_version(),
             "machine": platform.machine(),
             "easyocrVersion": _package_version("easyocr"),
@@ -381,6 +399,14 @@ def _run_single_child(
         str(args.warm_runs),
         "--ocr-backend",
         str(args.ocr_backend),
+        "--pdf-dpi",
+        str(args.pdf_dpi),
+        "--easyocr-canvas-size",
+        str(args.easyocr_canvas_size),
+        "--easyocr-mag-ratio",
+        str(args.easyocr_mag_ratio),
+        "--easyocr-preprocess-profile",
+        str(args.easyocr_preprocess_profile),
         "--authorization-confirmed",
         "--overwrite",
         "--single-run-source",
@@ -445,7 +471,13 @@ def _run_single_sample(args: argparse.Namespace) -> int:
     if run_root.exists():
         raise SystemExit("Single-run benchmark root already exists")
     content = source.read_bytes()
-    service = build_local_template_processing_service(ocr_backend=args.ocr_backend)
+    service = build_local_template_processing_service(
+        ocr_backend=args.ocr_backend,
+        pdf_dpi=args.pdf_dpi,
+        easyocr_canvas_size=args.easyocr_canvas_size,
+        easyocr_mag_ratio=args.easyocr_mag_ratio,
+        easyocr_preprocess_profile=args.easyocr_preprocess_profile,
+    )
     try:
         if args.prime_single_run:
             _prime_service(service, source.suffix, content)

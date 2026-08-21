@@ -1808,6 +1808,9 @@ footer { display: flex; justify-content: space-between; padding: 26px clamp(24px
 .external-review-status { display: grid; gap: 4px; text-align: right; color: var(--muted); }
 .external-review-status strong { color: var(--accent); font-size: 1.1rem; }
 .external-review-message { padding: 10px 12px; border: 1px solid #9cc9ad; background: #effaf2; color: #14532d; }
+.external-review-semantics { display: grid; gap: 8px; margin: 10px 0; }
+.external-review-semantics > div { display: grid; grid-template-columns: minmax(160px, 220px) 1fr; gap: 10px; }
+.external-review-semantics span { color: #365a45; }
 .camunda-case-status { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 14px; border: 1px solid #9cc9ad; background: #effaf2; }
 .camunda-case-status > div { display: grid; gap: 4px; }
 .camunda-case-status > div:last-child { justify-items: end; }

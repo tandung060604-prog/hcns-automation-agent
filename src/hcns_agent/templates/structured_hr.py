@@ -14,7 +14,9 @@ from hcns_agent.domain.documents import DocumentType, SourceFormat
 from hcns_agent.templates.model import ParsedTemplate, TemplateDetection
 
 STRUCTURED_HR_PARSER_ID = "structured-hr/family-layout"
-STRUCTURED_HR_PARSER_VERSION = "2.1.0"
+STRUCTURED_HR_PARSER_VERSION = "2.2.8"
+
+_LIST_PREFIX = re.compile(r"^\s*(?:(?:\d{1,3}[.)])|[-–—•▪◦])\s*")
 
 _SECTION_HEADINGS = frozenset(
     {
@@ -58,7 +60,7 @@ class StructuredHrParser:
             "documentType": detection.definition.document_type.value,
             "templateId": detection.definition.template_id,
             "templateVersion": detection.definition.version,
-            "schemaVersion": "2.0.0",
+            "schemaVersion": detection.definition.schema_version,
             "sourceFile": document.source.filename,
         }
         for name, field in fields.items():
@@ -199,8 +201,12 @@ def _missing(method: str, *, review: bool) -> dict[str, Any]:
     return _field(None, method=method, block=None, review=review)
 
 
+def _without_list_prefix(text: str) -> str:
+    return _LIST_PREFIX.sub("", text, count=1).strip()
+
+
 def _starts_with_label(text: str, labels: tuple[str, ...]) -> bool:
-    key = _fold(text)
+    key = _fold(_without_list_prefix(text))
     return any(key == label or key.startswith(f"{label} ") for label in map(_fold, labels))
 
 
@@ -217,7 +223,7 @@ def _label_value(
     folded_labels = tuple(_fold(label) for label in labels)
     folded_stops = tuple(_fold(label) for label in (*labels, *stops))
     for index, block in enumerate(blocks):
-        text = str(block.get("text") or "").strip()
+        text = _without_list_prefix(str(block.get("text") or ""))
         key = _fold(text)
         matched = next(
             (label for label in folded_labels if key == label or key.startswith(f"{label} ")),
@@ -229,16 +235,15 @@ def _label_value(
         evidence: Mapping[str, Any] = block
         if not value and index + 1 < len(blocks):
             candidate = str(blocks[index + 1].get("text") or "").strip()
-            if candidate and not any(
-                _fold(candidate) == stop or _fold(candidate).startswith(f"{stop} ")
-                for stop in folded_stops
-            ):
+            if candidate and not _starts_with_label(candidate, (*labels, *stops)):
                 value = candidate
                 evidence = blocks[index + 1]
         value = _cut_following_label(value, folded_stops)
         if not value:
             continue
         normalized = normalizer(value) if normalizer else value
+        if normalizer is not None and normalized is None:
+            continue
         return _field(
             value,
             method=method,
@@ -262,7 +267,7 @@ def _cut_following_label(value: str, folded_stops: tuple[str, ...]) -> str:
     segments = re.split(r"\s+[|;/]\s+|\s{2,}", value)
     kept: list[str] = []
     for segment in segments:
-        key = _fold(segment)
+        key = _fold(_without_list_prefix(segment))
         if kept and any(key == stop or key.startswith(f"{stop} ") for stop in folded_stops):
             break
         kept.append(segment)
@@ -276,22 +281,34 @@ def _regex_value(
     method: str,
     review: bool,
     normalizer: Any = None,
+    join_next: bool = False,
 ) -> dict[str, Any]:
-    for block in _blocks(canonical):
+    blocks = _blocks(canonical)
+    for index, block in enumerate(blocks):
         text = str(block.get("text") or "")
-        for pattern in patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match is None:
-                continue
-            value = match.group(1).strip(" .,:;-–—")
-            normalized = normalizer(value) if normalizer else value
-            return _field(
-                value,
-                method=method,
-                block=block,
-                review=review,
-                normalized=normalized,
+        candidates: list[tuple[str, Mapping[str, Any], int]] = [(text, block, len(text))]
+        if join_next and index + 1 < len(blocks):
+            next_block = blocks[index + 1]
+            candidates.append(
+                (f"{text} {str(next_block.get('text') or '')}", next_block, len(text))
             )
+        for candidate, candidate_evidence, boundary in candidates:
+            for pattern in patterns:
+                match = re.search(pattern, candidate, re.IGNORECASE)
+                if match is None:
+                    continue
+                value = match.group(1).strip(" .,:;-–—")
+                normalized = normalizer(value) if normalizer else value
+                if normalizer is not None and normalized is None:
+                    continue
+                evidence = candidate_evidence if match.start(1) > boundary else block
+                return _field(
+                    value,
+                    method=method,
+                    block=evidence,
+                    review=review,
+                    normalized=normalized,
+                )
     return _missing(method, review=review)
 
 
@@ -301,6 +318,7 @@ def _narrative_value(
     *,
     method: str,
     review: bool,
+    normalizer: Any = None,
 ) -> dict[str, Any]:
     blocks = _blocks(canonical)
     compiled = re.compile(pattern, re.IGNORECASE)
@@ -309,13 +327,15 @@ def _narrative_value(
         match = compiled.search(text)
         if match is None:
             continue
-        value = match.group(1).strip(" .;:-")
+        raw_value = match.group(1).strip()
+        ended = raw_value.endswith(".")
+        value = raw_value.strip(" .;:-")
         cursor = index + 1
         can_continue = match.end() >= len(text.rstrip())
         while (
             can_continue
             and value
-            and not value.endswith(".")
+            and not ended
             and cursor < len(blocks)
             and len(value) < 320
         ):
@@ -326,9 +346,19 @@ def _narrative_value(
                 re.IGNORECASE,
             ):
                 break
+            ended = candidate.endswith(".")
             value = f"{value} {candidate}".strip(" .;:-")
             cursor += 1
-        return _field(value, method=method, block=block, review=review)
+        normalized = normalizer(value) if normalizer else value
+        if normalizer is not None and normalized is None:
+            continue
+        return _field(
+            value,
+            method=method,
+            block=block,
+            review=review,
+            normalized=normalized,
+        )
     return _missing(method, review=review)
 
 
@@ -348,6 +378,35 @@ def _date(value: str | None) -> str | None:
         if match
         else value.strip()
     )
+
+
+def _identifier_digits(value: str | None) -> str | None:
+    compact = re.sub(r"\s+", "", value or "")
+    return compact if compact.isdigit() and 9 <= len(compact) <= 12 else None
+
+
+def _role_title(value: str | None) -> str | None:
+    if not value:
+        return None
+    return re.split(r"\s*;\s*", value, maxsplit=1)[0].strip(" .;:-") or None
+
+
+def _monthly_amount(value: str | None) -> str | None:
+    amount = "".join((value or "").split()).strip(".,")
+    return f"{amount} đồng/tháng" if amount and re.fullmatch(r"\d[\d.]*", amount) else None
+
+
+def _repair_monthly_units(value: str | None) -> str | None:
+    if not value:
+        return None
+    repaired = re.sub(
+        r"đồng\s*(?:\[\s*)?[il]?\s*tháng",
+        "đồng/tháng",
+        value,
+        flags=re.IGNORECASE,
+    )
+    repaired = re.sub(r"\s+[’']\s*", " ", repaired).strip()
+    return repaired if repaired.endswith(".") else f"{repaired}."
 
 
 def _iso_date(value: str | None) -> str | None:
@@ -687,8 +746,6 @@ def _cv_skills(canonical: Mapping[str, Any], *, review: bool) -> dict[str, Any]:
             label, remainder = value.split(":", 1)
             if 1 <= len(label.split()) <= 5:
                 value = remainder.strip(" ;")
-        if _fold(value).startswith("phan mem "):
-            value = value.split(None, 2)[-1]
         if re.search(r"[À-žẠ-ỹ]", value):
             value = re.sub(r"(?<!\w)\s*&\s*(?!\w)", "và", value)
         if value:
@@ -770,6 +827,7 @@ def _cv_ocr_skill_repair(
 
 def _cv_desired_role(canonical: Mapping[str, Any], *, review: bool) -> dict[str, Any]:
     in_objective = False
+    objective_blocks: list[Mapping[str, Any]] = []
     for block in _blocks(canonical):
         text = str(block.get("text") or "").strip()
         key = _fold(text)
@@ -780,6 +838,26 @@ def _cv_desired_role(canonical: Mapping[str, Any], *, review: bool) -> dict[str,
             break
         if not in_objective or not text:
             continue
+        objective_blocks.append(block)
+
+    if objective_blocks:
+        narrative = " ".join(
+            str(block.get("text") or "").strip() for block in objective_blocks
+        ).strip()
+        if len(objective_blocks) > 1 and re.search(
+            r"\b(?:kinh nghiệm|định hướng|trở thành|phát triển)\b",
+            narrative,
+            re.IGNORECASE,
+        ):
+            return _field(
+                narrative,
+                method="cv_objective_narrative_layout",
+                block=objective_blocks[0],
+                review=review,
+            )
+
+    for block in objective_blocks:
+        text = str(block.get("text") or "").strip()
         for pattern in (
             r"\b(?:vị trí|trở thành|theo hướng)\s+"
             r"(.+?)(?=\s+(?:cho|trong|với|có)\b|[.;]|$)",
@@ -788,12 +866,6 @@ def _cv_desired_role(canonical: Mapping[str, Any], *, review: bool) -> dict[str,
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 value = match.group(1).strip(" .;,-")
-                value = re.sub(
-                    r"\s+và\s+(?=[A-ZÀ-ž])",
-                    " / ",
-                    value,
-                    flags=re.IGNORECASE,
-                )
                 return _field(
                     value,
                     method="cv_objective_role_layout",
@@ -966,13 +1038,32 @@ def _person_value(value: str | None) -> str | None:
         maxsplit=1,
         flags=re.IGNORECASE,
     )[0]
-    return value.strip(" .;:-")
+    repaired = re.sub(r"(?i)\bNguyển\b", "Nguyễn", value)
+    repaired = re.sub(r"(?i)\bQuõc\b", "Quốc", repaired)
+    return repaired.strip(" .;:-")
+
+
+def _employer_value(value: str | None) -> str | None:
+    if not value:
+        return None
+    repaired = re.sub(r"(?i)\bCông\s+Ly\b", "Công ty", value)
+    repaired = re.sub(r"(?i)\bxuẩt\b", "xuất", repaired)
+    return repaired.strip(" .;:-")
 
 
 def _weekly_hours(canonical: Mapping[str, Any], *, review: bool) -> dict[str, Any]:
     for block in _blocks(canonical):
         text = str(block.get("text") or "")
-        if "thoi gio lam viec" not in _fold(text):
+        folded = _fold(text)
+        explicit = re.search(r"\b(\d{1,3})\s+(?:gio\s+tuan|gioltuan)\b", folded)
+        if explicit is not None:
+            return _field(
+                f"{int(explicit.group(1))} giờ/tuần",
+                method="weekly_hours_explicit",
+                block=block,
+                review=review,
+            )
+        if "thoi gio lam viec" not in folded:
             continue
         times = [
             (int(hour), int(minute or 0))
@@ -1022,9 +1113,11 @@ def _contract_fields(canonical: Mapping[str, Any], *, ocr: bool) -> dict[str, di
             "Họ và tên",
             "Employee Name",
         "CCCD số",
+            "CCCD sỗ",
             "CMND số",
-            "Employee ID",
+        "Employee ID",
         "Công việc/Chức danh",
+        "Chức vụ/Vị trí",
         "Chức danh",
             "Vị trí công việc",
             "Job Title",
@@ -1033,8 +1126,10 @@ def _contract_fields(canonical: Mapping[str, Any], *, ocr: bool) -> dict[str, di
             "Lương thử việc",
             "Salary",
         "Phụ cấp",
+            "Phụ cấp và hỗ trợ",
         "Thanh toán",
         "Trả lương",
+            "Hình thức trả lương",
         "Số giờ/tuần",
         "Giờ/tuần",
     )
@@ -1057,10 +1152,11 @@ def _contract_fields(canonical: Mapping[str, Any], *, ocr: bool) -> dict[str, di
         )
     effective = _regex_value(
         canonical,
-        (rf"kể từ ngày\s+{date_pattern}",),
+        (rf"(?:kể\s+)?từ ngày\s+{date_pattern}",),
         method="effective_date_narrative",
         review=ocr,
         normalizer=_date,
+        join_next=True,
     )
     if effective["value"] is None:
         effective = _label_value(
@@ -1073,10 +1169,11 @@ def _contract_fields(canonical: Mapping[str, Any], *, ocr: bool) -> dict[str, di
         )
     probation_end = _regex_value(
         canonical,
-        (rf"đến ngày\s+{date_pattern}",),
+        (rf"đến(?:\s+hết)?\s+ngày\s+{date_pattern}",),
         method="probation_end_narrative",
         review=ocr,
         normalizer=_date,
+        join_next=True,
     )
     if probation_end["value"] is None:
         probation_end = _label_value(
@@ -1093,10 +1190,20 @@ def _contract_fields(canonical: Mapping[str, Any], *, ocr: bool) -> dict[str, di
     if employer["value"] is None:
         employer = _label_value(
             canonical,
-            ("Đại diện cho", "Công ty", "Employer"),
+            ("Đại diện cho", "Employer"),
             stops=labels,
             method="employer_label",
             review=ocr,
+            normalizer=_employer_value,
+        )
+    if employer["value"] is None:
+        employer = _label_value(
+            canonical,
+            ("Công ty",),
+            stops=labels,
+            method="employer_label",
+            review=ocr,
+            normalizer=_employer_value,
         )
     party_a = _party_lines(canonical, ("Bên A",), ("Bên B",))
     representative = _regex_value(
@@ -1128,38 +1235,85 @@ def _contract_fields(canonical: Mapping[str, Any], *, ocr: bool) -> dict[str, di
     if employee["value"] is None:
         employee = _label_value(
             party_b,
-            ("Người lao động", "Ông/bà", "Họ và tên", "Employee Name"),
+            ("Người lao động", "Ông/bà", "ÔngJBà", "Họ và tên", "Employee Name"),
             stops=labels,
             method="employee_label",
             review=ocr,
             normalizer=_person_value,
         )
-    employee_id = _regex_value(
+    employee_id = _label_value(
         canonical,
-        (
-            r"(?:CCCD số|CMND số)\s*[:\-]?\s*([0-9]{9,12})",
-            r"Employee\s+ID\s*[:\-]?\s*([^\s]+)",
-        ),
-        method="employee_id_pattern",
+        ("CCCD số", "CCCD sỗ", "CMND số", "Employee ID"),
+        stops=labels,
+        method="employee_id_label",
         review=ocr,
+        normalizer=_identifier_digits,
     )
-    job = _narrative_value(
+    if employee_id["value"] is None:
+        employee_id = _regex_value(
+            canonical,
+            (
+                r"(?:CCCD\s+s(?:ố|ỗ|õ|o)|CMND\s+số)\s*[:\-]?\s*"
+                r"((?:[0-9][ \t]*){9,12})(?![ \t]*[0-9])",
+                r"Employee\s+ID\s*[:\-]?\s*((?:[0-9][ \t]*){9,12})(?![ \t]*[0-9])",
+            ),
+            method="employee_id_pattern",
+            review=ocr,
+            normalizer=_identifier_digits,
+        )
+    professional_title = _narrative_value(
         canonical,
         r"Chức\s+danh\s+công\s+việc\s*:\s*(.+?)(?:\.\s*$|$)",
-        method="job_title_narrative",
+        method="professional_title_narrative",
         review=ocr,
     )
-    if job["value"] is None:
-        job = _label_value(
+    if professional_title["value"] is None:
+        professional_title = _label_value(
             canonical,
-            ("Công việc/Chức danh", "Chức danh", "Vị trí công việc", "Job Title"),
+            (
+                "Công việc/Chức danh",
+                "Chức danh chuyên môn",
+                "Chức danh",
+                "Vị trí công việc",
+                "Job Title",
+            ),
             stops=labels,
-            method="job_title_label",
+            method="professional_title_label",
+            review=ocr,
+        )
+    has_employee_party = any(
+        _starts_with_label(str(block.get("text") or ""), ("Bên B",))
+        for block in _blocks(canonical)
+    )
+    employee_role_section = _party_lines(canonical, ("Bên B",), ())
+    role_title = _label_value(
+        employee_role_section,
+        ("Chức vụ/Vị trí", "Chức vụ", "Vị trí", "Job Title"),
+        stops=labels,
+        method="role_title_label",
+        review=ocr,
+        normalizer=_role_title,
+    )
+    if role_title["value"] is None and not has_employee_party:
+        role_title = _label_value(
+            canonical,
+            ("Chức vụ/Vị trí", "Chức vụ", "Vị trí", "Job Title"),
+            stops=labels,
+            method="role_title_label",
+            review=ocr,
+            normalizer=_role_title,
+        )
+    job_title = role_title
+    if job_title["value"] is None and professional_title["value"] is not None:
+        job_title = _field(
+            professional_title["value"],
+            method="job_title_professional_title_fallback",
+            block=professional_title,
             review=ocr,
         )
     workplace = _narrative_value(
         canonical,
-        r"Nơi\s+làm\s+việc\s*:\s*(.+?)(?:\.\s*$|$)",
+        r"(?:Nơi|Địa\s+điểm)\s+làm\s+việc\s*:\s*(.+?)(?:\.\s*$|$)",
         method="workplace_narrative",
         review=ocr,
     )
@@ -1167,6 +1321,46 @@ def _contract_fields(canonical: Mapping[str, Any], *, ocr: bool) -> dict[str, di
         workplace = _label_value(
             canonical, ("Địa điểm làm việc",), stops=labels, method="workplace_label", review=ocr
         )
+    salary = _regex_value(
+        canonical,
+        (
+            r"Mức\s+lương\s+thử\s+việc\s*:\s*"
+            r"((?:[0-9][0-9.\s]*[0-9]))\s*đồng\s*/?\s*tháng",
+        ),
+        method="salary_monthly_amount",
+        review=ocr,
+        normalizer=_monthly_amount,
+    )
+    if salary["value"] is None:
+        salary = _label_value(
+            canonical,
+            ("Mức lương thử việc", "Lương thử việc", "Salary"),
+            stops=labels,
+            method="salary_label",
+            review=ocr,
+        )
+    allowances = _narrative_value(
+        canonical,
+        r"Phụ\s+c[ấãẩậa]p(?:\s+và\s+hỗ\s+\S+)?\s*:\s*(.+?)(?:\.\s*$|$)",
+        method="allowances_narrative",
+        review=ocr,
+        normalizer=_repair_monthly_units,
+    )
+    if allowances["value"] is None:
+        allowances = _label_value(
+            canonical,
+            ("Phụ cấp và hỗ trợ", "Phụ cấp"),
+            stops=labels,
+            method="allowances_label",
+            review=ocr,
+        )
+    payment = _label_value(
+        canonical,
+        ("Hình thức trả lương", "Trả lương", "Thanh toán"),
+        stops=labels,
+        method="payment_label",
+        review=ocr,
+    )
     return {
         "contract_number": _label_value(
             canonical,
@@ -1182,22 +1376,14 @@ def _contract_fields(canonical: Mapping[str, Any], *, ocr: bool) -> dict[str, di
         "employer_representative": representative,
         "employee_name": employee,
         "employee_id_number": employee_id,
-        "job_title": job,
+        "professional_title": professional_title,
+        "role_title": role_title,
+        "job_title": job_title,
         "workplace": workplace,
         "weekly_hours": _weekly_hours(canonical, review=ocr),
-        "probation_salary_monthly": _label_value(
-            canonical,
-            ("Mức lương thử việc", "Lương thử việc", "Salary"),
-            stops=labels,
-            method="salary_label",
-            review=ocr,
-        ),
-        "allowances_summary": _label_value(
-            canonical, ("Phụ cấp",), stops=labels, method="allowances_label", review=ocr
-        ),
-        "salary_payment_schedule": _label_value(
-            canonical, ("Thanh toán", "Trả lương"), stops=labels, method="payment_label", review=ocr
-        ),
+        "probation_salary_monthly": salary,
+        "allowances_summary": allowances,
+        "salary_payment_schedule": payment,
     }
 
 
@@ -1227,8 +1413,22 @@ def _ocr_value_after_label(
 ) -> dict[str, Any]:
     keys = tuple(_fold(label) for label in labels)
     for index, block in enumerate(blocks):
-        if not any(label in _fold(block.get("text")) for label in keys):
+        text = str(block.get("text") or "").strip()
+        folded = _fold(text)
+        matched = next(
+            (
+                label
+                for label in keys
+                if folded == label or folded.startswith(f"{label} ")
+            ),
+            None,
+        )
+        if matched is None:
             continue
+        matched_label = next(label for label in labels if _fold(label) == matched)
+        inline = _value_after_label(text, len(matched_label.split()))
+        if inline and predicate(inline):
+            return _field(inline, method=method, block=block, review=review)
         label_box = _ocr_bbox(block)
         candidates: list[tuple[float, dict[str, Any]]] = []
         for candidate_index, candidate in enumerate(blocks[index + 1 : index + 5], index + 1):
@@ -1276,7 +1476,7 @@ def _ielts_fields(canonical: Mapping[str, Any], *, review: bool) -> dict[str, di
     def person(value: str) -> bool:
         return (
             1 <= len(value.split()) <= 5
-            and len(re.sub(r"[^A-Za-zÀ-ỹ]", "", value)) >= 3
+            and len(re.sub(r"[^A-Za-zÀ-ỹ]", "", value)) >= 2
             and not re.search(
                 r"\d|candidate|family|first|date|number",
                 value,
@@ -1319,47 +1519,224 @@ def _ielts_fields(canonical: Mapping[str, Any], *, review: bool) -> dict[str, di
         block=family if family.get("value") else first,
         review=review,
     )
-    credential = next((block for block in blocks if _fold(block.get("text")) == "academic"), None)
+    credential = next(
+        (block for block in blocks if re.search(r"\bacademic\b", _fold(block.get("text")))),
+        None,
+    )
+    credential_type_text = None
+    if credential:
+        raw_credential_type = " ".join(str(credential.get("text") or "").split())
+        type_match = re.search(
+            r"\b(academic|general\s+training|life\s+skills)\b",
+            raw_credential_type,
+            re.IGNORECASE,
+        )
+        credential_type_text = type_match.group(1).upper() if type_match else raw_credential_type
     credential_type = _field(
-        "IELTS Academic" if credential else None,
+        credential_type_text,
         method="ielts_credential_type_layout",
         block=credential,
         review=review,
     )
 
+    def candidate_number_from_blocks() -> str | None:
+        for idx, block in enumerate(blocks):
+            text = str(block.get("text") or "").strip()
+            m = re.search(
+                r"\bcandidate\s+(?:number|no|num)\b[:\s#-]*([0-9]{6})(?![0-9A-Za-z])",
+                text,
+                re.IGNORECASE,
+            )
+            if m:
+                return m.group(1)
+            if re.search(r"\bcandidate\s+(?:number|no|num)\b", text, re.IGNORECASE):
+                for next_idx in (idx + 1, idx + 2):
+                    if next_idx < len(blocks):
+                        next_text = str(blocks[next_idx].get("text") or "").strip()
+                        if re.fullmatch(r"[0-9]{6}", next_text):
+                            return next_text
+        return None
+
+    candidate_num = candidate_number_from_blocks()
+    digit_positions = frozenset({0, 1, 4, 5, 6, 7, 8, 9, 14, 15, 16})
+    ocr_digit_replacements = {"O": "0", "I": "1", "L": "1", "S": "5", "Z": "2"}
+    standard_trf_pattern = re.compile(r"^[0-9]{2}[A-Z]{2}[0-9]{6}[A-Z]{3,4}[0-9]{3}[A-Z]$")
+
+    def repair_trf_token(token: str, cand_num: str | None) -> str | None:
+        if len(token) != 18 or not cand_num or len(cand_num) != 6:
+            return None
+        chars = list(token.upper())
+        for pos in digit_positions:
+            if chars[pos] in ocr_digit_replacements:
+                chars[pos] = ocr_digit_replacements[chars[pos]]
+        repaired = "".join(chars)
+        if (
+            repaired[4:10] == cand_num
+            and standard_trf_pattern.fullmatch(repaired) is not None
+        ):
+            return repaired
+        return None
+
     def form_number(value: str) -> bool:
         compact = re.sub(r"\s+", "", value).upper()
-        return (
-            bool(re.fullmatch(r"[0-9A-Z]{18}", compact))
-            and sum(char.isalpha() for char in compact) >= 6
+        if not re.fullmatch(r"[0-9A-Z]{18}", compact):
+            return False
+        if (
+            sum(char.isalpha() for char in compact) < 3
+            or sum(char.isdigit() for char in compact) < 2
+        ):
+            return False
+        return not any(
+            keyword in compact
+            for keyword in (
+                "LISTENING",
+                "READING",
+                "WRITING",
+                "SPEAKING",
+                "OVERALL",
+                "BANDSCORE",
+                "VALIDITY",
+                "REPORTFORM",
+                "ASSESSMENT",
+                "CAMBRIDGE",
+            )
         )
 
-    def normalize_form_number(value: str) -> str:
-        chars = list(re.sub(r"\s+", "", value).upper())
-        replacements = {"O": "0", "I": "1", "L": "1", "S": "5", "B": "8", "Z": "2"}
-        for index in set(range(0, 2)) | set(range(4, 10)) | set(range(14, 17)):
-            if index < len(chars):
-                chars[index] = replacements.get(chars[index], chars[index])
-        return "".join(chars)
+    def form_numbers_from_block(text: str) -> list[tuple[str, bool]]:
+        results: list[tuple[str, bool]] = []
+        label_match = re.search(
+            r"(?:trf\s*(?:number|no|#)?|form\s*(?:number|no|#)?|(?:test\s+report\s+form\s+(?:number|no|#)?)|certificate\s*(?:number|no|#)?)\s*[:#-]*",
+            text,
+            re.IGNORECASE,
+        )
+        candidates_to_check: list[tuple[str, bool]] = []
+        if label_match:
+            after = text[label_match.end() :]
+            candidates_to_check.append((after, True))
+        candidates_to_check.append((text, False))
 
-    candidates = [block for block in blocks if form_number(str(block.get("text") or ""))]
-    selected = (
-        max(candidates, key=lambda block: (_ocr_bbox(block) or (0, 0, 0, 0))[1])
-        if candidates
-        else None
-    )
+        for candidate_text, is_explicit in candidates_to_check:
+            compact = re.sub(r"[^0-9A-Za-z]", "", candidate_text).upper()
+            for start in range(max(0, len(compact) - 17)):
+                sub = compact[start : start + 18]
+                if candidate_num:
+                    repaired = repair_trf_token(sub, candidate_num)
+                    if repaired:
+                        results.append((repaired, is_explicit))
+                        continue
+                if standard_trf_pattern.fullmatch(sub) or (
+                    candidate_num is None and is_explicit and form_number(sub)
+                ):
+                    results.append((sub, is_explicit))
+        return results
+
+    form_anchors = {
+        index
+        for index, block in enumerate(blocks)
+        if re.search(
+            r"(?:form|trf)\s*(?:number|no|#)?",
+            str(block.get("text") or ""),
+            re.IGNORECASE,
+        )
+    }
+    for index in range(len(blocks) - 1):
+        if _fold(blocks[index].get("text")) in {"form", "trf"} and _fold(
+            blocks[index + 1].get("text")
+        ) == "number":
+            form_anchors.update((index, index + 1))
+
+    candidates: list[tuple[int, dict[str, Any], str, int]] = []
+    for index, block in enumerate(blocks):
+        block_text = str(block.get("text") or "")
+        found = form_numbers_from_block(block_text)
+        for token, is_form_labelled in found:
+            is_cand_labelled = bool(
+                re.search(r"candidate\s+(?:number|no|num)", block_text, re.IGNORECASE)
+                and not is_form_labelled
+            )
+            is_near_form_anchor = any(abs(index - anchor) <= 2 for anchor in form_anchors)
+            if is_form_labelled:
+                priority = 3
+            elif is_near_form_anchor and not is_cand_labelled:
+                priority = 2
+            elif not is_cand_labelled:
+                priority = 1
+            else:
+                priority = 0
+            candidates.append((index, block, token, priority))
+
+    if candidates:
+        max_priority = max(item[3] for item in candidates)
+        top_candidates = [item for item in candidates if item[3] == max_priority]
+        selected = max(
+            top_candidates,
+            key=lambda item: (_ocr_bbox(item[1]) or (0, 0, 0, 0))[1],
+        )
+    else:
+        selected = None
+
     credential_id = _field(
-        normalize_form_number(str(selected.get("text"))) if selected else None,
+        selected[2] if selected else None,
         method="ielts_form_number_layout",
-        block=selected,
+        block=selected[1] if selected else None,
         review=review,
     )
 
     def band_score(value: str) -> bool:
         return bool(re.fullmatch(r"(?:[0-9]|10)(?:\.0|\.5)?", value.strip()))
 
+    def inline_band_score(value: str) -> str | None:
+        marker = re.search(
+            r"(?:overall\s+band\s+(?:score|band)?|overall\s+(?:score|band)?|band\s+score)",
+            value,
+            re.IGNORECASE,
+        )
+        if marker is None:
+            return None
+        match = re.search(
+            r"(?<!\d)(?:10|[0-9])(?:[.,][05])?(?!\d)",
+            value[marker.end() :],
+        )
+        return match.group(0).replace(",", ".") if match else None
+
+    def grouped_band_score(value: str) -> str | None:
+        if not re.search(r"listening|reading|writing|speaking", value, re.IGNORECASE):
+            return None
+        score_matches = list(
+            re.finditer(r"(?<![\d.])(?:10|[0-9])(?:[.,][05])?(?![\d.])", value)
+        )
+        overall_match = re.search(
+            r"overall(?:\s+band)?(?:\s+score)?\s*[:#-]?\s*"
+            r"(?P<score>(?:10|[0-9])(?:[.,][05])?)",
+            value,
+            re.IGNORECASE,
+        )
+        if overall_match:
+            return overall_match.group("score").replace(",", ".")
+        if len(score_matches) >= 5:
+            return score_matches[4].group(0).replace(",", ".")
+        return None
+
     score = _missing("ielts_overall_band_layout", review=review)
     for block in blocks:
+        inline = inline_band_score(str(block.get("text") or ""))
+        if inline is not None and band_score(inline):
+            score = _field(
+                inline,
+                method="ielts_overall_band_layout",
+                block=block,
+                review=review,
+            )
+            break
+        grouped = grouped_band_score(str(block.get("text") or ""))
+        if grouped is not None and band_score(grouped):
+            score = _field(
+                grouped,
+                method="ielts_overall_band_layout",
+                block=block,
+                review=review,
+            )
+            break
         key = _fold(block.get("text"))
         if "overall" not in key and key not in {"bvnral", "overall band"}:
             continue
@@ -1400,12 +1777,17 @@ def _ielts_fields(canonical: Mapping[str, Any], *, review: bool) -> dict[str, di
     if date_blocks:
         selected_date = max(date_blocks, key=lambda block: (_ocr_bbox(block) or (0, 0, 0, 0))[1])
         raw = str(selected_date.get("text") or "")
+        date_match = re.search(
+            r"\b\d{1,2}[./-](?:\d{1,2}|[A-Za-z]{2,3})[./-]\d{4}\b",
+            raw,
+        )
+        date_value = date_match.group(0) if date_match else raw
         issue = _field(
-            _iso_date(raw) or raw,
+            _iso_date(date_value) or date_value,
             method="ielts_issue_date_layout",
             block=selected_date,
             review=review,
-            normalized=_iso_date(raw) or raw,
+            normalized=_iso_date(date_value) or date_value,
         )
     return {
         "recipient_name": recipient,

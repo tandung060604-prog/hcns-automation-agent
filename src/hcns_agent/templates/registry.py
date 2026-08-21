@@ -213,6 +213,8 @@ def build_default_template_registry() -> TemplateRegistry:
         parser_version: str = "1.0.0",
         parser_id: str = "review-only/label-next-line",
         parser: TemplateParser | None = None,
+        optional_fields: tuple[str, ...] = (),
+        schema_version: str = "2.0.0",
     ) -> TemplateDefinition:
         return TemplateDefinition(
             template_id=template_id,
@@ -221,13 +223,14 @@ def build_default_template_registry() -> TemplateRegistry:
             parser_id=parser_id,
             supported_file_types=supported_file_types,
             required_fields=required_fields,
-            optional_fields=(),
+            optional_fields=optional_fields,
             schema_ref=schema_ref,
             parser_version=parser_version,
             anchors=anchors,
             minimum_anchor_matches=minimum_anchor_matches,
             parser=parser or ReviewOnlyParser(field_labels),
             validator=ReviewOnlyValidator(),
+            schema_version=schema_version,
         )
 
     registry.register(
@@ -242,6 +245,7 @@ def build_default_template_registry() -> TemplateRegistry:
                 "weekly_hours", "probation_salary_monthly", "allowances_summary",
                 "salary_payment_schedule",
             ),
+            optional_fields=("professional_title", "role_title"),
             schema_ref="schemas/templates/probation_contract_v2.schema.json",
             anchors=(
                 "probation",
@@ -250,10 +254,11 @@ def build_default_template_registry() -> TemplateRegistry:
                 "MỨC LƯƠNG",
             ),
             minimum_anchor_matches=2,
-            version="2.0",
+            version="2.1",
             parser_version=STRUCTURED_HR_PARSER_VERSION,
             parser_id=STRUCTURED_HR_PARSER_ID,
             parser=StructuredHrParser(),
+            schema_version="2.1.0",
             field_labels={
                 "contract_number": ("contract number", "so hop dong"),
                 "contract_sign_date": ("contract sign date", "ngay ky hop dong"),
